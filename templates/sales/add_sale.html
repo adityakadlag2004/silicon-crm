@@ -16,9 +16,7 @@
         class="form-control" 
         placeholder="Search by name, email, or phone"
         autocomplete="off">
-      <!-- Hidden field to store selected client id -->
       <input type="hidden" name="client" id="client-id" required>
-      <!-- Results dropdown -->
       <div id="client-results" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
     </div>
 
@@ -28,10 +26,18 @@
       {{ form.product }}
     </div>
 
-    <!-- Amount -->
+    <!-- Sale Amount -->
     <div class="mb-3">
       {{ form.amount.label_tag }}
       {{ form.amount }}
+      <small class="form-text text-muted">Business amount considered for points</small>
+    </div>
+
+    <!-- Cover Amount (only for Life/Health Insurance) -->
+    <div class="mb-3" id="cover-amount-group" style="display: none;">
+      <label for="cover-amount" class="form-label">Cover Amount</label>
+      <input type="number" step="0.01" class="form-control" name="cover_amount" id="cover-amount">
+      <small class="form-text text-muted">Enter insurance cover value (in ₹)</small>
     </div>
 
     <!-- Date -->
@@ -50,7 +56,10 @@ document.addEventListener("DOMContentLoaded", function () {
   const searchInput = document.getElementById("client-search");
   const resultsDiv = document.getElementById("client-results");
   const clientIdField = document.getElementById("client-id");
+  const productSelect = document.getElementById("id_product");
+  const coverAmountGroup = document.getElementById("cover-amount-group");
 
+  // 🔹 Client live search
   searchInput.addEventListener("input", function () {
     const query = this.value.trim();
     if (query.length < 2) {
@@ -62,30 +71,35 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(res => res.json())
       .then(data => {
         resultsDiv.innerHTML = "";
-
         if (!data.results || data.results.length === 0) {
           resultsDiv.innerHTML = "<div class='list-group-item text-muted'>No matches found</div>";
           return;
         }
-
         data.results.forEach(client => {
           const item = document.createElement("button");
           item.type = "button";
           item.className = "list-group-item list-group-item-action";
           item.textContent = client.text;
-
           item.onclick = function () {
             searchInput.value = client.text;
-            clientIdField.value = client.id; // store the ID
+            clientIdField.value = client.id;
             resultsDiv.innerHTML = "";
           };
-
           resultsDiv.appendChild(item);
         });
       })
-      .catch(err => {
-        console.error("Search error:", err);
-      });
+      .catch(err => console.error("Search error:", err));
+  });
+
+  // 🔹 Show cover field only for Life/Health Insurance
+  productSelect.addEventListener("change", function () {
+    const selected = this.value;
+    if (selected === "Life Insurance" || selected === "Health Insurance") {
+      coverAmountGroup.style.display = "block";
+    } else {
+      coverAmountGroup.style.display = "none";
+      document.getElementById("cover-amount").value = "";
+    }
   });
 });
 </script>

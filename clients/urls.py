@@ -18,7 +18,7 @@ urlpatterns = [
     path("sales/recalc/", views.recalc_points, name="recalc_points"),
     path("sales/all/", views.all_sales, name="all_sales"),
 
-
+    path("analysis/", views.client_analysis, name="client_analysis"),
 
     # Admin
     path("clients/all/", views.all_clients, name="all_clients"),

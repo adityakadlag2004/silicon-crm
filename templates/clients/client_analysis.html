@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Client Analysis{% endblock %}
+{% block content %}
+<h2 class="mb-4">Client Analysis</h2>
+
+<!-- 🔹 Filter Form -->
+<div class="card p-3 mb-4">
+  <form method="get" class="row g-3">
+    <div class="col-md-2">
+      <label class="form-label">SIP</label>
+      <select name="sip_status" class="form-select">
+        <option value="">All</option>
+        <option value="yes" {% if request.GET.sip_status == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if request.GET.sip_status == "no" %}selected{% endif %}>No</option>
+      </select>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Life Insurance</label>
+      <select name="life_status" class="form-select">
+        <option value="">All</option>
+        <option value="yes" {% if request.GET.life_status == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if request.GET.life_status == "no" %}selected{% endif %}>No</option>
+      </select>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Health Insurance</label>
+      <select name="health_status" class="form-select">
+        <option value="">All</option>
+        <option value="yes" {% if request.GET.health_status == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if request.GET.health_status == "no" %}selected{% endif %}>No</option>
+      </select>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Start Date</label>
+      <input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">End Date</label>
+      <input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date }}">
+    </div>
+
+    <div class="col-md-12 mt-2">
+      <button type="submit" class="btn btn-primary">Filter</button>
+      <a href="{% url 'client_analysis' %}" class="btn btn-secondary">Reset</a>
+      <button type="submit" name="export" value="1" class="btn btn-success">Export CSV</button>
+    </div>
+  </form>
+</div>
+
+<!-- 🔹 Results Table -->
+<div class="card p-3">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>SIP</th>
+        <th>Life</th>
+        <th>Health</th>
+        <th>Motor</th>
+        <th>PMS</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in clients %}
+      <tr>
+        <td>{{ c.id }}</td>
+        <td>{{ c.name }}</td>
+        <td>{{ c.email }}</td>
+        <td>{{ c.phone }}</td>
+        <td>{{ c.sip_status|yesno:"Yes,No" }}</td>
+        <td>{{ c.life_status|yesno:"Yes,No" }}</td>
+        <td>{{ c.health_status|yesno:"Yes,No" }}</td>
+        <td>{{ c.motor_status|yesno:"Yes,No" }}</td>
+        <td>{{ c.pms_status|yesno:"Yes,No" }}</td>
+        <td>{{ c.created_at|date:"Y-m-d" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="10" class="text-center">No clients found</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

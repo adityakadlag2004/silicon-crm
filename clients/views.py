@@ -8,7 +8,7 @@ from datetime import date
 from .models import Client, Sale, MonthlyIncentive,Employee
 from .forms import SaleForm,AdminSaleForm,EditSaleForm
 from django import forms
-
+from django.http import HttpResponse
 
 from .models import Sale
 
@@ -162,15 +162,90 @@ def add_sale(request):
 
     return render(request, "sales/add_sale.html", {"form": form})
 
-@login_required
-def my_clients(request):
-    clients = Client.objects.filter(mapped_to=request.user.employee)
-    return render(request, "clients/my_clients.html", {"clients": clients})
+# clients/views.py
+from django.db.models import Q
 
 @login_required
 def all_clients(request):
     clients = Client.objects.select_related("mapped_to")
+
+    # Filters
+    sip_status = request.GET.get("sip_status")
+    pms_status = request.GET.get("pms_status")
+    life_status = request.GET.get("life_status")
+    health_status = request.GET.get("health_status")
+
+    sip_min = request.GET.get("sip_min")
+    sip_max = request.GET.get("sip_max")
+    pms_min = request.GET.get("pms_min")
+    pms_max = request.GET.get("pms_max")
+    life_min = request.GET.get("life_min")
+    life_max = request.GET.get("life_max")
+    health_min = request.GET.get("health_min")
+    health_max = request.GET.get("health_max")
+
+    # Status filters
+    if sip_status in ["yes", "no"]:
+        clients = clients.filter(sip_status=(sip_status == "yes"))
+    if pms_status in ["yes", "no"]:
+        clients = clients.filter(pms_status=(pms_status == "yes"))
+    if life_status in ["yes", "no"]:
+        clients = clients.filter(life_status=(life_status == "yes"))
+    if health_status in ["yes", "no"]:
+        clients = clients.filter(health_status=(health_status == "yes"))
+
+    # Range filters
+    if sip_min: clients = clients.filter(sip_amount__gte=sip_min)
+    if sip_max: clients = clients.filter(sip_amount__lte=sip_max)
+    if pms_min: clients = clients.filter(pms_amount__gte=pms_min)
+    if pms_max: clients = clients.filter(pms_amount__lte=pms_max)
+    if life_min: clients = clients.filter(life_cover__gte=life_min)
+    if life_max: clients = clients.filter(life_cover__lte=life_max)
+    if health_min: clients = clients.filter(health_cover__gte=health_min)
+    if health_max: clients = clients.filter(health_cover__lte=health_max)
+
     return render(request, "clients/all_clients.html", {"clients": clients})
+
+
+@login_required
+def my_clients(request):
+    clients = Client.objects.filter(mapped_to=request.user.employee)
+
+    # Apply same filters (reuse above logic)
+    sip_status = request.GET.get("sip_status")
+    pms_status = request.GET.get("pms_status")
+    life_status = request.GET.get("life_status")
+    health_status = request.GET.get("health_status")
+
+    sip_min = request.GET.get("sip_min")
+    sip_max = request.GET.get("sip_max")
+    pms_min = request.GET.get("pms_min")
+    pms_max = request.GET.get("pms_max")
+    life_min = request.GET.get("life_min")
+    life_max = request.GET.get("life_max")
+    health_min = request.GET.get("health_min")
+    health_max = request.GET.get("health_max")
+
+    if sip_status in ["yes", "no"]:
+        clients = clients.filter(sip_status=(sip_status == "yes"))
+    if pms_status in ["yes", "no"]:
+        clients = clients.filter(pms_status=(pms_status == "yes"))
+    if life_status in ["yes", "no"]:
+        clients = clients.filter(life_status=(life_status == "yes"))
+    if health_status in ["yes", "no"]:
+        clients = clients.filter(health_status=(health_status == "yes"))
+
+    if sip_min: clients = clients.filter(sip_amount__gte=sip_min)
+    if sip_max: clients = clients.filter(sip_amount__lte=sip_max)
+    if pms_min: clients = clients.filter(pms_amount__gte=pms_min)
+    if pms_max: clients = clients.filter(pms_amount__lte=pms_max)
+    if life_min: clients = clients.filter(life_cover__gte=life_min)
+    if life_max: clients = clients.filter(life_cover__lte=life_max)
+    if health_min: clients = clients.filter(health_cover__gte=health_min)
+    if health_max: clients = clients.filter(health_cover__lte=health_max)
+
+    return render(request, "clients/my_clients.html", {"clients": clients})
+
 
 
 @login_required
@@ -386,3 +461,54 @@ def update_client_status(sender, instance, **kwargs):
     client.pms_status = client.pms_amount > 0
 
     client.save()
+
+
+@login_required
+def client_analysis(request):
+    # Base queryset
+    if request.user.employee.role == "admin":
+        clients = Client.objects.all()
+    else:
+        clients = Client.objects.filter(mapped_to=request.user.employee)
+
+    # Apply filters
+    filters = {}
+    if request.GET.get("sip_status") in ["yes", "no"]:
+        filters["sip_status"] = True if request.GET["sip_status"] == "yes" else False
+    if request.GET.get("life_status") in ["yes", "no"]:
+        filters["life_status"] = True if request.GET["life_status"] == "yes" else False
+    if request.GET.get("health_status") in ["yes", "no"]:
+        filters["health_status"] = True if request.GET["health_status"] == "yes" else False
+    if request.GET.get("motor_status") in ["yes", "no"]:
+        filters["motor_status"] = True if request.GET["motor_status"] == "yes" else False
+    if request.GET.get("pms_status") in ["yes", "no"]:
+        filters["pms_status"] = True if request.GET["pms_status"] == "yes" else False
+
+    clients = clients.filter(**filters)
+
+    # Date filter
+    start_date = request.GET.get("start_date")
+    end_date = request.GET.get("end_date")
+    if start_date and end_date:
+        clients = clients.filter(created_at__range=[start_date, end_date])
+
+    # Export
+    if "export" in request.GET:
+        import csv
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="clients_analysis.csv"'
+        writer = csv.writer(response)
+        writer.writerow(["ID", "Name", "Email", "Phone", "SIP", "Life", "Health", "Motor", "PMS", "Created At"])
+        for c in clients:
+            writer.writerow([
+                c.id, c.name, c.email, c.phone,
+                "Yes" if c.sip_status else "No",
+                "Yes" if c.life_status else "No",
+                "Yes" if c.health_status else "No",
+                "Yes" if c.motor_status else "No",
+                "Yes" if c.pms_status else "No",
+                c.created_at.strftime("%Y-%m-%d"),
+            ])
+        return response
+
+    return render(request, "clients/client_analysis.html", {"clients": clients})

@@ -1,31 +1,96 @@
 {% extends "base.html" %}
 {% block title %}My Clients{% endblock %}
+
 {% block content %}
-<h2>My Clients</h2>
-<table class="table table-striped">
-    <tr>
+<h2 class="mb-4">My Clients</h2>
+
+<!-- 🔹 Filter Form -->
+<div class="card p-3 mb-4">
+  <form method="get" class="row g-3">
+    <!-- Status Filters -->
+    <div class="col-md-2">
+      <label class="form-label">SIP</label>
+      <select name="sip_status" class="form-select">
+        <option value="">All</option>
+        <option value="yes" {% if request.GET.sip_status == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if request.GET.sip_status == "no" %}selected{% endif %}>No</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">PMS</label>
+      <select name="pms_status" class="form-select">
+        <option value="">All</option>
+        <option value="yes" {% if request.GET.pms_status == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if request.GET.pms_status == "no" %}selected{% endif %}>No</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Life</label>
+      <select name="life_status" class="form-select">
+        <option value="">All</option>
+        <option value="yes" {% if request.GET.life_status == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if request.GET.life_status == "no" %}selected{% endif %}>No</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Health</label>
+      <select name="health_status" class="form-select">
+        <option value="">All</option>
+        <option value="yes" {% if request.GET.health_status == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if request.GET.health_status == "no" %}selected{% endif %}>No</option>
+      </select>
+    </div>
+
+    <!-- Range Filters -->
+    <div class="col-md-2"><label class="form-label">SIP Min</label><input type="number" name="sip_min" class="form-control" value="{{ request.GET.sip_min }}"></div>
+    <div class="col-md-2"><label class="form-label">SIP Max</label><input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}"></div>
+    <div class="col-md-2"><label class="form-label">PMS Min</label><input type="number" name="pms_min" class="form-control" value="{{ request.GET.pms_min }}"></div>
+    <div class="col-md-2"><label class="form-label">PMS Max</label><input type="number" name="pms_max" class="form-control" value="{{ request.GET.pms_max }}"></div>
+    <div class="col-md-2"><label class="form-label">Life Min</label><input type="number" name="life_min" class="form-control" value="{{ request.GET.life_min }}"></div>
+    <div class="col-md-2"><label class="form-label">Life Max</label><input type="number" name="life_max" class="form-control" value="{{ request.GET.life_max }}"></div>
+    <div class="col-md-2"><label class="form-label">Health Min</label><input type="number" name="health_min" class="form-control" value="{{ request.GET.health_min }}"></div>
+    <div class="col-md-2"><label class="form-label">Health Max</label><input type="number" name="health_max" class="form-control" value="{{ request.GET.health_max }}"></div>
+
+    <div class="col-md-12 mt-2">
+      <button type="submit" class="btn btn-primary">Filter</button>
+      <a href="{% url 'all_clients' %}" class="btn btn-secondary">Reset</a>
+    </div>
+  </form>
+</div>
+
+<!-- 🔹 Clients Table -->
+<div class="card p-3">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>ID</th>
         <th>Name</th>
         <th>Email</th>
         <th>Phone</th>
         <th>SIP</th>
-        <th>Health</th>
-        <th>Life</th>
-        <th>Motor</th>
         <th>PMS</th>
-    </tr>
-    {% for c in clients %}
-    <tr>
-        <td>{{ c.name }}</td>
-        <td>{{ c.email }}</td>
-        <td>{{ c.phone }}</td>
-        <td>{{ c.sip_amount }}</td>
-        <td>{{ c.health_cover }}</td>
-        <td>{{ c.life_cover }}</td>
-        <td>{{ c.motor_insured_value }}</td>
-        <td>{{ c.pms_amount }}</td>
-    </tr>
-    {% empty %}
-    <tr><td colspan="8">No clients mapped to you.</td></tr>
-    {% endfor %}
-</table>
+        <th>Life Cover</th>
+        <th>Health Cover</th>
+        <th>Mapped To</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for client in clients %}
+      <tr>
+        <td>{{ client.id }}</td>
+        <td>{{ client.name }}</td>
+        <td>{{ client.email }}</td>
+        <td>{{ client.phone }}</td>
+        <td>₹{{ client.sip_amount|default:0 }}</td>
+        <td>₹{{ client.pms_amount|default:0 }}</td>
+        <td>₹{{ client.life_cover|default:0 }}</td>
+        <td>₹{{ client.health_cover|default:0 }}</td>
+        <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9" class="text-center">No clients found</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

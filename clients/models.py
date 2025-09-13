@@ -102,6 +102,11 @@ class IncentiveRule(models.Model):
 from django.db import models
 from decimal import Decimal
 
+from django.db import models
+from django.utils import timezone
+from decimal import Decimal
+
+
 class Sale(models.Model):
     PRODUCT_CHOICES = [
         ("SIP", "SIP"),
@@ -115,7 +120,13 @@ class Sale(models.Model):
     client = models.ForeignKey("Client", on_delete=models.CASCADE, related_name="sales")
     employee = models.ForeignKey("Employee", on_delete=models.CASCADE, related_name="sales")
     product = models.CharField(max_length=50, choices=PRODUCT_CHOICES)
+
+    # Business value (used for incentive calculation / points)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
+
+    # New: Cover amount (only relevant for Life & Health Insurance)
+    cover_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+
     date = models.DateField(default=timezone.now)   # not auto_now_add
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     incentive_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
@@ -131,7 +142,7 @@ class Sale(models.Model):
             rule = IncentiveRule.objects.get(product=self.product, active=True)
             if rule.unit_amount > 0:
                 self.points = (self.amount / rule.unit_amount) * rule.points_per_unit
-                self.incentive_amount = self.points  # you can later define ₹ conversion
+                self.incentive_amount = self.points  # You can later define ₹ conversion
         except IncentiveRule.DoesNotExist:
             self.points = Decimal("0.000")
             self.incentive_amount = Decimal("0.00")
