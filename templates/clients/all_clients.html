@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}All Clients{% endblock %}
+{% block content %}
+<h2>All Clients</h2>
+<a href="{% url 'add_client' %}" class="btn btn-success mb-3">+ Add Client</a>
+<table class="table table-striped">
+  <tr>
+    <th>Name</th><th>Email</th><th>Phone</th><th>Mapped To</th>
+    <th>SIP</th><th>Health</th><th>Life</th><th>Motor</th><th>PMS</th>
+  </tr>
+  {% for c in clients %}
+  <tr>
+    <td>{{ c.name }}</td>
+    <td>{{ c.email }}</td>
+    <td>{{ c.phone }}</td>
+    <td>{% if c.mapped_to %}{{ c.mapped_to.user.username }}{% else %}-{% endif %}</td>
+    <td>{{ c.sip_amount }}</td>
+    <td>{{ c.health_cover }}</td>
+    <td>{{ c.life_cover }}</td>
+    <td>{{ c.motor_insured_value }}</td>
+    <td>{{ c.pms_amount }}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="9">No clients yet.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

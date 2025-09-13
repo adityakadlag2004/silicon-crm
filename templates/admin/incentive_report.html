@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<h1>Incentive Report ({{ month }}/{{ year }})</h1>
+
+<form method="get">
+  <label for="year">Year:</label>
+  <input type="number" name="year" value="{{ year }}">
+  <label for="month">Month:</label>
+  <input type="number" name="month" value="{{ month }}" min="1" max="12">
+  <button type="submit">Filter</button>
+  <button type="submit" name="export" value="1">Export CSV</button>
+</form>
+
+<table border="1" cellpadding="5" cellspacing="0">
+  <tr>
+    <th>Employee</th>
+    <th>Total Points</th>
+    <th>Total Amount</th>
+  </tr>
+  {% for row in qs %}
+  <tr>
+    {% if row.employee %}
+      <td>{{ row.employee.user.username }}</td>
+      <td>{{ row.total_points }}</td>
+      <td>{{ row.total_amount }}</td>
+    {% else %}
+      <td>{{ row.employee__user__username }}</td>
+      <td>{{ row.total_points }}</td>
+      <td>{{ row.total_amount }}</td>
+    {% endif %}
+  </tr>
+  {% empty %}
+  <tr><td colspan="3">No data</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Edit Sale{% endblock %}
+
+{% block content %}
+<div class="card shadow p-4">
+  <h2 class="mb-4">Edit Sale #{{ sale.id }}</h2>
+
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+
+    <button type="submit" class="btn btn-success">Save Changes</button>
+    <a href="{% url 'all_sales' %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

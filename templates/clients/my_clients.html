@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}My Clients{% endblock %}
+{% block content %}
+<h2>My Clients</h2>
+<table class="table table-striped">
+    <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>SIP</th>
+        <th>Health</th>
+        <th>Life</th>
+        <th>Motor</th>
+        <th>PMS</th>
+    </tr>
+    {% for c in clients %}
+    <tr>
+        <td>{{ c.name }}</td>
+        <td>{{ c.email }}</td>
+        <td>{{ c.phone }}</td>
+        <td>{{ c.sip_amount }}</td>
+        <td>{{ c.health_cover }}</td>
+        <td>{{ c.life_cover }}</td>
+        <td>{{ c.motor_insured_value }}</td>
+        <td>{{ c.pms_amount }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8">No clients mapped to you.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

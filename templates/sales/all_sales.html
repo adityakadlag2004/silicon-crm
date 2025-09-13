@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}All Sales{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">All Sales</h2>
+
+<!-- 🔹 Filters -->
+<div class="card p-3 mb-4">
+  <form method="get" class="row g-3">
+    <div class="col-md-2">
+      <label class="form-label">Product</label>
+      <select name="product" class="form-select">
+        <option value="">All</option>
+        <option value="SIP" {% if request.GET.product == "SIP" %}selected{% endif %}>SIP</option>
+        <option value="Lumsum" {% if request.GET.product == "Lumsum" %}selected{% endif %}>Lumpsum</option>
+        <option value="Life Insurance" {% if request.GET.product == "Life Insurance" %}selected{% endif %}>Life Insurance</option>
+        <option value="Health Insurance" {% if request.GET.product == "Health Insurance" %}selected{% endif %}>Health Insurance</option>
+        <option value="Motor Insurance" {% if request.GET.product == "Motor Insurance" %}selected{% endif %}>Motor Insurance</option>
+        <option value="PMS" {% if request.GET.product == "PMS" %}selected{% endif %}>PMS</option>
+      </select>
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">Client</label>
+      <input type="text" id="client-search" class="form-control" placeholder="Search client by name, email, or phone">
+      <input type="hidden" name="client" id="client-id" value="{{ request.GET.client }}">
+      <div id="client-results" class="list-group mt-1 position-absolute w-25" style="z-index: 1000;"></div>
+    </div>
+
+    <div class="col-md-3">
+      <label class="form-label">Employee</label>
+      <input type="text" name="employee" class="form-control" placeholder="Employee Username" value="{{ request.GET.employee }}">
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Start Date</label>
+      <input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date }}">
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">End Date</label>
+      <input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date }}">
+    </div>
+
+    <div class="col-md-12 mt-2">
+      <button type="submit" class="btn btn-primary">Search</button>
+      <a href="{% url 'all_sales' %}" class="btn btn-secondary">Reset</a>
+    </div>
+  </form>
+</div>
+
+<!-- 🔹 Sales Table -->
+<div class="card p-3">
+  <table class="table table-striped">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Client</th>
+        <th>Product</th>
+        <th>Amount</th>
+        <th>Points</th>
+        <th>Employee</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sale in sales %}
+        <tr>
+          <td>{{ sale.date }}</td>
+          <td>{{ sale.client.name }}</td>
+          <td>{{ sale.product }}</td>
+          <td>₹{{ sale.amount }}</td>
+          <td>{{ sale.points }}</td>
+          <td>{{ sale.employee.user.username }}</td>
+          <td>
+            <a href="{% url 'edit_sale' sale.id %}" class="btn btn-sm btn-warning">Edit</a>
+            <a href="{% url 'delete_sale' sale.id %}" class="btn btn-sm btn-danger">Delete</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="text-center">No sales found</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- 🔹 Client Search JS -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const searchInput = document.getElementById("client-search");
+  const resultsDiv = document.getElementById("client-results");
+  const clientIdField = document.getElementById("client-id");
+
+  if (clientIdField.value) {
+    searchInput.value = "Selected Client ID: " + clientIdField.value;
+  }
+
+  searchInput.addEventListener("input", function () {
+    const query = this.value.trim();
+    if (query.length < 2) {
+      resultsDiv.innerHTML = "";
+      return;
+    }
+
+    fetch(`/clients/search/?q=${encodeURIComponent(query)}`)
+      .then(res => res.json())
+      .then(data => {
+        resultsDiv.innerHTML = "";
+        if (!data.results || data.results.length === 0) {
+          resultsDiv.innerHTML = "<div class='list-group-item text-muted'>No matches</div>";
+          return;
+        }
+
+        data.results.forEach(client => {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = "list-group-item list-group-item-action";
+          item.textContent = client.text;
+          item.onclick = function () {
+            searchInput.value = client.text;
+            clientIdField.value = client.id;
+            resultsDiv.innerHTML = "";
+          };
+          resultsDiv.appendChild(item);
+        });
+      });
+  });
+});
+</script>
+{% endblock %}

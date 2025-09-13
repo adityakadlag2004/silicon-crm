@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Add Sale{% endblock %}
+{% block content %}
+<div class="card shadow p-4">
+  <h2 class="mb-4">Add Sale</h2>
+
+  <form method="post" id="saleForm">
+    {% csrf_token %}
+
+    <!-- Client Search -->
+    <div class="mb-3 position-relative">
+      <label for="client-search" class="form-label">Search Client</label>
+      <input 
+        type="text" 
+        id="client-search" 
+        class="form-control" 
+        placeholder="Search by name, email, or phone"
+        autocomplete="off">
+      <!-- Hidden field to store selected client id -->
+      <input type="hidden" name="client" id="client-id" required>
+      <!-- Results dropdown -->
+      <div id="client-results" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
+    </div>
+
+    <!-- Product -->
+    <div class="mb-3">
+      {{ form.product.label_tag }}
+      {{ form.product }}
+    </div>
+
+    <!-- Amount -->
+    <div class="mb-3">
+      {{ form.amount.label_tag }}
+      {{ form.amount }}
+    </div>
+
+    <!-- Date -->
+    <div class="mb-3">
+      {{ form.date.label_tag }}
+      {{ form.date }}
+    </div>
+
+    <button type="submit" class="btn btn-success">Save Sale</button>
+    <a href="{% url 'employee_dashboard' %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const searchInput = document.getElementById("client-search");
+  const resultsDiv = document.getElementById("client-results");
+  const clientIdField = document.getElementById("client-id");
+
+  searchInput.addEventListener("input", function () {
+    const query = this.value.trim();
+    if (query.length < 2) {
+      resultsDiv.innerHTML = "";
+      return;
+    }
+
+    fetch(`/clients/search/?q=${encodeURIComponent(query)}`)
+      .then(res => res.json())
+      .then(data => {
+        resultsDiv.innerHTML = "";
+
+        if (!data.results || data.results.length === 0) {
+          resultsDiv.innerHTML = "<div class='list-group-item text-muted'>No matches found</div>";
+          return;
+        }
+
+        data.results.forEach(client => {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = "list-group-item list-group-item-action";
+          item.textContent = client.text;
+
+          item.onclick = function () {
+            searchInput.value = client.text;
+            clientIdField.value = client.id; // store the ID
+            resultsDiv.innerHTML = "";
+          };
+
+          resultsDiv.appendChild(item);
+        });
+      })
+      .catch(err => {
+        console.error("Search error:", err);
+      });
+  });
+});
+</script>
+{% endblock %}

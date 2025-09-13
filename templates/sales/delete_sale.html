@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Delete Sale{% endblock %}
+
+{% block content %}
+<div class="card shadow p-4">
+  <h2>Delete Sale #{{ sale.id }}</h2>
+  <p>
+    Are you sure you want to delete this sale for
+    <b>{{ sale.client.name }}</b>
+    ({{ sale.product }} — ₹{{ sale.amount }})?
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger">Yes, Delete</button>
+    <a href="{% url 'all_sales' %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}
