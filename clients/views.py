@@ -262,11 +262,17 @@ def add_client(request):
 
 from django.db.models import Q
 
+from django.core.paginator import Paginator
+
 @login_required
 def all_sales(request):
-    sales = Sale.objects.all().order_by("-date")
+    sales = Sale.objects.all().order_by("-date", "-created_at")
 
-    # Apply filters
+    # Role-based filtering
+    if request.user.employee.role == "employee":
+        sales = sales.filter(employee=request.user.employee)
+
+    # Apply filters only if user submits something
     product = request.GET.get("product")
     client = request.GET.get("client")
     employee = request.GET.get("employee")
@@ -282,8 +288,18 @@ def all_sales(request):
     if start_date and end_date:
         sales = sales.filter(date__range=[start_date, end_date])
 
+    # Default: show only today's sales unless filters are applied
+    if not (product or client or employee or start_date or end_date):
+        sales = sales.filter(date=date.today())
+
+    # Pagination
+    paginator = Paginator(sales, 10)  # 10 records per page
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
     context = {
-        "sales": sales,
+        "sales": page_obj,
+        "is_employee": request.user.employee.role == "employee",
     }
     return render(request, "sales/all_sales.html", context)
 
