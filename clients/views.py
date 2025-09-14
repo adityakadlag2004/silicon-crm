@@ -15,11 +15,8 @@ from .models import Sale, Client, Target
 from django.contrib.auth.decorators import login_required
 from .models import Employee, Sale, Target
 from .models import Employee, Sale, Target, MonthlyTargetHistory
-
-
-
-
-
+import json
+from calendar import month_name
 
 
 
@@ -608,3 +605,98 @@ def map_client(request, client_id):
         return redirect("all_clients")
 
     return render(request, "clients/map_client.html", {"client": client, "employees": employees})
+
+
+
+
+def _last_n_months(today, n=12):
+    """Return list of (year, month) tuples from oldest -> newest (n months including current)."""
+    months = []
+    y, m = today.year, today.month
+    for _ in range(n):
+        months.append((y, m))
+        if m == 1:
+            m = 12
+            y -= 1
+        else:
+            m -= 1
+    months.reverse()
+    return months
+
+@login_required
+def employee_past_performance(request):
+    """
+    Page: shows a Chart.js line chart of monthly points (last 12 months)
+    and a clickable list of months (each links to month detail).
+    """
+    emp = request.user.employee
+    today = now().date()
+
+
+    months = _last_n_months(today, n=12)
+    
+
+    labels = []
+    points_data = []
+    months_data = []  # list of dicts to render table rows
+
+    for (y, m) in months:
+        label = f"{month_name[m]} {y}"
+        # Sum points for this employee in that month
+        pts = (
+            Sale.objects.filter(employee=emp, date__year=y, date__month=m)
+            .aggregate(total=Sum("points"))["total"]
+            or 0
+        )
+
+        labels.append(label)
+        points_data.append(int(pts))
+        months_data.append({"year": y, "month": m, "label": label, "points": int(pts)})
+
+    context = {
+        "labels_json": json.dumps(labels),
+        "points_json": json.dumps(points_data),
+        "months_data": months_data,
+    }
+    return render(request, "dashboards/employee_past_performance.html", context)
+
+
+@login_required
+def past_month_performance(request, year, month):
+    """
+    Shows product-wise business done for this employee in the specific month.
+    product rows will include: product name, total_amount, total_points, (and monthly target & achieved if available)
+    """
+    emp = request.user.employee
+
+    # product-wise sales in the month
+    product_sales = (
+        Sale.objects.filter(employee=emp, date__year=year, date__month=month)
+        .values("product")
+        .annotate(total_amount=Sum("amount"), total_points=Sum("points"))
+        .order_by("-total_amount")
+    )
+
+    # Also fetch MonthlyTargetHistory rows (if you want to show target_value & achieved_value)
+    target_history = MonthlyTargetHistory.objects.filter(employee=emp, year=year, month=month)
+    target_map = {t.product: t for t in target_history}
+
+    products = []
+    for row in product_sales:
+        prod = row["product"]
+        prod_row = {
+            "product": prod,
+            "total_amount": row["total_amount"] or 0,
+            "total_points": int(row["total_points"] or 0),
+            "target_value": target_map.get(prod).target_value if prod in target_map else None,
+            "achieved_value": target_map.get(prod).achieved_value if prod in target_map else None,
+        }
+        products.append(prod_row)
+
+    context = {
+        "year": year,
+        "month": month,
+        "month_label": f"{month_name[month]} {year}",
+        "products": products,
+    }
+    return render(request, "dashboards/past_month_performance.html", context)

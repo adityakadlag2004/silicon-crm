@@ -74,23 +74,12 @@
 </div>
 
 <h4>Past Performance (Last 6 Months)</h4>
-<table class="table">
-  <thead>
-    <tr><th>Month</th><th>Product</th><th>Target</th><th>Achieved</th></tr>
-  </thead>
-  <tbody>
-    {% for h in history %}
-    <tr>
-      <td>{{ h.month }}/{{ h.year }}</td>
-      <td>{{ h.product }}</td>
-      <td>{{ h.target_value }}</td>
-      <td>{{ h.achieved_value }}</td>
-    </tr>
-    {% empty %}
-    <tr><td colspan="4">No history available.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="mt-4">
+  <a href="{% url 'employee_past_performance' %}" class="inline-flex items-center px-4 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-gray-800">
+    View Detailed Past Performance
+  </a>
+</div>
+
 
 
 <!-- Points Counter Animation -->
