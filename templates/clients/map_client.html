@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Map Client{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="card shadow p-4">
+    <h2 class="mb-3">Map Client: {{ client.name }}</h2>
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label">Select Employee</label>
+        <select name="employee" class="form-select">
+          <option value="">-- Unmap (None) --</option>
+          {% for emp in employees %}
+            <option value="{{ emp.id }}" {% if client.mapped_to == emp %}selected{% endif %}>
+              {{ emp.user.username }} ({{ emp.role }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="d-flex justify-content-between">
+        <a href="{% url 'all_clients' %}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-success">Save Mapping</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -29,7 +29,7 @@ urlpatterns = [
     path("clients/search/", views.search_clients, name="search_clients"),
     
 
-
+     path("clients/<int:client_id>/map/", views.map_client, name="map_client"),
 
 
 ]

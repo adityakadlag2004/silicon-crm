@@ -297,17 +297,20 @@ def admin_add_sale(request):
         form = AdminSaleForm(request.POST)
         if form.is_valid():
             sale = form.save(commit=False)
-            # Make sure employee is set
-            if not sale.employee:
-                form.add_error("employee", "Please select an employee.")
+
+            # 🔹 Ensure employee is assigned
+            if not sale.employee_id:
+                form.add_error("employee", "Please select an employee for this sale.")
             else:
                 sale.save()
                 messages.success(request, "Sale added successfully!")
-                return redirect("admin_dashboard")
+                return redirect("all_sales")  # show latest sales immediately
     else:
         form = AdminSaleForm()
 
     return render(request, "sales/admin_add_sale.html", {"form": form})
+
+
 
 
 
@@ -512,3 +515,33 @@ def client_analysis(request):
         return response
 
     return render(request, "clients/client_analysis.html", {"clients": clients})
+
+
+# clients/views.py
+from django.contrib.auth.decorators import user_passes_test
+
+def is_admin(user):
+    return hasattr(user, "employee") and user.employee.role == "admin"
+
+@user_passes_test(is_admin)
+def map_client(request, client_id):
+    client = get_object_or_404(Client, id=client_id)
+    employees = Employee.objects.all()
+
+    if request.method == "POST":
+        emp_id = request.POST.get("employee")
+        if emp_id:
+            employee = get_object_or_404(Employee, id=emp_id)
+            client.mapped_to = employee
+            client.status = "Mapped"
+            client.save()
+            messages.success(request, f"Client {client.name} mapped to {employee.user.username}")
+        else:
+            client.mapped_to = None
+            client.status = "Unmapped"
+            client.save()
+            messages.success(request, f"Client {client.name} unmapped")
+
+        return redirect("all_clients")
+
+    return render(request, "clients/map_client.html", {"client": client, "employees": employees})

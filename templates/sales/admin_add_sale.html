@@ -16,7 +16,8 @@
         class="form-control" 
         placeholder="Search by name, email, or phone"
         autocomplete="off">
-      <input type="hidden" name="client" id="client-id">
+      <!-- This will store the client ID for Django -->
+      {{ form.client }}
       <div id="client-results" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
     </div>
 
@@ -38,6 +39,12 @@
       {{ form.amount }}
     </div>
 
+    <!-- Date -->
+    <div class="mb-3">
+      {{ form.date.label_tag }}
+      {{ form.date }}
+    </div>
+
     <button type="submit" class="btn btn-success">Save Sale</button>
     <a href="{% url 'admin_dashboard' %}" class="btn btn-secondary">Cancel</a>
   </form>
@@ -47,7 +54,12 @@
 document.addEventListener("DOMContentLoaded", function () {
   const searchInput = document.getElementById("client-search");
   const resultsDiv = document.getElementById("client-results");
-  const clientIdField = document.getElementById("client-id");
+  const clientSelect = document.getElementById("id_client");  // Django form field
+
+  // Hide the Django dropdown (we only use it for form binding)
+  if (clientSelect) {
+    clientSelect.style.display = "none";
+  }
 
   searchInput.addEventListener("input", function () {
     const query = this.value.trim();
@@ -74,7 +86,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
           item.onclick = function () {
             searchInput.value = client.text;
-            clientIdField.value = client.id;
+            clientSelect.value = client.id; // ✅ set the hidden Django field
             resultsDiv.innerHTML = "";
           };
 
