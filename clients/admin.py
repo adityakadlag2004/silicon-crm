@@ -9,8 +9,8 @@ from django.http import HttpResponse
 import csv
 from .models import Sale, MonthlyIncentive, Employee
 from datetime import date
-
-
+from .models import IncentiveRule
+from .models import Target
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
     list_display = ('user', 'role')  # show linked User + role
@@ -40,6 +40,24 @@ class ClientAdmin(ImportExportModelAdmin):
         'status',
     )
 
+
+from django.contrib import admin
+from .models import Employee, Target, Sale
+
+@admin.register(Target)
+class TargetAdmin(admin.ModelAdmin):
+    list_display = ("product", "target_type", "target_value", "created_at")
+    list_editable = ("target_value",)
+    list_filter = ("target_type", "product")
+    search_fields = ("product",)
+    fields = ("product", "target_type", "target_value")
+
+    # Prevent duplicate targets
+    def has_add_permission(self, request):
+        # Allow add only if combination does not exist
+        if Target.objects.count() >= (len(Sale.PRODUCT_CHOICES) * 2):
+            return False
+        return True
 
 
 
@@ -215,5 +233,11 @@ def get_admin_urls(urls):
 
 admin.site.get_urls = get_admin_urls(admin.site.get_urls())
 
-from .models import IncentiveRule
+
+
+
+
+
+
+
 

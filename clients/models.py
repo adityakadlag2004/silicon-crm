@@ -173,3 +173,38 @@ class MonthlyIncentive(models.Model):
 
     def __str__(self):
         return f"{self.employee} - {self.year}-{str(self.month).zfill(2)} : {self.total_points} pts"
+
+
+
+class Target(models.Model):
+    TARGET_TYPE_CHOICES = [
+        ("daily", "Daily"),
+        ("monthly", "Monthly"),
+    ]
+
+    product = models.CharField(max_length=50, choices=Sale.PRODUCT_CHOICES)
+    target_type = models.CharField(max_length=20, choices=TARGET_TYPE_CHOICES)
+    target_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("product", "target_type")  # ✅ one daily + one monthly per product
+
+    def __str__(self):
+        return f"{self.product} ({self.target_type})"
+
+
+class MonthlyTargetHistory(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    product = models.CharField(max_length=50, choices=Sale.PRODUCT_CHOICES)
+    target_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    achieved_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    year = models.IntegerField()
+    month = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("employee", "product", "year", "month")
+
+    def __str__(self):
+        return f"{self.employee.user.username} - {self.product} ({self.month}/{self.year})"

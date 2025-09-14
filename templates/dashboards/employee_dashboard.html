@@ -1,84 +1,106 @@
 {% extends "base.html" %}
+{% load custom_tags %}
 
 {% block title %}Employee Dashboard{% endblock %}
 
 {% block content %}
 <h2 class="mb-4">My Dashboard</h2>
 
+<!-- Totals -->
 <div class="row">
-  <!-- Total Sales (All Products) -->
   <div class="col-md-6 mb-3">
     <div class="card text-center p-3">
       <h5>Total Sales (This Month)</h5>
       <h3 class="text-success">₹{{ total_sales }}</h3>
     </div>
   </div>
-
-  <!-- Total Points -->
   <div class="col-md-6 mb-3">
     <div class="card text-center p-3">
       <h5>Total Points (This Month)</h5>
-      <h3
-        class="text-danger"
-        id="points-counter"
-        data-points="{{ total_points }}"
-      >
-        0
-      </h3>
+      <h3 class="text-danger" id="points-counter" data-points="{{ total_points }}">0</h3>
     </div>
   </div>
 </div>
 
-<!-- 🔹 Product-wise Sales Amounts -->
+<!-- Product-wise Sales -->
 <hr class="my-4" />
 <h4>Product-wise Sales (This Month)</h4>
 <div class="row">
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>SIP</h6>
-      <h5>₹{{ sip_sales }}</h5>
-    </div>
-  </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>Lumpsum</h6>
-      <h5>₹{{ lumsum_sales }}</h5>
-    </div>
-  </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>Life Insurance</h6>
-      <h5>₹{{ life_sales }}</h5>
-    </div>
-  </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>Health Insurance</h6>
-      <h5>₹{{ health_sales }}</h5>
-    </div>
-  </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>Motor Insurance</h6>
-      <h5>₹{{ motor_sales }}</h5>
-    </div>
-  </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>PMS</h6>
-      <h5>₹{{ pms_sales }}</h5>
-    </div>
-  </div>
+  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>SIP</h6><h5>₹{{ sip_sales }}</h5></div></div>
+  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>Lumpsum</h6><h5>₹{{ lumsum_sales }}</h5></div></div>
+  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>Life Insurance</h6><h5>₹{{ life_sales }}</h5></div></div>
+  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>Health Insurance</h6><h5>₹{{ health_sales }}</h5></div></div>
+  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>Motor Insurance</h6><h5>₹{{ motor_sales }}</h5></div></div>
+  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>PMS</h6><h5>₹{{ pms_sales }}</h5></div></div>
 </div>
 
-<!-- 🔹 Points Counter Animation -->
+<!-- Daily Targets Progress -->
+<hr class="my-4" />
+<h4>Today's Progress</h4>
+<div class="card p-3 mb-4">
+  {% for target in daily_targets %}
+    <div class="mb-3">
+      <strong>{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
+      <div class="progress mt-1">
+        <div class="progress-bar bg-success" role="progressbar" 
+             style="width: {{ target.progress|floatformat:0 }}%"
+             aria-valuenow="{{ target.achieved }}" aria-valuemin="0" aria-valuemax="{{ target.target_value }}">
+          {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">No daily targets set.</p>
+  {% endfor %}
+</div>
+
+<!-- Monthly Targets Progress -->
+<h4>This Month's Progress</h4>
+<div class="card p-3 mb-4">
+  {% for target in monthly_targets %}
+    <div class="mb-3">
+      <strong>{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
+      <div class="progress mt-1">
+        <div class="progress-bar bg-info" role="progressbar" 
+             style="width: {{ target.progress|floatformat:0 }}%"
+             aria-valuenow="{{ target.achieved }}" aria-valuemin="0" aria-valuemax="{{ target.target_value }}">
+          {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">No monthly targets set.</p>
+  {% endfor %}
+</div>
+
+<h4>Past Performance (Last 6 Months)</h4>
+<table class="table">
+  <thead>
+    <tr><th>Month</th><th>Product</th><th>Target</th><th>Achieved</th></tr>
+  </thead>
+  <tbody>
+    {% for h in history %}
+    <tr>
+      <td>{{ h.month }}/{{ h.year }}</td>
+      <td>{{ h.product }}</td>
+      <td>{{ h.target_value }}</td>
+      <td>{{ h.achieved_value }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">No history available.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+
+<!-- Points Counter Animation -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const counter = document.getElementById("points-counter");
     if (counter) {
       const target = parseFloat(counter.getAttribute("data-points")) || 0;
       let current = 0;
-      const step = target / 50; // speed: 50 frames
+      const step = target / 50;
       function animate() {
         current += step;
         if (current >= target) {

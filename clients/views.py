@@ -9,8 +9,12 @@ from .models import Client, Sale, MonthlyIncentive,Employee
 from .forms import SaleForm,AdminSaleForm,EditSaleForm
 from django import forms
 from django.http import HttpResponse
-
-from .models import Sale
+from django.utils.timezone import now
+from django.db.models import Sum
+from .models import Sale, Client, Target
+from django.contrib.auth.decorators import login_required
+from .models import Employee, Sale, Target
+from .models import Employee, Sale, Target, MonthlyTargetHistory
 
 
 
@@ -112,22 +116,59 @@ def admin_dashboard(request):
     return render(request, "dashboards/admin_dashboard.html", context)
 
 
+
+
+
 @login_required
 def employee_dashboard(request):
     emp = request.user.employee
-    sales = Sale.objects.filter(employee=emp)
+    today = now().date()
 
-    # Totals for this employee
-    total_sales = sales.aggregate(total=Sum("amount"))["total"] or 0
-    total_points = sales.aggregate(total=Sum("points"))["total"] or 0
+    # --- Querysets restricted by time ---
+    monthly_sales_qs = Sale.objects.filter(
+        employee=emp,
+        date__year=today.year,
+        date__month=today.month
+    )
+    today_sales_qs = monthly_sales_qs.filter(date=today)
 
-    # Product-wise totals
-    sip_sales = sales.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
-    lumsum_sales = sales.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
-    life_sales = sales.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    health_sales = sales.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    motor_sales = sales.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    pms_sales = sales.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
+    # --- Totals for this employee (THIS MONTH only) ---
+    total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or 0
+    total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or 0
+
+    # --- Product-wise totals (THIS MONTH only) ---
+    sip_sales = monthly_sales_qs.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
+    lumsum_sales = monthly_sales_qs.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
+    life_sales = monthly_sales_qs.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    health_sales = monthly_sales_qs.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    motor_sales = monthly_sales_qs.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    pms_sales = monthly_sales_qs.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
+
+    # --- Today's sales (resets daily) ---
+    today_sales = today_sales_qs.values("product").annotate(total=Sum("amount"))
+    today_sales_dict = {s["product"]: s["total"] for s in today_sales}
+
+    # --- Monthly sales (resets monthly) ---
+    month_sales = monthly_sales_qs.values("product").annotate(total=Sum("amount"))
+    month_sales_dict = {s["product"]: s["total"] for s in month_sales}
+
+    # --- Global targets ---
+    daily_targets = Target.objects.filter(target_type="daily")
+    monthly_targets = Target.objects.filter(target_type="monthly")
+
+    # --- Attach progress to each target ---
+    for target in daily_targets:
+        achieved = today_sales_dict.get(target.product, 0)
+        target.achieved = achieved
+        target.progress = (achieved / target.target_value * 100) if target.target_value else 0
+
+    for target in monthly_targets:
+        achieved = month_sales_dict.get(target.product, 0)
+        target.achieved = achieved
+        target.progress = (achieved / target.target_value * 100) if target.target_value else 0
+
+    # --- Past 6 months performance history ---
+    history = MonthlyTargetHistory.objects.filter(employee=emp).order_by("-year", "-month")[:6]
 
     context = {
         "total_sales": total_sales,
@@ -138,8 +179,14 @@ def employee_dashboard(request):
         "health_sales": health_sales,
         "motor_sales": motor_sales,
         "pms_sales": pms_sales,
+        "today_sales_dict": today_sales_dict,
+        "month_sales_dict": month_sales_dict,
+        "daily_targets": daily_targets,
+        "monthly_targets": monthly_targets,
+        "history": history,   # 👈 important for template
     }
     return render(request, "dashboards/employee_dashboard.html", context)
+
 
 @login_required
 def add_sale(request):

@@ -31,16 +31,17 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'widget_tweaks',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'widget_tweaks',
     'django.contrib.staticfiles',
-    'django_select2',
-    'import_export',   # 👈 must be here
     'clients.apps.ClientsConfig',
+    'django_select2',
+    'import_export', 
+    
 ]
 
 MIDDLEWARE = [
@@ -87,6 +88,14 @@ DATABASES = {
         'PORT': '5432',
     }
 }
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-snowflake",  # just a unique key name
+    }
+}
+
 
 
 # Password validation

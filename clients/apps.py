@@ -6,3 +6,5 @@ class ClientsConfig(AppConfig):
 
     def ready(self):
         import clients.signals
+
+
