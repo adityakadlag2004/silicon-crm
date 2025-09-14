@@ -196,15 +196,15 @@ class Target(models.Model):
 
 class MonthlyTargetHistory(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
-    product = models.CharField(max_length=50, choices=Sale.PRODUCT_CHOICES)
-    target_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-    achieved_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    product = models.CharField(max_length=50)
     year = models.IntegerField()
     month = models.IntegerField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    target_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    achieved_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    points_value = models.IntegerField(default=0)  # ✅ new field
 
     class Meta:
         unique_together = ("employee", "product", "year", "month")
 
     def __str__(self):
-        return f"{self.employee.user.username} - {self.product} ({self.month}/{self.year})"
+        return f"{self.employee} - {self.product} ({self.month}/{self.year})"

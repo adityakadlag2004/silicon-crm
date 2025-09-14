@@ -623,6 +623,15 @@ def _last_n_months(today, n=12):
     months.reverse()
     return months
 
+import json
+from calendar import month_name
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from django.db.models import Sum
+from clients.models import MonthlyTargetHistory
+
+
+
 @login_required
 def employee_past_performance(request):
     """
