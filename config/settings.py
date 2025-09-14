@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'clients.apps.ClientsConfig',
     'django_select2',
     'import_export', 
+    'django_crontab',
     
 ]
 
@@ -95,6 +96,11 @@ CACHES = {
         "LOCATION": "unique-snowflake",  # just a unique key name
     }
 }
+
+CRONJOBS = [
+    # Run close_month at 12:05 AM on 1st of every month
+    ('5 0 1 * *', 'django.core.management.call_command', ['close_month']),
+]
 
 
 
