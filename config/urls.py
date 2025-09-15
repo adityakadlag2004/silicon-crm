@@ -15,13 +15,16 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.shortcuts import redirect
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("select2/", include("django_select2.urls")), 
     path("", include("clients.urls")), 
     path("clients/", include("clients.urls")),
+    path("", lambda request: redirect('login', permanent=False)),
 
+    # path("login/", views.login_view, name="login"),
 
 
 
