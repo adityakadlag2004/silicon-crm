@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-^db_o%w9*@(ak%7#%ftjsv$h^$4i4_@muo!10$$7x@2osja)vw
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["139.59.28.8", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["139.59.28.8", "localhost", "127.0.0.1", "yourdomain.com"]
 
 
 
@@ -85,7 +85,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'crmdb',
         'USER': 'crmuser',
-        'PASSWORD': 'StrongPasswordHere',
+        'PASSWORD': 'NewStrongPassword123!',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -139,7 +139,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
-STATIC_URL = 'static/'
+#STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = '/home/ubuntu/silicon-crm/static/'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = '/home/ubuntu/silicon-crm/media/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
