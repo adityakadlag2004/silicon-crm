@@ -76,7 +76,7 @@ from django.utils import timezone
 class IncentiveRule(models.Model):
     PRODUCT_CHOICES = [
         ("SIP", "SIP"),
-        ("Lumpsum", "Lumsum"),
+        ("Lumsum", "Lumsum"),
         ("Life Insurance", "Life Insurance"),
         ("Health Insurance", "Health Insurance"),
         ("Motor Insurance", "Motor Insurance"),
