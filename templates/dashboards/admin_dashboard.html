@@ -79,6 +79,75 @@
   </div>
 </div>
 
+<hr class="my-4" />
+
+<!-- ================== Section 1: Today’s Summary ================== -->
+<h4>Today's Summary (Per Employee)</h4>
+<div class="table-responsive mb-5">
+  <table class="table table-bordered text-center">
+    <thead class="table-light">
+      <tr>
+        <th>Employee</th>
+        <th>Sales (₹)</th>
+        <th>Points</th>
+        <th>New Clients</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in todays_summary %}
+      <tr>
+        <td>{{ row.employee }}</td>
+        <td>₹{{ row.sales }}</td>
+        <td>{{ row.points }}</td>
+        <td>{{ row.new_clients }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4">No data for today</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<hr class="my-4" />
+<!-- ================== Section 2: Monthly Sales Progress ================== -->
+<h4>Monthly Sales Progress (Employee × Product)</h4>
+<div class="table-responsive mb-5">
+  <table class="table table-bordered text-center">
+    <thead class="table-light">
+      <tr>
+        <th>Employee</th>
+        <th>SIP (₹)</th>
+        <th>Lumpsum (₹)</th>
+        <th>Life Insurance (₹)</th>
+        <th>Health Insurance (₹)</th>
+        <th>Motor Insurance (₹)</th>
+        <th>PMS (₹)</th>
+        <th>Total (₹)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in monthly_progress %}
+      <tr>
+        <td>{{ row.employee }}</td>
+        <td>₹{{ row.sip }}</td>
+        <td>₹{{ row.lumpsum }}</td>
+        <td>₹{{ row.life }}</td>
+        <td>₹{{ row.health }}</td>
+        <td>₹{{ row.motor }}</td>
+        <td>₹{{ row.pms }}</td>
+        <td><strong>₹{{ row.total }}</strong></td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="8">No data available for this month</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<hr class="my-4" />
+<!-- ================== Section 3: Monthly Cumulative Summary ================== -->
 <!-- 🔹 Points Counter Animation -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {

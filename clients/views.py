@@ -8,6 +8,7 @@ from datetime import date
 from .models import Client, Sale, MonthlyIncentive,Employee
 from .forms import SaleForm,AdminSaleForm,EditSaleForm
 from django import forms
+from django.utils import timezone
 from django.http import HttpResponse
 from django.utils.timezone import now
 from django.db.models import Sum
@@ -84,14 +85,18 @@ from .models import Sale, Client
 
 @login_required
 def admin_dashboard(request):
+    today = timezone.now().date()
+    month = today.month
+    year = today.year
+
     sales = Sale.objects.all()
 
-    # Overall summary
+    # ---------------- Overall summary ----------------
     total_clients = Client.objects.count()
     total_sales = sales.aggregate(total=Sum("amount"))["total"] or 0
     total_points = sales.aggregate(total=Sum("points"))["total"] or 0
 
-    # 🔹 Product-wise totals
+    # ---------------- Product-wise totals ----------------
     sip_sales = sales.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
     lumsum_sales = sales.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
     life_sales = sales.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
@@ -99,6 +104,60 @@ def admin_dashboard(request):
     motor_sales = sales.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
     pms_sales = sales.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
 
+    # ---------------- Section 1: Today's Summary ----------------
+    todays_summary = []
+    for emp in Employee.objects.all():
+        emp_sales = sales.filter(employee=emp, created_at__date=today)
+        todays_summary.append({
+            "employee": emp.user.username if hasattr(emp, "user") else emp.name,
+            "sales": emp_sales.aggregate(total=Sum("amount"))["total"] or 0,
+            "points": emp_sales.aggregate(total=Sum("points"))["total"] or 0,
+            "new_clients": Client.objects.filter(
+                mapped_to=emp, created_at__date=today
+            ).count(),
+        })
+
+    # ---------------- Section 2: Monthly Progress (Employee × Product) ----------------
+    PRODUCT_MAP = {
+        "SIP": "sip",
+        "Lumsum": "lumpsum",   # DB value = "Lumsum", template key = "lumpsum"
+        "Life Insurance": "life",
+        "Health Insurance": "health",
+        "Motor Insurance": "motor",
+        "PMS": "pms",
+    }
+
+    monthly_progress = []
+    for emp in Employee.objects.all():
+        row = {"employee": emp.user.username if hasattr(emp, "user") else emp.name}
+        total_emp_sales = 0
+        for product, key in PRODUCT_MAP.items():
+            amt = sales.filter(
+                employee=emp,
+                product=product,
+                created_at__year=year,
+                created_at__month=month,
+            ).aggregate(total=Sum("amount"))["total"] or 0
+            row[key] = amt
+            total_emp_sales += amt
+        row["total"] = total_emp_sales
+        monthly_progress.append(row)
+
+    # ---------------- Section 3: Monthly Cumulative Summary ----------------
+    monthly_sales = sales.filter(created_at__year=year, created_at__month=month)
+    monthly_summary = {
+        "total_clients": Client.objects.filter(created_at__year=year, created_at__month=month).count(),
+        "total_sales": monthly_sales.aggregate(total=Sum("amount"))["total"] or 0,
+        "total_points": monthly_sales.aggregate(total=Sum("points"))["total"] or 0,
+        "sip": monthly_sales.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0,
+        "lumpsum": monthly_sales.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0,
+        "life": monthly_sales.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0,
+        "health": monthly_sales.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0,
+        "motor": monthly_sales.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0,
+        "pms": monthly_sales.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0,
+    }
+
+    # ---------------- Context ----------------
     context = {
         "total_clients": total_clients,
         "total_sales": total_sales,
@@ -109,11 +168,12 @@ def admin_dashboard(request):
         "health_sales": health_sales,
         "motor_sales": motor_sales,
         "pms_sales": pms_sales,
+        "todays_summary": todays_summary,
+        "monthly_progress": monthly_progress,
+        "monthly_summary": monthly_summary,
     }
+
     return render(request, "dashboards/admin_dashboard.html", context)
-
-
-
 
 
 @login_required
