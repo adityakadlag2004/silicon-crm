@@ -1,14 +1,135 @@
+
 {% extends "base.html" %}
 {% block title %}All Clients{% endblock %}
-
 {% block content %}
-<h2 class="mb-4">All Clients</h2>
+<style>
+  .dashboard-section-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 1.2rem;
+    margin-top: 2rem;
+    letter-spacing: 0.5px;
+  }
+  .modern-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    padding: 1.5rem 1rem;
+    margin-bottom: 1.2rem;
+    transition: box-shadow 0.2s;
+  }
+  .modern-card:hover {
+    box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+  }
+  .filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+  }
+  @media (max-width: 900px) {
+    .filter-form {
+      flex-direction: column;
+      gap: 0.7rem;
+      align-items: stretch;
+    }
+    .filter-form > div {
+      width: 100%;
+      min-width: 0;
+    }
+    .dashboard-section-title { font-size: 1.05rem; }
+    .modern-card { padding: 1rem 0.3rem; }
+    .table thead th, .table td { font-size: 0.93rem; }
+  }
+  @media (max-width: 600px) {
+    .modern-card { padding: 0.7rem 0.1rem; }
+    .dashboard-section-title { font-size: 0.98rem; }
+    .table thead th, .table td { font-size: 0.89rem; padding: 0.5rem 0.2rem; }
+    .filter-form .form-label { font-size: 0.92rem; }
+    .dashboard-link { font-size: 0.95rem; padding: 0.45rem 0.7rem; }
+  }
+  .filter-form .form-label {
+    font-size: 0.98rem;
+    font-weight: 500;
+    color: #4a5568;
+    margin-bottom: 0.3rem;
+  }
+  .filter-form .form-select, .filter-form .form-control {
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.97rem;
+    padding: 0.45rem 0.7rem;
+    background: #f7fafc;
+    color: #2d3748;
+    box-shadow: none;
+    margin-bottom: 0.2rem;
+  }
+  .filter-form .form-select:focus, .filter-form .form-control:focus {
+    border-color: #ecc94b;
+    outline: none;
+    background: #fffde7;
+  }
+  .dashboard-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.55rem 1.2rem;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    transition: background 0.2s;
+    border: none;
+    font-size: 1rem;
+  }
+  .dashboard-link:hover {
+    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
+    color: #1a202c;
+  }
+  .table {
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    margin-bottom: 0;
+    font-size: 0.98rem;
+  }
+  .table thead th {
+    background: #f6e05e;
+    color: #2d3748;
+    font-weight: 600;
+    border-bottom: 2px solid #ecc94b;
+    padding: 0.7rem 0.5rem;
+    text-align: left;
+  }
+  .table tbody tr {
+    transition: background 0.2s;
+  }
+  .table tbody tr:hover {
+    background: #fffde7;
+  }
+  .table td {
+    padding: 0.6rem 0.5rem;
+    border-top: 1px solid #f7fafc;
+    color: #2d3748;
+  }
+  .table-striped tbody tr:nth-of-type(odd) {
+    background: #f7fafc;
+  }
+  @media (max-width: 900px) {
+    .filter-form { gap: 0.5rem; }
+    .modern-card { padding: 1rem 0.3rem; }
+    .dashboard-section-title { font-size: 1.05rem; }
+    .table thead th, .table td { font-size: 0.93rem; }
+  }
+</style>
 
-<!-- 🔹 Filter Form -->
-<div class="card p-3 mb-4">
-  <form method="get" class="row g-3">
-    <!-- Status Filters -->
-    <div class="col-md-2">
+<div class="dashboard-section-title">All Clients</div>
+
+<div class="modern-card mb-4">
+  <form method="get" class="filter-form">
+    <div>
       <label class="form-label">SIP</label>
       <select name="sip_status" class="form-select">
         <option value="">All</option>
@@ -16,7 +137,7 @@
         <option value="no" {% if request.GET.sip_status == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-    <div class="col-md-2">
+    <div>
       <label class="form-label">PMS</label>
       <select name="pms_status" class="form-select">
         <option value="">All</option>
@@ -24,7 +145,7 @@
         <option value="no" {% if request.GET.pms_status == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-    <div class="col-md-2">
+    <div>
       <label class="form-label">Life</label>
       <select name="life_status" class="form-select">
         <option value="">All</option>
@@ -32,7 +153,7 @@
         <option value="no" {% if request.GET.life_status == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-    <div class="col-md-2">
+    <div>
       <label class="form-label">Health</label>
       <select name="health_status" class="form-select">
         <option value="">All</option>
@@ -40,26 +161,22 @@
         <option value="no" {% if request.GET.health_status == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-
-    <!-- Range Filters -->
-    <div class="col-md-2"><label class="form-label">SIP Min</label><input type="number" name="sip_min" class="form-control" value="{{ request.GET.sip_min }}"></div>
-    <div class="col-md-2"><label class="form-label">SIP Max</label><input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}"></div>
-    <div class="col-md-2"><label class="form-label">PMS Min</label><input type="number" name="pms_min" class="form-control" value="{{ request.GET.pms_min }}"></div>
-    <div class="col-md-2"><label class="form-label">PMS Max</label><input type="number" name="pms_max" class="form-control" value="{{ request.GET.pms_max }}"></div>
-    <div class="col-md-2"><label class="form-label">Life Min</label><input type="number" name="life_min" class="form-control" value="{{ request.GET.life_min }}"></div>
-    <div class="col-md-2"><label class="form-label">Life Max</label><input type="number" name="life_max" class="form-control" value="{{ request.GET.life_max }}"></div>
-    <div class="col-md-2"><label class="form-label">Health Min</label><input type="number" name="health_min" class="form-control" value="{{ request.GET.health_min }}"></div>
-    <div class="col-md-2"><label class="form-label">Health Max</label><input type="number" name="health_max" class="form-control" value="{{ request.GET.health_max }}"></div>
-
-    <div class="col-md-12 mt-2">
-      <button type="submit" class="btn btn-primary">Filter</button>
-      <a href="{% url 'clients:all_clients' %}" class="btn btn-secondary">Reset</a>
+    <div><label class="form-label">SIP Min</label><input type="number" name="sip_min" class="form-control" value="{{ request.GET.sip_min }}"></div>
+    <div><label class="form-label">SIP Max</label><input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}"></div>
+    <div><label class="form-label">PMS Min</label><input type="number" name="pms_min" class="form-control" value="{{ request.GET.pms_min }}"></div>
+    <div><label class="form-label">PMS Max</label><input type="number" name="pms_max" class="form-control" value="{{ request.GET.pms_max }}"></div>
+    <div><label class="form-label">Life Min</label><input type="number" name="life_min" class="form-control" value="{{ request.GET.life_min }}"></div>
+    <div><label class="form-label">Life Max</label><input type="number" name="life_max" class="form-control" value="{{ request.GET.life_max }}"></div>
+    <div><label class="form-label">Health Min</label><input type="number" name="health_min" class="form-control" value="{{ request.GET.health_min }}"></div>
+    <div><label class="form-label">Health Max</label><input type="number" name="health_max" class="form-control" value="{{ request.GET.health_max }}"></div>
+    <div style="display:flex;gap:0.7rem;margin-top:0.5rem;flex-wrap:wrap;">
+      <button type="submit" class="dashboard-link">Filter</button>
+      <a href="{% url 'clients:all_clients' %}" class="dashboard-link" style="background:linear-gradient(90deg,#e2e8f0 0%,#f7fafc 100%);color:#2d3748;">Reset</a>
     </div>
   </form>
 </div>
 
-<!-- 🔹 Clients Table -->
-<div class="card p-3">
+<div class="modern-card" style="overflow-x:auto;">
   <table class="table table-striped">
     <thead>
       <tr>
@@ -72,7 +189,7 @@
         <th>Life Cover</th>
         <th>Health Cover</th>
         <th>Mapped To</th>
-        <th>Actions</th> <!-- ✅ Added column -->
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -88,7 +205,7 @@
         <td>₹{{ client.health_cover|default:0 }}</td>
         <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
         <td>
-          <a href="{% url 'clients:map_client' client.id %}" class="btn btn-sm btn-primary">Map</a>
+          <a href="{% url 'clients:map_client' client.id %}" class="dashboard-link" style="padding:0.3rem 1rem;font-size:0.95rem;">Map</a>
         </td>
       </tr>
       {% empty %}
