@@ -828,11 +828,14 @@ import io
 from django.contrib import messages
 from .models import CallingList, Prospect
 
-
 @login_required
 def upload_list(request):
     if request.method == "POST" and request.FILES.get("file"):
         import pandas as pd
+        from datetime import datetime, timedelta
+        from django.utils import timezone
+        from .models import CallingList, Prospect, Employee, CalendarEvent
+
         file = request.FILES["file"]
 
         # Supports both CSV and Excel
@@ -841,20 +844,23 @@ def upload_list(request):
         else:
             df = pd.read_excel(file)
 
-        from .models import CallingList, Prospect, Employee
+        # ✅ Create calling list
+        daily_calls = int(request.POST.get("daily_calls", 5))  # default 5 if not provided
         calling_list = CallingList.objects.create(
             title=request.POST.get("title", "Untitled List"),
-            uploaded_by=request.user,   # ✅ must be a User
+            uploaded_by=request.user,   # must be a User
         )
 
         employees = list(Employee.objects.filter(role="employee"))
         emp_count = len(employees)
         emp_index = 0
 
+        prospects = []
+
         for _, row in df.iterrows():
             assigned_to = None
 
-            # ✅ if assigned_to is provided in CSV
+            # ✅ if CSV has assigned_to column
             if "assigned_to" in df.columns and pd.notna(row.get("assigned_to")):
                 try:
                     assigned_to = Employee.objects.get(user__username=row["assigned_to"])
@@ -866,7 +872,7 @@ def upload_list(request):
                 assigned_to = employees[emp_index % emp_count]
                 emp_index += 1
 
-            Prospect.objects.create(
+            p = Prospect.objects.create(
                 name=row.get("name", "Unknown"),
                 phone=row.get("phone", ""),
                 email=row.get("email", ""),
@@ -874,11 +880,54 @@ def upload_list(request):
                 assigned_to=assigned_to,
                 calling_list=calling_list,
             )
+            prospects.append(p)
 
-        messages.success(request, f"Calling list '{calling_list.title}' uploaded successfully!")
+        # ✅ Create calendar events for each employee
+        start_date = timezone.now().date()
+        # if today is Sat (5) or Sun (6), move to Monday
+        if start_date.weekday() in (5, 6):
+            start_date += timedelta(days=(7 - start_date.weekday()))
+
+        emp_buckets = {emp.id: [] for emp in employees}
+        for p in prospects:
+            if p.assigned_to:
+                emp_buckets[p.assigned_to.id].append(p)
+
+        for emp_id, plist in emp_buckets.items():
+            day_index = 0
+            call_index = 0
+            current_date = start_date
+
+            for p in plist:
+                if call_index >= daily_calls:
+                    call_index = 0
+                    day_index += 1
+                    current_date = start_date + timedelta(days=day_index)
+
+                    # skip weekends
+                    while current_date.weekday() in (5, 6):
+                        day_index += 1
+                        current_date = start_date + timedelta(days=day_index)
+
+                CalendarEvent.objects.create(
+                    employee_id=emp_id,
+                    title=f"Call: {p.name}",
+                    type="call_followup",
+                    related_prospect=p,
+                    scheduled_time=timezone.make_aware(
+                        datetime.combine(current_date, datetime.min.time()) + timedelta(hours=10 + call_index)
+                    ),
+                    notes=f"Call {p.name}, Phone: {p.phone}",
+                )
+                call_index += 1
+
+        messages.success(
+            request, f"Calling list '{calling_list.title}' uploaded and tasks assigned!"
+        )
         return redirect("clients:admin_lists")
 
     return render(request, "calling/upload_list.html")
+
 
 
 @login_required

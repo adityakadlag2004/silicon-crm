@@ -4,7 +4,7 @@ from .models import Sale, Client
 
 from django import forms
 from django_select2.forms import ModelSelect2Widget
-from .models import Sale, Client
+from .models import Sale, Client, Employee
 
 class SaleForm(forms.ModelForm):
     class Meta:
@@ -41,3 +41,16 @@ class EditSaleForm(forms.ModelForm):
             "date": forms.DateInput(attrs={"type": "date"}),
         }
 
+class CallingListUploadForm(forms.Form):
+    title = forms.CharField(max_length=255)
+    file = forms.FileField()
+    daily_calls = forms.IntegerField(
+        min_value=1,
+        initial=5,
+        help_text="Number of calls per employee per day"
+    )
+    employees = forms.ModelMultipleChoiceField(
+        queryset=Employee.objects.filter(role="employee"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple
+    )
