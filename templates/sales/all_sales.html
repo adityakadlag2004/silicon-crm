@@ -40,7 +40,7 @@
 
     <div class="col-md-12 mt-2">
       <button type="submit" class="btn btn-primary">Search</button>
-      <a href="{% url 'all_sales' %}" class="btn btn-secondary">Reset</a>
+      <a href="{% url 'clients:all_sales' %}" class="btn btn-secondary">Reset</a>
     </div>
   </form>
 </div>
@@ -70,8 +70,8 @@
         <td>{{ sale.employee.user.username }}</td>
         {% if not is_employee %}
         <td>
-          <a href="{% url 'edit_sale' sale.id %}" class="btn btn-sm btn-warning">Edit</a>
-          <a href="{% url 'delete_sale' sale.id %}" class="btn btn-sm btn-danger">Delete</a>
+          <a href="{% url 'clients:edit_sale' sale.id %}" class="btn btn-sm btn-warning">Edit</a>
+          <a href="{% url 'clients:delete_sale' sale.id %}" class="btn btn-sm btn-danger">Delete</a>
         </td>
         {% endif %}
       </tr>

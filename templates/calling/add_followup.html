@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Add Follow-up{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Add Follow-up for {{ prospect.name }}</h2>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label for="followup_date" class="form-label">Follow-up Date & Time</label>
+      <input type="datetime-local" class="form-control" id="followup_date" name="followup_date" required>
+    </div>
+
+    <div class="mb-3">
+      <label for="notes" class="form-label">Notes</label>
+      <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+    </div>
+
+    <button type="submit" class="btn btn-success">Save Follow-up</button>
+    <a href="{% url 'clients:callingworkspace' prospect.calling_list.id %}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %}

@@ -12,7 +12,7 @@
       <h1 class="text-2xl font-bold text-gray-900">Past Performance</h1>
       <p class="text-sm text-gray-500">Track your monthly points and performance history</p>
     </div>
-    <a href="{% url 'employee_dashboard' %}" 
+    <a href="{% url 'clients:employee_dashboard' %}" 
        class="inline-flex items-center px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow transition">
       Back to Dashboard
     </a>
@@ -39,7 +39,7 @@
     <span>{{ m.label }}</span>
     <div class="flex items-center space-x-3">
       <span class="text-xs text-gray-500">{{ m.points }} pts</span>
-      <a href="{% url 'past_month_performance' year=m.year month=m.month %}" 
+      <a href="{% url 'clients:past_month_performance' year=m.year month=m.month %}" 
          class="text-xs text-yellow-600 hover:text-yellow-700 underline">
         View
       </a>

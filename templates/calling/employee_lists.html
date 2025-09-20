@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}My Calling Lists{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h2>📞 My Calling Lists</h2>
+  <div class="list-group">
+    {% for list in my_lists %}
+      <a href="{% url 'clients:callingworkspace' list.id %}" class="list-group-item list-group-item-action">
+        {{ list.title }}
+        <span class="badge bg-primary float-end">{{ list.my_prospects_count }}</span>
+      </a>
+    {% empty %}
+      <p class="text-muted">No calling lists assigned to you yet.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
