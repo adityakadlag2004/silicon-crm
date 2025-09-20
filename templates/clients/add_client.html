@@ -1,104 +1,133 @@
+
 {% extends "base.html" %}
 {% block title %}Add Client{% endblock %}
-
 {% block content %}
-<div class="container mt-4">
-  <div class="card shadow p-4">
-    <h2 class="mb-4">Add New Client</h2>
+<style>
+  .dashboard-section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 1rem;
+    margin-top: 2rem;
+  }
+  .modern-card {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+    padding: 2rem 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: box-shadow 0.2s;
+  }
+  .modern-card:hover {
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  }
+  .dashboard-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.7rem 1.5rem;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    transition: background 0.2s;
+  }
+  .dashboard-link:hover {
+    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
+    color: #1a202c;
+  }
+  @media (max-width: 768px) {
+    .dashboard-section-title { font-size: 1rem; }
+    .modern-card { padding: 1rem 0.5rem; }
+  }
+</style>
 
-    <form method="post" novalidate class="needs-validation">
-      {% csrf_token %}
+<div class="dashboard-section-title">Add New Client</div>
 
-      <div class="row g-3">
-        <!-- Name -->
-        <div class="col-md-6">
-          <label class="form-label">Client Name *</label>
-          <input type="text" name="name" value="{{ form.name.value|default_if_none:'' }}"
-                 class="form-control {% if form.name.errors %}is-invalid{% endif %}" required>
-          <div class="invalid-feedback">
-            {% if form.name.errors %}{{ form.name.errors.0 }}{% else %}Name is required{% endif %}
-          </div>
-        </div>
-
-        <!-- Email -->
-        <div class="col-md-6">
-          <label class="form-label">Email</label>
-          <input type="email" name="email" value="{{ form.email.value|default_if_none:'' }}"
-                 class="form-control {% if form.email.errors %}is-invalid{% endif %}">
-          <div class="invalid-feedback">
-            {% if form.email.errors %}{{ form.email.errors.0 }}{% else %}Enter a valid email address{% endif %}
-          </div>
-        </div>
-
-        <!-- Phone -->
-        <div class="col-md-6">
-          <label class="form-label">Phone</label>
-          <input type="text" name="phone" value="{{ form.phone.value|default_if_none:'' }}"
-                 class="form-control {% if form.phone.errors %}is-invalid{% endif %}" 
-                 pattern="^[0-9]{10}$" placeholder="10-digit number">
-          <div class="invalid-feedback">
-            {% if form.phone.errors %}{{ form.phone.errors.0 }}{% else %}Enter a valid 10-digit phone number{% endif %}
-          </div>
-        </div>
-
-        <!-- PAN -->
-        <div class="col-md-6">
-          <label class="form-label">PAN</label>
-          <input type="text" name="pan" value="{{ form.pan.value|default_if_none:'' }}"
-                 class="form-control {% if form.pan.errors %}is-invalid{% endif %}" 
-                 pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}" placeholder="ABCDE1234F">
-          <div class="invalid-feedback">
-            {% if form.pan.errors %}{{ form.pan.errors.0 }}{% else %}Enter a valid PAN (ABCDE1234F){% endif %}
-          </div>
-        </div>
-
-        <!-- Address -->
-        <div class="col-12">
-          <label class="form-label">Address</label>
-          <textarea name="address" class="form-control {% if form.address.errors %}is-invalid{% endif %}" rows="2">{{ form.address.value|default_if_none:'' }}</textarea>
-          <div class="invalid-feedback">
-            {% if form.address.errors %}{{ form.address.errors.0 }}{% endif %}
-          </div>
-        </div>
-
-        <!-- Mapped Employee -->
-        <div class="col-md-6">
-          <label class="form-label">Mapped To</label>
-          {{ form.mapped_to }}
+<div class="modern-card">
+  <form method="post" novalidate class="needs-validation">
+    {% csrf_token %}
+    <div class="row g-3">
+      <!-- Name -->
+      <div class="col-md-6">
+        <label class="form-label">Client Name *</label>
+        <input type="text" name="name" value="{{ form.name.value|default_if_none:'' }}"
+               class="form-control {% if form.name.errors %}is-invalid{% endif %}" required>
+        <div class="invalid-feedback">
+          {% if form.name.errors %}{{ form.name.errors.0 }}{% else %}Name is required{% endif %}
         </div>
       </div>
-
-      <hr class="my-4">
-
-      <!-- Product statuses -->
-      <h5 class="mb-3">Products</h5>
-      <div class="row g-3">
-        <div class="col-md-4">
-          <label class="form-label">SIP Amount</label>
-          <input type="number" step="0.01" name="sip_amount" value="{{ form.sip_amount.value|default_if_none:'' }}" class="form-control">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">PMS Amount</label>
-          <input type="number" step="0.01" name="pms_amount" value="{{ form.pms_amount.value|default_if_none:'' }}" class="form-control">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Life Cover</label>
-          <input type="number" step="0.01" name="life_cover" value="{{ form.life_cover.value|default_if_none:'' }}" class="form-control">
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Health Cover</label>
-          <input type="number" step="0.01" name="health_cover" value="{{ form.health_cover.value|default_if_none:'' }}" class="form-control">
+      <!-- Email -->
+      <div class="col-md-6">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" value="{{ form.email.value|default_if_none:'' }}"
+               class="form-control {% if form.email.errors %}is-invalid{% endif %}">
+        <div class="invalid-feedback">
+          {% if form.email.errors %}{{ form.email.errors.0 }}{% else %}Enter a valid email address{% endif %}
         </div>
       </div>
-
-      <div class="mt-4 d-flex justify-content-between">
-        <a href="{% url 'clients:all_clients' %}" class="btn btn-secondary">Cancel</a>
-        <button type="submit" class="btn btn-success">Save Client</button>
+      <!-- Phone -->
+      <div class="col-md-6">
+        <label class="form-label">Phone</label>
+        <input type="text" name="phone" value="{{ form.phone.value|default_if_none:'' }}"
+               class="form-control {% if form.phone.errors %}is-invalid{% endif %}" 
+               pattern="^[0-9]{10}$" placeholder="10-digit number">
+        <div class="invalid-feedback">
+          {% if form.phone.errors %}{{ form.phone.errors.0 }}{% else %}Enter a valid 10-digit phone number{% endif %}
+        </div>
       </div>
-    </form>
-  </div>
+      <!-- PAN -->
+      <div class="col-md-6">
+        <label class="form-label">PAN</label>
+        <input type="text" name="pan" value="{{ form.pan.value|default_if_none:'' }}"
+               class="form-control {% if form.pan.errors %}is-invalid{% endif %}" 
+               pattern="[A-Z]{5}[0-9]{4}[A-Z]{1}" placeholder="ABCDE1234F">
+        <div class="invalid-feedback">
+          {% if form.pan.errors %}{{ form.pan.errors.0 }}{% else %}Enter a valid PAN (ABCDE1234F){% endif %}
+        </div>
+      </div>
+      <!-- Address -->
+      <div class="col-12">
+        <label class="form-label">Address</label>
+        <textarea name="address" class="form-control {% if form.address.errors %}is-invalid{% endif %}" rows="2">{{ form.address.value|default_if_none:'' }}</textarea>
+        <div class="invalid-feedback">
+          {% if form.address.errors %}{{ form.address.errors.0 }}{% endif %}
+        </div>
+      </div>
+      <!-- Mapped Employee -->
+      <div class="col-md-6">
+        <label class="form-label">Mapped To</label>
+        {{ form.mapped_to }}
+      </div>
+    </div>
+    <hr class="my-4">
+    <!-- Product statuses -->
+    <h5 class="mb-3">Products</h5>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">SIP Amount</label>
+        <input type="number" step="0.01" name="sip_amount" value="{{ form.sip_amount.value|default_if_none:'' }}" class="form-control">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">PMS Amount</label>
+        <input type="number" step="0.01" name="pms_amount" value="{{ form.pms_amount.value|default_if_none:'' }}" class="form-control">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Life Cover</label>
+        <input type="number" step="0.01" name="life_cover" value="{{ form.life_cover.value|default_if_none:'' }}" class="form-control">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Health Cover</label>
+        <input type="number" step="0.01" name="health_cover" value="{{ form.health_cover.value|default_if_none:'' }}" class="form-control">
+      </div>
+    </div>
+    <div class="mt-4 d-flex justify-content-between">
+      <a href="{% url 'clients:all_clients' %}" class="dashboard-link" style="background:linear-gradient(90deg,#e2e8f0 0%,#f7fafc 100%);color:#2d3748;">Cancel</a>
+      <button type="submit" class="dashboard-link" style="background:linear-gradient(90deg,#38b2ac 0%,#319795 100%);color:#fff;">Save Client</button>
+    </div>
+  </form>
 </div>
-
 <script>
 // Bootstrap client-side validation
 (function () {

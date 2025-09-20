@@ -2,13 +2,133 @@
 {% block title %}All Sales{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">All Sales</h2>
+<style>
+  .dashboard-section-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 1.2rem;
+    margin-top: 2rem;
+    letter-spacing: 0.5px;
+    text-align: center;
+  }
+  .modern-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    padding: 1.5rem 1rem;
+    margin-bottom: 1.2rem;
+    transition: box-shadow 0.2s;
+  }
+  .modern-card:hover {
+    box-shadow: 0 4px 18px rgba(0,0,0,0.10);
+  }
+  .filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .filter-form .form-label {
+    font-size: 0.98rem;
+    font-weight: 500;
+    color: #4a5568;
+    margin-bottom: 0.3rem;
+  }
+  .filter-form .form-select, .filter-form .form-control {
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.97rem;
+    padding: 0.45rem 0.7rem;
+    background: #f7fafc;
+    color: #2d3748;
+    box-shadow: none;
+    margin-bottom: 0.2rem;
+  }
+  .filter-form .form-select:focus, .filter-form .form-control:focus {
+    border-color: #ecc94b;
+    outline: none;
+    background: #fffde7;
+  }
+  .dashboard-link, .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.55rem 1.2rem;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    transition: background 0.2s;
+    border: none;
+    font-size: 1rem;
+  }
+  .dashboard-link:hover, .btn-primary:hover {
+    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
+    color: #1a202c;
+  }
+  .btn-secondary {
+    border-radius: 10px;
+    background: #e2e8f0;
+    color: #2d3748;
+    font-weight: 600;
+    border: none;
+    font-size: 1rem;
+    padding: 0.55rem 1.2rem;
+    margin-left: 0.5rem;
+  }
+  .table {
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+    margin-bottom: 0;
+    font-size: 0.98rem;
+  }
+  .table thead th {
+    background: #f6e05e;
+    color: #2d3748;
+    font-weight: 600;
+    border-bottom: 2px solid #ecc94b;
+    padding: 0.7rem 0.5rem;
+    text-align: left;
+  }
+  .table tbody tr {
+    transition: background 0.2s;
+  }
+  .table tbody tr:hover {
+    background: #fffde7;
+  }
+  .table td {
+    padding: 0.6rem 0.5rem;
+    border-top: 1px solid #f7fafc;
+    color: #2d3748;
+  }
+  .table-striped tbody tr:nth-of-type(odd) {
+    background: #f7fafc;
+  }
+  @media (max-width: 900px) {
+    .filter-form { gap: 0.5rem; }
+    .modern-card { padding: 1rem 0.3rem; }
+    .dashboard-section-title { font-size: 1.05rem; }
+    .table thead th, .table td { font-size: 0.93rem; }
+  }
+  @media (max-width: 600px) {
+    .modern-card { padding: 0.7rem 0.1rem; }
+    .dashboard-section-title { font-size: 0.98rem; }
+    .table thead th, .table td { font-size: 0.89rem; padding: 0.5rem 0.2rem; }
+    .filter-form .form-label { font-size: 0.92rem; }
+    .dashboard-link, .btn-primary, .btn-secondary { font-size: 0.95rem; padding: 0.45rem 0.7rem; }
+  }
+</style>
+
+<div class="dashboard-section-title">All Sales</div>
 
 <!-- 🔹 Filters -->
-<div class="card p-3 mb-4">
-  <form method="get" class="row g-3">
-    <!-- Product filter -->
-    <div class="col-md-2">
+<div class="modern-card mb-4">
+  <form method="get" class="filter-form">
+    <div>
       <label class="form-label">Product</label>
       <select name="product" class="form-select">
         <option value="">All</option>
@@ -20,25 +140,15 @@
         <option value="PMS" {% if request.GET.product == "PMS" %}selected{% endif %}>PMS</option>
       </select>
     </div>
-
-    <!-- Employee filter (only visible to admins) -->
     {% if not is_employee %}
-    <div class="col-md-3">
+    <div>
       <label class="form-label">Employee</label>
       <input type="text" name="employee" class="form-control" placeholder="Employee Username" value="{{ request.GET.employee }}">
     </div>
     {% endif %}
-
-    <div class="col-md-2">
-      <label class="form-label">Start Date</label>
-      <input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date }}">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">End Date</label>
-      <input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date }}">
-    </div>
-
-    <div class="col-md-12 mt-2">
+    <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date }}"></div>
+    <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date }}"></div>
+    <div style="display:flex;gap:0.7rem;margin-top:0.5rem;flex-wrap:wrap;">
       <button type="submit" class="btn btn-primary">Search</button>
       <a href="{% url 'clients:all_sales' %}" class="btn btn-secondary">Reset</a>
     </div>
@@ -46,7 +156,7 @@
 </div>
 
 <!-- 🔹 Sales Table -->
-<div class="card p-3">
+<div class="modern-card" style="overflow-x:auto;">
   <table class="table table-striped">
     <thead>
       <tr>

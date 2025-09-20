@@ -1,88 +1,187 @@
-{% extends "base.html" %} {% load custom_tags %} {% block title %}Employee
-Dashboard{% endblock %} {% block content %}
-<h2 class="mb-4">My Dashboard</h2>
 
-<!-- Totals -->
-<div class="row">
-  <div class="col-md-6 mb-3">
-    <div class="card text-center p-3">
-      <h5>Total Sales (This Month)</h5>
-      <h3 class="text-success">₹{{ total_sales }}</h3>
+{% extends "base.html" %}
+{% load custom_tags %}
+{% block title %}Employee Dashboard{% endblock %}
+{% block content %}
+<style>
+  .dashboard-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .dashboard-header img {
+    height: 48px;
+    width: auto;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .dashboard-header h2 {
+    font-weight: 700;
+    font-size: 2rem;
+    color: #1a202c;
+    margin: 0;
+  }
+  .modern-card {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+    padding: 2rem 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: box-shadow 0.2s;
+  }
+  .modern-card:hover {
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  }
+  .modern-progress {
+    height: 18px;
+    border-radius: 9px;
+    background: #e9ecef;
+    overflow: hidden;
+  }
+  .modern-progress-bar {
+    height: 100%;
+    border-radius: 9px;
+    transition: width 0.6s cubic-bezier(.4,0,.2,1);
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modern-progress-bar-success {
+    background: linear-gradient(90deg, #38b2ac 0%, #319795 100%);
+  }
+  .modern-progress-bar-info {
+    background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%);
+  }
+  .dashboard-section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 1rem;
+    margin-top: 2rem;
+  }
+  .product-card {
+    background: #f7fafc;
+    border-radius: 14px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+    padding: 1.2rem 0.8rem;
+    text-align: center;
+    margin-bottom: 1rem;
+  }
+  .product-card h6 {
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+  }
+  .product-card h5 {
+    font-weight: 700;
+    color: #2b6cb0;
+    margin: 0;
+  }
+  .dashboard-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.7rem 1.5rem;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    transition: background 0.2s;
+  }
+  .dashboard-link:hover {
+    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
+    color: #1a202c;
+  }
+  @media (max-width: 900px) {
+    .dashboard-header h2 { font-size: 1.3rem; }
+    .modern-card { padding: 1rem 0.5rem; }
+    .dashboard-section-title { font-size: 1rem; }
+    .product-card { padding: 0.8rem 0.3rem; }
+    .row { gap: 0.5rem; }
+  }
+  @media (max-width: 600px) {
+    .dashboard-header { flex-direction: column; gap: 0.5rem; }
+    .dashboard-header h2 { font-size: 1.05rem; }
+    .modern-card { padding: 0.7rem 0.1rem; }
+    .dashboard-section-title { font-size: 0.98rem; }
+    .product-card { padding: 0.5rem 0.1rem; font-size: 0.92rem; }
+    .dashboard-link { font-size: 0.95rem; padding: 0.45rem 0.7rem; }
+    .row { gap: 0.3rem; }
+  }
+</style>
+
+<div class="dashboard-header">
+  
+  <h2>My Dashboard</h2>
+</div>
+
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  <div class="col-md-6 mb-3" style="flex:1 1 300px;min-width:220px;">
+    <div class="modern-card text-center">
+      <h5 style="color:#319795;font-weight:600;">Total Sales (This Month)</h5>
+      <h2 style="color:#38b2ac;font-weight:700;">₹{{ total_sales }}</h2>
     </div>
   </div>
-  <div class="col-md-6 mb-3">
-    <div class="card text-center p-3">
-      <h5>Total Points (This Month)</h5>
-      <h3
-        class="text-danger"
-        id="points-counter"
-        data-points="{{ total_points }}"
-      >
-        0
-      </h3>
+  <div class="col-md-6 mb-3" style="flex:1 1 300px;min-width:220px;">
+    <div class="modern-card text-center">
+      <h5 style="color:#3182ce;font-weight:600;">Total Points (This Month)</h5>
+      <h2 style="color:#4299e1;font-weight:700;" id="points-counter" data-points="{{ total_points }}">0</h2>
     </div>
   </div>
 </div>
 
-<!-- Product-wise Sales -->
-<hr class="my-4" />
-<h4>Product-wise Sales (This Month)</h4>
-<div class="row">
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
+<div class="dashboard-section-title">Product-wise Sales (This Month)</div>
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+    <div class="product-card">
       <h6>SIP</h6>
       <h5>₹{{ sip_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
+  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+    <div class="product-card">
       <h6>Lumpsum</h6>
       <h5>₹{{ lumsum_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
+  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+    <div class="product-card">
       <h6>Life Insurance</h6>
       <h5>₹{{ life_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
+  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+    <div class="product-card">
       <h6>Health Insurance</h6>
       <h5>₹{{ health_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
+  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+    <div class="product-card">
       <h6>Motor Insurance</h6>
       <h5>₹{{ motor_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
+  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+    <div class="product-card">
       <h6>PMS</h6>
       <h5>₹{{ pms_sales }}</h5>
     </div>
   </div>
 </div>
 
-<!-- Daily Targets Progress -->
-<hr class="my-4" />
-<h4>Today's Progress</h4>
-<div class="card p-3 mb-4">
+<div class="dashboard-section-title">Today's Progress</div>
+<div class="modern-card">
   {% for target in daily_targets %}
   <div class="mb-3">
-    <strong>{{ target.product }}</strong> — Target: ₹{{ target.target_value }} |
-    Achieved: ₹{{ target.achieved }}
-    <div class="progress mt-1">
-      <div
-        class="progress-bar bg-success"
-        role="progressbar"
-        style="width: {{ target.progress|floatformat:0 }}%"
-        aria-valuenow="{{ target.achieved }}"
-        aria-valuemin="0"
-        aria-valuemax="{{ target.target_value }}"
-      >
+    <strong style="color:#319795;">{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
+    <div class="modern-progress mt-2">
+      <div class="modern-progress-bar modern-progress-bar-success" style="width: {{ target.progress|floatformat:0 }}%">
         {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
       </div>
     </div>
@@ -92,22 +191,13 @@ Dashboard{% endblock %} {% block content %}
   {% endfor %}
 </div>
 
-<!-- Monthly Targets Progress -->
-<h4>This Month's Progress</h4>
-<div class="card p-3 mb-4">
+<div class="dashboard-section-title">This Month's Progress</div>
+<div class="modern-card">
   {% for target in monthly_targets %}
   <div class="mb-3">
-    <strong>{{ target.product }}</strong> — Target: ₹{{ target.target_value }} |
-    Achieved: ₹{{ target.achieved }}
-    <div class="progress mt-1">
-      <div
-        class="progress-bar bg-info"
-        role="progressbar"
-        style="width: {{ target.progress|floatformat:0 }}%"
-        aria-valuenow="{{ target.achieved }}"
-        aria-valuemin="0"
-        aria-valuemax="{{ target.target_value }}"
-      >
+    <strong style="color:#3182ce;">{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
+    <div class="modern-progress mt-2">
+      <div class="modern-progress-bar modern-progress-bar-info" style="width: {{ target.progress|floatformat:0 }}%">
         {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
       </div>
     </div>
@@ -117,48 +207,38 @@ Dashboard{% endblock %} {% block content %}
   {% endfor %}
 </div>
 
-<h4>Past Performance (Last 6 Months)</h4>
-<div class="mt-4">
-  <a
-    href="{% url 'clients:employee_past_performance' %}"
-    class="inline-flex items-center px-4 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-gray-800"
-  >
+<div class="dashboard-section-title">Past Performance (Last 6 Months)</div>
+<div class="mt-3">
+  <a href="{% url 'clients:employee_past_performance' %}" class="dashboard-link">
     View Detailed Past Performance
   </a>
 </div>
 
-{% comment %} Calling Calendaer {% endcomment %}
-<hr class="my-4" />
-<div class="card mt-4">
-  <div class="card-header">
-    📅 Today's Work
-  </div>  
-  <div class="card-body">
-    {% if todays_events %}
-      {% for event in todays_events %}
-        <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
-          <div>
-            <strong>{{ event.title }}</strong>
-            {% if event.related_prospect %}
-              – {{ event.related_prospect.name }}
-            {% endif %}
-            <br>
-            {{ event.scheduled_time|time:"h:i A" }} | {{ event.get_type_display }}
-          </div>
-          <div>
-            <a href="{% url 'clients:mark_done' event.id %}" class="btn btn-sm btn-success">✔</a>
-            <a href="{% url 'clients:reschedule' event.id %}" class="btn btn-sm btn-warning">↻</a>
-            <a href="{% url 'clients:skip' event.id %}" class="btn btn-sm btn-danger">✘</a>
-          </div>
+<div class="dashboard-section-title">Today's Work</div>
+<div class="modern-card">
+  {% if todays_events %}
+    {% for event in todays_events %}
+      <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2" style="background:#f7fafc;">
+        <div>
+          <strong style="color:#2b6cb0;">{{ event.title }}</strong>
+          {% if event.related_prospect %}
+            – {{ event.related_prospect.name }}
+          {% endif %}
+          <br>
+          <span style="color:#718096;">{{ event.scheduled_time|time:"h:i A" }} | {{ event.get_type_display }}</span>
         </div>
-      {% endfor %}
-    {% else %}
-      <p class="text-muted">No tasks for today 🎉</p>
-    {% endif %}
-  </div>
+        <div>
+          <a href="{% url 'clients:mark_done' event.id %}" class="btn btn-sm btn-success" title="Mark Done">✔</a>
+          <a href="{% url 'clients:reschedule' event.id %}" class="btn btn-sm btn-warning" title="Reschedule">↻</a>
+          <a href="{% url 'clients:skip' event.id %}" class="btn btn-sm btn-danger" title="Skip">✘</a>
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="text-muted">No tasks for today 🎉</p>
+  {% endif %}
 </div>
 
-<!-- Points Counter Animation -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const counter = document.getElementById("points-counter");

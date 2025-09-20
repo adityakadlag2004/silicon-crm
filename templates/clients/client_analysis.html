@@ -1,10 +1,51 @@
+
 {% extends "base.html" %}
 {% block title %}Client Analysis{% endblock %}
 {% block content %}
-<h2 class="mb-4">Client Analysis</h2>
+<style>
+  .dashboard-section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 1rem;
+    margin-top: 2rem;
+  }
+  .modern-card {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+    padding: 2rem 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: box-shadow 0.2s;
+  }
+  .modern-card:hover {
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  }
+  .dashboard-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.7rem 1.5rem;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    transition: background 0.2s;
+  }
+  .dashboard-link:hover {
+    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
+    color: #1a202c;
+  }
+  @media (max-width: 768px) {
+    .dashboard-section-title { font-size: 1rem; }
+    .modern-card { padding: 1rem 0.5rem; }
+  }
+</style>
 
-<!-- 🔹 Filter Form -->
-<div class="card p-3 mb-4">
+<div class="dashboard-section-title">Client Analysis</div>
+
+<div class="modern-card mb-4">
   <form method="get" class="row g-3">
     <div class="col-md-2">
       <label class="form-label">SIP</label>
@@ -43,15 +84,14 @@
     </div>
 
     <div class="col-md-12 mt-2">
-      <button type="submit" class="btn btn-primary">Filter</button>
-      <a href="{% url 'clients:client_analysis' %}" class="btn btn-secondary">Reset</a>
-      <button type="submit" name="export" value="1" class="btn btn-success">Export CSV</button>
+      <button type="submit" class="dashboard-link">Filter</button>
+      <a href="{% url 'clients:client_analysis' %}" class="dashboard-link" style="background:linear-gradient(90deg,#e2e8f0 0%,#f7fafc 100%);color:#2d3748;">Reset</a>
+      <button type="submit" name="export" value="1" class="dashboard-link" style="background:linear-gradient(90deg,#38b2ac 0%,#319795 100%);color:#fff;">Export CSV</button>
     </div>
   </form>
 </div>
 
-<!-- 🔹 Results Table -->
-<div class="card p-3">
+<div class="modern-card">
   <table class="table table-striped">
     <thead>
       <tr>

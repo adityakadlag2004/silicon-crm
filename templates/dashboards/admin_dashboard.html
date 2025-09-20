@@ -3,79 +3,175 @@
 {% block title %}Admin Dashboard{% endblock %}
 
 {% block content %}
-<h2 class="mb-4">Admin Dashboard</h2>
+<style>
+  .dashboard-section-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 1.5rem;
+    margin-top: 2rem;
+    letter-spacing: 0.5px;
+  }
+  .dashboard-cards-row {
+    display: flex;
+    gap: 1.2rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .dashboard-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    padding: 1.1rem 1rem;
+    min-width: 180px;
+    flex: 1 1 0;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    transition: box-shadow 0.2s;
+  }
+  .dashboard-card:hover {
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+  }
+  .dashboard-card h5 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+    color: #4a5568;
+  }
+  .dashboard-card h3 {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0;
+    color: #2b6cb0;
+  }
+  .dashboard-products-row {
+    display: flex;
+    gap: 1.2rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: stretch;
+    width: 100%;
+  }
+  .dashboard-product-card {
+    background: #f7fafc;
+    border-radius: 12px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+    padding: 1.5rem 2.2rem;
+    margin: 0.5rem 0.5rem 0.8rem 0.5rem;
+    min-width: 180px;
+    flex: 1 1 0;
+    text-align: center;
+    font-size: 1.12rem;
+    width: 100%;
+    max-width: none;
+  }
+  .dashboard-product-card h6 {
+    font-size: 0.98rem;
+    font-weight: 600;
+    color: #4a5568;
+    margin-bottom: 0.2rem;
+  }
+  .dashboard-product-card h5 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #2b6cb0;
+    margin: 0;
+  }
+  .modern-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 1.08rem;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.05);
+    overflow: hidden;
+  }
+  .modern-table th {
+    background: linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);
+    color: #2d3748;
+    font-weight: 700;
+    padding: 0.85rem 0.5rem;
+    border-bottom: 2px solid #e2e8f0;
+    font-size: 1.08rem;
+  }
+  .modern-table td {
+    padding: 0.7rem 0.5rem;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 1.05rem;
+    color: #2d3748;
+  }
+  .modern-table tr:last-child td {
+    border-bottom: none;
+  }
+  .modern-table tbody tr:hover {
+    background: #f7fafc;
+    transition: background 0.2s;
+  }
+  @media (max-width: 900px) {
+    .dashboard-cards-row, .dashboard-products-row { flex-direction: column; gap: 0.7rem; }
+    .dashboard-card, .dashboard-product-card { min-width: 0; }
+    .modern-table th, .modern-table td { font-size: 0.98rem; }
+    .table-bordered th, .table-bordered td { font-size: 0.98rem; }
+  }
+  @media (max-width: 600px) {
+    .dashboard-section-title { font-size: 1.05rem; text-align: center; }
+    .dashboard-card, .dashboard-product-card { padding: 0.7rem 0.2rem; font-size: 0.92rem; text-align: center; }
+    .modern-table th, .modern-table td { font-size: 0.93rem; padding: 0.5rem 0.2rem; text-align: center; }
+    .table-bordered th, .table-bordered td { font-size: 0.93rem; padding: 0.5rem 0.2rem; text-align: center; }
+    h4 { font-size: 1rem; text-align: center; }
+    .dashboard-cards-row, .dashboard-products-row, .table-responsive { justify-content: center; }
+    body, .container, .row { text-align: center; }
+    .dashboard-products-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
+    .dashboard-product-card { margin-left: auto; margin-right: auto; }
+  }
+</style>
 
-<div class="row">
-  <!-- Total Clients -->
-  <div class="col-md-3 mb-3">
-    <div class="card text-center p-3">
-      <h5>Total Clients</h5>
-      <h3 class="text-primary">{{ total_clients }}</h3>
-    </div>
+<div class="dashboard-section-title">Admin Dashboard</div>
+
+<div class="dashboard-cards-row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
+    <h5>Total Clients</h5>
+    <h3>{{ total_clients }}</h3>
   </div>
-
-  <!-- Total Sales (All Products) -->
-  <div class="col-md-3 mb-3">
-    <div class="card text-center p-3">
-      <h5>Total Sales (This Month)</h5>
-      <h3 class="text-success">₹{{ total_sales }}</h3>
-    </div>
+  <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
+    <h5>Total Sales (This Month)</h5>
+    <h3>₹{{ total_sales }}</h3>
   </div>
-
-  <!-- Total Points -->
-  <div class="col-md-3 mb-3">
-    <div class="card text-center p-3">
-      <h5>Total Points (This Month)</h5>
-      <h3
-        class="text-danger"
-        id="points-counter"
-        data-points="{{ total_points }}"
-      >
-        0
-      </h3>
-    </div>
+  <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
+    <h5>Total Points (This Month)</h5>
+    <h3 id="points-counter" data-points="{{ total_points }}">0</h3>
   </div>
 </div>
 
-<!-- 🔹 Product-wise Sales Amounts -->
-<hr class="my-4" />
-<h4>Product-wise Sales (This Month)</h4>
-<div class="row">
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>SIP</h6>
-      <h5>₹{{ sip_sales }}</h5>
-    </div>
+<div class="dashboard-section-title">Product-wise Sales (This Month)</div>
+<div class="dashboard-products-row" style="display:flex;flex-wrap:wrap;gap:1.2rem;width:100%;">
+  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+    <h6>SIP</h6>
+    <h5>₹{{ sip_sales }}</h5>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>Lumpsum</h6>
-      <h5>₹{{ lumsum_sales }}</h5>
-    </div>
+  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+    <h6>Lumpsum</h6>
+    <h5>₹{{ lumsum_sales }}</h5>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>Life Insurance</h6>
-      <h5>₹{{ life_sales }}</h5>
-    </div>
+  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+    <h6>Life Insurance</h6>
+    <h5>₹{{ life_sales }}</h5>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>Health Insurance</h6>
-      <h5>₹{{ health_sales }}</h5>
-    </div>
+  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+    <h6>Health Insurance</h6>
+    <h5>₹{{ health_sales }}</h5>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>Motor Insurance</h6>
-      <h5>₹{{ motor_sales }}</h5>
-    </div>
+  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+    <h6>Motor Insurance</h6>
+    <h5>₹{{ motor_sales }}</h5>
   </div>
-  <div class="col-md-2 mb-3">
-    <div class="card text-center p-3">
-      <h6>PMS</h6>
-      <h5>₹{{ pms_sales }}</h5>
-    </div>
+  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+    <h6>PMS</h6>
+    <h5>₹{{ pms_sales }}</h5>
   </div>
 </div>
 
@@ -83,68 +179,78 @@
 
 <!-- ================== Section 1: Today’s Summary ================== -->
 <h4>Today's Summary (Per Employee)</h4>
-<div class="table-responsive mb-5">
-  <table class="table table-bordered text-center">
-    <thead class="table-light">
-      <tr>
-        <th>Employee</th>
-        <th>Sales (₹)</th>
-        <th>Points</th>
-        <th>New Clients</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in todays_summary %}
-      <tr>
-        <td>{{ row.employee }}</td>
-        <td>₹{{ row.sales }}</td>
-        <td>{{ row.points }}</td>
-        <td>{{ row.new_clients }}</td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="4">No data for today</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="table-responsive mb-5" style="overflow-x:auto;">
+  {% for row in todays_summary %}
+    <div class="card mb-2" style="border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,0.05);">
+      <div class="card-header" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);color:#2d3748;cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#today-{{ forloop.counter }}" aria-expanded="false" aria-controls="today-{{ forloop.counter }}">
+        <strong>{{ row.employee }}</strong>
+      </div>
+      <div id="today-{{ forloop.counter }}" class="collapse">
+        <div class="card-body p-2">
+          <table class="table table-bordered text-center mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Sales (₹)</th>
+                <th>Points</th>
+                <th>New Clients</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>₹{{ row.sales }}</td>
+                <td>{{ row.points }}</td>
+                <td>{{ row.new_clients }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card mb-2"><div class="card-body">No data for today</div></div>
+  {% endfor %}
 </div>
 <hr class="my-4" />
 <!-- ================== Section 2: Monthly Sales Progress ================== -->
 <h4>Monthly Sales Progress (Employee × Product)</h4>
-<div class="table-responsive mb-5">
-  <table class="table table-bordered text-center">
-    <thead class="table-light">
-      <tr>
-        <th>Employee</th>
-        <th>SIP (₹)</th>
-        <th>Lumpsum (₹)</th>
-        <th>Life Insurance (₹)</th>
-        <th>Health Insurance (₹)</th>
-        <th>Motor Insurance (₹)</th>
-        <th>PMS (₹)</th>
-        <th>Total (₹)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in monthly_progress %}
-      <tr>
-        <td>{{ row.employee }}</td>
-        <td>₹{{ row.sip }}</td>
-        <td>₹{{ row.lumpsum }}</td>
-        <td>₹{{ row.life }}</td>
-        <td>₹{{ row.health }}</td>
-        <td>₹{{ row.motor }}</td>
-        <td>₹{{ row.pms }}</td>
-        <td><strong>₹{{ row.total }}</strong></td>
-      </tr>
-      {% empty %}
-      <tr>
-        <td colspan="8">No data available for this month</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="table-responsive mb-5" style="overflow-x:auto;">
+  {% for row in monthly_progress %}
+    <div class="card mb-2" style="border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,0.05);">
+      <div class="card-header" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);color:#2d3748;cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#employee-{{ forloop.counter }}" aria-expanded="false" aria-controls="employee-{{ forloop.counter }}">
+        <strong>{{ row.employee }}</strong>
+      </div>
+      <div id="employee-{{ forloop.counter }}" class="collapse">
+        <div class="card-body p-2">
+          <table class="table table-bordered text-center mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>SIP (₹)</th>
+                <th>Lumpsum (₹)</th>
+                <th>Life Insurance (₹)</th>
+                <th>Health Insurance (₹)</th>
+                <th>Motor Insurance (₹)</th>
+                <th>PMS (₹)</th>
+                <th>Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>₹{{ row.sip }}</td>
+                <td>₹{{ row.lumpsum }}</td>
+                <td>₹{{ row.life }}</td>
+                <td>₹{{ row.health }}</td>
+                <td>₹{{ row.motor }}</td>
+                <td>₹{{ row.pms }}</td>
+                <td><strong>₹{{ row.total }}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="card mb-2"><div class="card-body">No data available for this month</div></div>
+  {% endfor %}
 </div>
 <hr class="my-4" />
 <!-- ================== Section 3: Monthly Cumulative Summary ================== -->

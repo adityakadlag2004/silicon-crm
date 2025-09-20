@@ -21,18 +21,58 @@
       }
       .navbar {
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        background: linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%) !important;
+      }
+      .navbar .navbar-brand, .navbar .nav-link, .navbar .navbar-text {
+        color: #2d3748 !important;
+      }
+      .navbar .nav-link.active, .navbar .nav-link:focus, .navbar .nav-link:hover {
+        color: #1a202c !important;
+        background: rgba(255,255,255,0.12);
+        border-radius: 8px;
+      }
+      .dropdown-menu {
+        background: #fffbe5;
+        color: #2d3748;
       }
       .navbar-brand {
         font-weight: bold;
+        letter-spacing: 1px;
       }
       .dropdown-menu {
         border-radius: 8px;
+      }
+      .navbar-nav .nav-link {
+        font-size: 1.08rem;
+        font-weight: 500;
+        padding: 0.6rem 1rem;
+      }
+      .navbar-text {
+        font-size: 1.05rem;
+      }
+      @media (max-width: 900px) {
+        .navbar-nav .nav-link {
+          font-size: 1rem;
+          padding: 0.5rem 0.7rem;
+        }
+        .navbar-brand { font-size: 1.1rem; }
+      }
+      @media (max-width: 600px) {
+        .navbar-brand, .navbar-text, .nav-link, .dropdown-item {
+          text-align: center !important;
+          width: 100%;
+        }
+        .navbar-nav { align-items: center; }
+        .container, .container-fluid, .mt-4 {
+          text-align: center;
+        }
+        .dropdown-menu { min-width: 100px; }
       }
     </style>
   </head>
   <body>
     <!-- Navbar with dropdowns -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+  <nav class="navbar navbar-expand-lg" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);">
       <div class="container-fluid">
         <a class="navbar-brand" href="#">KI BackOffice</a>
         <button
@@ -48,17 +88,16 @@
         </button>
 
         <div class="collapse navbar-collapse" id="navbarNav">
-          <ul class="navbar-nav me-auto">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
             {% if request.user.is_authenticated %}
               {% if request.user.employee.role == "admin" %}
                 <!-- Admin -->
                 <li class="nav-item">
                   <a class="nav-link" href="{% url 'clients:admin_dashboard' %}">Dashboard</a>
                 </li>
-
                 <!-- Clients Dropdown -->
                 <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" id="clientsDropdown" role="button" data-bs-toggle="dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="clientsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                     Clients
                   </a>
                   <ul class="dropdown-menu" aria-labelledby="clientsDropdown">
@@ -66,10 +105,9 @@
                     <li><a class="dropdown-item" href="{% url 'clients:add_client' %}">Add Client</a></li>
                   </ul>
                 </li>
-
                 <!-- Sales Dropdown -->
                 <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" id="salesDropdown" role="button" data-bs-toggle="dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="salesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                     Sales
                   </a>
                   <ul class="dropdown-menu" aria-labelledby="salesDropdown">
@@ -80,10 +118,9 @@
                     <li><a class="dropdown-item" href="{% url 'clients:client_analysis' %}">Client Analysis</a></li>
                   </ul>
                 </li>
-
                 <!-- 🔹 Calling Dropdown (Admin) -->
                 <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" id="callingDropdown" role="button" data-bs-toggle="dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="callingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                     Calling
                   </a>
                   <ul class="dropdown-menu" aria-labelledby="callingDropdown">
@@ -91,16 +128,14 @@
                     <li><a class="dropdown-item" href="{% url 'clients:admin_lists' %}">Manage Calling Lists</a></li>
                   </ul>
                 </li>
-
               {% elif request.user.employee.role == "employee" %}
                 <!-- Employee -->
                 <li class="nav-item">
                   <a class="nav-link" href="{% url 'clients:employee_dashboard' %}">Dashboard</a>
                 </li>
-
                 <!-- Clients Dropdown -->
                 <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" id="empClientsDropdown" role="button" data-bs-toggle="dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="empClientsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                     Clients
                   </a>
                   <ul class="dropdown-menu" aria-labelledby="empClientsDropdown">
@@ -108,10 +143,9 @@
                     <li><a class="dropdown-item" href="{% url 'clients:add_client' %}">Add Client</a></li>
                   </ul>
                 </li>
-
                 <!-- Sales Dropdown -->
                 <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" id="empSalesDropdown" role="button" data-bs-toggle="dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="empSalesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                     Sales
                   </a>
                   <ul class="dropdown-menu" aria-labelledby="empSalesDropdown">
@@ -121,10 +155,9 @@
                     <li><a class="dropdown-item" href="{% url 'clients:all_sales' %}">All Sales</a></li>
                   </ul>
                 </li>
-
                 <!-- 🔹 Calling Dropdown (Employee) -->
                 <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" id="empCallingDropdown" role="button" data-bs-toggle="dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="empCallingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                     Calling
                   </a>
                   <ul class="dropdown-menu" aria-labelledby="empCallingDropdown">
@@ -135,10 +168,9 @@
               {% endif %}
             {% endif %}
           </ul>
-
           <!-- Right side -->
-          <span class="navbar-text text-white me-3">Hi, {{ request.user.username }}</span>
-          <a href="{% url 'clients:logout' %}" class="btn btn-light btn-sm">Logout</a>
+          <span class="navbar-text" style="color:#2d3748;font-weight:600;">Hi, {{ request.user.username }}</span>
+          <a href="{% url 'clients:logout' %}" class="btn btn-outline-dark btn-sm ms-2">Logout</a>
         </div>
       </div>
     </nav>
