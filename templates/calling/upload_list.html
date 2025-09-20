@@ -1,15 +1,78 @@
+
 {% extends "base.html" %}
 {% block title %}Upload Calling List{% endblock %}
 {% block content %}
-<div class="container mt-4">
+<style>
+  .upload-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    padding: 2.2rem 1.5rem 2rem 1.5rem;
+    margin-bottom: 1.2rem;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .upload-card h2 {
+    text-align: center;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 1.2rem;
+    letter-spacing: 0.5px;
+  }
+  .form-label {
+    font-weight: 500;
+    color: #4a5568;
+    margin-bottom: 0.2rem;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin-bottom: 1.1rem;
+  }
+  .form-control {
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 1rem;
+    background: #f7fafc;
+    color: #2d3748;
+    margin-bottom: 0.1rem;
+    padding: 0.55rem 0.8rem;
+  }
+  .form-control:focus {
+    border-color: #ecc94b;
+    outline: none;
+    background: #fffde7;
+  }
+  .btn-primary {
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 0.55rem 1.2rem;
+    margin-top: 0.5rem;
+  }
+  .btn-primary:hover {
+    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
+    color: #1a202c;
+  }
+  @media (max-width: 600px) {
+    .upload-card { padding: 1rem 0.2rem; max-width: 98vw; }
+    h2 { font-size: 1.1rem; }
+    .btn-primary { font-size: 0.95rem; padding: 0.45rem 0.7rem; }
+  }
+</style>
+<div class="upload-card">
   <h2>Upload Calling List</h2>
   <form method="POST" enctype="multipart/form-data">
     {% csrf_token %}
-    <div class="mb-3">
+    <div class="form-group">
       <label class="form-label">List Title</label>
       <input type="text" name="title" class="form-control" required />
     </div>
-    <div class="mb-3">
+    <div class="form-group">
       <label class="form-label">Upload File (CSV/Excel)</label>
       <input type="file" name="file" class="form-control" required />
     </div>

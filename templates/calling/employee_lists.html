@@ -1,13 +1,70 @@
+
 {% extends "base.html" %}
 {% block title %}My Calling Lists{% endblock %}
 {% block content %}
-<div class="container mt-4">
+<style>
+  .my-lists-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    padding: 2.2rem 1.5rem 2rem 1.5rem;
+    margin-bottom: 1.2rem;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .my-lists-card h2 {
+    text-align: center;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 1.2rem;
+    letter-spacing: 0.5px;
+  }
+  .my-list-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .my-list-group a {
+    background: #f7fafc;
+    border-radius: 8px;
+    padding: 0.8rem 1.1rem;
+    font-size: 1.05rem;
+    color: #2d3748;
+    font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-decoration: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    transition: background 0.2s;
+  }
+  .my-list-group a:hover {
+    background: #fffde7;
+  }
+  .badge {
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.95rem;
+  }
+  @media (max-width: 600px) {
+    .my-lists-card { padding: 1rem 0.2rem; max-width: 98vw; }
+    h2 { font-size: 1.1rem; }
+    .my-list-group a { font-size: 0.97rem; padding: 0.6rem 0.7rem; }
+    .badge { font-size: 0.9rem; padding: 0.2rem 0.5rem; }
+  }
+</style>
+<div class="my-lists-card">
   <h2>📞 My Calling Lists</h2>
-  <div class="list-group">
+  <div class="my-list-group">
     {% for list in my_lists %}
-      <a href="{% url 'clients:callingworkspace' list.id %}" class="list-group-item list-group-item-action">
-        {{ list.title }}
-        <span class="badge bg-primary float-end">{{ list.my_prospects_count }}</span>
+      <a href="{% url 'clients:callingworkspace' list.id %}">
+        <span>{{ list.title }}</span>
+        <span class="badge">{{ list.my_prospects_count }}</span>
       </a>
     {% empty %}
       <p class="text-muted">No calling lists assigned to you yet.</p>
