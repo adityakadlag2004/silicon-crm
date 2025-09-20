@@ -18,17 +18,34 @@
   .calendar-card h2 {
     text-align: center;
     font-weight: 700;
-    color: #2d3748;
+    color: #1a202c;
     margin-bottom: 1.2rem;
     letter-spacing: 0.5px;
+    text-shadow: 0 1px 4px rgba(236,201,75,0.12);
   }
   #calendar {
     max-width: 100%;
     margin: 0 auto;
-    background: #fff;
+    background: linear-gradient(120deg, #fffde7 0%, #f6e05e 100%);
     padding: 12px;
-    border-radius: 8px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    border-radius: 12px;
+    box-shadow: 0 1px 8px rgba(236,201,75,0.10);
+    color: #1a202c;
+  }
+  .fc .fc-toolbar-title, .fc .fc-col-header-cell-cushion, .fc .fc-daygrid-day-number, .fc .fc-event-title {
+    color: #1a202c !important;
+    font-weight: 600;
+    text-shadow: 0 1px 4px rgba(236,201,75,0.10);
+  }
+  .fc .fc-timegrid-slot-label {
+    color: #ecc94b !important;
+    font-weight: 700;
+    background: #2d3748 !important;
+    border-radius: 6px;
+    padding: 2px 8px;
+  }
+  .fc .fc-daygrid-day {
+    color: #2d3748 !important;
   }
   .fc-daygrid-day:hover { cursor: pointer; background-color: #f3f7fb; }
   .fc-customButton-backButton { background-color: #6c757d; color: #fff; border: none; }
@@ -119,8 +136,9 @@ document.addEventListener('DOMContentLoaded', function() {
         info.el.style.backgroundColor = "#28a745"; // green
         info.el.style.borderColor = "#28a745";
       } else if (type === "meeting") {
-        info.el.style.backgroundColor = "#007bff"; // blue
-        info.el.style.borderColor = "#007bff";
+        info.el.style.backgroundColor = "#ecc94b"; // brand yellow
+        info.el.style.borderColor = "#ecc94b";
+        info.el.style.color = "#2d3748";
       } else if (type === "reminder") {
         info.el.style.backgroundColor = "#fd7e14"; // orange
         info.el.style.borderColor = "#fd7e14";
