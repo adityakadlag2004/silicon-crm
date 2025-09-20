@@ -2,18 +2,26 @@ from django import forms
 from .models import Sale, Client
 
 
+from django import forms
+from django_select2.forms import ModelSelect2Widget
+from .models import Sale, Client
+
 class SaleForm(forms.ModelForm):
     class Meta:
         model = Sale
         fields = ["client", "product", "amount", "cover_amount", "date"]
         widgets = {
+            "client": ModelSelect2Widget(
+                model=Client,
+                search_fields=["name__icontains", "phone__icontains", "email__icontains"],
+                attrs={"data-placeholder": "Search Client"}
+            ),
             "date": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
         employee = kwargs.pop("employee", None)
         super().__init__(*args, **kwargs)
-        # Hide cover_amount by default, show only for insurance products (JS will handle in template)
         self.fields["cover_amount"].required = False
 
 

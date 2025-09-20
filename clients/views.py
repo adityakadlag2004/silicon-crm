@@ -5,21 +5,26 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Sum, Value, DecimalField
 from datetime import date
-from .models import Client, Sale, MonthlyIncentive,Employee
+from .models import Client, Sale, CalendarEvent,Employee
 from .forms import SaleForm,AdminSaleForm,EditSaleForm
+from django.http import HttpResponseRedirect
 from django import forms
-from django.utils import timezone
+from django.utils import timezone  
 from django.http import HttpResponse
 from django.utils.timezone import now
 from django.db.models import Sum
 from .models import Sale, Client, Target
 from django.contrib.auth.decorators import login_required
-from .models import Employee, Sale, Target
-from .models import Employee, Sale, Target, MonthlyTargetHistory
+from .models import Employee, Sale, Target, MonthlyTargetHistory,CallRecord
 import json
 from calendar import month_name
 
 
+
+from django.contrib import messages
+from django.contrib.auth import authenticate, login
+from django.shortcuts import render, redirect
+from .models import Sale  # make sure Sale is imported
 
 def login_view(request):
     if request.method == "POST":
@@ -39,13 +44,13 @@ def login_view(request):
                     s.compute_points()
                     s.save()
 
-            # Redirect based on role
+            # ✅ Redirect based on role
             if hasattr(user, "employee"):
                 role = user.employee.role.lower()
                 if role == "admin":
-                    return redirect("admin_dashboard")
+                    return redirect("clients:admin_dashboard")   # fixed
                 elif role == "employee":
-                    return redirect("employee_dashboard")
+                    return redirect("clients:employee_dashboard")  # fixed
             else:
                 messages.error(request, "No employee role mapped.")
         else:
@@ -55,10 +60,11 @@ def login_view(request):
     return render(request, "login.html")
 
 
+
 @login_required
 def logout_view(request):
     logout(request)
-    return redirect("login")
+    return redirect("clients:login")
 
 # Client Form
 class ClientForm(forms.ModelForm):
@@ -204,6 +210,11 @@ def employee_dashboard(request):
     # --- Today's sales (resets daily) ---
     today_sales = today_sales_qs.values("product").annotate(total=Sum("amount"))
     today_sales_dict = {s["product"]: s["total"] for s in today_sales}
+    today = timezone.now().date()
+    todays_tasks = CalendarEvent.objects.filter(
+    employee=request.user.employee,
+    scheduled_time__date=today,
+    ).order_by("scheduled_time")
 
     # --- Monthly sales (resets monthly) ---
     month_sales = monthly_sales_qs.values("product").annotate(total=Sum("amount"))
@@ -227,12 +238,20 @@ def employee_dashboard(request):
     # --- Past 6 months performance history ---
     history = MonthlyTargetHistory.objects.filter(employee=emp).order_by("-year", "-month")[:6]
 
+    
+    todays_events = CalendarEvent.objects.filter(
+    employee=request.user.employee,
+    scheduled_time__date=today,
+    status="pending",   # 👈 only show pending
+).order_by("scheduled_time")
+
     context = {
         "total_sales": total_sales,
         "total_points": total_points,
         "sip_sales": sip_sales,
         "lumsum_sales": lumsum_sales,
         "life_sales": life_sales,
+        "todays_events": todays_events,
         "health_sales": health_sales,
         "motor_sales": motor_sales,
         "pms_sales": pms_sales,
@@ -248,24 +267,37 @@ def employee_dashboard(request):
 @login_required
 def add_sale(request):
     if request.method == "POST":
-        form = SaleForm(request.POST, employee=request.user.employee)
+        form = SaleForm(request.POST)
         if form.is_valid():
             sale = form.save(commit=False)
-            # always assign employee
-            sale.employee = request.user.employee
+
+            # ✅ assign logged-in employee
+            sale.employee = request.user.employee  
+
+            # ✅ assign client from hidden field
+            client_id = request.POST.get("client")
+            if not client_id:
+                messages.error(request, "Please select a client from search results.")
+                return render(request, "sales/add_sale.html", {"form": form})
+
             try:
-                sale.save()
-                messages.success(request, "Sale added successfully!")
-                return redirect("employee_dashboard")
-            except Exception as e:
-                messages.error(request, f"Error saving sale: {e}")
-        else:
-            messages.error(request, f"Form errors: {form.errors}")
+                client = Client.objects.get(id=client_id)
+            except Client.DoesNotExist:
+                messages.error(request, "Selected client does not exist.")
+                return render(request, "sales/add_sale.html", {"form": form})
+
+            sale.client = client
+
+            # compute points before saving
+            sale.compute_points()
+            sale.save()
+
+            messages.success(request, "Sale added successfully!")
+            return redirect("clients:all_sales")
     else:
-        form = SaleForm(employee=request.user.employee)
+        form = SaleForm()
 
     return render(request, "sales/add_sale.html", {"form": form})
-
 # clients/views.py
 from django.db.models import Q
 
@@ -359,7 +391,7 @@ def add_client(request):
         if form.is_valid():
             form.save()
             messages.success(request, "Client added successfully!")
-            return redirect("all_clients")
+            return redirect("clients:all_clients")  # ✅ namespaced
     else:
         form = ClientForm()
     return render(request, "clients/add_client.html", {"form": form})
@@ -411,7 +443,7 @@ def all_sales(request):
 @login_required
 def admin_add_sale(request):
     if not request.user.is_superuser and request.user.employee.role != "admin":
-        return redirect("employee_dashboard")  # block non-admins
+        return redirect("clients:employee_dashboard")  # block non-admins
 
     if request.method == "POST":
         form = AdminSaleForm(request.POST)
@@ -424,7 +456,7 @@ def admin_add_sale(request):
             else:
                 sale.save()
                 messages.success(request, "Sale added successfully!")
-                return redirect("all_sales")  # show latest sales immediately
+                return redirect("clients:all_sales")  # show latest sales immediately
     else:
         form = AdminSaleForm()
 
@@ -441,7 +473,7 @@ def manage_incentive_rules(request):
     # Role check OR hardcoded pass
     if request.user.employee.role != "admin" and request.GET.get("pass") != "SuperSecret123":
         messages.error(request, "You do not have permission to access incentive rules.")
-        return redirect("admin_dashboard")
+        return redirect("clients:admin_dashboard")
 
     rules = IncentiveRule.objects.all()
 
@@ -454,7 +486,7 @@ def manage_incentive_rules(request):
                 rule.points_per_unit = request.POST[points_field]
                 rule.save()
         messages.success(request, "Incentive rules updated successfully!")
-        return redirect("manage_incentive_rules")
+        return redirect("clients:manage_incentive_rules")
 
     return render(request, "incentives/manage_rules.html", {"rules": rules})
 
@@ -475,9 +507,9 @@ def recalc_points(request):
 
     messages.success(request, f"Recalculated points for {count} sales.")
     if request.user.employee.role == "admin":
-        return redirect("all_sales")
+        return redirect("clients:all_sales")
     else:
-        return redirect("employee_dashboard")
+        return redirect("clients:employee_dashboard")
 
 
 
@@ -512,7 +544,7 @@ def edit_sale(request, sale_id):
         if form.is_valid():
             form.save()
             messages.success(request, "Sale updated successfully!")
-            return redirect("all_sales")
+            return redirect("clients:all_sales")
     else:
         form = EditSaleForm(instance=sale)
 
@@ -526,7 +558,7 @@ def delete_sale(request, sale_id):
     if request.method == "POST":
         sale.delete()
         messages.success(request, "Sale deleted successfully!")
-        return redirect("admin_dashboard")
+        return redirect("clients:admin_dashboard")
     return render(request, "sales/delete_sale.html", {"sale": sale})
 
 
@@ -662,7 +694,7 @@ def map_client(request, client_id):
             client.save()
             messages.success(request, f"Client {client.name} unmapped")
 
-        return redirect("all_clients")
+        return redirect("clients:all_clients")
 
     return render(request, "clients/map_client.html", {"client": client, "employees": employees})
 
@@ -769,3 +801,415 @@ def past_month_performance(request, year, month):
         "products": products,
     }
     return render(request, "dashboards/past_month_performance.html", context)
+
+
+
+from .models import CallingList, Prospect
+
+@login_required
+def calling_workspace(request, list_id):
+    # Get the calling list
+    calling_list = get_object_or_404(CallingList, id=list_id)
+
+    # Get prospects assigned to this employee under that list
+    prospects = Prospect.objects.filter(
+        calling_list=calling_list,
+        assigned_to=request.user.employee
+    )
+
+    context = {
+        "calling_list": calling_list,
+        "prospects": prospects,
+    }
+    return render(request, "calling/callingworkspace.html", context)
+
+import csv
+import io
+from django.contrib import messages
+from .models import CallingList, Prospect
+
+
+@login_required
+def upload_list(request):
+    if request.method == "POST" and request.FILES.get("file"):
+        import pandas as pd
+        file = request.FILES["file"]
+
+        # Supports both CSV and Excel
+        if file.name.endswith(".csv"):
+            df = pd.read_csv(file)
+        else:
+            df = pd.read_excel(file)
+
+        from .models import CallingList, Prospect, Employee
+        calling_list = CallingList.objects.create(
+            title=request.POST.get("title", "Untitled List"),
+            uploaded_by=request.user,   # ✅ must be a User
+        )
+
+        employees = list(Employee.objects.filter(role="employee"))
+        emp_count = len(employees)
+        emp_index = 0
+
+        for _, row in df.iterrows():
+            assigned_to = None
+
+            # ✅ if assigned_to is provided in CSV
+            if "assigned_to" in df.columns and pd.notna(row.get("assigned_to")):
+                try:
+                    assigned_to = Employee.objects.get(user__username=row["assigned_to"])
+                except Employee.DoesNotExist:
+                    assigned_to = None
+
+            # ✅ if not provided → auto distribute
+            if not assigned_to and emp_count > 0:
+                assigned_to = employees[emp_index % emp_count]
+                emp_index += 1
+
+            Prospect.objects.create(
+                name=row.get("name", "Unknown"),
+                phone=row.get("phone", ""),
+                email=row.get("email", ""),
+                notes=row.get("notes", ""),
+                assigned_to=assigned_to,
+                calling_list=calling_list,
+            )
+
+        messages.success(request, f"Calling list '{calling_list.title}' uploaded successfully!")
+        return redirect("clients:admin_lists")
+
+    return render(request, "calling/upload_list.html")
+
+
+@login_required
+def admin_lists(request):
+    # Fetch all calling lists (latest first)
+    calling_lists = CallingList.objects.all().order_by("-created_at")
+
+    context = {
+        "calling_lists": calling_lists,
+    }
+    return render(request, "calling/admin_lists.html", context)
+
+from django.urls import reverse
+
+@login_required
+def admin_list_detail(request, list_id):
+    calling_list = get_object_or_404(CallingList, id=list_id)
+    prospects = calling_list.prospects.select_related("assigned_to").all()
+    employees = Employee.objects.select_related("user").all()
+
+    if request.method == "POST":
+        prospect_id = request.POST.get("prospect_id")
+        employee_id = request.POST.get("employee_id")
+
+        prospect = get_object_or_404(Prospect, id=prospect_id, calling_list=calling_list)
+
+        if employee_id:
+            employee = get_object_or_404(Employee, id=employee_id)
+            prospect.assigned_to = employee
+        else:
+            prospect.assigned_to = None  # unassign
+        prospect.save()
+
+        return HttpResponseRedirect(reverse("clients:admin_list_detail", args=[list_id]))
+
+    context = {
+        "calling_list": calling_list,
+        "prospects": prospects,
+        "employees": employees,
+    }
+    return render(request, "calling/admin_list_detail.html", context)
+
+@login_required
+def employee_lists(request):
+    employee = request.user.employee  
+    
+    # fetch all lists that have at least one prospect assigned to this employee
+    my_lists = CallingList.objects.filter(prospects__assigned_to=employee).distinct()
+
+    # attach a count of how many prospects from each list are assigned to this employee
+    for clist in my_lists:
+        clist.my_prospects_count = clist.prospects.filter(assigned_to=employee).count()
+
+    context = {
+        "my_lists": my_lists
+    }
+    return render(request, "calling/employee_lists.html", context)
+
+
+@login_required
+def calling_workspace(request, list_id):
+    employee = request.user.employee
+    calling_list = get_object_or_404(CallingList, id=list_id)
+
+    # only fetch prospects assigned to this employee
+    prospects = calling_list.prospects.filter(assigned_to=employee)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        prospect_id = request.POST.get("prospect_id")
+        prospect = get_object_or_404(Prospect, id=prospect_id, assigned_to=employee)
+
+        # ---- Log Call Result ----
+        if action == "log_call":
+            status = request.POST.get("status")
+            notes = request.POST.get("notes", "")
+            CallRecord.objects.create(
+                prospect=prospect,
+                employee=employee,
+                call_time=timezone.now(),
+                status=status,
+                notes=notes,
+            )
+            prospect.status = status
+            prospect.save()
+            messages.success(request, f"Call logged for {prospect.name}.")
+
+        # ---- Add Follow-up ----
+        elif action == "add_followup":
+            followup_date = request.POST.get("followup_date")
+            notes = request.POST.get("notes", "")
+            if followup_date:
+                CalendarEvent.objects.create(
+                    employee=employee,
+                    title=f"Follow-up: {prospect.name}",
+                    description=notes,
+                    event_date=followup_date,
+                    related_prospect=prospect,
+                )
+                messages.success(request, f"Follow-up added for {prospect.name}.")
+
+        return redirect("clients:callingworkspace", list_id=list_id)
+
+    context = {
+        "calling_list": calling_list,
+        "prospects": prospects,
+    }
+    return render(request, "calling/callingworkspace.html", context)
+
+@login_required
+def employee_calendar(request):
+    employee = request.user.employee
+    today = timezone.now().date()
+
+    # fetch all events assigned to this employee
+    events = CalendarEvent.objects.filter(employee=employee).order_by("scheduled_time")
+
+    # split into today's events and future events
+    todays_events = events.filter(scheduled_time__date=today)
+    upcoming_events = events.filter(scheduled_time__date__gt=today)
+
+    context = {
+        "todays_events": todays_events,
+        "upcoming_events": upcoming_events,
+    }
+    return render(request, "calendar/employee_calendar.html", context)
+
+# clients/views.py (add imports at top)
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.shortcuts import render, get_object_or_404
+from django.utils.dateparse import parse_datetime
+from django.utils import timezone
+from django.views.decorators.http import require_GET
+from .models import CalendarEvent, Prospect
+
+# Page view
+@login_required
+def employee_calendar_page(request):
+    """
+    Renders the page containing the FullCalendar instance.
+    FullCalendar will call the events JSON endpoint to fetch events.
+    """
+    return render(request, "calendar/employee_calendar.html")
+
+
+# Events JSON API used by FullCalendar
+
+@require_GET
+@login_required
+def calendar_events_json(request):
+    """
+    Returns calendar events as JSON for the currently logged-in employee.
+    Compatible with FullCalendar (dayGridMonth, timeGridWeek, timeGridDay).
+    """
+    employee = request.user.employee
+
+    # Optional: FullCalendar sends `start` and `end` query params
+    start = request.GET.get("start")
+    end = request.GET.get("end")
+
+    events_qs = CalendarEvent.objects.filter(employee=employee)
+
+    if start:
+        try:
+            start_dt = parse_datetime(start)
+            if start_dt and timezone.is_naive(start_dt):
+                start_dt = timezone.make_aware(start_dt)
+            events_qs = events_qs.filter(scheduled_time__gte=start_dt)
+        except Exception:
+            pass
+
+    if end:
+        try:
+            end_dt = parse_datetime(end)
+            if end_dt and timezone.is_naive(end_dt):
+                end_dt = timezone.make_aware(end_dt)
+            events_qs = events_qs.filter(scheduled_time__lte=end_dt)
+        except Exception:
+            pass
+
+    # Build JSON in FullCalendar expected format
+    events = []
+    for e in events_qs:
+        events.append({
+            "id": e.id,
+            "title": e.title,
+            "start": e.scheduled_time.isoformat(),
+            # Only include end if you add duration support later
+            "extendedProps": {
+                "type": e.type,
+                "notes": e.notes,
+                "related_prospect_id": e.related_prospect.id if e.related_prospect else None,
+                "related_prospect_name": e.related_prospect.name if e.related_prospect else None,
+            }
+        })
+
+    return JsonResponse(events, safe=False)
+
+
+from django.views.decorators.csrf import csrf_exempt
+import json
+from django.http import JsonResponse
+@login_required
+@csrf_exempt
+def update_calendar_event(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            event_id = data.get("id")
+            start = data.get("start")
+            end = data.get("end")
+
+            event = CalendarEvent.objects.get(id=event_id, employee=request.user.employee)
+            if start:
+                event.scheduled_time = start
+            if end:
+                event.reminder_time = end  # or use duration if you want
+            event.save()
+
+            return JsonResponse({"success": True})
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)}, status=400)
+    return JsonResponse({"success": False}, status=405)
+
+@login_required
+def delete_calling_list(request, list_id):
+    calling_list = get_object_or_404(CallingList, id=list_id)
+
+    # Only admin should delete
+    if request.user.employee.role != "admin":
+        messages.error(request, "You are not authorized to delete lists.")
+        return redirect("clients:admin_lists")
+
+    calling_list.delete()
+    messages.success(request, "Calling list deleted successfully!")
+    return redirect("clients:admin_lists")
+
+
+@login_required
+def log_result(request, prospect_id):
+    prospect = get_object_or_404(Prospect, id=prospect_id)
+
+    if request.method == "POST":
+        status = request.POST.get("status")
+        notes = request.POST.get("notes")
+
+        # ✅ Update prospect
+        prospect.status = status
+        prospect.last_contacted = timezone.now()
+        if notes:
+            prospect.notes = (prospect.notes or "") + f"\n{timezone.now().strftime('%Y-%m-%d %H:%M')}: {notes}"
+        prospect.save()
+
+        # ✅ Auto-create follow-up if status is "follow_up"
+        if status == "follow_up":
+            CalendarEvent.objects.create(
+                employee=request.user.employee,
+                title=f"Follow-up: {prospect.name}",
+                scheduled_time=timezone.now() + timezone.timedelta(days=1),  # default +1 day
+                type="follow_up",
+                notes=notes,
+                related_prospect=prospect,
+            )
+
+        messages.success(request, f"Call result logged for {prospect.name}")
+        return redirect("clients:callingworkspace", list_id=prospect.calling_list.id)
+
+    return render(request, "calling/log_result.html", {"prospect": prospect})
+
+
+from django.utils import timezone
+
+@login_required
+def add_followup(request, prospect_id):
+    prospect = get_object_or_404(Prospect, id=prospect_id)
+
+    if request.method == "POST":
+        followup_date = request.POST.get("scheduled_time")
+        notes = request.POST.get("notes")
+
+        if followup_date:
+            CalendarEvent.objects.create(
+                employee=request.user.employee,
+                title=f"Follow-up: {prospect.name}",
+                scheduled_time=followup_date,
+                type="follow_up",
+                notes=notes,
+                related_prospect=prospect,
+            )
+            messages.success(request, f"Follow-up added for {prospect.name}")
+            return redirect("clients:callingworkspace", list_id=prospect.calling_list.id)
+        else:
+            messages.error(request, "Follow-up date is required.")
+
+    return render(request, "calling/add_followup.html", {"prospect": prospect})
+
+
+from django.shortcuts import get_object_or_404, redirect
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from .models import CalendarEvent
+
+
+@login_required
+def mark_done(request, event_id):
+    event = get_object_or_404(CalendarEvent, id=event_id, employee=request.user.employee)
+    event.status = "completed"
+    event.save()
+    messages.success(request, "Event marked as completed ✅")
+    return redirect("clients:employee_dashboard")
+
+@login_required
+def skip_event(request, event_id):
+    event = get_object_or_404(CalendarEvent, id=event_id, employee=request.user.employee)
+    event.status = "skipped"
+    event.save()
+    messages.warning(request, "Event skipped ❌")
+    return redirect("clients:employee_dashboard")
+
+@login_required
+def reschedule_event(request, event_id):
+    event = get_object_or_404(CalendarEvent, id=event_id, employee=request.user.employee)
+
+    if request.method == "POST":
+        new_time = request.POST.get("scheduled_time")
+        if new_time:
+            event.scheduled_time = new_time
+            event.status = "rescheduled"
+            event.save()
+            messages.success(request, "Event rescheduled 🔄")
+            return redirect("clients:employee_dashboard")
+
+    return render(request, "calendar/reschedule_event.html", {"event": event})

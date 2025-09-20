@@ -1,9 +1,5 @@
-{% extends "base.html" %}
-{% load custom_tags %}
-
-{% block title %}Employee Dashboard{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% load custom_tags %} {% block title %}Employee
+Dashboard{% endblock %} {% block content %}
 <h2 class="mb-4">My Dashboard</h2>
 
 <!-- Totals -->
@@ -17,7 +13,13 @@
   <div class="col-md-6 mb-3">
     <div class="card text-center p-3">
       <h5>Total Points (This Month)</h5>
-      <h3 class="text-danger" id="points-counter" data-points="{{ total_points }}">0</h3>
+      <h3
+        class="text-danger"
+        id="points-counter"
+        data-points="{{ total_points }}"
+      >
+        0
+      </h3>
     </div>
   </div>
 </div>
@@ -26,12 +28,42 @@
 <hr class="my-4" />
 <h4>Product-wise Sales (This Month)</h4>
 <div class="row">
-  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>SIP</h6><h5>₹{{ sip_sales }}</h5></div></div>
-  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>Lumpsum</h6><h5>₹{{ lumsum_sales }}</h5></div></div>
-  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>Life Insurance</h6><h5>₹{{ life_sales }}</h5></div></div>
-  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>Health Insurance</h6><h5>₹{{ health_sales }}</h5></div></div>
-  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>Motor Insurance</h6><h5>₹{{ motor_sales }}</h5></div></div>
-  <div class="col-md-2 mb-3"><div class="card text-center p-3"><h6>PMS</h6><h5>₹{{ pms_sales }}</h5></div></div>
+  <div class="col-md-2 mb-3">
+    <div class="card text-center p-3">
+      <h6>SIP</h6>
+      <h5>₹{{ sip_sales }}</h5>
+    </div>
+  </div>
+  <div class="col-md-2 mb-3">
+    <div class="card text-center p-3">
+      <h6>Lumpsum</h6>
+      <h5>₹{{ lumsum_sales }}</h5>
+    </div>
+  </div>
+  <div class="col-md-2 mb-3">
+    <div class="card text-center p-3">
+      <h6>Life Insurance</h6>
+      <h5>₹{{ life_sales }}</h5>
+    </div>
+  </div>
+  <div class="col-md-2 mb-3">
+    <div class="card text-center p-3">
+      <h6>Health Insurance</h6>
+      <h5>₹{{ health_sales }}</h5>
+    </div>
+  </div>
+  <div class="col-md-2 mb-3">
+    <div class="card text-center p-3">
+      <h6>Motor Insurance</h6>
+      <h5>₹{{ motor_sales }}</h5>
+    </div>
+  </div>
+  <div class="col-md-2 mb-3">
+    <div class="card text-center p-3">
+      <h6>PMS</h6>
+      <h5>₹{{ pms_sales }}</h5>
+    </div>
+  </div>
 </div>
 
 <!-- Daily Targets Progress -->
@@ -39,18 +71,24 @@
 <h4>Today's Progress</h4>
 <div class="card p-3 mb-4">
   {% for target in daily_targets %}
-    <div class="mb-3">
-      <strong>{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
-      <div class="progress mt-1">
-        <div class="progress-bar bg-success" role="progressbar" 
-             style="width: {{ target.progress|floatformat:0 }}%"
-             aria-valuenow="{{ target.achieved }}" aria-valuemin="0" aria-valuemax="{{ target.target_value }}">
-          {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
-        </div>
+  <div class="mb-3">
+    <strong>{{ target.product }}</strong> — Target: ₹{{ target.target_value }} |
+    Achieved: ₹{{ target.achieved }}
+    <div class="progress mt-1">
+      <div
+        class="progress-bar bg-success"
+        role="progressbar"
+        style="width: {{ target.progress|floatformat:0 }}%"
+        aria-valuenow="{{ target.achieved }}"
+        aria-valuemin="0"
+        aria-valuemax="{{ target.target_value }}"
+      >
+        {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
       </div>
     </div>
+  </div>
   {% empty %}
-    <p class="text-muted">No daily targets set.</p>
+  <p class="text-muted">No daily targets set.</p>
   {% endfor %}
 </div>
 
@@ -58,29 +96,67 @@
 <h4>This Month's Progress</h4>
 <div class="card p-3 mb-4">
   {% for target in monthly_targets %}
-    <div class="mb-3">
-      <strong>{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
-      <div class="progress mt-1">
-        <div class="progress-bar bg-info" role="progressbar" 
-             style="width: {{ target.progress|floatformat:0 }}%"
-             aria-valuenow="{{ target.achieved }}" aria-valuemin="0" aria-valuemax="{{ target.target_value }}">
-          {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
-        </div>
+  <div class="mb-3">
+    <strong>{{ target.product }}</strong> — Target: ₹{{ target.target_value }} |
+    Achieved: ₹{{ target.achieved }}
+    <div class="progress mt-1">
+      <div
+        class="progress-bar bg-info"
+        role="progressbar"
+        style="width: {{ target.progress|floatformat:0 }}%"
+        aria-valuenow="{{ target.achieved }}"
+        aria-valuemin="0"
+        aria-valuemax="{{ target.target_value }}"
+      >
+        {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
       </div>
     </div>
+  </div>
   {% empty %}
-    <p class="text-muted">No monthly targets set.</p>
+  <p class="text-muted">No monthly targets set.</p>
   {% endfor %}
 </div>
 
 <h4>Past Performance (Last 6 Months)</h4>
 <div class="mt-4">
-  <a href="{% url 'employee_past_performance' %}" class="inline-flex items-center px-4 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-gray-800">
+  <a
+    href="{% url 'clients:employee_past_performance' %}"
+    class="inline-flex items-center px-4 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-500 text-gray-800"
+  >
     View Detailed Past Performance
   </a>
 </div>
 
-
+{% comment %} Calling Calendaer {% endcomment %}
+<hr class="my-4" />
+<div class="card mt-4">
+  <div class="card-header">
+    📅 Today's Work
+  </div>  
+  <div class="card-body">
+    {% if todays_events %}
+      {% for event in todays_events %}
+        <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
+          <div>
+            <strong>{{ event.title }}</strong>
+            {% if event.related_prospect %}
+              – {{ event.related_prospect.name }}
+            {% endif %}
+            <br>
+            {{ event.scheduled_time|time:"h:i A" }} | {{ event.get_type_display }}
+          </div>
+          <div>
+            <a href="{% url 'clients:mark_done' event.id %}" class="btn btn-sm btn-success">✔</a>
+            <a href="{% url 'clients:reschedule' event.id %}" class="btn btn-sm btn-warning">↻</a>
+            <a href="{% url 'clients:skip' event.id %}" class="btn btn-sm btn-danger">✘</a>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted">No tasks for today 🎉</p>
+    {% endif %}
+  </div>
+</div>
 
 <!-- Points Counter Animation -->
 <script>

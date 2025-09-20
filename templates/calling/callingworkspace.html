@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Calling Workspace{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>{{ calling_list.title }}</h2>
+  
+  <table class="table table-bordered">
+    <thead>
+      <tr>
+        <th>Prospect</th>
+        <th>Phone</th>
+        <th>Status</th>
+        <th>Last Call</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for prospect in prospects %}
+      <tr>
+        <td>{{ prospect.name }}</td>
+        <td>{{ prospect.phone }}</td>
+        <td>{{ prospect.get_status_display }}</td>
+        <td>{{ prospect.last_contacted|date:"Y-m-d H:i"|default:"-" }}</td>
+        <td>
+          <!-- Call button -->
+          <button class="btn btn-sm btn-success" onclick="alert('Dialing {{ prospect.phone }}...')">
+            Call
+          </button>
+
+          <!-- Log Result Modal Trigger -->
+          <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#logResultModal{{ prospect.id }}">
+            Log Result
+          </button>
+
+          <!-- Follow-up Modal Trigger -->
+          <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#followUpModal{{ prospect.id }}">
+            Add Follow-up
+          </button>
+        </td>
+      </tr>
+
+      <!-- 🔹 Log Result Modal -->
+      <div class="modal fade" id="logResultModal{{ prospect.id }}" tabindex="-1">
+        <div class="modal-dialog">
+          <form method="post" action="{% url 'clients:log_result' prospect.id %}">
+            {% csrf_token %}
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Log Call Result – {{ prospect.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label">Call Status</label>
+                  <select name="status" class="form-select" required>
+                    <option value="called">Called</option>
+                    <option value="no_answer">No Answer</option>
+                    <option value="interested">Interested</option>
+                    <option value="not_interested">Not Interested</option>
+                    <option value="busy">Busy</option>
+                    <option value="wrong_number">Wrong Number</option>
+                    <option value="follow_up">Follow-up</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Notes</label>
+                  <textarea name="notes" class="form-control"></textarea>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Save</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- 🔹 Follow-up Modal -->
+      <div class="modal fade" id="followUpModal{{ prospect.id }}" tabindex="-1">
+        <div class="modal-dialog">
+          <form method="post" action="{% url 'clients:add_followup' prospect.id %}">
+            {% csrf_token %}
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">Add Follow-up – {{ prospect.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label">Follow-up Date & Time</label>
+                  <input type="datetime-local" name="scheduled_time" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Notes</label>
+                  <textarea name="notes" class="form-control"></textarea>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Add Follow-up</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

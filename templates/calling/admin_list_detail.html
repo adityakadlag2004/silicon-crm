@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Calling List Detail{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>📋 Calling List: {{ calling_list.title }}</h2>
+  <p><strong>Created:</strong> {{ calling_list.created_at|date:"Y-m-d H:i" }}</p>
+  <p><strong>Total Prospects:</strong> {{ prospects.count }}</p>
+
+  <table class="table table-striped table-bordered mt-3">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Phone</th>
+        <th>Status</th>
+        <th>Assigned To</th>
+        <th>Last Call</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for prospect in prospects %}
+      <tr>
+        <td>{{ prospect.name }}</td>
+        <td>{{ prospect.phone }}</td>
+        <td>{{ prospect.get_status_display }}</td>
+        <td>
+          {% if prospect.assigned_to %}
+            {{ prospect.assigned_to.user.username }}
+          {% else %}
+            <span class="text-muted">Unassigned</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if prospect.call_records.last %}
+            {{ prospect.call_records.last.call_time|date:"Y-m-d H:i" }}
+          {% else %}
+            -
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="5" class="text-center text-muted">No prospects in this list.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <a href="{% url 'clients:admin_lists' %}" class="btn btn-secondary">← Back to All Lists</a>
+</div>
+{% endblock %}

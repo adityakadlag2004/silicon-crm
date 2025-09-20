@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Upload Calling List{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Upload Calling List</h2>
+  <form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label">List Title</label>
+      <input type="text" name="title" class="form-control" required />
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Upload File (CSV/Excel)</label>
+      <input type="file" name="file" class="form-control" required />
+    </div>
+    <button type="submit" class="btn btn-primary">Upload</button>
+  </form>
+</div>
+{% endblock %}

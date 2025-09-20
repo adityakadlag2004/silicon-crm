@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}My Calendar{% endblock %}
+
+{% block content %}
+<!-- FullCalendar CSS -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
+<style>
+  #calendar { max-width: 1100px; margin: 0 auto; background: #fff; padding: 12px; border-radius: 8px; }
+  .fc-daygrid-day:hover { cursor: pointer; background-color: #f3f7fb; }
+  .fc-customButton-backButton { background-color: #6c757d; color: #fff; border: none; }
+</style>
+
+<div class="container mt-4">
+  <h2>📅 My Calendar</h2>
+  <div id="calendar"></div>
+</div>
+
+<!-- Event detail modal -->
+<div class="modal fade" id="eventDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">Event</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="modalWhen"></p>
+        <p><strong>Type:</strong> <span id="modalType"></span></p>
+        <p><strong>Notes:</strong></p>
+        <p id="modalNotes"></p>
+        <p id="modalProspect" style="display:none;">
+          <strong>Prospect:</strong> <span id="modalProspectName"></span>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FullCalendar JS -->
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const calendarEl = document.getElementById('calendar');
+
+  const calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: 'dayGridMonth',
+    headerToolbar: {
+      left: 'prev,next today,backButton',
+      center: 'title',
+      right: 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
+    },
+    customButtons: {
+      backButton: {
+        text: 'Back to Month',
+        click: function() {
+          calendar.changeView('dayGridMonth');
+        }
+      }
+    },
+    navLinks: true,
+    nowIndicator: true,
+    selectable: true,
+
+    // 🔹 Enable drag-drop & resize
+    editable: true,
+    eventDurationEditable: true,
+
+    events: {
+      url: "{% url 'clients:calendar_events_json' %}",
+      failure: function() {
+        alert('There was an error while fetching events.');
+      }
+    },
+
+    // 🔹 Event color coding
+    eventDidMount: function(info) {
+      const type = info.event.extendedProps.type;
+      if (type === "follow_up") {
+        info.el.style.backgroundColor = "#28a745"; // green
+        info.el.style.borderColor = "#28a745";
+      } else if (type === "meeting") {
+        info.el.style.backgroundColor = "#007bff"; // blue
+        info.el.style.borderColor = "#007bff";
+      } else if (type === "reminder") {
+        info.el.style.backgroundColor = "#fd7e14"; // orange
+        info.el.style.borderColor = "#fd7e14";
+      } else {
+        info.el.style.backgroundColor = "#6c757d"; // grey default
+        info.el.style.borderColor = "#6c757d";
+      }
+    },
+
+    // 🔹 Event drag/drop update
+    eventDrop: function(info) {
+      updateEventTime(info.event);
+    },
+
+    // 🔹 Event resize update
+    eventResize: function(info) {
+      updateEventTime(info.event);
+    },
+
+    // Click on event → modal
+    eventClick: function(info) {
+      const ev = info.event;
+      const props = ev.extendedProps || {};
+
+      document.getElementById('modalTitle').innerText = ev.title;
+      document.getElementById('modalWhen').innerText = new Date(ev.start).toLocaleString();
+      document.getElementById('modalType').innerText = props.type || '—';
+      document.getElementById('modalNotes').innerText = props.notes || '—';
+
+      if (props.related_prospect_name) {
+        document.getElementById('modalProspectName').innerText = props.related_prospect_name;
+        document.getElementById('modalProspect').style.display = 'block';
+      } else {
+        document.getElementById('modalProspect').style.display = 'none';
+      }
+
+      new bootstrap.Modal(document.getElementById('eventDetailModal')).show();
+    },
+
+    // Click on a day → switch to Day view
+    dateClick: function(info) {
+      calendar.changeView('timeGridDay', info.dateStr);
+    }
+  });
+
+  calendar.render();
+
+  // 🔹 Ajax update when event moved/resized
+  function updateEventTime(event) {
+    fetch("{% url 'clients:update_calendar_event' %}", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": "{{ csrf_token }}"
+      },
+      body: JSON.stringify({
+        id: event.id,
+        start: event.start.toISOString(),
+        end: event.end ? event.end.toISOString() : null
+      })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error("Failed to update event.");
+      return response.json();
+    })
+    .then(data => {
+      if (!data.success) alert("Update failed!");
+    })
+    .catch(err => {
+      alert(err);
+      event.setDates(event.oldStart, event.oldEnd); // rollback if failed
+    });
+  }
+});
+</script>
+{% endblock %}
