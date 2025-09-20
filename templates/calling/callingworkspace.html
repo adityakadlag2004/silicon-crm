@@ -1,11 +1,77 @@
+
 {% extends "base.html" %}
 {% block title %}Calling Workspace{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<style>
+  .workspace-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    padding: 2.2rem 1.5rem 2rem 1.5rem;
+    margin-bottom: 1.2rem;
+    max-width: 900px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .workspace-card h2 {
+    text-align: center;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 1.2rem;
+    letter-spacing: 0.5px;
+  }
+  .workspace-table {
+    width: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #f7fafc;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    margin-bottom: 0;
+  }
+  .workspace-table th {
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    text-align: center;
+    padding: 0.7rem 0.3rem;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .workspace-table td {
+    text-align: center;
+    padding: 0.7rem 0.3rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 1rem;
+  }
+  .workspace-table tr:last-child td {
+    border-bottom: none;
+  }
+  .workspace-actions button {
+    margin: 0 0.15rem;
+    min-width: 90px;
+    font-size: 0.97rem;
+    border-radius: 8px;
+    font-weight: 500;
+  }
+  .modal-content {
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  }
+  @media (max-width: 900px) {
+    .workspace-card { padding: 1rem 0.2rem; max-width: 99vw; }
+    .workspace-table th, .workspace-table td { font-size: 0.95rem; padding: 0.5rem 0.1rem; }
+    .workspace-actions button { min-width: 70px; font-size: 0.93rem; }
+  }
+  @media (max-width: 600px) {
+    .workspace-card { padding: 0.5rem 0.1rem; }
+    .workspace-table th, .workspace-table td { font-size: 0.9rem; padding: 0.35rem 0.05rem; }
+    .workspace-actions button { min-width: 60px; font-size: 0.9rem; }
+  }
+</style>
+<div class="workspace-card">
   <h2>{{ calling_list.title }}</h2>
-  
-  <table class="table table-bordered">
+  <table class="workspace-table">
     <thead>
       <tr>
         <th>Prospect</th>
@@ -22,25 +88,13 @@
         <td>{{ prospect.phone }}</td>
         <td>{{ prospect.get_status_display }}</td>
         <td>{{ prospect.last_contacted|date:"Y-m-d H:i"|default:"-" }}</td>
-        <td>
-          <!-- Call button -->
-          <button class="btn btn-sm btn-success" onclick="alert('Dialing {{ prospect.phone }}...')">
-            Call
-          </button>
-
-          <!-- Log Result Modal Trigger -->
-          <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#logResultModal{{ prospect.id }}">
-            Log Result
-          </button>
-
-          <!-- Follow-up Modal Trigger -->
-          <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#followUpModal{{ prospect.id }}">
-            Add Follow-up
-          </button>
+        <td class="workspace-actions">
+          <button class="btn btn-sm btn-success" onclick="alert('Dialing {{ prospect.phone }}...')">Call</button>
+          <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#logResultModal{{ prospect.id }}">Log Result</button>
+          <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#followUpModal{{ prospect.id }}">Add Follow-up</button>
         </td>
       </tr>
-
-      <!-- 🔹 Log Result Modal -->
+      <!-- Log Result Modal -->
       <div class="modal fade" id="logResultModal{{ prospect.id }}" tabindex="-1">
         <div class="modal-dialog">
           <form method="post" action="{% url 'clients:log_result' prospect.id %}">
@@ -75,8 +129,7 @@
           </form>
         </div>
       </div>
-
-      <!-- 🔹 Follow-up Modal -->
+      <!-- Follow-up Modal -->
       <div class="modal fade" id="followUpModal{{ prospect.id }}" tabindex="-1">
         <div class="modal-dialog">
           <form method="post" action="{% url 'clients:add_followup' prospect.id %}">
@@ -103,7 +156,6 @@
           </form>
         </div>
       </div>
-
       {% endfor %}
     </tbody>
   </table>
