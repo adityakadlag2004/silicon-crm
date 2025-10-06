@@ -95,38 +95,41 @@ def admin_dashboard(request):
     month = today.month
     year = today.year
 
-    sales = Sale.objects.all()
+    # All-time sales (if you use it elsewhere)
+    all_sales_qs = Sale.objects.all()
+
+    # --- IMPORTANT: use month-scoped queryset for 'This Month' widgets ---
+    monthly_sales_qs = Sale.objects.filter(created_at__year=year, created_at__month=month)
 
     # ---------------- Overall summary ----------------
     total_clients = Client.objects.count()
-    total_sales = sales.aggregate(total=Sum("amount"))["total"] or 0
-    total_points = sales.aggregate(total=Sum("points"))["total"] or 0
+    # If "Total Sales (This Month)" is what you want in the card, use monthly_sales_qs
+    total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or 0
+    total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or 0
 
-    # ---------------- Product-wise totals ----------------
-    sip_sales = sales.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
-    lumsum_sales = sales.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
-    life_sales = sales.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    health_sales = sales.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    motor_sales = sales.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    pms_sales = sales.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
+    # ---------------- Product-wise totals (THIS MONTH) ----------------
+    sip_sales = monthly_sales_qs.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
+    lumsum_sales = monthly_sales_qs.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
+    life_sales = monthly_sales_qs.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    health_sales = monthly_sales_qs.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    motor_sales = monthly_sales_qs.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    pms_sales = monthly_sales_qs.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
 
     # ---------------- Section 1: Today's Summary ----------------
     todays_summary = []
     for emp in Employee.objects.all():
-        emp_sales = sales.filter(employee=emp, created_at__date=today)
+        emp_sales = monthly_sales_qs.filter(employee=emp, created_at__date=today)
         todays_summary.append({
             "employee": emp.user.username if hasattr(emp, "user") else emp.name,
             "sales": emp_sales.aggregate(total=Sum("amount"))["total"] or 0,
             "points": emp_sales.aggregate(total=Sum("points"))["total"] or 0,
-            "new_clients": Client.objects.filter(
-                mapped_to=emp, created_at__date=today
-            ).count(),
+            "new_clients": Client.objects.filter(mapped_to=emp, created_at__date=today).count(),
         })
 
     # ---------------- Section 2: Monthly Progress (Employee × Product) ----------------
     PRODUCT_MAP = {
         "SIP": "sip",
-        "Lumsum": "lumpsum",   # DB value = "Lumsum", template key = "lumpsum"
+        "Lumsum": "lumpsum",
         "Life Insurance": "life",
         "Health Insurance": "health",
         "Motor Insurance": "motor",
@@ -138,11 +141,9 @@ def admin_dashboard(request):
         row = {"employee": emp.user.username if hasattr(emp, "user") else emp.name}
         total_emp_sales = 0
         for product, key in PRODUCT_MAP.items():
-            amt = sales.filter(
+            amt = monthly_sales_qs.filter(
                 employee=emp,
                 product=product,
-                created_at__year=year,
-                created_at__month=month,
             ).aggregate(total=Sum("amount"))["total"] or 0
             row[key] = amt
             total_emp_sales += amt
@@ -150,17 +151,16 @@ def admin_dashboard(request):
         monthly_progress.append(row)
 
     # ---------------- Section 3: Monthly Cumulative Summary ----------------
-    monthly_sales = sales.filter(created_at__year=year, created_at__month=month)
     monthly_summary = {
         "total_clients": Client.objects.filter(created_at__year=year, created_at__month=month).count(),
-        "total_sales": monthly_sales.aggregate(total=Sum("amount"))["total"] or 0,
-        "total_points": monthly_sales.aggregate(total=Sum("points"))["total"] or 0,
-        "sip": monthly_sales.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0,
-        "lumpsum": monthly_sales.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0,
-        "life": monthly_sales.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0,
-        "health": monthly_sales.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0,
-        "motor": monthly_sales.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0,
-        "pms": monthly_sales.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0,
+        "total_sales": total_sales,
+        "total_points": total_points,
+        "sip": sip_sales,
+        "lumpsum": lumsum_sales,
+        "life": life_sales,
+        "health": health_sales,
+        "motor": motor_sales,
+        "pms": pms_sales,
     }
 
     # ---------------- Context ----------------
