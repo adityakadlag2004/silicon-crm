@@ -16,7 +16,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # Determine target year and month (previous month by default)
-        now = timezone.now().date()
+        now_date = timezone.now().date()
         y = options.get('year')
         m = options.get('month')
 
@@ -24,12 +24,12 @@ class Command(BaseCommand):
             year, month = y, m
         else:
             # previous month
-            if now.month == 1:
-                year = now.year - 1
+            if now_date.month == 1:
+                year = now_date.year - 1
                 month = 12
             else:
-                year = now.year
-                month = now.month - 1
+                year = now_date.year
+                month = now_date.month - 1
 
         # Logging info
         _, last_day = calendar.monthrange(year, month)

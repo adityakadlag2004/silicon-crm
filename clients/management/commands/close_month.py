@@ -1,3 +1,4 @@
+# clients/management/commands/close_month.py
 from django.core.management.base import BaseCommand
 from django.utils.timezone import now
 from django.db.models import Sum
@@ -44,7 +45,7 @@ class Command(BaseCommand):
                     defaults={
                         "target_value": target.target_value,
                         "achieved_value": achieved_amount,
-                        "points_value": achieved_points,  # ⚡ new field (see below)
+                        "points_value": achieved_points,
                     },
                 )
 
