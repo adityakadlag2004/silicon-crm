@@ -301,11 +301,14 @@ def add_sale(request):
 # clients/views.py
 from django.db.models import Q
 
+# pagination settings
+PER_PAGE = 15  # change to how many clients you want per page
+
 @login_required
 def all_clients(request):
-    clients = Client.objects.select_related("mapped_to")
+    clients_qs = Client.objects.select_related("mapped_to").order_by('id')
 
-    # Filters
+    # Filters (keep your existing filter logic)
     sip_status = request.GET.get("sip_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
@@ -320,34 +323,59 @@ def all_clients(request):
     health_min = request.GET.get("health_min")
     health_max = request.GET.get("health_max")
 
-    # Status filters
     if sip_status in ["yes", "no"]:
-        clients = clients.filter(sip_status=(sip_status == "yes"))
+        clients_qs = clients_qs.filter(sip_status=(sip_status == "yes"))
     if pms_status in ["yes", "no"]:
-        clients = clients.filter(pms_status=(pms_status == "yes"))
+        clients_qs = clients_qs.filter(pms_status=(pms_status == "yes"))
     if life_status in ["yes", "no"]:
-        clients = clients.filter(life_status=(life_status == "yes"))
+        clients_qs = clients_qs.filter(life_status=(life_status == "yes"))
     if health_status in ["yes", "no"]:
-        clients = clients.filter(health_status=(health_status == "yes"))
+        clients_qs = clients_qs.filter(health_status=(health_status == "yes"))
 
-    # Range filters
-    if sip_min: clients = clients.filter(sip_amount__gte=sip_min)
-    if sip_max: clients = clients.filter(sip_amount__lte=sip_max)
-    if pms_min: clients = clients.filter(pms_amount__gte=pms_min)
-    if pms_max: clients = clients.filter(pms_amount__lte=pms_max)
-    if life_min: clients = clients.filter(life_cover__gte=life_min)
-    if life_max: clients = clients.filter(life_cover__lte=life_max)
-    if health_min: clients = clients.filter(health_cover__gte=health_min)
-    if health_max: clients = clients.filter(health_cover__lte=health_max)
+    if sip_min: clients_qs = clients_qs.filter(sip_amount__gte=sip_min)
+    if sip_max: clients_qs = clients_qs.filter(sip_amount__lte=sip_max)
+    if pms_min: clients_qs = clients_qs.filter(pms_amount__gte=pms_min)
+    if pms_max: clients_qs = clients_qs.filter(pms_amount__lte=pms_max)
+    if life_min: clients_qs = clients_qs.filter(life_cover__gte=life_min)
+    if life_max: clients_qs = clients_qs.filter(life_cover__lte=life_max)
+    if health_min: clients_qs = clients_qs.filter(health_cover__gte=health_min)
+    if health_max: clients_qs = clients_qs.filter(health_cover__lte=health_max)
 
-    return render(request, "clients/all_clients.html", {"clients": clients})
+    # Paginate
+    paginator = Paginator(clients_qs, PER_PAGE)
+    page_num = request.GET.get("page", 1)
+    try:
+        page_obj = paginator.get_page(page_num)
+    except Exception:
+        page_obj = paginator.get_page(1)
+
+    # Build a compact page_range around current page (±3)
+    current = page_obj.number
+    total_pages = paginator.num_pages
+    start = current - 3 if (current - 3) > 1 else 1
+    end = current + 3 if (current + 3) < total_pages else total_pages
+    page_range = range(start, end + 1)
+
+    context = {
+        "clients_page": page_obj,
+        "page_range": page_range,
+        "total_pages": total_pages,
+        # keep filters in context so links preserve them
+        "sip_status": sip_status, "pms_status": pms_status,
+        "life_status": life_status, "health_status": health_status,
+        "sip_min": sip_min, "sip_max": sip_max,
+        "pms_min": pms_min, "pms_max": pms_max,
+        "life_min": life_min, "life_max": life_max,
+        "health_min": health_min, "health_max": health_max,
+    }
+    return render(request, "clients/all_clients.html", context)
 
 
 @login_required
 def my_clients(request):
-    clients = Client.objects.filter(mapped_to=request.user.employee)
+    clients_qs = Client.objects.filter(mapped_to=request.user.employee).order_by('id')
 
-    # Apply same filters (reuse above logic)
+    # Apply same filters as all_clients (reuse the same logic)
     sip_status = request.GET.get("sip_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
@@ -363,26 +391,44 @@ def my_clients(request):
     health_max = request.GET.get("health_max")
 
     if sip_status in ["yes", "no"]:
-        clients = clients.filter(sip_status=(sip_status == "yes"))
+        clients_qs = clients_qs.filter(sip_status=(sip_status == "yes"))
     if pms_status in ["yes", "no"]:
-        clients = clients.filter(pms_status=(pms_status == "yes"))
+        clients_qs = clients_qs.filter(pms_status=(pms_status == "yes"))
     if life_status in ["yes", "no"]:
-        clients = clients.filter(life_status=(life_status == "yes"))
+        clients_qs = clients_qs.filter(life_status=(life_status == "yes"))
     if health_status in ["yes", "no"]:
-        clients = clients.filter(health_status=(health_status == "yes"))
+        clients_qs = clients_qs.filter(health_status=(health_status == "yes"))
 
-    if sip_min: clients = clients.filter(sip_amount__gte=sip_min)
-    if sip_max: clients = clients.filter(sip_amount__lte=sip_max)
-    if pms_min: clients = clients.filter(pms_amount__gte=pms_min)
-    if pms_max: clients = clients.filter(pms_amount__lte=pms_max)
-    if life_min: clients = clients.filter(life_cover__gte=life_min)
-    if life_max: clients = clients.filter(life_cover__lte=life_max)
-    if health_min: clients = clients.filter(health_cover__gte=health_min)
-    if health_max: clients = clients.filter(health_cover__lte=health_max)
+    if sip_min: clients_qs = clients_qs.filter(sip_amount__gte=sip_min)
+    if sip_max: clients_qs = clients_qs.filter(sip_amount__lte=sip_max)
+    if pms_min: clients_qs = clients_qs.filter(pms_amount__gte=pms_min)
+    if pms_max: clients_qs = clients_qs.filter(pms_amount__lte=pms_max)
+    if life_min: clients_qs = clients_qs.filter(life_cover__gte=life_min)
+    if life_max: clients_qs = clients_qs.filter(life_cover__lte=life_max)
+    if health_min: clients_qs = clients_qs.filter(health_cover__gte=health_min)
+    if health_max: clients_qs = clients_qs.filter(health_cover__lte=health_max)
 
-    return render(request, "clients/my_clients.html", {"clients": clients})
+    # Paginate
+    paginator = Paginator(clients_qs, PER_PAGE)
+    page_num = request.GET.get("page", 1)
+    try:
+        page_obj = paginator.get_page(page_num)
+    except Exception:
+        page_obj = paginator.get_page(1)
 
+    current = page_obj.number
+    total_pages = paginator.num_pages
+    start = current - 3 if (current - 3) > 1 else 1
+    end = current + 3 if (current + 3) < total_pages else total_pages
+    page_range = range(start, end + 1)
 
+    context = {
+        "clients_page": page_obj,
+        "page_range": page_range,
+        "total_pages": total_pages,
+        # pass filters if your template uses them
+    }
+    return render(request, "clients/my_clients.html", context)
 
 @login_required
 def add_client(request):
