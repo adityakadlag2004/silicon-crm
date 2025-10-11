@@ -448,13 +448,17 @@ from django.core.paginator import Paginator
 
 @login_required
 def all_sales(request):
-    sales = Sale.objects.all().order_by("-date", "-created_at")
+    """
+    List all sales with product/client/employee/start_date/end_date filters.
+    Pagination preserves current GET filters via `qstring`.
+    """
+    sales_qs = Sale.objects.all().order_by("-date", "-created_at")
 
-    # Role-based filtering
-    if request.user.employee.role == "employee":
-        sales = sales.filter(employee=request.user.employee)
+    # Role-based filtering: employees only see their own sales
+    if hasattr(request.user, "employee") and request.user.employee.role == "employee":
+        sales_qs = sales_qs.filter(employee=request.user.employee)
 
-    # Apply filters only if user submits something
+    # Filters from GET
     product = request.GET.get("product")
     client = request.GET.get("client")
     employee = request.GET.get("employee")
@@ -462,29 +466,40 @@ def all_sales(request):
     end_date = request.GET.get("end_date")
 
     if product:
-        sales = sales.filter(product=product)
+        sales_qs = sales_qs.filter(product=product)
     if client:
-        sales = sales.filter(client_id=client)
+        # allow passing client id
+        try:
+            cid = int(client)
+            sales_qs = sales_qs.filter(client_id=cid)
+        except Exception:
+            # fallback to name search (if you want)
+            sales_qs = sales_qs.filter(client__name__icontains=client)
     if employee:
-        sales = sales.filter(employee__user__username__icontains=employee)
+        sales_qs = sales_qs.filter(employee__user__username__icontains=employee)
     if start_date and end_date:
-        sales = sales.filter(date__range=[start_date, end_date])
+        sales_qs = sales_qs.filter(date__range=[start_date, end_date])
 
-    # Default: show only today's sales unless filters are applied
+    # Default: show only today's sales unless any filter is present
     if not (product or client or employee or start_date or end_date):
-        sales = sales.filter(date=date.today())
+        sales_qs = sales_qs.filter(date=date.today())
 
     # Pagination
-    paginator = Paginator(sales, 10)  # 10 records per page
+    paginator = Paginator(sales_qs, 10)  # 10 records per page
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
+    # Build querystring of current GET params EXCEPT 'page'
+    qdict = request.GET.copy()
+    qdict.pop("page", None)
+    qstring = qdict.urlencode()  # empty string if no other params
+
     context = {
-        "sales": page_obj,
-        "is_employee": request.user.employee.role == "employee",
+        "sales": page_obj,  # page object used by template
+        "is_employee": hasattr(request.user, "employee") and request.user.employee.role == "employee",
+        "qstring": qstring,
     }
     return render(request, "sales/all_sales.html", context)
-
 
 @login_required
 def admin_add_sale(request):
