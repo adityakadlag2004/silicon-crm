@@ -2,69 +2,14 @@
 {% block title %}My Clients{% endblock %}
 {% block content %}
 <style>
-  .dashboard-section-title {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #2d3748;
-    margin-bottom: 1rem;
-    margin-top: 2rem;
-  }
-  .modern-card {
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
-    padding: 2rem 1.5rem;
-    margin-bottom: 1.5rem;
-    transition: box-shadow 0.2s;
-  }
-  .modern-card:hover {
-    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
-  }
-  .dashboard-link {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.7rem 1.5rem;
-    border-radius: 12px;
-    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
-    color: #2d3748;
-    font-weight: 600;
-    text-decoration: none;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
-    transition: background 0.2s;
-  }
-  .dashboard-link:hover {
-    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
-    color: #1a202c;
-  }
-  @media (max-width: 768px) {
-    .dashboard-section-title { font-size: 1rem; }
-    .modern-card { padding: 1rem 0.5rem; }
-  }
-  .pager-wrap {
-    display:flex;
-    justify-content:flex-end;
-    padding: 1rem 0;
-  }
+  /* (same CSS as before) */
+  .dashboard-section-title { font-size: 1.25rem; font-weight: 600; color: #2d3748; margin-bottom: 1rem; margin-top: 2rem; }
+  .modern-card { background: #fff; border-radius: 18px; box-shadow: 0 2px 16px rgba(0,0,0,0.07); padding: 2rem 1.5rem; margin-bottom: 1.5rem; transition: box-shadow 0.2s; }
+  .dashboard-link { display:inline-flex; align-items:center; padding:0.7rem 1.5rem; border-radius:12px; background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%); color:#2d3748; font-weight:600; text-decoration:none; box-shadow:0 1px 6px rgba(0,0,0,0.07); transition:background 0.2s; }
+  .pager-wrap { display:flex; justify-content:flex-end; padding:1rem 0; }
   .pagination { display:flex; gap:0.25rem; list-style:none; padding:0; margin:0; }
-  .pagination .page-item { }
-  .pagination .page-link {
-    display:inline-block;
-    padding:0.45rem 0.75rem;
-    border-radius:8px;
-    text-decoration:none;
-    background: #fff;
-    border: 1px solid #e6e6e6;
-    color:#2d3748;
-    font-weight:600;
-  }
-  .pagination .page-item.active .page-link {
-    background:#f6e05e;
-    border-color:#ecc94b;
-  }
-  .pagination .page-item.disabled .page-link {
-    opacity:0.5;
-    pointer-events:none;
-  }
+  .pagination .page-link { display:inline-block; padding:0.45rem 0.75rem; border-radius:8px; text-decoration:none; background:#fff; border:1px solid #e6e6e6; color:#2d3748; font-weight:600; }
+  .pagination .page-item.active .page-link { background:#f6e05e; border-color:#ecc94b; }
   .table { margin-bottom: 0; border-radius:12px; overflow:hidden; background:#fff; }
   .table thead th { background:#f6e05e; color:#2d3748; font-weight:600; border-bottom:2px solid #ecc94b; padding:0.7rem 0.5rem; text-align:left; }
   .table td { padding:0.6rem 0.5rem; border-top:1px solid #f7fafc; color:#2d3748; }
@@ -75,7 +20,6 @@
 
 <div class="modern-card mb-4">
   <form method="get" class="row g-3">
-    <!-- Status Filters -->
     <div class="col-md-2">
       <label class="form-label">SIP</label>
       <select name="sip_status" class="form-select">
@@ -109,7 +53,6 @@
       </select>
     </div>
 
-    <!-- Range Filters -->
     <div class="col-md-2"><label class="form-label">SIP Min</label><input type="number" name="sip_min" class="form-control" value="{{ request.GET.sip_min }}"></div>
     <div class="col-md-2"><label class="form-label">SIP Max</label><input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}"></div>
     <div class="col-md-2"><label class="form-label">PMS Min</label><input type="number" name="pms_min" class="form-control" value="{{ request.GET.pms_min }}"></div>
@@ -162,20 +105,19 @@
     </tbody>
   </table>
 
-  {# Numeric pager #}
   <div class="pager-wrap">
     <nav aria-label="Page navigation">
       <ul class="pagination">
         {% if clients_page.has_previous %}
           <li class="page-item">
-            <a class="page-link" href="?page={{ clients_page.previous_page_number }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Prev</a>
+            <a class="page-link" href="?page={{ clients_page.previous_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">Prev</a>
           </li>
         {% else %}
           <li class="page-item disabled"><span class="page-link">Prev</span></li>
         {% endif %}
 
         {% if 1 not in page_range %}
-          <li class="page-item"><a class="page-link" href="?page=1{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">1</a></li>
+          <li class="page-item"><a class="page-link" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}">1</a></li>
           {% if 2 not in page_range %}
             <li class="page-item disabled"><span class="page-link">…</span></li>
           {% endif %}
@@ -185,7 +127,7 @@
           {% if p == clients_page.number %}
             <li class="page-item active"><span class="page-link">{{ p }}</span></li>
           {% else %}
-            <li class="page-item"><a class="page-link" href="?page={{ p }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">{{ p }}</a></li>
+            <li class="page-item"><a class="page-link" href="?page={{ p }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ p }}</a></li>
           {% endif %}
         {% endfor %}
 
@@ -193,12 +135,12 @@
           {% if total_pages|add:-1 not in page_range %}
             <li class="page-item disabled"><span class="page-link">…</span></li>
           {% endif %}
-          <li class="page-item"><a class="page-link" href="?page={{ total_pages }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">{{ total_pages }}</a></li>
+          <li class="page-item"><a class="page-link" href="?page={{ total_pages }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ total_pages }}</a></li>
         {% endif %}
 
         {% if clients_page.has_next %}
           <li class="page-item">
-            <a class="page-link" href="?page={{ clients_page.next_page_number }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Next</a>
+            <a class="page-link" href="?page={{ clients_page.next_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">Next</a>
           </li>
         {% else %}
           <li class="page-item disabled"><span class="page-link">Next</span></li>
