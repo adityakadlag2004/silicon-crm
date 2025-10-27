@@ -246,7 +246,7 @@
         {# Prev button #}
         {% if clients_page.has_previous %}
           <li class="page-item">
-            <a class="page-link" href="?page={{ clients_page.previous_page_number }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Prev</a>
+            <a class="page-link" href="?page={{ clients_page.previous_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">Prev</a>
           </li>
         {% else %}
           <li class="page-item disabled"><span class="page-link">Prev</span></li>
@@ -254,7 +254,7 @@
 
         {# First page + ellipsis if needed #}
         {% if 1 not in page_range %}
-          <li class="page-item"><a class="page-link" href="?page=1{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">1</a></li>
+          <li class="page-item"><a class="page-link" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}">1</a></li>
           {% if 2 not in page_range %}
             <li class="page-item disabled"><span class="page-link">…</span></li>
           {% endif %}
@@ -265,7 +265,7 @@
           {% if p == clients_page.number %}
             <li class="page-item active"><span class="page-link">{{ p }}</span></li>
           {% else %}
-            <li class="page-item"><a class="page-link" href="?page={{ p }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">{{ p }}</a></li>
+            <li class="page-item"><a class="page-link" href="?page={{ p }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ p }}</a></li>
           {% endif %}
         {% endfor %}
 
@@ -274,13 +274,13 @@
           {% if total_pages|add:-1 not in page_range %}
             <li class="page-item disabled"><span class="page-link">…</span></li>
           {% endif %}
-          <li class="page-item"><a class="page-link" href="?page={{ total_pages }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">{{ total_pages }}</a></li>
+          <li class="page-item"><a class="page-link" href="?page={{ total_pages }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ total_pages }}</a></li>
         {% endif %}
 
         {# Next button #}
         {% if clients_page.has_next %}
           <li class="page-item">
-            <a class="page-link" href="?page={{ clients_page.next_page_number }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Next</a>
+            <a class="page-link" href="?page={{ clients_page.next_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">Next</a>
           </li>
         {% else %}
           <li class="page-item disabled"><span class="page-link">Next</span></li>

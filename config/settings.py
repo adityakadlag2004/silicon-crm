@@ -27,6 +27,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["139.59.28.8", "localhost", "127.0.0.1", "bo.kadlaginvestment.com"]
 
+PER_PAGE = 50
 
 
 # Application definition

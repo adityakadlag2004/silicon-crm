@@ -302,13 +302,14 @@ def add_sale(request):
 from django.db.models import Q
 
 # pagination settings
-PER_PAGE = 15  # change to how many clients you want per page
+PER_PAGE = 50  # change to how many clients you want per page
+
 
 @login_required
 def all_clients(request):
     clients_qs = Client.objects.select_related("mapped_to").order_by('id')
 
-    # Filters (keep your existing filter logic)
+    # Filters
     sip_status = request.GET.get("sip_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
@@ -332,14 +333,46 @@ def all_clients(request):
     if health_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(health_status=(health_status == "yes"))
 
-    if sip_min: clients_qs = clients_qs.filter(sip_amount__gte=sip_min)
-    if sip_max: clients_qs = clients_qs.filter(sip_amount__lte=sip_max)
-    if pms_min: clients_qs = clients_qs.filter(pms_amount__gte=pms_min)
-    if pms_max: clients_qs = clients_qs.filter(pms_amount__lte=pms_max)
-    if life_min: clients_qs = clients_qs.filter(life_cover__gte=life_min)
-    if life_max: clients_qs = clients_qs.filter(life_cover__lte=life_max)
-    if health_min: clients_qs = clients_qs.filter(health_cover__gte=health_min)
-    if health_max: clients_qs = clients_qs.filter(health_cover__lte=health_max)
+    if sip_min:
+        try:
+            clients_qs = clients_qs.filter(sip_amount__gte=float(sip_min))
+        except ValueError:
+            pass
+    if sip_max:
+        try:
+            clients_qs = clients_qs.filter(sip_amount__lte=float(sip_max))
+        except ValueError:
+            pass
+    if pms_min:
+        try:
+            clients_qs = clients_qs.filter(pms_amount__gte=float(pms_min))
+        except ValueError:
+            pass
+    if pms_max:
+        try:
+            clients_qs = clients_qs.filter(pms_amount__lte=float(pms_max))
+        except ValueError:
+            pass
+    if life_min:
+        try:
+            clients_qs = clients_qs.filter(life_cover__gte=float(life_min))
+        except ValueError:
+            pass
+    if life_max:
+        try:
+            clients_qs = clients_qs.filter(life_cover__lte=float(life_max))
+        except ValueError:
+            pass
+    if health_min:
+        try:
+            clients_qs = clients_qs.filter(health_cover__gte=float(health_min))
+        except ValueError:
+            pass
+    if health_max:
+        try:
+            clients_qs = clients_qs.filter(health_cover__lte=float(health_max))
+        except ValueError:
+            pass
 
     # Paginate
     paginator = Paginator(clients_qs, PER_PAGE)
@@ -349,33 +382,45 @@ def all_clients(request):
     except Exception:
         page_obj = paginator.get_page(1)
 
-    # Build a compact page_range around current page (±3)
+    # Compact page range
     current = page_obj.number
     total_pages = paginator.num_pages
     start = current - 3 if (current - 3) > 1 else 1
     end = current + 3 if (current + 3) < total_pages else total_pages
     page_range = range(start, end + 1)
 
+    # Build base_qs WITHOUT 'page' so we don't duplicate page param in links
+    get_params = request.GET.copy()
+    if 'page' in get_params:
+        del get_params['page']
+    base_qs = get_params.urlencode()  # '' if no other params
+
     context = {
         "clients_page": page_obj,
         "page_range": page_range,
         "total_pages": total_pages,
-        # keep filters in context so links preserve them
+        # keep filters in context if you want to use them individually
         "sip_status": sip_status, "pms_status": pms_status,
         "life_status": life_status, "health_status": health_status,
         "sip_min": sip_min, "sip_max": sip_max,
         "pms_min": pms_min, "pms_max": pms_max,
         "life_min": life_min, "life_max": life_max,
         "health_min": health_min, "health_max": health_max,
+        "base_qs": base_qs,
     }
     return render(request, "clients/all_clients.html", context)
 
+from django.conf import settings
+
+PER_PAGE = getattr(settings, "PER_PAGE", 50)
 
 @login_required
 def my_clients(request):
+    # Base queryset: clients mapped to the logged-in user's employee record
+    # adapt `mapped_to=request.user.employee` if your relation differs
     clients_qs = Client.objects.filter(mapped_to=request.user.employee).order_by('id')
 
-    # Apply same filters as all_clients (reuse the same logic)
+    # --- Filters from GET ---
     sip_status = request.GET.get("sip_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
@@ -399,16 +444,48 @@ def my_clients(request):
     if health_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(health_status=(health_status == "yes"))
 
-    if sip_min: clients_qs = clients_qs.filter(sip_amount__gte=sip_min)
-    if sip_max: clients_qs = clients_qs.filter(sip_amount__lte=sip_max)
-    if pms_min: clients_qs = clients_qs.filter(pms_amount__gte=pms_min)
-    if pms_max: clients_qs = clients_qs.filter(pms_amount__lte=pms_max)
-    if life_min: clients_qs = clients_qs.filter(life_cover__gte=life_min)
-    if life_max: clients_qs = clients_qs.filter(life_cover__lte=life_max)
-    if health_min: clients_qs = clients_qs.filter(health_cover__gte=health_min)
-    if health_max: clients_qs = clients_qs.filter(health_cover__lte=health_max)
+    if sip_min:
+        try:
+            clients_qs = clients_qs.filter(sip_amount__gte=float(sip_min))
+        except ValueError:
+            pass
+    if sip_max:
+        try:
+            clients_qs = clients_qs.filter(sip_amount__lte=float(sip_max))
+        except ValueError:
+            pass
+    if pms_min:
+        try:
+            clients_qs = clients_qs.filter(pms_amount__gte=float(pms_min))
+        except ValueError:
+            pass
+    if pms_max:
+        try:
+            clients_qs = clients_qs.filter(pms_amount__lte=float(pms_max))
+        except ValueError:
+            pass
+    if life_min:
+        try:
+            clients_qs = clients_qs.filter(life_cover__gte=float(life_min))
+        except ValueError:
+            pass
+    if life_max:
+        try:
+            clients_qs = clients_qs.filter(life_cover__lte=float(life_max))
+        except ValueError:
+            pass
+    if health_min:
+        try:
+            clients_qs = clients_qs.filter(health_cover__gte=float(health_min))
+        except ValueError:
+            pass
+    if health_max:
+        try:
+            clients_qs = clients_qs.filter(health_cover__lte=float(health_max))
+        except ValueError:
+            pass
 
-    # Paginate
+    # --- Pagination ---
     paginator = Paginator(clients_qs, PER_PAGE)
     page_num = request.GET.get("page", 1)
     try:
@@ -422,11 +499,17 @@ def my_clients(request):
     end = current + 3 if (current + 3) < total_pages else total_pages
     page_range = range(start, end + 1)
 
+    # --- build base querystring without 'page' so links are clean ---
+    get_params = request.GET.copy()
+    if 'page' in get_params:
+        del get_params['page']
+    base_qs = get_params.urlencode()  # empty string if no params
+
     context = {
         "clients_page": page_obj,
         "page_range": page_range,
         "total_pages": total_pages,
-        # pass filters if your template uses them
+        "base_qs": base_qs,
     }
     return render(request, "clients/my_clients.html", context)
 
@@ -485,7 +568,7 @@ def all_sales(request):
         sales_qs = sales_qs.filter(date=date.today())
 
     # Pagination
-    paginator = Paginator(sales_qs, 10)  # 10 records per page
+    paginator = Paginator(sales_qs, 50)  # 10 records per page
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
