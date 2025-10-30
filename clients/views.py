@@ -300,6 +300,7 @@ def add_sale(request):
     return render(request, "sales/add_sale.html", {"form": form})
 # clients/views.py
 from django.db.models import Q
+from .models import MessageTemplate   # (add this import at top if not already)
 
 # pagination settings
 PER_PAGE = 50  # change to how many clients you want per page
@@ -408,10 +409,12 @@ def all_clients(request):
         "health_min": health_min, "health_max": health_max,
         "base_qs": base_qs,
     }
+    templates = MessageTemplate.objects.all()     # fetch all message templates
+    context.update({"templates": templates})   
     return render(request, "clients/all_clients.html", context)
 
 from django.conf import settings
-
+from .models import MessageTemplate 
 PER_PAGE = getattr(settings, "PER_PAGE", 50)
 
 @login_required
@@ -504,13 +507,18 @@ def my_clients(request):
     if 'page' in get_params:
         del get_params['page']
     base_qs = get_params.urlencode()  # empty string if no params
+      # (add this import at top if not already)
 
+
+    templates = MessageTemplate.objects.all()     # fetch all message templates
+        # make them available in template
     context = {
         "clients_page": page_obj,
         "page_range": page_range,
         "total_pages": total_pages,
         "base_qs": base_qs,
     }
+    context.update({"templates": templates})  
     return render(request, "clients/my_clients.html", context)
 
 @login_required
@@ -1406,3 +1414,92 @@ def reschedule_event(request, event_id):
             return redirect("clients:employee_dashboard")
 
     return render(request, "calendar/reschedule_event.html", {"event": event})
+import json
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from .models import Client, MessageTemplate
+
+@login_required
+@require_POST
+def bulk_whatsapp(request):
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+        template_id = data.get("template_id")
+        client_ids = data.get("client_ids", [])
+        preview_only = data.get("preview", False)
+
+        # Validate input
+        if not template_id or not client_ids:
+            return JsonResponse({"error": "Missing template_id or client_ids"}, status=400)
+
+        template = MessageTemplate.objects.filter(id=template_id).first()
+        if not template:
+            return JsonResponse({"error": "Template not found"}, status=404)
+
+        clients = Client.objects.filter(id__in=client_ids)
+        if not clients.exists():
+            return JsonResponse({"error": "No valid clients found"}, status=404)
+
+        messages_preview = []
+        sent_count = 0
+
+        for client in clients:
+            # ✅ Replace placeholders dynamically
+            msg = template.content
+            placeholders = {
+                "name": client.name or "",
+                "email": client.email or "",
+                "phone": client.phone or "",
+                "sip_amount": client.sip_amount or 0,
+                "pms_amount": client.pms_amount or 0,
+                "life_cover": client.life_cover or 0,
+                "health_cover": client.health_cover or 0,
+            }
+
+            for key, val in placeholders.items():
+                msg = msg.replace(f"{{{{{key}}}}}", str(val))
+
+            messages_preview.append({
+                "client": client.name,
+                "phone": client.phone,
+                "message": msg
+            })
+
+            if not preview_only:
+                # ✅ TODO: integrate actual WhatsApp API (like Twilio, Gupshup, etc.)
+                sent_count += 1
+
+        return JsonResponse({
+            "messages_preview": messages_preview,
+            "sent_count": sent_count
+        })
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def edit_client(request, client_id):
+    client = get_object_or_404(Client, id=client_id)
+
+    # ✅ Allow both admin and employees — but employee can only edit their own mapped clients
+    if hasattr(request.user, "employee") and request.user.employee.role == "employee":
+        if client.mapped_to != request.user.employee:
+            messages.error(request, "You can edit only your assigned clients.")
+            return redirect("clients:my_clients")
+
+    if request.method == "POST":
+        form = ClientForm(request.POST, instance=client)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Client updated successfully!")
+            if request.user.employee.role == "admin":
+                return redirect("clients:all_clients")
+            else:
+                return redirect("clients:my_clients")
+    else:
+        form = ClientForm(instance=client)
+
+    return render(request, "clients/edit_client.html", {"form": form, "client": client})

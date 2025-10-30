@@ -54,3 +54,27 @@ class CallingListUploadForm(forms.Form):
         required=False,
         widget=forms.CheckboxSelectMultiple
     )
+
+class ClientForm(forms.ModelForm):
+    class Meta:
+        model = Client
+        fields = [
+            "name", "email", "phone", "pan", "address", "mapped_to",
+            "sip_status", "sip_amount", "sip_topup",
+            "life_status", "life_cover", "life_product",
+            "health_status", "health_cover", "health_topup", "health_product",
+            "motor_status", "motor_insured_value", "motor_product",
+            "pms_status", "pms_amount", "pms_start_date",
+        ]
+        widgets = {
+            "address": forms.Textarea(attrs={"rows": 3}),
+            "pms_start_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.update({"class": "form-control"})
+        # optional: uppercase PAN
+        if "pan" in self.fields:
+            self.fields["pan"].widget.attrs["style"] = "text-transform: uppercase;"

@@ -177,6 +177,13 @@ class IncentiveRuleAdmin(admin.ModelAdmin):
     list_editable = ('unit_amount', 'points_per_unit', 'active')
     search_fields = ('product',)
 
+from django.contrib import admin
+from .models import MessageTemplate
+
+@admin.register(MessageTemplate)
+class MessageTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "created_by", "created_at")
+    search_fields = ("name", "content")
 
 
 @admin.register(MonthlyIncentive)
