@@ -263,18 +263,75 @@ class CalendarEvent(models.Model):
     ]
 
     employee = models.ForeignKey("Employee", on_delete=models.CASCADE, related_name="calendar_events")
+    client = models.ForeignKey("clients.Client", on_delete=models.SET_NULL, null=True, blank=True, related_name="calendar_events")  # ✅ NEW
     title = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=EVENT_TYPES, default="task")
-    related_prospect = models.ForeignKey(Prospect, on_delete=models.SET_NULL, null=True, blank=True)
+    related_prospect = models.ForeignKey("Prospect", on_delete=models.SET_NULL, null=True, blank=True)
     scheduled_time = models.DateTimeField()
     reminder_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=20,
-        choices=[("pending", "Pending"), ("completed", "Completed"), ("rescheduled", "Rescheduled"), ("skipped", "Skipped")],
+        choices=[
+            ("pending", "Pending"),
+            ("completed", "Completed"),
+            ("rescheduled", "Rescheduled"),
+            ("skipped", "Skipped")
+        ],
         default="pending"
     )
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"{self.title} ({self.employee})"
 
+
+from django.db import models
+from django.conf import settings
+from django.template import Template, Context
+from django.utils import timezone
+
+# adjust the Employee import/path if your project uses a different app/model
+# from employees.models import Employee
+from django.template import Template, Context
+from django.utils.html import strip_tags
+
+class MessageTemplate(models.Model):
+    name = models.CharField(max_length=120)
+    content = models.TextField(help_text="Use any placeholders from the Client model like {{ name }}, {{ phone }}, {{ sip_amount }} etc.")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def render(self, obj, extra_context=None):
+        """
+        Render the message with any placeholders present in 'content'.
+        Automatically maps object attributes (e.g. from Client).
+        """
+        # Convert model instance to dict of all attributes
+        context_data = {}
+
+        # Add all field names + values from model (safe reflection)
+        for field in obj._meta.get_fields():
+            try:
+                val = getattr(obj, field.name, "")
+                # handle related fields (like mapped_to.user.username)
+                if hasattr(val, "username"):
+                    val = val.username
+                context_data[field.name] = val
+            except Exception:
+                continue
+
+        # Merge any extra values
+        if extra_context:
+            context_data.update(extra_context)
+
+        # Render safely
+        try:
+            template = Template(self.content)
+            context = Context(context_data)
+            rendered = template.render(context)
+            return strip_tags(rendered).strip()
+        except Exception as e:
+            print("Render error:", e)
+            return self.content

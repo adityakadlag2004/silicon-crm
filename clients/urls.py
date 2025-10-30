@@ -7,6 +7,7 @@ app_name = "clients"
 urlpatterns = [
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
+    path("clients/<int:client_id>/edit/", views.edit_client, name="edit_client"),
     
     path("dashboard/admin/", views.admin_dashboard, name="admin_dashboard"),
     path("dashboard/employee/", views.employee_dashboard, name="employee_dashboard"),
@@ -58,6 +59,10 @@ urlpatterns = [
     path("calendar/mark-done/<int:event_id>/", views.mark_done, name="mark_done"),
     path("calendar/reschedule/<int:event_id>/", views.reschedule_event, name="reschedule"),
     path("calendar/skip/<int:event_id>/", views.skip_event, name="skip"),
+
+    # bulk messaging
+    path("bulk_whatsapp/", views.bulk_whatsapp, name="bulk_whatsapp"),
+
 
     
     

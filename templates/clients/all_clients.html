@@ -141,12 +141,6 @@
     opacity:0.5;
     pointer-events:none;
   }
-  @media (max-width: 900px) {
-    .filter-form { gap: 0.5rem; }
-    .modern-card { padding: 1rem 0.3rem; }
-    .dashboard-section-title { font-size: 1.05rem; }
-    .table thead th, .table td { font-size: 0.93rem; }
-  }
 </style>
 
 <div class="dashboard-section-title">All Clients</div>
@@ -200,10 +194,30 @@
   </form>
 </div>
 
+<!-- Bulk Messaging Controls -->
+<div class="modern-card mb-3" style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;justify-content:space-between;">
+  <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+    <label style="display:flex;align-items:center;gap:0.4rem;">
+      <input id="selectAllClients" type="checkbox" />
+      <small>Select all</small>
+    </label>
+    <select id="messageTemplateSelect" class="form-select" style="min-width:260px;">
+      <option value="">Select message template...</option>
+      {% for tpl in templates %}
+        <option value="{{ tpl.id }}">{{ tpl.name }}</option>
+      {% endfor %}
+    </select>
+    <button id="previewTemplateBtn" class="dashboard-link" type="button" style="padding:0.4rem 0.9rem;">Preview</button>
+    <button id="sendWhatsAppBtn" class="dashboard-link" type="button" style="padding:0.4rem 0.9rem;">Send WhatsApp</button>
+  </div>
+  <div id="bulkStatus" style="font-size:0.95rem;color:#374151;display:none;"></div>
+</div>
+
 <div class="modern-card" style="overflow-x:auto;">
   <table class="table table-striped">
     <thead>
       <tr>
+        <th style="width:40px;"><input id="colSelectAll" type="checkbox" /></th>
         <th>ID</th>
         <th>Name</th>
         <th>Email</th>
@@ -219,6 +233,7 @@
     <tbody>
       {% for client in clients_page %}
       <tr>
+        <td><input class="client-select" type="checkbox" value="{{ client.id }}" /></td>
         <td>{{ client.id }}</td>
         <td>{{ client.name }}</td>
         <td>{{ client.email }}</td>
@@ -230,7 +245,12 @@
         <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
         <td>
           <a href="{% url 'clients:map_client' client.id %}" class="dashboard-link" style="padding:0.3rem 1rem;font-size:0.95rem;">Map</a>
+          <a href="{% url 'clients:edit_client' client.id %}" class="btn btn-sm btn-warning">
+    Edit
+  </a>
         </td>
+        
+
       </tr>
       {% empty %}
       <tr><td colspan="11" class="text-center">No clients found</td></tr>
@@ -290,4 +310,158 @@
   </div>
 
 </div>
+
+<!-- Preview / Send Modal (hidden by default) -->
+<div id="bulkModal" style="display:none;position:fixed;inset:0;z-index:1200;align-items:center;justify-content:center;">
+  <div style="width:94%;max-width:800px;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 8px 40px rgba(0,0,0,0.25);margin:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+      <strong id="bulkModalTitle">Preview messages</strong>
+      <button id="bulkModalClose" class="dashboard-link" style="padding:0.25rem 0.6rem;font-size:0.9rem;">Close</button>
+    </div>
+
+    <div id="bulkModalBody" style="max-height:420px;overflow:auto;padding:0.4rem;border-radius:8px;background:#f8fafc;"></div>
+
+    <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.6rem;">
+      <button id="bulkModalSend" class="dashboard-link" style="padding:0.45rem 0.9rem;">Send now</button>
+      <button id="bulkModalCancel" class="dashboard-link" style="background:#e2e8f0;color:#2d3748;padding:0.45rem 0.9rem;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // CSRF cookie helper
+  function getCookie(name) {
+    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return v ? v.pop() : '';
+  }
+  const csrftoken = getCookie('csrftoken');
+
+  const colSelectAll = document.getElementById('colSelectAll');
+  const selectAll = document.getElementById('selectAllClients');
+  const templateSelect = document.getElementById('messageTemplateSelect');
+  const previewBtn = document.getElementById('previewTemplateBtn');
+  const sendBtn = document.getElementById('sendWhatsAppBtn');
+  const bulkStatus = document.getElementById('bulkStatus');
+  const modal = document.getElementById('bulkModal');
+  const modalBody = document.getElementById('bulkModalBody');
+  const modalTitle = document.getElementById('bulkModalTitle');
+  const modalClose = document.getElementById('bulkModalClose');
+  const modalCancel = document.getElementById('bulkModalCancel');
+  const modalSend = document.getElementById('bulkModalSend');
+
+  function clientCheckboxes() {
+    return Array.from(document.querySelectorAll('.client-select'));
+  }
+
+  if (colSelectAll) {
+    colSelectAll.addEventListener('change', function(){ clientCheckboxes().forEach(cb=>cb.checked = this.checked); });
+  }
+  if (selectAll) {
+    selectAll.addEventListener('change', function(){ clientCheckboxes().forEach(cb=>cb.checked = this.checked); });
+  }
+
+  function getSelectedClients() {
+    return clientCheckboxes().filter(cb=>cb.checked).map(cb=>{
+      const tr = cb.closest('tr');
+      const tds = tr ? tr.querySelectorAll('td') : [];
+      // name and phone positions may vary; fallback to selectors by column content
+      let name = '';
+      let phone = '';
+      if (tds.length) {
+        // name is likely in second or third td depending on table; attempt robustly:
+        // find cell that looks like a name (non-numeric, not phone)
+        for (let i=0;i<tds.length;i++){
+          const text = tds[i].innerText.trim();
+          if (!phone && /^[0-9\+\-\s]{6,}$/.test(text)) { phone = text; continue; }
+          if (!name && text && !/^[0-9\+\-\s]{6,}$/.test(text)) { name = text; continue; }
+        }
+      }
+      return { id: cb.value, name: name, phone: phone };
+    });
+  }
+
+  async function postBulk(data){
+    const res = await fetch("{% url 'clients:bulk_whatsapp' %}", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrftoken,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify(data)
+    });
+    return res;
+  }
+
+  previewBtn && previewBtn.addEventListener('click', async function(){
+    const tpl = templateSelect.value;
+    const clients = getSelectedClients();
+    if (!tpl) return alert('Select a message template.');
+    if (!clients.length) return alert('Select at least one client.');
+    modalTitle.innerText = `Preview (${clients.length} clients)`;
+    modalBody.innerHTML = `<div style="padding:0.6rem">Generating previews...</div>`;
+    modal.style.display = 'flex';
+    try {
+      const res = await postBulk({ template_id: parseInt(tpl), client_ids: clients.map(c=>parseInt(c.id)), preview: true });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Server error');
+      modalBody.innerHTML = '';
+      (data.messages_preview || []).forEach(m=>{
+        const el = document.createElement('div');
+        el.style.padding = '0.6rem';
+        el.style.borderBottom = '1px solid #e6eef6';
+        el.innerHTML = `<strong>${m.client}</strong> — <small>${m.phone}</small>
+                        <pre style="white-space:pre-wrap;margin:0.45rem 0 0 0;font-family:inherit;">${m.message}</pre>`;
+        modalBody.appendChild(el);
+      });
+    } catch(err){
+      modalBody.innerHTML = `<div style="color:#9b2c2c;padding:0.6rem">Preview failed: ${err.message}</div>`;
+    }
+  });
+
+  [modalClose, modalCancel].forEach(el=> el && el.addEventListener('click', ()=> modal.style.display='none'));
+
+  modalSend && modalSend.addEventListener('click', async function(){
+    const tpl = templateSelect.value;
+    const clients = getSelectedClients();
+    if (!tpl) return alert('Select a template.');
+    if (!clients.length) return alert('Select clients.');
+    modalBody.innerHTML = `<div style="padding:0.6rem">Sending messages... please wait.</div>`;
+    modalSend.disabled = true;
+    modalSend.innerText = 'Sending...';
+    try {
+      const res = await postBulk({ template_id: parseInt(tpl), client_ids: clients.map(c=>parseInt(c.id)) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Server error');
+      modalBody.innerHTML = `<div style="padding:0.6rem;color:green">Sent ${data.sent_count} messages.</div>`;
+      (data.messages_preview || []).forEach(m=>{
+        const el = document.createElement('div');
+        el.style.padding = '0.5rem';
+        el.style.borderTop = '1px solid #eef4fb';
+        el.innerHTML = `<strong>${m.client}</strong> — <small>${m.phone}</small>
+                        <pre style="white-space:pre-wrap;margin:0.3rem 0 0 0;font-family:inherit;">${m.message}</pre>`;
+        modalBody.appendChild(el);
+      });
+      bulkStatus.style.display = 'block';
+      bulkStatus.innerText = `Last sent: ${data.sent_count} messages`;
+      setTimeout(()=> bulkStatus.style.opacity = 1, 10);
+    } catch(err){
+      modalBody.innerHTML = `<div style="color:#9b2c2c;padding:0.6rem">Send failed: ${err.message}</div>`;
+    } finally {
+      modalSend.disabled = false;
+      modalSend.innerText = 'Send now';
+    }
+  });
+
+  sendBtn && sendBtn.addEventListener('click', function(){ // open preview modal first
+    const clients = getSelectedClients();
+    if (!templateSelect.value) return alert('Select a template first');
+    if (!clients.length) return alert('Select clients first');
+    previewBtn.click();
+  });
+
+})();
+</script>
+
 {% endblock %}
