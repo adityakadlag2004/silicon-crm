@@ -11,7 +11,10 @@ urlpatterns = [
     
     path("dashboard/admin/", views.admin_dashboard, name="admin_dashboard"),
     path("dashboard/employee/", views.employee_dashboard, name="employee_dashboard"),
-    
+  # ----- Admin past performance -----
+    path("admin/past-performance/", views.admin_past_performance, name="admin_past_performance"),
+    path("admin/past-performance/<int:year>/<int:month>/", views.admin_past_month_performance, name="admin_past_month_performance"),
+
 
     # New
     # sales CRUD
@@ -63,8 +66,9 @@ urlpatterns = [
     # bulk messaging
     path("bulk_whatsapp/", views.bulk_whatsapp, name="bulk_whatsapp"),
 
-
-    
+    # bulk shifting
+    path('<int:client_id>/reassign/', views.client_reassign_view, name='reassign'),
+    path("reassign-bulk/", views.bulk_reassign_view, name="bulk_reassign"),
     
     
 

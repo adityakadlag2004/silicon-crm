@@ -16,6 +16,15 @@ class EmployeeAdmin(admin.ModelAdmin):
     list_display = ('user', 'role')  # show linked User + role
     search_fields = ('user__username', 'user__email')  # search by Django user fields
 
+# app/admin.py
+from django.contrib import admin, messages
+from django.template.response import TemplateResponse
+from django.urls import path
+from django.shortcuts import redirect, get_object_or_404
+
+from import_export.admin import ImportExportModelAdmin
+
+from .models import Client, Employee
 
 @admin.register(Client)
 class ClientAdmin(ImportExportModelAdmin):
@@ -40,6 +49,47 @@ class ClientAdmin(ImportExportModelAdmin):
         'status',
     )
 
+    # Add the bulk reassign action
+    actions = ['bulk_reassign_action']
+
+    def bulk_reassign_action(self, request, queryset):
+        """
+        If 'apply' in POST => perform bulk reassign.
+        Otherwise render an intermediate page to pick target employee.
+        """
+        # When form is submitted (confirm step)
+        if 'apply' in request.POST:
+            emp_id = request.POST.get('employee')
+            if not emp_id:
+                self.message_user(request, "No employee selected.", level=messages.ERROR)
+                return None
+            employee = get_object_or_404(Employee, pk=emp_id)
+            count = 0
+            for c in queryset:
+                changed, prev, new = c.reassign_to(employee, changed_by=request.user, note="Admin bulk reassign")
+                if changed:
+                    count += 1
+            self.message_user(request, f"{count} clients reassigned to {employee.user.username}.")
+            return None
+
+        # First step: render a confirmation template with employee list
+        employees = Employee.objects.all()
+        context = {
+            'clients': queryset,
+            'employees': employees,
+            'action_checkbox_name': admin.helpers.ACTION_CHECKBOX_NAME,
+            'opts': self.model._meta,
+        }
+        return TemplateResponse(request, 'admin/bulk_reassign.html', context)
+
+    bulk_reassign_action.short_description = "Reassign selected clients to an employee"
+
+    def get_actions(self, request):
+        # Optionally hide action if user lacks permission
+        actions = super().get_actions(request)
+        if not request.user.has_perm('clients.change_client'):
+            actions.pop('bulk_reassign_action', None)
+        return actions
 
 from django.contrib import admin
 from .models import Employee, Target, Sale
@@ -239,12 +289,6 @@ def get_admin_urls(urls):
     return _get_urls
 
 admin.site.get_urls = get_admin_urls(admin.site.get_urls())
-
-
-
-
-
-
 
 
 

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div class="dashboard-section-title">Past Performance (Last {{ months_data|length }} Months) — Admin</div>
+
+<div class="mt-3">
+  <!-- Link to a dedicated detailed page if needed -->
+  <a href="{% url 'clients:admin_past_performance' %}" class="dashboard-link">View Admin Past Performance (Full)</a>
+</div>
+
+<!-- Chart -->
+<div class="card mt-4 p-3">
+  <canvas id="adminPerformanceChart" height="120"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  (function() {
+    const labels = {{ labels_json|safe }};
+    const data = {{ totals_json|safe }};
+
+    const ctx = document.getElementById('adminPerformanceChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Total Points (all employees)',
+          data: data,
+          fill: false,
+          tension: 0.3,
+          borderWidth: 2,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: true } },
+        scales: {
+          y: { beginAtZero: true }
+        }
+      }
+    });
+  })();
+</script>
+
+<!-- Months table (clickable to month detail) -->
+<div class="mt-4">
+  <h4>Monthly Summary</h4>
+  <table class="table">
+    <thead>
+      <tr><th>Month</th><th>Total Points</th><th>Total Amount</th><th>Details</th></tr>
+    </thead>
+    <tbody>
+      {% for m in months_data %}
+      <tr>
+        <td>{{ m.label }}</td>
+        <td>{{ m.points }}</td>
+        <td>{{ m.amount|floatformat:2 }}</td>
+        <td>
+          <a href="{% url 'clients:admin_past_month_performance' m.year m.month %}">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Top performers for latest month -->
+<div class="mt-4">
+  <h4>Top Performers — {{ latest_month_label }}</h4>
+  {% if top_performers %}
+    <ol>
+      {% for t in top_performers %}
+        <li>
+          <strong>{{ t.full_name }}</strong>
+          — Points: {{ t.total_points }} —
+          Sales: {{ t.total_amount|floatformat:2 }}
+          <!-- link to employee profile if you have it -->
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <p>No sales recorded for {{ latest_month_label }}.</p>
+  {% endif %}
+</div>
+
+{% endblock %}
