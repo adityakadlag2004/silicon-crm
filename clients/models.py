@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
@@ -64,6 +65,50 @@ class Client(models.Model):
                 max_id = Client.objects.aggregate(max_id=Max('id'))['max_id'] or 0
                 self.id = max_id + 1
         super().save(*args, **kwargs)
+    
+    def reassign_to(self, new_employee, changed_by=None, note=''):
+        """
+        Atomically reassign this client to `new_employee` and create an audit entry.
+
+        Returns:
+            (changed: bool, previous_employee, new_employee)
+        """
+        previous = self.mapped_to
+        if previous == new_employee:
+            return False, previous, new_employee
+
+        with transaction.atomic():
+            self.mapped_to = new_employee
+            self.save(update_fields=['mapped_to'])
+
+            # create audit entry
+            ClientMappingAudit.objects.create(
+                client=self,
+                previous_employee=previous,
+                new_employee=new_employee,
+                changed_by=changed_by,
+                changed_at=timezone.now(),
+                note=note or ''
+            )
+
+        return True, previous, new_employee
+
+
+
+class ClientMappingAudit(models.Model):
+    client = models.ForeignKey('Client', on_delete=models.CASCADE, related_name='mapping_audits')
+    previous_employee = models.ForeignKey(Employee, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    new_employee = models.ForeignKey(Employee, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    changed_at = models.DateTimeField(default=timezone.now)
+    note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-changed_at']
+
+    def __str__(self):
+        return f"Client {self.client_id}: {self.previous_employee} → {self.new_employee} at {self.changed_at}"
+
 
 
 # Add these imports at top if not already present

@@ -868,6 +868,30 @@ def _last_n_months(today, n=12):
     return months
 
 import json
+import calendar
+from django.contrib.auth.decorators import login_required
+from django.db.models import Sum
+from django.shortcuts import render
+from django.utils.timezone import now
+
+from .models import Sale, MonthlyTargetHistory  # adjust if needed
+
+month_name = {i: calendar.month_name[i] for i in range(1, 13)}
+
+# helper: last N months (returns list of (year, month) tuples)
+# def _last_n_months(today, n=12):
+#     months = []
+#     y, m = today.year, today.month
+#     for _ in range(n):
+#         months.append((y, m))
+#         m -= 1
+#         if m == 0:
+#             m = 12
+#             y -= 1
+#     months.reverse()
+#     return months
+
+import json
 from calendar import month_name
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
@@ -955,6 +979,171 @@ def past_month_performance(request, year, month):
     return render(request, "dashboards/past_month_performance.html", context)
 
 
+
+
+@login_required
+def admin_past_performance(request, n_months=12):
+    # allow staff OR superuser
+    # if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+    #     from django.http import HttpResponseForbidden
+    #     return HttpResponseForbidden("Forbidden: staff or superuser required")
+
+    today = now().date()
+    months = _last_n_months(today, n=n_months)
+
+    labels = []
+    totals_data = []
+    months_data = []
+
+    for (y, m) in months:
+        label = f"{month_name[m]} {y}"
+
+        total_points = (
+            Sale.objects.filter(date__year=y, date__month=m)
+            .aggregate(total=Sum("points"))["total"]
+            or 0
+        )
+        total_amount = (
+            Sale.objects.filter(date__year=y, date__month=m)
+            .aggregate(total=Sum("amount"))["total"]
+            or 0
+        )
+
+        labels.append(label)
+        totals_data.append(int(total_points))
+        months_data.append({
+            "year": y,
+            "month": m,
+            "label": label,
+            "points": int(total_points),
+            "amount": float(total_amount),
+        })
+
+    # Top performers for the most recent month:
+    latest_year, latest_month = months[-1]
+
+    # Use user first/last name fields (safe), fallback to username
+    top_performers_qs = (
+        Sale.objects.filter(date__year=latest_year, date__month=latest_month)
+        .values(
+            "employee__id",
+            "employee__user__username",
+            "employee__user__first_name",
+            "employee__user__last_name",
+        )
+        .annotate(total_points=Sum("points"), total_amount=Sum("amount"))
+        .order_by("-total_points")
+    )
+
+    top_performers = []
+    for r in top_performers_qs:
+        first = (r.get("employee__user__first_name") or "").strip()
+        last = (r.get("employee__user__last_name") or "").strip()
+        if first or last:
+            full_name = (first + " " + last).strip()
+        else:
+            full_name = r.get("employee__user__username") or "Unknown"
+
+        top_performers.append({
+            "employee_id": r.get("employee__id"),
+            "username": r.get("employee__user__username") or "",
+            "full_name": full_name,
+            "total_points": int(r.get("total_points") or 0),
+            "total_amount": float(r.get("total_amount") or 0),
+        })
+
+    context = {
+        "labels_json": json.dumps(labels),
+        "totals_json": json.dumps(totals_data),
+        "months_data": months_data,
+        "top_performers": top_performers,
+        "latest_month_label": months_data[-1]["label"],
+        "latest_year": latest_year,
+        "latest_month": latest_month,
+    }
+
+    return render(request, "dashboards/admin_past_performance.html", context)
+
+
+@login_required
+def admin_past_month_performance(request, year, month):
+    # allow staff OR superuser
+    # if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
+    #     from django.http import HttpResponseForbidden
+    #     return HttpResponseForbidden("Forbidden: staff or superuser required")
+
+    # Product-wise summary
+    product_sales = (
+        Sale.objects.filter(date__year=year, date__month=month)
+        .values("product")
+        .annotate(total_amount=Sum("amount"), total_points=Sum("points"))
+        .order_by("-total_amount")
+    )
+
+    # Target aggregation across employees (if any)
+    target_history = MonthlyTargetHistory.objects.filter(year=year, month=month)
+    target_map = {}
+    if target_history.exists():
+        summed_targets = (
+            target_history.values("product")
+            .annotate(target_value_sum=Sum("target_value"), achieved_value_sum=Sum("achieved_value"))
+        )
+        for t in summed_targets:
+            target_map[t["product"]] = {
+                "target_value": float(t["target_value_sum"] or 0),
+                "achieved_value": float(t["achieved_value_sum"] or 0),
+            }
+
+    products = []
+    for row in product_sales:
+        prod = row["product"]
+        products.append({
+            "product": prod,
+            "total_amount": float(row["total_amount"] or 0),
+            "total_points": int(row["total_points"] or 0),
+            "target_value": target_map.get(prod, {}).get("target_value"),
+            "achieved_value": target_map.get(prod, {}).get("achieved_value"),
+        })
+
+    # Top performers for that month (employee -> points/amount)
+    top_performers_qs = (
+        Sale.objects.filter(date__year=year, date__month=month)
+        .values(
+            "employee__id",
+            "employee__user__username",
+            "employee__user__first_name",
+            "employee__user__last_name",
+        )
+        .annotate(total_points=Sum("points"), total_amount=Sum("amount"))
+        .order_by("-total_points")
+    )
+
+    top_performers = []
+    for r in top_performers_qs:
+        first = (r.get("employee__user__first_name") or "").strip()
+        last = (r.get("employee__user__last_name") or "").strip()
+        if first or last:
+            full_name = (first + " " + last).strip()
+        else:
+            full_name = r.get("employee__user__username") or "Unknown"
+
+        top_performers.append({
+            "employee_id": r.get("employee__id"),
+            "username": r.get("employee__user__username") or "",
+            "full_name": full_name,
+            "total_points": int(r.get("total_points") or 0),
+            "total_amount": float(r.get("total_amount") or 0),
+        })
+
+    context = {
+        "year": int(year),
+        "month": int(month),
+        "month_label": f"{month_name[int(month)]} {year}",
+        "products": products,
+        "top_performers": top_performers,
+    }
+
+    return render(request, "dashboards/admin_past_month_performance.html", context)
 
 from .models import CallingList, Prospect
 
@@ -1503,3 +1692,114 @@ def edit_client(request, client_id):
         form = ClientForm(instance=client)
 
     return render(request, "clients/edit_client.html", {"form": form, "client": client})
+
+
+# app/views.py
+from django.contrib.auth.decorators import login_required, permission_required
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.contrib import messages
+
+from .models import Client, Employee
+from .forms import ClientReassignForm
+
+@login_required
+@permission_required('clients.change_client', raise_exception=True)
+def client_reassign_view(request, client_id):
+    client = get_object_or_404(Client, id=client_id)
+
+    if request.method == 'POST':
+        form = ClientReassignForm(request.POST)
+        if form.is_valid():
+            new_employee = form.cleaned_data['new_employee']
+            note = form.cleaned_data.get('note', '')
+            changed, previous, new = client.reassign_to(new_employee, changed_by=request.user, note=note)
+            if changed:
+                messages.success(request, f"Reassigned client to {new_employee.user.username if new_employee else 'Unassigned'}.")
+            else:
+                messages.info(request, "No change — client already assigned to that employee.")
+            return redirect(reverse('clients:detail', args=[client.id]))
+    else:
+        form = ClientReassignForm(initial={'new_employee': client.mapped_to})
+
+    return render(request, 'clients/reassign_modal.html', {'client': client, 'form': form})
+
+
+# app/views.py
+from django.contrib.auth.decorators import login_required, permission_required
+from django.http import HttpResponseForbidden
+from django.db import transaction
+
+@login_required
+def bulk_reassign_view(request):
+    """
+    Three-step behaviour in one view:
+    - GET: show the form to choose source + target
+    - POST action='load' : show clients belonging to selected source_employee (preview & select)
+    - POST action='apply': perform reassign for selected client ids to target_employee
+    """
+    employees = Employee.objects.all().select_related('user')
+    context = {'employees': employees, 'clients_preview': None, 'source_emp': None, 'target_emp': None}
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        # LOAD clients for preview
+        if action == 'load':
+            try:
+                source_id = int(request.POST.get('source_employee') or 0)
+            except (TypeError, ValueError):
+                messages.error(request, "Please choose a source employee.")
+                return render(request, 'clients/bulk_reassign.html', context)
+
+            source_emp = get_object_or_404(Employee, pk=source_id)
+            clients_qs = Client.objects.filter(mapped_to=source_emp).order_by('id')
+            context.update({
+                'clients_preview': clients_qs,
+                'source_emp': source_emp,
+                'target_emp': None,
+            })
+            return render(request, 'clients/bulk_reassign.html', context)
+
+        # APPLY reassignment for selected client ids
+        if action == 'apply':
+            try:
+                source_id = int(request.POST.get('source_employee') or 0)
+            except (TypeError, ValueError):
+                messages.error(request, "Source employee missing.")
+                return redirect('clients:bulk_reassign')
+
+            try:
+                target_id = int(request.POST.get('target_employee') or 0)
+            except (TypeError, ValueError):
+                messages.error(request, "Target employee missing.")
+                return redirect('clients:bulk_reassign')
+
+            source_emp = get_object_or_404(Employee, pk=source_id)
+            target_emp = get_object_or_404(Employee, pk=target_id)
+
+            # collect selected client ids from checkboxes named selected_client
+            selected = request.POST.getlist('selected_client')
+            if not selected:
+                messages.error(request, "No clients selected for reassignment.")
+                return redirect('clients:bulk_reassign')
+
+            # validate they actually belong to source_emp (safety)
+            clients_to_move = Client.objects.filter(id__in=selected, mapped_to=source_emp)
+
+            if not clients_to_move.exists():
+                messages.error(request, "No valid clients found to reassign (maybe selection mismatch).")
+                return redirect('clients:bulk_reassign')
+
+            moved_count = 0
+            # Do reassign within transaction
+            with transaction.atomic():
+                for c in clients_to_move:
+                    changed, prev, new = c.reassign_to(target_emp, changed_by=request.user, note="Bulk reassign via admin page")
+                    if changed:
+                        moved_count += 1
+
+            messages.success(request, f"Reassigned {moved_count} client(s) from {source_emp.user.username} to {target_emp.user.username}.")
+            return redirect('clients:bulk_reassign')
+
+    return render(request, 'clients/bulk_reassign.html', context)

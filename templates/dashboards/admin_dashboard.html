@@ -80,6 +80,23 @@
     color: #2b6cb0;
     margin: 0;
   }
+  .dashboard-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.7rem 1.5rem;
+    border-radius: 12px;
+    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
+    color: #2d3748;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+    transition: background 0.2s;
+  }
+  .dashboard-link:hover {
+    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
+    color: #1a202c;
+  }
+  
   .modern-table {
     width: 100%;
     border-collapse: separate;
@@ -254,6 +271,23 @@
 </div>
 <hr class="my-4" />
 <!-- ================== Section 3: Monthly Cumulative Summary ================== -->
+<!-- Insert into your admin dashboard template where links/cards are shown -->
+<!-- ADMIN PAST PERFORMANCE SECTION -->
+<!-- Admin past performance - plain style -->
+<div style="border-top:1px solid #e6eef2; padding-top:2rem;">
+  <h2 style="font-size:2rem; font-weight:700; color:#2d3748; margin:0 0 1rem 0;">
+    Admin Past Performance (Cumulative)
+  </h2>
+
+  <div class="mt-3">
+    <!-- plain link (browser default) -->
+    <a href="{% url 'clients:admin_past_performance' %}" class="dashboard-link">View Detailed Past Performance</a>
+  </div>
+  
+</div>
+<hr class="my-4" />
+
+
 <!-- 🔹 Points Counter Animation -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="dashboard-section-title">Month Detail — {{ month_label }}</div>
+
+<div class="mt-3">
+  <a href="{% url 'clients:admin_past_performance' %}" class="dashboard-link">Back to Admin Past Performance</a>
+</div>
+
+<div class="row mt-4">
+  <div class="col-md-8">
+    <h5>Product-wise Sales</h5>
+    <table class="table">
+      <thead><tr><th>Product</th><th>Total Amount</th><th>Total Points</th><th>Target (sum)</th><th>Achieved (sum)</th></tr></thead>
+      <tbody>
+        {% for p in products %}
+        <tr>
+          <td>{{ p.product }}</td>
+          <td>{{ p.total_amount|floatformat:2 }}</td>
+          <td>{{ p.total_points }}</td>
+          <td>{% if p.target_value %}{{ p.target_value|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td>{% if p.achieved_value %}{{ p.achieved_value|floatformat:2 }}{% else %}-{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col-md-4">
+    <h5>Top Performers — {{ month_label }}</h5>
+    {% if top_performers %}
+      <ol>
+        {% for t in top_performers %}
+          <li>
+            <strong>{{ t.full_name }}</strong><br/>
+            Points: {{ t.total_points }}<br/>
+            Sales: {{ t.total_amount|floatformat:2 }}
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p>No performers for this month.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

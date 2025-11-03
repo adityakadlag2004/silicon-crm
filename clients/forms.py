@@ -78,3 +78,17 @@ class ClientForm(forms.ModelForm):
         # optional: uppercase PAN
         if "pan" in self.fields:
             self.fields["pan"].widget.attrs["style"] = "text-transform: uppercase;"
+
+
+# app/forms.py
+from django import forms
+from .models import Employee
+
+class ClientReassignForm(forms.Form):
+    new_employee = forms.ModelChoiceField(
+        queryset=Employee.objects.all(),
+        required=False,
+        empty_label="-- Unassign --",
+        label="Assign to"
+    )
+    note = forms.CharField(widget=forms.Textarea(attrs={'rows': 2}), required=False)

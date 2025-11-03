@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div class="container mt-4">
+  <h3>Bulk Client Reassignment</h3>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="alert {% if m.tags %}alert-{{ m.tags }}{% endif %}">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <!-- Step: choose source and optionally target -->
+  <form method="post" id="load-form">
+    {% csrf_token %}
+    <div class="row mb-3">
+      <div class="col-md-5">
+        <label for="source_employee">Source employee (move FROM)</label>
+        <select name="source_employee" id="source_employee" class="form-control">
+          <option value="">-- Select source employee --</option>
+          {% for emp in employees %}
+            <option value="{{ emp.id }}"
+              {% if source_emp and source_emp.id == emp.id %}selected{% endif %}>
+              {{ emp.user.username }} — {{ emp.role }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-5">
+        <label for="target_employee">Target employee (move TO)</label>
+        <select name="target_employee" id="target_employee" class="form-control">
+          <option value="">-- Select target employee --</option>
+          {% for emp in employees %}
+            <option value="{{ emp.id }}"
+              {% if target_emp and target_emp.id == emp.id %}selected{% endif %}>
+              {{ emp.user.username }} — {{ emp.role }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-2 align-self-end">
+        <!-- action=load triggers preview -->
+        <input type="hidden" name="action" value="load">
+        <button class="btn btn-outline-primary" type="submit">Load clients</button>
+      </div>
+    </div>
+  </form>
+
+  {% if clients_preview %}
+    <hr>
+    <h5>Clients currently mapped to {{ source_emp.user.username }}</h5>
+    <form method="post" id="apply-form">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="apply">
+      <input type="hidden" name="source_employee" value="{{ source_emp.id }}">
+      {% if target_emp %}
+  <input type="hidden" name="target_employee" value="{{ target_emp.id }}">
+{% elif request.POST.target_employee %}
+  <input type="hidden" name="target_employee" value="{{ request.POST.target_employee }}">
+{% endif %}
+
+
+      <div class="mb-2">
+        <button type="button" id="select-all" class="btn btn-sm btn-outline-secondary">Select all</button>
+        <button type="button" id="clear-all" class="btn btn-sm btn-outline-secondary">Clear</button>
+      </div>
+
+      <table class="table table-sm table-striped">
+        <thead>
+          <tr>
+            <th></th>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Current mapped_to</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for client in clients_preview %}
+            <tr>
+              <td><input type="checkbox" name="selected_client" value="{{ client.id }}" class="client-checkbox"></td>
+              <td>{{ client.id }}</td>
+              <td>{{ client.name }}</td>
+              <td>{{ client.email }}</td>
+              <td>{{ client.phone }}</td>
+              <td>
+  {% if client.mapped_to %}
+    {{ client.mapped_to.user.username }}
+  {% else %}
+    —
+  {% endif %}
+</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="form-group mt-2">
+        <button class="btn btn-primary" type="submit">Reassign selected clients</button>
+        <a href="{% url 'clients:bulk_reassign' %}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+
+    <script>
+      // simple select all / clear all
+      document.getElementById('select-all').addEventListener('click', function() {
+        document.querySelectorAll('.client-checkbox').forEach(cb => cb.checked = true);
+      });
+      document.getElementById('clear-all').addEventListener('click', function() {
+        document.querySelectorAll('.client-checkbox').forEach(cb => cb.checked = false);
+      });
+    </script>
+  {% endif %}
+</div>
+{% endblock %}
