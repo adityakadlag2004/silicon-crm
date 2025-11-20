@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Net Business{% endblock %}
+{% block content %}
+<style>
+.card-compact { background:#fff; padding:1rem; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+.table-sm td, .table-sm th { padding:0.4rem 0.6rem; }
+</style>
+<div class="card-compact">
+  <h2>Net Business</h2>
+  <p class="text-muted">View net business (Sales − Redemptions/SIP stoppage)</p>
+
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label small">From</label>
+      <input type="date" name="start" class="form-control form-control-sm" value="{{ start }}">
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">To</label>
+      <input type="date" name="end" class="form-control form-control-sm" value="{{ end }}">
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">Granularity</label>
+      <select name="granularity" class="form-select form-select-sm">
+  <option value="day" {% if granularity == 'day' %}selected{% endif %}>Day</option>
+  <option value="month" {% if granularity == 'month' %}selected{% endif %}>Month</option>
+  <option value="year" {% if granularity == 'year' %}selected{% endif %}>Year</option>
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">Product</label>
+      <select name="product" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for p in products %}
+          <option value="{{ p }}">{{ p }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-primary btn-sm">Apply</button>
+    </div>
+  </form>
+
+  <hr />
+
+  <h5>Totals by product</h5>
+  <table class="table table-sm">
+    <thead><tr><th>Product</th><th>Sales</th><th>Redemptions</th><th>Net</th></tr></thead>
+    <tbody>
+      {% for prod, vals in totals.items %}
+        <tr>
+          <td>{{ prod }}</td>
+          <td>₹{{ vals.sales|floatformat:2 }}</td>
+          <td>₹{{ vals.redemptions|floatformat:2 }}</td>
+          <td>₹{{ vals.net|floatformat:2 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="text-muted">No data</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <hr />
+  <h5>Detailed</h5>
+  <table class="table table-sm">
+    <thead><tr><th>Period</th><th>Product</th><th>Sales</th><th>Redemptions</th><th>Net</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td>{{ row.period }}</td>
+          <td>{{ row.product }}</td>
+          <td>₹{{ row.sales|floatformat:2 }}</td>
+          <td>₹{{ row.redemptions|floatformat:2 }}</td>
+          <td>₹{{ row.net|floatformat:2 }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="text-muted">No rows</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <hr />
+  <h5>Add Redemption / SIP Stoppage</h5>
+  <form method="post" class="row g-2">
+    {% csrf_token %}
+    <div class="col-auto">
+      <label class="form-label small">Product</label>
+      <select name="product" class="form-select form-select-sm" required>
+        {% for p in products %}
+          <option value="{{ p }}">{{ p }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">Type</label>
+      <select name="entry_type" class="form-select form-select-sm">
+        <option value="redemption">Redemption (Lumsum)</option>
+        <option value="sip_stoppage">SIP Stoppage</option>
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">Amount</label>
+      <input type="number" step="0.01" name="amount" class="form-control form-control-sm" required>
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">Date</label>
+      <input type="date" name="date" class="form-control form-control-sm" value="{{ end }}">
+    </div>
+    <div class="col-12">
+      <label class="form-label small">Note (optional)</label>
+      <input type="text" name="note" class="form-control form-control-sm">
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-warning btn-sm">Add Entry</button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

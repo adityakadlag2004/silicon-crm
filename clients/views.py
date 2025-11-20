@@ -42,9 +42,11 @@ from .models import (
     Prospect,
     MessageTemplate,
     IncentiveRule,
+    Redemption,
 )
 from .forms import SaleForm, AdminSaleForm, EditSaleForm
 from django.db.models import Count, Avg, Sum
+from django.db.models.functions import TruncDay, TruncMonth, TruncYear
 from django.core.exceptions import FieldError
 
 @login_required
@@ -162,6 +164,122 @@ def employee_performance(request):
         context['employees'] = Employee.objects.select_related('user').all()
 
     return render(request, 'sales/employee_performance.html', context)
+
+
+@login_required
+def net_business(request):
+    """Net business dashboard: shows sales minus redemptions/SIP stoppage.
+
+    Filters:
+    - start, end (ISO dates)
+    - granularity: day|month|year
+    - product (optional)
+
+    Also supports adding a Redemption entry via POST (managers only).
+    """
+    # permission: only admin/manager or superuser
+    if not (request.user.is_superuser or (hasattr(request.user, 'employee') and request.user.employee.role in ('admin', 'manager'))):
+        messages.error(request, 'You do not have permission to view Net Business.')
+        return redirect('clients:admin_dashboard')
+
+    # handle POST to add redemption
+    if request.method == 'POST':
+        product = request.POST.get('product')
+        entry_type = request.POST.get('entry_type', 'redemption')
+        amount = request.POST.get('amount')
+        date_str = request.POST.get('date')
+        note = request.POST.get('note', '')
+        try:
+            amt = float(amount)
+            d = date.fromisoformat(date_str) if date_str else date.today()
+            Redemption.objects.create(product=product, entry_type=entry_type, amount=amt, date=d, note=note, created_by=request.user)
+            messages.success(request, 'Redemption entry added')
+            return redirect('clients:net_business')
+        except Exception as e:
+            messages.error(request, f'Invalid input: {e}')
+
+    # Filters
+    try:
+        start_str = request.GET.get('start')
+        end_str = request.GET.get('end')
+        if start_str:
+            start = date.fromisoformat(start_str)
+        else:
+            start = date(date.today().year, 1, 1)
+        if end_str:
+            end = date.fromisoformat(end_str)
+        else:
+            end = date.today()
+    except Exception:
+        start = date(date.today().year, 1, 1)
+        end = date.today()
+
+    gran = request.GET.get('granularity', 'month')  # day|month|year
+    product_filter = request.GET.get('product')
+
+    # Base sales queryset
+    sales_qs = Sale.objects.filter(date__range=(start, end))
+    if product_filter:
+        sales_qs = sales_qs.filter(product=product_filter)
+
+    # Base redemptions
+    red_qs = Redemption.objects.filter(date__range=(start, end))
+    if product_filter:
+        red_qs = red_qs.filter(product=product_filter)
+
+    # Grouping
+    if gran == 'day':
+        sales_grouped = sales_qs.annotate(period=TruncDay('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        red_grouped = red_qs.annotate(period=TruncDay('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+    elif gran == 'year':
+        sales_grouped = sales_qs.annotate(period=TruncYear('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        red_grouped = red_qs.annotate(period=TruncYear('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+    else:
+        sales_grouped = sales_qs.annotate(period=TruncMonth('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        red_grouped = red_qs.annotate(period=TruncMonth('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+
+    # Build a mapping: (period, product) -> totals
+    data = {}
+    products = set()
+    for r in sales_grouped:
+        key = (r['period'].date() if hasattr(r['period'], 'date') else r['period'], r['product'])
+        data.setdefault(key, {'sales': 0, 'redemptions': 0})
+        data[key]['sales'] = float(r['total'] or 0)
+        products.add(r['product'])
+
+    for r in red_grouped:
+        key = (r['period'].date() if hasattr(r['period'], 'date') else r['period'], r['product'])
+        data.setdefault(key, {'sales': 0, 'redemptions': 0})
+        data[key]['redemptions'] = float(r['total'] or 0)
+        products.add(r['product'])
+
+    # Prepare rows sorted by period
+    rows = []
+    # get sorted unique periods
+    periods = sorted({k[0] for k in data.keys()})
+    for p in periods:
+        for prod in sorted(products):
+            s = data.get((p, prod), {'sales': 0, 'redemptions': 0})
+            net = s['sales'] - s['redemptions']
+            rows.append({'period': p, 'product': prod, 'sales': s['sales'], 'redemptions': s['redemptions'], 'net': net})
+
+    # totals by product
+    totals = {}
+    for prod in products:
+        total_sales = sum(r['sales'] for r in rows if r['product'] == prod)
+        total_red = sum(r['redemptions'] for r in rows if r['product'] == prod)
+        totals[prod] = {'sales': total_sales, 'redemptions': total_red, 'net': total_sales - total_red}
+
+    context = {
+        'rows': rows,
+        'totals': totals,
+        'start': start,
+        'end': end,
+        'granularity': gran,
+        'products': [c[0] for c in Sale.PRODUCT_CHOICES],
+    }
+
+    return render(request, 'dashboards/net_business.html', context)
 
 def login_view(request):
     if request.method == "POST":

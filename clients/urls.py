@@ -26,6 +26,7 @@ urlpatterns = [
     path("sales/all/", views.all_sales, name="all_sales"),
   # Employee performance
   path("sales/performance/", views.employee_performance, name="employee_performance"),
+  path("dashboard/net-business/", views.net_business, name="net_business"),
     path("sales/admin_add/", views.admin_add_sale, name="admin_add_sale"),
 
     path("analysis/", views.client_analysis, name="client_analysis"),
