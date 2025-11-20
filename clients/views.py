@@ -44,6 +44,124 @@ from .models import (
     IncentiveRule,
 )
 from .forms import SaleForm, AdminSaleForm, EditSaleForm
+from django.db.models import Count, Avg, Sum
+from django.core.exceptions import FieldError
+
+@login_required
+def employee_performance(request):
+    """Employee performance overview (MVP).
+
+    - If ?employee_id= is provided in GET and the user is admin, show that employee.
+    - Otherwise, show metrics for the logged-in employee.
+    """
+    # determine employee and permission for selector
+    emp_id = request.GET.get('employee_id')
+    is_manager = False
+    if hasattr(request.user, 'employee') and request.user.employee.role in ('admin', 'manager'):
+        is_manager = True
+    if request.user.is_superuser:
+        is_manager = True
+
+    if emp_id and is_manager:
+        employee = get_object_or_404(Employee, id=emp_id)
+    elif hasattr(request.user, 'employee'):
+        employee = request.user.employee
+    else:
+        messages.error(request, 'No employee selected and you are not mapped to an employee.')
+        return redirect('clients:admin_dashboard')
+
+    # date range
+    try:
+        start_str = request.GET.get('start')
+        end_str = request.GET.get('end')
+        if start_str:
+            start = datetime.fromisoformat(start_str).date()
+        else:
+            start = date.today() - timedelta(days=30)
+        if end_str:
+            end = datetime.fromisoformat(end_str).date()
+        else:
+            end = date.today()
+    except Exception:
+        start = date.today() - timedelta(days=30)
+        end = date.today()
+
+    # Sales aggregates
+    sales_qs = Sale.objects.filter(employee=employee, date__range=(start, end))
+    total_sales = sales_qs.count()
+    # some installs use `amount`, some may use `total_amount` — try preferred field safely
+    try:
+        total_amount = sales_qs.aggregate(total=Sum('amount'))['total'] or 0
+    except FieldError:
+        try:
+            total_amount = sales_qs.aggregate(total=Sum('total_amount'))['total'] or 0
+        except FieldError:
+            total_amount = 0
+    points = sales_qs.aggregate(total=Sum('points'))['total'] or 0
+
+    # Calls aggregates
+    calls_qs = CallRecord.objects.filter(employee=employee, call_time__date__range=(start, end))
+    calls_made = calls_qs.count()
+    connects = calls_qs.filter(status__in=['connected', 'success']).count() if calls_made else 0
+    connect_rate = (connects / calls_made * 100) if calls_made else 0
+
+    conversion_rate = (total_sales / calls_made * 100) if calls_made else 0
+
+    # Time series: build daily series between start and end
+    days = []
+    sales_series = []
+    calls_series = []
+    current = start
+    while current <= end:
+        days.append(current.strftime('%Y-%m-%d'))
+        sales_series.append(sales_qs.filter(date=current).aggregate(cnt=Count('id'))['cnt'] or 0)
+        calls_series.append(calls_qs.filter(call_time__date=current).aggregate(cnt=Count('id'))['cnt'] or 0)
+        current += timedelta(days=1)
+
+    # Recent sales table (top 10 recent)
+    recent_sales = sales_qs.order_by('-date')[:10]
+
+    # Export CSV if requested
+    if request.GET.get('export') == 'csv':
+        # build CSV response for sales_qs
+        import csv as _csv
+        from django.http import HttpResponse
+
+        resp = HttpResponse(content_type='text/csv')
+        filename = f"employee_{employee.id}_performance_{start}_{end}.csv"
+        resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+        writer = _csv.writer(resp)
+        writer.writerow(['date', 'client', 'amount', 'points', 'product'])
+        for s in sales_qs.order_by('date'):
+            client_name = s.client.name if getattr(s, 'client', None) else ''
+            amount = getattr(s, 'total_amount', None) or getattr(s, 'amount', None) or ''
+            points_v = getattr(s, 'points', '')
+            product = getattr(s, 'product', '')
+            writer.writerow([s.date, client_name, amount, points_v, product])
+        return resp
+
+    context = {
+        'employee': employee,
+        'start': start,
+        'end': end,
+        'total_sales': total_sales,
+        'total_amount': total_amount,
+        'points': points,
+        'calls_made': calls_made,
+        'connects': connects,
+        'connect_rate': round(connect_rate, 1),
+        'conversion_rate': round(conversion_rate, 1),
+        'days': days,
+        'sales_series': sales_series,
+        'calls_series': calls_series,
+        'recent_sales': recent_sales,
+        'is_manager': is_manager,
+    }
+
+    if is_manager:
+        context['employees'] = Employee.objects.select_related('user').all()
+
+    return render(request, 'sales/employee_performance.html', context)
 
 def login_view(request):
     if request.method == "POST":
@@ -1160,7 +1278,7 @@ def upload_list(request):
     if request.method == "POST" and request.FILES.get("file"):
         # pandas used for Excel parsing; import locally to keep startup light
         try:
-            import pandas as pd
+            import pandas as pd  # type: ignore[import]
         except Exception:
             pd = None
         from datetime import timedelta

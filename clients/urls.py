@@ -24,6 +24,8 @@ urlpatterns = [
     path("sales/<int:sale_id>/delete/", views.delete_sale, name="delete_sale"),
     path("sales/recalc/", views.recalc_points, name="recalc_points"),
     path("sales/all/", views.all_sales, name="all_sales"),
+  # Employee performance
+  path("sales/performance/", views.employee_performance, name="employee_performance"),
     path("sales/admin_add/", views.admin_add_sale, name="admin_add_sale"),
 
     path("analysis/", views.client_analysis, name="client_analysis"),

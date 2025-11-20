@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Employee Performance{% endblock %}
+{% block content %}
+<style>
+.performance-card { background: #fff; border-radius: 12px; padding: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+.kpi { display:inline-block; width:23%; margin-right:1%; vertical-align:top; padding: 0.8rem; border-radius:8px; background: linear-gradient(90deg,#fef3c7,#fff7ed); }
+.kpi h3 { margin:0; font-size:1.1rem; color:#1a202c }
+.kpi p { margin:0.25rem 0 0; color:#4a5568; font-weight:600 }
+@media (max-width:900px) { .kpi { width:48%; margin-bottom:0.6rem } }
+@media (max-width:600px) { .kpi { width:100%; display:block } }
+</style>
+
+<div class="performance-card">
+  <h2>Employee Performance — {{ employee.user.get_full_name|default:employee.user.username }}</h2>
+
+  <form id="perfForm" method="get" class="row gy-2 gx-2 align-items-center" style="margin-top:0.5rem;">
+    {% if is_manager %}
+      <div class="col-auto">
+        <label class="form-label small">Employee</label>
+        <select name="employee_id" class="form-select form-select-sm">
+          {% for emp in employees %}
+            <option value="{{ emp.id }}" {% if emp.id == employee.id %}selected{% endif %}>{{ emp.user.get_full_name|default:emp.user.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+
+    <div class="col-auto">
+      <label class="form-label small">From</label>
+      <input type="date" name="start" class="form-control form-control-sm" value="{{ start }}" />
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">To</label>
+      <input type="date" name="end" class="form-control form-control-sm" value="{{ end }}" />
+    </div>
+    <div class="col-auto">
+      <label class="form-label small">&nbsp;</label>
+      <div>
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
+        <button type="button" class="btn btn-sm btn-primary" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </div>
+  </form>
+
+  <p class="text-muted">Period: {{ start }} → {{ end }}</p>
+
+  <div style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+    <div class="kpi">
+      <h3>Total Sales</h3>
+      <p>{{ total_sales }}</p>
+    </div>
+    <div class="kpi">
+      <h3>Sales Amount</h3>
+      <p>₹{{ total_amount|floatformat:2 }}</p>
+    </div>
+    <div class="kpi">
+      <h3>Calls Made</h3>
+      <p>{{ calls_made }}</p>
+    </div>
+    <div class="kpi">
+      <h3>Conversion Rate</h3>
+      <p>{{ conversion_rate }}%</p>
+    </div>
+  </div>
+
+  <div style="margin-top:1.2rem; display:flex; gap:1rem; flex-wrap:wrap">
+    <div style="flex:1 1 60%" class="performance-card">
+      <canvas id="trendChart" height="160"></canvas>
+    </div>
+    <div style="flex:1 1 35%" class="performance-card">
+      <h4>Recent Sales</h4>
+      <table class="table table-sm">
+        <thead><tr><th>Date</th><th>Client</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for s in recent_sales %}
+            <tr>
+              <td>{{ s.date }}</td>
+              <td>{% if s.client %}{{ s.client.name }}{% else %}-{% endif %}</td>
+              <td>₹{% if s.total_amount %}{{ s.total_amount|floatformat:2 }}{% elif s.amount %}{{ s.amount|floatformat:2 }}{% else %}0.00{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="text-muted">No recent sales</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const days = {{ days|safe }};
+  const sales = {{ sales_series|safe }};
+  const calls = {{ calls_series|safe }};
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: days,
+      datasets: [{
+        label: 'Sales',
+        data: sales,
+        borderColor: '#ecc94b',
+        backgroundColor: 'rgba(236,201,75,0.12)',
+        tension: 0.2,
+      },{
+        label: 'Calls',
+        data: calls,
+        borderColor: '#3182ce',
+        backgroundColor: 'rgba(49,130,206,0.08)',
+        tension: 0.2,
+      }]
+    },
+    options: {
+      scales: { x: { display: true }, y: { beginAtZero: true } },
+      plugins: { legend: { position: 'bottom' } }
+    }
+  });
+</script>
+
+<script>
+  function exportCSV() {
+    const form = document.getElementById('perfForm');
+    // create temporary input
+    let inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = 'export'; inp.value = 'csv';
+    form.appendChild(inp);
+    form.submit();
+    form.removeChild(inp);
+  }
+</script>
+
+{% endblock %}
