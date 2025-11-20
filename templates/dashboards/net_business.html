@@ -4,19 +4,23 @@
 <style>
 .card-compact { background:#fff; padding:1rem; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
 .table-sm td, .table-sm th { padding:0.4rem 0.6rem; }
+.net-row { background: linear-gradient(90deg,#e6fffa,#f0fff4); font-weight:700; }
+.redemption { color: #e53e3e; font-weight:600; }
+.redemption, .redemption * { color: #e53e3e !important; font-weight:600; }
+.net-cell { background: linear-gradient(90deg,#fff9db,#fff7ed); font-weight:700; }
 </style>
 <div class="card-compact">
   <h2>Net Business</h2>
   <p class="text-muted">View net business (Sales − Redemptions/SIP stoppage)</p>
 
   <form method="get" class="row g-2 align-items-end">
-    <div class="col-auto">
+      <div class="col-auto">
       <label class="form-label small">From</label>
-      <input type="date" name="start" class="form-control form-control-sm" value="{{ start }}">
+      <input type="date" name="start" class="form-control form-control-sm" value="{{ start_str }}">
     </div>
     <div class="col-auto">
       <label class="form-label small">To</label>
-      <input type="date" name="end" class="form-control form-control-sm" value="{{ end }}">
+      <input type="date" name="end" class="form-control form-control-sm" value="{{ end_str }}">
     </div>
     <div class="col-auto">
       <label class="form-label small">Granularity</label>
@@ -29,9 +33,9 @@
     <div class="col-auto">
       <label class="form-label small">Product</label>
       <select name="product" class="form-select form-select-sm">
-        <option value="">All</option>
+        <option value="" {% if not selected_product %}selected{% endif %}>All</option>
         {% for p in products %}
-          <option value="{{ p }}">{{ p }}</option>
+          <option value="{{ p }}" {% if selected_product == p %}selected{% endif %}>{{ p }}</option>
         {% endfor %}
       </select>
     </div>
@@ -50,8 +54,8 @@
         <tr>
           <td>{{ prod }}</td>
           <td>₹{{ vals.sales|floatformat:2 }}</td>
-          <td>₹{{ vals.redemptions|floatformat:2 }}</td>
-          <td>₹{{ vals.net|floatformat:2 }}</td>
+           <td class="redemption text-danger">₹{{ vals.redemptions|floatformat:2 }}</td>
+          <td class="net-cell">₹{{ vals.net|floatformat:2 }}</td>
         </tr>
       {% empty %}
         <tr><td colspan="4" class="text-muted">No data</td></tr>
@@ -62,19 +66,35 @@
   <hr />
   <h5>Detailed</h5>
   <table class="table table-sm">
-    <thead><tr><th>Period</th><th>Product</th><th>Sales</th><th>Redemptions</th><th>Net</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Metric</th>
+        {% for prod in totals.keys %}
+          <th>{{ prod }}</th>
+        {% empty %}
+          <th class="text-muted">No products</th>
+        {% endfor %}
+      </tr>
+    </thead>
     <tbody>
-      {% for row in rows %}
-        <tr>
-          <td>{{ row.period }}</td>
-          <td>{{ row.product }}</td>
-          <td>₹{{ row.sales|floatformat:2 }}</td>
-          <td>₹{{ row.redemptions|floatformat:2 }}</td>
-          <td>₹{{ row.net|floatformat:2 }}</td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="5" class="text-muted">No rows</td></tr>
-      {% endfor %}
+      <tr>
+        <td><strong>Sales</strong></td>
+        {% for prod, vals in totals.items %}
+          <td>₹{{ vals.sales|floatformat:2 }}</td>
+        {% endfor %}
+      </tr>
+      <tr>
+        <td><strong>Redemptions</strong></td>
+        {% for prod, vals in totals.items %}
+           <td class="redemption text-danger">₹{{ vals.redemptions|floatformat:2 }}</td>
+        {% endfor %}
+      </tr>
+      <tr class="net-row">
+        <td><strong>Net</strong></td>
+        {% for prod, vals in totals.items %}
+          <td class="net-cell">₹{{ vals.net|floatformat:2 }}</td>
+        {% endfor %}
+      </tr>
     </tbody>
   </table>
 
@@ -103,7 +123,7 @@
     </div>
     <div class="col-auto">
       <label class="form-label small">Date</label>
-      <input type="date" name="date" class="form-control form-control-sm" value="{{ end }}">
+      <input type="date" name="date" class="form-control form-control-sm" value="{{ end_str }}">
     </div>
     <div class="col-12">
       <label class="form-label small">Note (optional)</label>

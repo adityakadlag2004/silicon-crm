@@ -270,13 +270,20 @@ def net_business(request):
         total_red = sum(r['redemptions'] for r in rows if r['product'] == prod)
         totals[prod] = {'sales': total_sales, 'redemptions': total_red, 'net': total_sales - total_red}
 
+    # expose string versions of dates so HTML date inputs retain values
+    start_str = start.isoformat() if hasattr(start, 'isoformat') else str(start)
+    end_str = end.isoformat() if hasattr(end, 'isoformat') else str(end)
+
     context = {
         'rows': rows,
         'totals': totals,
         'start': start,
         'end': end,
+        'start_str': start_str,
+        'end_str': end_str,
         'granularity': gran,
         'products': [c[0] for c in Sale.PRODUCT_CHOICES],
+        'selected_product': product_filter,
     }
 
     return render(request, 'dashboards/net_business.html', context)
@@ -1693,8 +1700,16 @@ def calendar_events_json(request):
     # Optional: FullCalendar sends `start` and `end` query params
     start = request.GET.get("start")
     end = request.GET.get("end")
+    types_param = request.GET.get("types")  # comma-separated types allowed by client-side filter
 
     events_qs = CalendarEvent.objects.filter(employee=employee)
+    if types_param:
+        try:
+            allowed = [t for t in types_param.split(',') if t]
+            if allowed:
+                events_qs = events_qs.filter(type__in=allowed)
+        except Exception:
+            pass
 
     if start:
         try:
@@ -1730,6 +1745,53 @@ def calendar_events_json(request):
             }
         })
 
+    # ---- Include birthdays from Clients and Prospects within the requested range ----
+    try:
+        # Ensure start_dt/end_dt are available; if not, set wide range
+        if 'start_dt' in locals():
+            s_dt = start_dt
+        else:
+            s_dt = timezone.now() - timezone.timedelta(days=365)
+        if 'end_dt' in locals():
+            e_dt = end_dt
+        else:
+            e_dt = timezone.now() + timezone.timedelta(days=365)
+
+        # helper to add birthday events
+        from datetime import date
+        from .models import Client, Prospect
+
+        def add_birthdays(queryset, label_prefix="Birthday"):
+            for obj in queryset:
+                dob = getattr(obj, 'date_of_birth', None)
+                if not dob:
+                    continue
+                # iterate years between s_dt.year and e_dt.year
+                for yr in range(s_dt.year, e_dt.year + 1):
+                    try:
+                        bday = date(yr, dob.month, dob.day)
+                    except ValueError:
+                        # skip invalid dates (Feb 29 on non-leap year)
+                        continue
+                    bday_dt = timezone.make_aware(timezone.datetime.combine(bday, timezone.datetime.min.time()))
+                    if bday_dt >= s_dt and bday_dt <= e_dt:
+                        events.append({
+                            "id": f"birth-{obj.__class__.__name__}-{obj.id}-{yr}",
+                            "title": f"{label_prefix}: {getattr(obj, 'name', getattr(obj, 'client', ''))}",
+                            "start": bday_dt.isoformat(),
+                            "extendedProps": {
+                                "type": "birthday",
+                                "notes": "Auto-generated birthday call",
+                                "related_prospect_id": obj.id if obj.__class__.__name__ == 'Prospect' else None,
+                            }
+                        })
+
+        if not types_param or 'birthday' in (types_param or ''):
+            add_birthdays(Client.objects.filter(date_of_birth__isnull=False))
+            add_birthdays(Prospect.objects.filter(date_of_birth__isnull=False), label_prefix="Prospect Birthday")
+    except Exception:
+        pass
+
     return JsonResponse(events, safe=False)
 
 
@@ -1757,6 +1819,152 @@ def update_calendar_event(request):
         except Exception as e:
             return JsonResponse({"success": False, "error": str(e)}, status=400)
     return JsonResponse({"success": False}, status=405)
+
+
+@login_required
+@require_POST
+def create_calendar_event(request):
+    """Create a CalendarEvent for the logged-in employee via AJAX.
+
+    Expects JSON body with: title, scheduled_time (ISO), type, notes, related_prospect_id (optional), client_id (optional)
+    Returns the created event in FullCalendar-friendly JSON.
+    """
+    try:
+        data = json.loads(request.body)
+        title = data.get("title") or "Untitled"
+        scheduled_time = data.get("scheduled_time")
+        ev_type = data.get("type") or "task"
+        notes = data.get("notes") or ""
+        related_prospect_id = data.get("related_prospect_id")
+        client_id = data.get("client_id")
+
+        # parse scheduled_time (ISO) to aware datetime
+        scheduled_dt = None
+        if scheduled_time:
+            scheduled_dt = parse_datetime(scheduled_time)
+            if scheduled_dt and timezone.is_naive(scheduled_dt):
+                scheduled_dt = timezone.make_aware(scheduled_dt)
+        else:
+            scheduled_dt = timezone.now()
+
+        # lazy imports to avoid circular issues
+        from .models import Prospect, Client
+
+        related_prospect = None
+        client = None
+        if related_prospect_id:
+            try:
+                related_prospect = Prospect.objects.get(id=related_prospect_id)
+            except Prospect.DoesNotExist:
+                related_prospect = None
+        if client_id:
+            try:
+                client = Client.objects.get(id=client_id)
+            except Exception:
+                client = None
+
+        event = CalendarEvent.objects.create(
+            employee=request.user.employee,
+            title=title,
+            type=ev_type,
+            notes=notes,
+            scheduled_time=scheduled_dt,
+            related_prospect=related_prospect,
+            client=client,
+        )
+
+        ev_json = {
+            "id": event.id,
+            "title": event.title,
+            "start": event.scheduled_time.isoformat(),
+            "extendedProps": {
+                "type": event.type,
+                "notes": event.notes,
+                "related_prospect_id": event.related_prospect.id if event.related_prospect else None,
+                "related_prospect_name": event.related_prospect.name if event.related_prospect else None,
+            }
+        }
+
+        return JsonResponse({"success": True, "event": ev_json})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def delete_calendar_event(request):
+    """Delete a CalendarEvent owned by the requesting employee.
+
+    Expects JSON body: { id: <event id> }
+    """
+    try:
+        data = json.loads(request.body)
+        event_id = data.get('id')
+        if not event_id:
+            return JsonResponse({'success': False, 'error': 'Missing id'}, status=400)
+
+        # allow deletion of auto-generated birthday events (synthetic ids) only by ignoring them
+        # ensure event belongs to user
+        if str(event_id).startswith('birth-'):
+            # synthetic birthday events are not deletable
+            return JsonResponse({'success': False, 'error': 'Birthday events cannot be deleted'}, status=400)
+
+        event = CalendarEvent.objects.filter(id=event_id, employee=request.user.employee).first()
+        if not event:
+            return JsonResponse({'success': False, 'error': 'Event not found or permission denied'}, status=404)
+        event.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def update_calendar_event_details(request):
+    """Update title/type/notes/scheduled_time for an existing CalendarEvent owned by the user.
+
+    Expects JSON body: { id, title?, scheduled_time?, type?, notes? }
+    """
+    try:
+        data = json.loads(request.body)
+        event_id = data.get('id')
+        if not event_id:
+            return JsonResponse({'success': False, 'error': 'Missing id'}, status=400)
+
+        event = CalendarEvent.objects.filter(id=event_id, employee=request.user.employee).first()
+        if not event:
+            return JsonResponse({'success': False, 'error': 'Event not found or permission denied'}, status=404)
+
+        title = data.get('title')
+        scheduled_time = data.get('scheduled_time')
+        ev_type = data.get('type')
+        notes = data.get('notes')
+
+        if title is not None:
+            event.title = title
+        if ev_type is not None:
+            event.type = ev_type
+        if notes is not None:
+            event.notes = notes
+        if scheduled_time is not None:
+            dt = parse_datetime(scheduled_time)
+            if dt and timezone.is_naive(dt):
+                dt = timezone.make_aware(dt)
+            event.scheduled_time = dt
+
+        event.save()
+
+        return JsonResponse({'success': True, 'event': {
+            'id': event.id,
+            'title': event.title,
+            'start': event.scheduled_time.isoformat(),
+            'extendedProps': {
+                'type': event.type,
+                'notes': event.notes,
+            }
+        }})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 @login_required
 def delete_calling_list(request, list_id):

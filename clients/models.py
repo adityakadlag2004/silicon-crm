@@ -24,6 +24,9 @@ class Client(models.Model):
     pan = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
 
+    # Optional date of birth to support Birthday Calls in calendar
+    date_of_birth = models.DateField(null=True, blank=True)
+
     mapped_to = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
 
     # SIP details
@@ -311,6 +314,8 @@ class Prospect(models.Model):
     # ✅ Add these if you want to store them
     email = models.EmailField(blank=True, null=True)
     notes = models.TextField(blank=True, null=True)
+    # Optional DOB for prospects (used to schedule birthday calls)
+    date_of_birth = models.DateField(null=True, blank=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="new")
     created_at = models.DateTimeField(auto_now_add=True)
