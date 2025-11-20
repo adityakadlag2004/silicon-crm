@@ -129,6 +129,18 @@
                     <li><a class="dropdown-item" href="{% url 'clients:admin_lists' %}">Manage Calling Lists</a></li>
                   </ul>
                 </li>
+                <!-- 🔹 Business Tracking Dropdown (Admin) -->
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" href="#" id="businessDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Business Tracking
+  </a>
+  <ul class="dropdown-menu" aria-labelledby="businessDropdown">
+    <li><a href="{% url 'clients:admin_past_performance' %}" class="dropdown-item">Business Tracking</a></li>
+    {% comment %} <li><a class="dropdown-item" href="{% url 'tracking:employee_progress' %}">👥 Track Employee Progress</a></li> {% endcomment %}
+  </ul>
+</li>
+
+
               {% elif request.user.employee.role == "employee" %}
                 <!-- Employee -->
                 <li class="nav-item">

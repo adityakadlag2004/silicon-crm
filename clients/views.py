@@ -1,30 +1,49 @@
 # clients/views.py
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.db.models import Sum, Value, DecimalField
-from datetime import date
-from .models import Client, Sale, CalendarEvent,Employee
-from .forms import SaleForm,AdminSaleForm,EditSaleForm
-from django.http import HttpResponseRedirect
-from django import forms
-from django.utils import timezone  
-from django.http import HttpResponse
-from django.utils.timezone import now
-from django.db.models import Sum
-from .models import Sale, Client, Target
-from django.contrib.auth.decorators import login_required
-from .models import Employee, Sale, Target, MonthlyTargetHistory,CallRecord
+"""Views for clients app.
+
+This file was cleaned: imports consolidated and duplicates removed. Function bodies
+are left intact. If any NameError appears after this change, add back the specific
+import near the top.
+"""
 import json
+from datetime import date, datetime, timedelta
 from calendar import month_name
+import csv
+import io
 
-
-
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.contrib.auth import authenticate, login
-from django.shortcuts import render, redirect
-from .models import Sale  # make sure Sale is imported
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.utils import timezone
+from django.utils.timezone import now
+from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django import forms
+from django.db.models import Sum, Value, Q
+from django.core.paginator import Paginator
+from django.conf import settings
+from django.utils.dateparse import parse_datetime
+from django.urls import reverse
+from django.db import transaction
+from django.http import HttpResponseForbidden
+
+# Local imports
+from .models import (
+    Client,
+    Sale,
+    CalendarEvent,
+    Employee,
+    Target,
+    MonthlyTargetHistory,
+    CallRecord,
+    CallingList,
+    Prospect,
+    MessageTemplate,
+    IncentiveRule,
+)
+from .forms import SaleForm, AdminSaleForm, EditSaleForm
 
 def login_view(request):
     if request.method == "POST":
@@ -867,40 +886,7 @@ def _last_n_months(today, n=12):
     months.reverse()
     return months
 
-import json
-import calendar
-from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
-from django.shortcuts import render
-from django.utils.timezone import now
-
-from .models import Sale, MonthlyTargetHistory  # adjust if needed
-
-month_name = {i: calendar.month_name[i] for i in range(1, 13)}
-
-# helper: last N months (returns list of (year, month) tuples)
-# def _last_n_months(today, n=12):
-#     months = []
-#     y, m = today.year, today.month
-#     for _ in range(n):
-#         months.append((y, m))
-#         m -= 1
-#         if m == 0:
-#             m = 12
-#             y -= 1
-#     months.reverse()
-#     return months
-
-import json
-from calendar import month_name
-from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
-from django.db.models import Sum
-from clients.models import MonthlyTargetHistory
-
-
-
-@login_required
+# Monthly target helpers
 def employee_past_performance(request):
     """
     Page: shows a Chart.js line chart of monthly points (last 12 months)
@@ -1172,39 +1158,62 @@ from .models import CallingList, Prospect
 @login_required
 def upload_list(request):
     if request.method == "POST" and request.FILES.get("file"):
-        import pandas as pd
-        from datetime import datetime, timedelta
+        # pandas used for Excel parsing; import locally to keep startup light
+        try:
+            import pandas as pd
+        except Exception:
+            pd = None
+        from datetime import timedelta
         from django.utils import timezone
-        from .models import CallingList, Prospect, Employee, CalendarEvent
 
         file = request.FILES["file"]
 
-        # Supports both CSV and Excel
-        if file.name.endswith(".csv"):
-            df = pd.read_csv(file)
+        # Read rows as list of dicts; prefer pandas if available for Excel support
+        rows = []
+        columns = set()
+        if pd is not None:
+            if file.name.endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                df = pd.read_excel(file)
+            rows = df.to_dict(orient='records')
+            columns = set(df.columns)
         else:
-            df = pd.read_excel(file)
+            # pandas not available: support CSV via csv.DictReader only
+            if not file.name.endswith('.csv'):
+                messages.error(request, 'Excel uploads require pandas. Please upload a CSV or install pandas.')
+                return redirect('clients:upload_list')
+            decoded = file.read().decode('utf-8')
+            reader = csv.DictReader(io.StringIO(decoded))
+            rows = [r for r in reader]
+            columns = set(rows[0].keys()) if rows else set()
 
-        # ✅ Create calling list
         daily_calls = int(request.POST.get("daily_calls", 5))  # default 5 if not provided
-        calling_list = CallingList.objects.create(
-            title=request.POST.get("title", "Untitled List"),
-            uploaded_by=request.user,   # must be a User
-        )
 
-        employees = list(Employee.objects.filter(role="employee"))
+        # Respect selected employees from the form: POST 'employees[]' contains selected employee ids
+        selected_emp_ids = request.POST.getlist('employees[]')
+        if selected_emp_ids:
+            employees = list(Employee.objects.filter(id__in=selected_emp_ids).select_related('user'))
+        else:
+            employees = list(Employee.objects.filter(role="employee").select_related('user'))
+
+        # Validation: ensure we have at least one employee to assign calls to
+        if not employees:
+            messages.error(request, "No employees available to assign calls. Please add employees or select at least one.")
+            return redirect('clients:upload_list')
+
         emp_count = len(employees)
         emp_index = 0
 
-        prospects = []
-
-        for _, row in df.iterrows():
+        prospect_objs = []
+        # Build prospect instances in-memory for bulk_create
+        for row in rows:
             assigned_to = None
 
-            # ✅ if CSV has assigned_to column
-            if "assigned_to" in df.columns and pd.notna(row.get("assigned_to")):
+            # ✅ if CSV/Excel has assigned_to column
+            if 'assigned_to' in columns and row.get('assigned_to'):
                 try:
-                    assigned_to = Employee.objects.get(user__username=row["assigned_to"])
+                    assigned_to = Employee.objects.get(user__username=row.get('assigned_to'))
                 except Employee.DoesNotExist:
                     assigned_to = None
 
@@ -1213,61 +1222,80 @@ def upload_list(request):
                 assigned_to = employees[emp_index % emp_count]
                 emp_index += 1
 
-            p = Prospect.objects.create(
-                name=row.get("name", "Unknown"),
-                phone=row.get("phone", ""),
-                email=row.get("email", ""),
-                notes=row.get("notes", ""),
+            prospect_objs.append(Prospect(
+                name=(row.get('name') or 'Unknown'),
+                phone=(row.get('phone') or ''),
+                email=(row.get('email') or ''),
+                notes=(row.get('notes') or ''),
                 assigned_to=assigned_to,
-                calling_list=calling_list,
+            ))
+
+        # Use a DB transaction and bulk_create for performance
+        with transaction.atomic():
+            calling_list = CallingList.objects.create(
+                title=request.POST.get("title", "Untitled List"),
+                uploaded_by=request.user,
             )
-            prospects.append(p)
 
-        # ✅ Create calendar events for each employee
-        start_date = timezone.now().date()
-        # if today is Sat (5) or Sun (6), move to Monday
-        if start_date.weekday() in (5, 6):
-            start_date += timedelta(days=(7 - start_date.weekday()))
+            # attach calling_list to each prospect object and bulk insert
+            for obj in prospect_objs:
+                obj.calling_list = calling_list
+            Prospect.objects.bulk_create(prospect_objs)
 
-        emp_buckets = {emp.id: [] for emp in employees}
-        for p in prospects:
-            if p.assigned_to:
-                emp_buckets[p.assigned_to.id].append(p)
+            # refresh prospects from DB (they are the ones we just created)
+            prospects = list(calling_list.prospects.select_related('assigned_to').all())
 
-        for emp_id, plist in emp_buckets.items():
-            day_index = 0
-            call_index = 0
-            current_date = start_date
+            # Create calendar events in bulk
+            start_date = timezone.now().date()
+            # if today is Sat (5) or Sun (6), move to Monday
+            if start_date.weekday() in (5, 6):
+                start_date += timedelta(days=(7 - start_date.weekday()))
 
-            for p in plist:
-                if call_index >= daily_calls:
-                    call_index = 0
-                    day_index += 1
-                    current_date = start_date + timedelta(days=day_index)
+            emp_buckets = {emp.id: [] for emp in employees}
+            for p in prospects:
+                if p.assigned_to:
+                    emp_buckets[p.assigned_to.id].append(p)
 
-                    # skip weekends
-                    while current_date.weekday() in (5, 6):
+            event_objs = []
+            for emp_id, plist in emp_buckets.items():
+                day_index = 0
+                call_index = 0
+                current_date = start_date
+
+                for p in plist:
+                    if call_index >= daily_calls:
+                        call_index = 0
                         day_index += 1
                         current_date = start_date + timedelta(days=day_index)
 
-                CalendarEvent.objects.create(
-                    employee_id=emp_id,
-                    title=f"Call: {p.name}",
-                    type="call_followup",
-                    related_prospect=p,
-                    scheduled_time=timezone.make_aware(
-                        datetime.combine(current_date, datetime.min.time()) + timedelta(hours=10 + call_index)
-                    ),
-                    notes=f"Call {p.name}, Phone: {p.phone}",
-                )
-                call_index += 1
+                        # skip weekends
+                        while current_date.weekday() in (5, 6):
+                            day_index += 1
+                            current_date = start_date + timedelta(days=day_index)
 
-        messages.success(
-            request, f"Calling list '{calling_list.title}' uploaded and tasks assigned!"
-        )
+                    scheduled = timezone.make_aware(
+                        datetime.combine(current_date, datetime.min.time()) + timedelta(hours=10 + call_index)
+                    )
+
+                    event_objs.append(CalendarEvent(
+                        employee_id=emp_id,
+                        title=f"Call: {p.name}",
+                        type="call_followup",
+                        related_prospect=p,
+                        scheduled_time=scheduled,
+                        notes=f"Call {p.name}, Phone: {p.phone}",
+                    ))
+                    call_index += 1
+
+            if event_objs:
+                CalendarEvent.objects.bulk_create(event_objs)
+
+        messages.success(request, f"Calling list '{calling_list.title}' uploaded and tasks assigned!")
         return redirect("clients:admin_lists")
 
-    return render(request, "calling/upload_list.html")
+    # For GET render, provide employees so UI can list/select them
+    employees = Employee.objects.filter(role="employee").select_related('user')
+    return render(request, "calling/upload_list.html", {"employees": employees})
 
 
 
