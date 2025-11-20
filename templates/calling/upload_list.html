@@ -112,20 +112,20 @@
     <!-- Employee Selection -->
     <div class="form-group">
       <label class="form-label">Assign to Employees</label>
-      <span class="select-toggle" onclick="toggleEmployees(this)">Select All</span>
+      <span class="select-toggle" onclick="toggleEmployees(this)">Deselect All</span>
       <div class="employee-list">
-        {% for emp in form.employees %}
+        {% for emp in employees %}
           <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="employees" value="{{ emp.data.value }}" id="emp{{ forloop.counter }}">
+            <input class="form-check-input" type="checkbox" name="employees[]" value="{{ emp.id }}" id="emp{{ forloop.counter }}" checked>
             <label class="form-check-label" for="emp{{ forloop.counter }}">
-              {{ emp.choice_label }}
+              {{ emp.user.get_full_name|default:emp.user.username }}
             </label>
           </div>
         {% empty %}
           <p class="text-muted">No employees available.</p>
         {% endfor %}
       </div>
-      <small class="form-text text-muted">Leave blank to auto-assign across all employees.</small>
+      <small class="form-text text-muted">Selected employees will receive the calls; all are selected by default.</small>
     </div>
 
     <!-- Submit -->
