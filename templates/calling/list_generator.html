@@ -1,0 +1,304 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+  <h2>Calling List Generator</h2>
+
+  <form method="get" class="row g-3 my-3" id="filter-form">
+    <div class="col-md-2">
+      <label class="form-label">Source</label>
+      <select name="source" class="form-select">
+        <option value="clients" {% if source != 'prospects' %}selected{% endif %}>Clients</option>
+        <option value="prospects" {% if source == 'prospects' %}selected{% endif %}>Prospects</option>
+      </select>
+    </div>
+    <div class="col-12">
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label class="form-label">SIP</label>
+          <div class="input-group">
+            <select name="sip" class="form-select">
+              <option value="any" {% if sip_status == 'any' %}selected{% endif %}>Any</option>
+              <option value="yes" {% if sip_status == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="no" {% if sip_status == 'no' %}selected{% endif %}>No</option>
+            </select>
+            <input name="sip_min" class="form-control" placeholder="min" value="{{ sip_min }}" />
+            <input name="sip_max" class="form-control" placeholder="max" value="{{ sip_max }}" />
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Health Insurance</label>
+          <div class="input-group">
+            <select name="health" class="form-select">
+              <option value="any" {% if health_status == 'any' %}selected{% endif %}>Any</option>
+              <option value="yes" {% if health_status == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="no" {% if health_status == 'no' %}selected{% endif %}>No</option>
+            </select>
+            <input name="health_min" class="form-control" placeholder="min cover" value="{{ health_min }}" />
+            <input name="health_max" class="form-control" placeholder="max cover" value="{{ health_max }}" />
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Life Insurance</label>
+          <div class="input-group">
+            <select name="life" class="form-select">
+              <option value="any" {% if life_status == 'any' %}selected{% endif %}>Any</option>
+              <option value="yes" {% if life_status == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="no" {% if life_status == 'no' %}selected{% endif %}>No</option>
+            </select>
+            <input name="life_min" class="form-control" placeholder="min cover" value="{{ life_min }}" />
+            <input name="life_max" class="form-control" placeholder="max cover" value="{{ life_max }}" />
+          </div>
+        </div>
+
+        <div class="col-md-4 mt-2">
+          <label class="form-label">Motor Insurance</label>
+          <div class="input-group">
+            <select name="motor" class="form-select">
+              <option value="any" {% if motor_status == 'any' %}selected{% endif %}>Any</option>
+              <option value="yes" {% if motor_status == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="no" {% if motor_status == 'no' %}selected{% endif %}>No</option>
+            </select>
+            <input name="motor_min" class="form-control" placeholder="min insured" value="{{ motor_min }}" />
+            <input name="motor_max" class="form-control" placeholder="max insured" value="{{ motor_max }}" />
+          </div>
+        </div>
+
+        <div class="col-md-4 mt-2">
+          <label class="form-label">PMS</label>
+          <div class="input-group">
+            <select name="pms" class="form-select">
+              <option value="any" {% if pms_status == 'any' %}selected{% endif %}>Any</option>
+              <option value="yes" {% if pms_status == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="no" {% if pms_status == 'no' %}selected{% endif %}>No</option>
+            </select>
+            <input name="pms_min" class="form-control" placeholder="min" value="{{ pms_min }}" />
+            <input name="pms_max" class="form-control" placeholder="max" value="{{ pms_max }}" />
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="col-md-2">
+      <label class="form-label">Min Amount</label>
+      <input name="min_amount" class="form-control" value="{{ min_amount }}" />
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Max Amount</label>
+      <input name="max_amount" class="form-control" value="{{ max_amount }}" />
+    </div>
+
+    {% if not is_employee %}
+    <div class="col-md-3">
+      <label class="form-label">Mapped Employee</label>
+      <select name="mapped" class="form-select">
+        <option value="">-- Any --</option>
+        <option value="__unmapped__" {% if unmapped_only %}selected{% endif %}>Unmapped Only</option>
+        {% for e in employees %}
+          <option value="{{ e.id }}" {% if mapped_emp|default:'' == e.id|stringformat:"s" %}selected{% endif %}>{{ e.user.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="col-12 d-flex align-items-end gap-2">
+      <div>
+        <button class="btn btn-primary" type="submit" name="generate" value="1">Generate</button>
+        <a href="" class="btn btn-outline-secondary">Reset</a>
+      </div>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <label class="mb-0">Per page</label>
+        <select name="per_page" class="form-select form-select-sm" style="width:120px">
+          <option value="25" {% if per_page|default:25 == 25 %}selected{% endif %}>25</option>
+          <option value="50" {% if per_page|default:25 == 50 %}selected{% endif %}>50</option>
+          <option value="100" {% if per_page|default:25 == 100 %}selected{% endif %}>100</option>
+          <option value="200" {% if per_page|default:25 == 200 %}selected{% endif %}>200</option>
+        </select>
+      </div>
+    </div>
+  </form>
+
+  <form method="post" enctype="multipart/form-data" id="results-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" id="action-input" value="" />
+
+    <div class="my-3 d-flex justify-content-between align-items-center">
+      <div>
+        {% if can_create %}
+          <button type="button" class="btn btn-success" id="btn-create-list">Create Calling List</button>
+        {% else %}
+          <button type="button" class="btn btn-success" id="btn-create-list" disabled title="Managers/Admins only">Create Calling List</button>
+        {% endif %}
+        <button type="button" class="btn btn-secondary" id="btn-export-csv">Export CSV</button>
+      </div>
+      <div>Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} results)</div>
+    </div>
+    <div class="table-container border rounded" style="max-height:60vh; overflow:auto;">
+      <table class="table table-striped mb-0">
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="select-all" /></th>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Mapped To</th>
+          <th>SIP</th>
+          <th>SIP Amount</th>
+          <th>Last Sale</th>
+        </tr>
+  </thead>
+      <tbody>
+        {% for client in page_obj.object_list %}
+        {% if source == 'prospects' %}
+        <tr>
+          <td><input type="checkbox" name="selected_ids" value="{{ client.id }}" class="row-check" /></td>
+          <td>P-{{ client.id }}</td>
+          <td>{{ client.name }}</td>
+          <td>{{ client.phone }}</td>
+          <td>{{ client.email }}</td>
+          <td>{% if client.assigned_to %}{{ client.assigned_to.user.username }}{% else %}-{% endif %}</td>
+          <td>{{ client.notes|default:'-' }}</td>
+          <td>-</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td><input type="checkbox" name="selected_ids" value="{{ client.id }}" class="row-check" /></td>
+          <td>{{ client.id }}</td>
+          <td>{{ client.name }}</td>
+          <td>{{ client.phone }}</td>
+          <td>{{ client.email }}</td>
+          <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
+          <td>{% if client.sip_status %}Yes{% else %}No{% endif %}</td>
+          <td>{{ client.sip_amount }}</td>
+          <td>
+            {% if client.last_sale_date %}
+              {{ client.last_sale_date }} / {{ client.last_sale_product }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+  {% empty %}
+  <tr><td colspan="9">No clients found matching filters.</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+
+    <nav aria-label="page navigation" class="mt-3">
+      <ul class="pagination">
+        {% if page_obj.has_previous %}
+          <li class="page-item"><a class="page-link" href="?page=1&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">« First</a></li>
+          <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">‹ Prev</a></li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">« First</span></li>
+          <li class="page-item disabled"><span class="page-link">‹ Prev</span></li>
+        {% endif %}
+
+        {# show a window of pages around current #}
+        {% for p in page_obj.paginator.page_range %}
+          {% if p >= page_obj.number|add:-2 and p <= page_obj.number|add:2 %}
+            {% if p == page_obj.number %}
+              <li class="page-item active" aria-current="page"><span class="page-link">{{ p }}</span></li>
+            {% else %}
+              <li class="page-item"><a class="page-link" href="?page={{ p }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">{{ p }}</a></li>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+          <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Next ›</a></li>
+          <li class="page-item"><a class="page-link" href="?page={{ paginator.num_pages }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Last »</a></li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">Next ›</span></li>
+          <li class="page-item disabled"><span class="page-link">Last »</span></li>
+        {% endif %}
+      </ul>
+    </nav>
+
+    <!-- Create list modal -->
+    <div class="modal fade" id="createListModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Create Calling List</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Title</label>
+              <input type="text" name="title" id="list-title" class="form-control" placeholder="My Calling List" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Assign to Employee (optional)</label>
+              {% if not is_employee %}
+                  <select name="assign_employee" id="assign-employee" class="form-select">
+                    <option value="">-- Do not assign --</option>
+                    {% for e in employees %}
+                      <option value="{{ e.id }}">{{ e.user.username }}</option>
+                    {% endfor %}
+                  </select>
+                <div class="form-text mt-2">Or assign to multiple employees (split round-robin):</div>
+                <select multiple name="assign_employee_multiple" id="assign-employee-multiple" class="form-select mt-1">
+                  {% for e in employees %}
+                    <option value="{{ e.id }}">{{ e.user.username }}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-text mt-2">Or upload a CSV with columns: name,phone,email to add custom rows.</div>
+                <input type="file" name="csv_file" id="csv-file" accept=".csv" class="form-control mt-1" />
+              {% else %}
+                <div class="form-text">Lists you create will automatically be assigned to you.</div>
+                <div class="form-text mt-2">You may still upload a CSV to add custom rows.</div>
+                <input type="file" name="csv_file" id="csv-file" accept=".csv" class="form-control mt-1" />
+              {% endif %}
+            </div>
+            <div class="form-text">Selected rows will become prospects inside the created Calling List.</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="confirm-create">Create List</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </form>
+</div>
+
+<script>
+// select all
+document.getElementById('select-all').addEventListener('change', function(e){
+  var checks = document.querySelectorAll('.row-check');
+  checks.forEach(function(c){ c.checked = e.target.checked; });
+});
+
+// make table header sticky (in case CSS is slow to load)
+document.addEventListener('DOMContentLoaded', function(){
+  var ths = document.querySelectorAll('.table thead th');
+  ths.forEach(function(th){ th.style.position = 'sticky'; th.style.top = '0'; th.style.zIndex = '2'; th.style.background = 'white'; });
+});
+
+// Export CSV handler
+document.getElementById('btn-export-csv').addEventListener('click', function(){
+  document.getElementById('action-input').value = 'export_csv';
+  document.getElementById('results-form').submit();
+});
+
+// Create list handler
+document.getElementById('btn-create-list').addEventListener('click', function(){
+  var modal = new bootstrap.Modal(document.getElementById('createListModal'));
+  modal.show();
+});
+
+// When confirming create, set action and submit
+document.getElementById('confirm-create').addEventListener('click', function(e){
+  // set action and submit
+  document.getElementById('action-input').value = 'create_list';
+  // modal submit will post the form because confirm-create is inside form and type=submit
+});
+</script>
+
+{% endblock %}

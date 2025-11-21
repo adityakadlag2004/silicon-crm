@@ -128,6 +128,7 @@
                   <ul class="dropdown-menu" aria-labelledby="callingDropdown">
                     <li><a class="dropdown-item" href="{% url 'clients:upload_list' %}">Upload Calling List</a></li>
                     <li><a class="dropdown-item" href="{% url 'clients:admin_lists' %}">Manage Calling Lists</a></li>
+                        <li><a class="dropdown-item" href="{% url 'clients:calling_list_generator' %}">List Generator</a></li>
                   </ul>
                 </li>
                 <!-- 🔹 Business Tracking Dropdown (Admin) -->
@@ -179,6 +180,7 @@
                   <ul class="dropdown-menu" aria-labelledby="empCallingDropdown">
                     <li><a class="dropdown-item" href="{% url 'clients:employee_lists' %}">My Calling Lists</a></li>
                     <li><a class="dropdown-item" href="{% url 'clients:employee_calendar' %}">My Calendar</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:calling_list_generator' %}">List Generator</a></li>
                   </ul>
                 </li>
               {% endif %}

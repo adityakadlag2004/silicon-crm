@@ -48,6 +48,370 @@ from .forms import SaleForm, AdminSaleForm, EditSaleForm
 from django.db.models import Count, Avg, Sum
 from django.db.models.functions import TruncDay, TruncMonth, TruncYear
 from django.core.exceptions import FieldError
+from django.views.decorators.csrf import csrf_protect
+
+
+@login_required
+def calling_list_generator(request):
+    """Generate calling lists by applying filters.
+
+    Filters supported (GET):
+    - sip: all | yes | no
+    - product: one of Sale.PRODUCT_CHOICES or empty
+    - min_amount, max_amount: numeric filters applied to SIP amount (for SIP) or Sale.amount (for Sales)
+    - mapped: employee id to filter clients mapped to a specific employee
+    - unmapped_only: if present, only clients with mapped_to is null
+
+    Actions (POST):
+    - export_csv: export current results
+    - create_list: create a CallingList with selected client ids and optional assign_employee
+    """
+    # Prepare filter defaults: per-product yes/no and amount ranges
+    sip_status = request.GET.get('sip', 'any')
+    sip_min = request.GET.get('sip_min')
+    sip_max = request.GET.get('sip_max')
+
+    health_status = request.GET.get('health', 'any')
+    health_min = request.GET.get('health_min')
+    health_max = request.GET.get('health_max')
+
+    life_status = request.GET.get('life', 'any')
+    life_min = request.GET.get('life_min')
+    life_max = request.GET.get('life_max')
+
+    motor_status = request.GET.get('motor', 'any')
+    motor_min = request.GET.get('motor_min')
+    motor_max = request.GET.get('motor_max')
+
+    pms_status = request.GET.get('pms', 'any')
+    pms_min = request.GET.get('pms_min')
+    pms_max = request.GET.get('pms_max')
+
+    mapped_emp = request.GET.get('mapped')
+    unmapped_only = request.GET.get('unmapped_only')
+
+    # source: clients | prospects | both
+    source = request.GET.get('source', 'clients')
+
+    # base queryset for clients or prospects
+    qs = None
+    if source == 'prospects':
+        qs = Prospect.objects.select_related('assigned_to').all()
+    else:
+        # default: clients
+        qs = Client.objects.all()
+
+    # Restrict view based on user role: employees should only see mapped clients/prospects
+    if hasattr(request.user, 'employee') and request.user.employee.role == 'employee':
+        emp = request.user.employee
+        if source == 'prospects':
+            qs = qs.filter(assigned_to=emp)
+        else:
+            qs = qs.filter(mapped_to=emp)
+
+    # SIP filter and amount
+    try:
+        sip_min_v = float(sip_min) if sip_min not in (None, '') else None
+    except Exception:
+        sip_min_v = None
+    try:
+        sip_max_v = float(sip_max) if sip_max not in (None, '') else None
+    except Exception:
+        sip_max_v = None
+
+    if sip_status == 'yes':
+        qs = qs.filter(sip_status=True)
+        if sip_min_v is not None:
+            qs = qs.filter(sip_amount__gte=sip_min_v)
+        if sip_max_v is not None:
+            qs = qs.filter(sip_amount__lte=sip_max_v)
+    elif sip_status == 'no':
+        qs = qs.filter(sip_status=False)
+
+    # mapped filter (applies differently for prospects)
+    if mapped_emp:
+        try:
+            emp = Employee.objects.get(id=int(mapped_emp))
+            if source == 'prospects':
+                qs = qs.filter(assigned_to=emp)
+            else:
+                qs = qs.filter(mapped_to=emp)
+        except Exception:
+            pass
+
+    if unmapped_only:
+        if source == 'prospects':
+            qs = qs.filter(assigned_to__isnull=True)
+        else:
+            qs = qs.filter(mapped_to__isnull=True)
+
+    # Health filters
+    try:
+        health_min_v = float(health_min) if health_min not in (None, '') else None
+    except Exception:
+        health_min_v = None
+    try:
+        health_max_v = float(health_max) if health_max not in (None, '') else None
+    except Exception:
+        health_max_v = None
+
+    if health_status == 'yes':
+        qs = qs.filter(health_status=True)
+        if health_min_v is not None:
+            qs = qs.filter(health_cover__gte=health_min_v)
+        if health_max_v is not None:
+            qs = qs.filter(health_cover__lte=health_max_v)
+    elif health_status == 'no':
+        qs = qs.filter(health_status=False)
+
+    # Life filters
+    try:
+        life_min_v = float(life_min) if life_min not in (None, '') else None
+    except Exception:
+        life_min_v = None
+    try:
+        life_max_v = float(life_max) if life_max not in (None, '') else None
+    except Exception:
+        life_max_v = None
+
+    if life_status == 'yes':
+        qs = qs.filter(life_status=True)
+        if life_min_v is not None:
+            qs = qs.filter(life_cover__gte=life_min_v)
+        if life_max_v is not None:
+            qs = qs.filter(life_cover__lte=life_max_v)
+    elif life_status == 'no':
+        qs = qs.filter(life_status=False)
+
+    # Motor filters
+    try:
+        motor_min_v = float(motor_min) if motor_min not in (None, '') else None
+    except Exception:
+        motor_min_v = None
+    try:
+        motor_max_v = float(motor_max) if motor_max not in (None, '') else None
+    except Exception:
+        motor_max_v = None
+
+    if motor_status == 'yes':
+        qs = qs.filter(motor_status=True)
+        if motor_min_v is not None:
+            qs = qs.filter(motor_insured_value__gte=motor_min_v)
+        if motor_max_v is not None:
+            qs = qs.filter(motor_insured_value__lte=motor_max_v)
+    elif motor_status == 'no':
+        qs = qs.filter(motor_status=False)
+
+    # PMS filters
+    try:
+        pms_min_v = float(pms_min) if pms_min not in (None, '') else None
+    except Exception:
+        pms_min_v = None
+    try:
+        pms_max_v = float(pms_max) if pms_max not in (None, '') else None
+    except Exception:
+        pms_max_v = None
+
+    if pms_status == 'yes':
+        qs = qs.filter(pms_status=True)
+        if pms_min_v is not None:
+            qs = qs.filter(pms_amount__gte=pms_min_v)
+        if pms_max_v is not None:
+            qs = qs.filter(pms_amount__lte=pms_max_v)
+    elif pms_status == 'no':
+        qs = qs.filter(pms_status=False)
+
+    # Pagination
+    page = int(request.GET.get('page', 1))
+    # default to a smaller page size for better UX with large lists
+    per_page = int(request.GET.get('per_page', 25))
+    # Order by created_at where available; prospects and clients both have created_at
+    order_expr = '-created_at'
+    paginator = Paginator(qs.order_by(order_expr), per_page)
+    page_obj = paginator.get_page(page)
+
+    # preserve other query params for pagination links
+    params = request.GET.copy()
+    if 'page' in params:
+        params.pop('page')
+    qs_params = params.urlencode()
+
+    # Handle POST actions: export CSV or create calling list
+    # permission for creating lists
+    # allow employees to create lists for their own mapped clients/prospects; admins/managers/superuser can create and assign broadly
+    can_create = False
+    if request.user.is_superuser:
+        can_create = True
+    elif hasattr(request.user, 'employee'):
+        # any mapped employee can create lists (with restrictions for 'employee' role)
+        can_create = True
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        selected_ids = request.POST.getlist('selected_ids')
+        if action == 'export_csv':
+            # export CSV of current page or selected ids
+            if selected_ids:
+                export_qs = Client.objects.filter(id__in=selected_ids)
+            else:
+                export_qs = qs
+            resp = HttpResponse(content_type='text/csv')
+            resp['Content-Disposition'] = 'attachment; filename="calling_list.csv"'
+            writer = csv.writer(resp)
+            writer.writerow(['client_id', 'name', 'phone', 'email', 'mapped_to', 'sip_status', 'sip_amount'])
+            for c in export_qs.order_by('id'):
+                writer.writerow([c.id, c.name, c.phone or '', c.email or '', getattr(c.mapped_to, 'user', '') and getattr(c.mapped_to.user, 'username', '') or '', c.sip_status, c.sip_amount or ''])
+            return resp
+
+        elif action == 'create_list':
+            if not can_create:
+                messages.error(request, 'You do not have permission to create calling lists.')
+                return redirect(request.path)
+
+            title = request.POST.get('title') or f"Calling List {timezone.now().date()}"
+            # support single assign_employee or multiple assign_employee_multiple
+            assign_emp_single = request.POST.get('assign_employee')
+            assign_emp_multiple = request.POST.getlist('assign_employee_multiple')
+            csv_file = request.FILES.get('csv_file')
+
+            # Build selection
+            if source == 'prospects':
+                if selected_ids:
+                    selected_qs = Prospect.objects.filter(id__in=selected_ids)
+                else:
+                    selected_qs = qs
+            else:
+                if selected_ids:
+                    selected_qs = Client.objects.filter(id__in=selected_ids)
+                else:
+                    selected_qs = qs
+
+            if not selected_qs.exists() and not csv_file:
+                messages.error(request, 'No rows selected and no CSV uploaded to create a calling list')
+                return redirect(request.path)
+
+            with transaction.atomic():
+                cl = CallingList.objects.create(title=title, uploaded_by=request.user)
+                prospects_to_create = []
+
+                # handle CSV upload: expect columns name, phone, email (optional)
+                if csv_file:
+                    try:
+                        data = csv_file.read().decode('utf-8')
+                        reader = csv.DictReader(io.StringIO(data))
+                        for row in reader:
+                            name = row.get('name') or row.get('Name') or ''
+                            phone = row.get('phone') or row.get('Phone') or ''
+                            email = row.get('email') or row.get('Email') or ''
+                            p = Prospect(calling_list=cl, assigned_to=None, name=name, phone=phone, email=email)
+                            prospects_to_create.append(p)
+                    except Exception:
+                        # ignore file parse errors but surface a message
+                        messages.warning(request, 'Uploaded CSV could not be parsed; skipping CSV rows.')
+
+                # Duplicate selected prospects or clients
+                if source == 'prospects':
+                    for idx, sp in enumerate(selected_qs):
+                        # create a new Prospect record copying key fields
+                        assigned = None
+                        p = Prospect(calling_list=cl, assigned_to=sp.assigned_to, name=sp.name, phone=sp.phone or '', email=sp.email or '', notes=sp.notes)
+                        prospects_to_create.append(p)
+                else:
+                    for c in selected_qs:
+                        p = Prospect(calling_list=cl, assigned_to=None, name=c.name, phone=c.phone or '', email=c.email or '')
+                        prospects_to_create.append(p)
+
+                # Bulk create prospects
+                Prospect.objects.bulk_create(prospects_to_create)
+
+                # Assignment logic
+                # For normal employees (role == 'employee'), force assignment to themselves
+                user_emp = getattr(request.user, 'employee', None)
+                if user_emp and getattr(user_emp, 'role', None) == 'employee':
+                    Prospect.objects.filter(calling_list=cl).update(assigned_to=user_emp)
+                else:
+                    # Admins/managers may assign to multiple employees (round-robin) or a single employee
+                    if assign_emp_multiple:
+                        emp_objs = []
+                        for eid in assign_emp_multiple:
+                            try:
+                                emp_objs.append(Employee.objects.get(id=int(eid)))
+                            except Exception:
+                                continue
+                        if emp_objs:
+                            created = list(Prospect.objects.filter(calling_list=cl).order_by('id'))
+                            for i, created_p in enumerate(created):
+                                assigned_emp = emp_objs[i % len(emp_objs)]
+                                created_p.assigned_to = assigned_emp
+                                created_p.save(update_fields=['assigned_to'])
+                    elif assign_emp_single:
+                        try:
+                            assigned_emp = Employee.objects.get(id=int(assign_emp_single))
+                            Prospect.objects.filter(calling_list=cl).update(assigned_to=assigned_emp)
+                        except Exception:
+                            pass
+
+            messages.success(request, f'Calling list "{cl.title}" created with {len(prospects_to_create)} prospects')
+            return redirect('clients:callingworkspace', list_id=cl.id)
+
+    # compute last sale per client for visible page (clients source)
+    last_sales = {}
+    if source != 'prospects':
+        client_ids = [c.id for c in page_obj.object_list]
+        last_qs = Sale.objects.filter(client_id__in=client_ids).order_by('client_id', '-date')
+        # naive approach: pick first per client
+        seen = set()
+        for s in last_qs:
+            if s.client_id in seen:
+                continue
+            last_sales[s.client_id] = {'date': s.date, 'product': s.product}
+            seen.add(s.client_id)
+        # attach last sale attributes to client objects on this page for easier template rendering
+        for c in page_obj.object_list:
+            ls = last_sales.get(c.id)
+            if ls:
+                setattr(c, 'last_sale_date', ls.get('date'))
+                setattr(c, 'last_sale_product', ls.get('product'))
+            else:
+                setattr(c, 'last_sale_date', None)
+                setattr(c, 'last_sale_product', None)
+
+    context = {
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'sip_status': sip_status,
+        'sip_min': sip_min or '',
+        'sip_max': sip_max or '',
+        'health_status': health_status,
+        'health_min': health_min or '',
+        'health_max': health_max or '',
+        'life_status': life_status,
+        'life_min': life_min or '',
+        'life_max': life_max or '',
+        'motor_status': motor_status,
+        'motor_min': motor_min or '',
+        'motor_max': motor_max or '',
+        'pms_status': pms_status,
+        'pms_min': pms_min or '',
+        'pms_max': pms_max or '',
+        'employees': Employee.objects.select_related('user').all(),
+        'products': [c[0] for c in Sale.PRODUCT_CHOICES],
+        'mapped_emp': mapped_emp or '',
+        'unmapped_only': bool(unmapped_only),
+        'source': source,
+        'can_create': can_create,
+        'last_sales': last_sales,
+        'per_page': per_page,
+        'qs_params': qs_params,
+    }
+    # flag for template: is current user a plain employee
+    is_employee = False
+    if hasattr(request.user, 'employee') and getattr(request.user.employee, 'role', None) == 'employee':
+        is_employee = True
+    context['is_employee'] = is_employee
+
+    return render(request, 'calling/list_generator.html', context)
+
 
 @login_required
 def employee_performance(request):
@@ -1374,26 +1738,7 @@ def admin_past_month_performance(request, year, month):
 
     return render(request, "dashboards/admin_past_month_performance.html", context)
 
-from .models import CallingList, Prospect
 
-@login_required
-def calling_workspace(request, list_id):
-    # Get the calling list
-    calling_list = get_object_or_404(CallingList, id=list_id)
-
-    # Get prospects assigned to this employee under that list
-    prospects = Prospect.objects.filter(
-        calling_list=calling_list,
-        assigned_to=request.user.employee
-    )
-
-    context = {
-        "calling_list": calling_list,
-        "prospects": prospects,
-    }
-    return render(request, "calling/callingworkspace.html", context)
-
-import csv
 import io
 from django.contrib import messages
 from .models import CallingList, Prospect
@@ -1545,7 +1890,37 @@ def upload_list(request):
 @login_required
 def admin_lists(request):
     # Fetch all calling lists (latest first)
-    calling_lists = CallingList.objects.all().order_by("-created_at")
+    # Prefetch prospects and their assigned employees to avoid N+1 queries
+    calling_lists = CallingList.objects.all().order_by("-created_at").prefetch_related('prospects__assigned_to')
+
+    # Attach computed attributes to each CallingList for template rendering:
+    # - assigned_employees_count: number of distinct employees assigned within that list
+    # - assigned_employees: comma-separated display names of assigned employees (username or full name)
+    # - created_by_display: username of the user who uploaded the list
+    for cl in calling_lists:
+        seen = set()
+        names = []
+        for p in cl.prospects.all():
+            emp = getattr(p, 'assigned_to', None)
+            if emp and emp.id not in seen:
+                seen.add(emp.id)
+                # prefer full name if available, otherwise username
+                uname = ''
+                try:
+                    uname = emp.user.get_full_name() or emp.user.username
+                except Exception:
+                    uname = str(emp)
+                names.append(uname)
+        cl.assigned_employees_count = len(names)
+        cl.assigned_employees = ', '.join(names) if names else ''
+        # uploaded_by may be null
+        if getattr(cl, 'uploaded_by', None):
+            try:
+                cl.created_by_display = cl.uploaded_by.get_full_name() or cl.uploaded_by.username
+            except Exception:
+                cl.created_by_display = str(cl.uploaded_by)
+        else:
+            cl.created_by_display = ''
 
     context = {
         "calling_lists": calling_lists,
@@ -1605,7 +1980,13 @@ def calling_workspace(request, list_id):
     calling_list = get_object_or_404(CallingList, id=list_id)
 
     # only fetch prospects assigned to this employee
-    prospects = calling_list.prospects.filter(assigned_to=employee)
+    prospects_qs = calling_list.prospects.filter(assigned_to=employee).order_by('id')
+
+    # pagination for large lists
+    page = int(request.GET.get('page', 1))
+    per_page = int(request.GET.get('per_page', 25))
+    paginator = Paginator(prospects_qs, per_page)
+    page_obj = paginator.get_page(page)
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -1645,7 +2026,9 @@ def calling_workspace(request, list_id):
 
     context = {
         "calling_list": calling_list,
-        "prospects": prospects,
+        "page_obj": page_obj,
+        "paginator": paginator,
+        "per_page": per_page,
     }
     return render(request, "calling/callingworkspace.html", context)
 
