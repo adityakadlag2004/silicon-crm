@@ -74,6 +74,7 @@
         <th>Created</th>
         <th>Prospects</th>
         <th>Assigned Employees</th>
+        <th>Created By</th>
         <th>Actions</th>
       </tr>
     </thead>
@@ -83,7 +84,20 @@
         <td>{{ list.title }}</td>
         <td>{{ list.created_at|date:"Y-m-d" }}</td>
         <td>{{ list.prospects.count }}</td>
-        <td>{{ list.assigned_employees_count }}</td>
+        <td>
+          {% if list.assigned_employees %}
+            {{ list.assigned_employees }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if list.created_by_display %}
+            {{ list.created_by_display }}
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
+        </td>
         <td class="lists-actions">
           <a href="{% url 'clients:admin_list_detail' list.id %}" class="btn btn-sm btn-info">View</a>
           <a href="{% url 'clients:delete_calling_list' list.id %}"
@@ -95,7 +109,7 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="5" class="text-center text-muted">
+        <td colspan="6" class="text-center text-muted">
           No calling lists found.
         </td>
       </tr>

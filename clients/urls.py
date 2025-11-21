@@ -48,6 +48,7 @@ urlpatterns = [
 
     # calling
     path("calling/upload/", views.upload_list, name="upload_list"),
+  path("calling/list-generator/", views.calling_list_generator, name="calling_list_generator"),
     path("calling/admin-lists/", views.admin_lists, name="admin_lists"),
     path("calling/employee-lists/", views.employee_lists, name="employee_lists"),
     path("calling/workspace/<int:list_id>/", views.calling_workspace, name="callingworkspace"),
