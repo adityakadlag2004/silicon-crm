@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}WhatsApp Preview Links{% endblock %}
+{% block content %}
+<div class="container py-3">
+  <h3>WhatsApp Draft Previews — {{ template.name }}</h3>
+  <div class="row">
+    {% for p in previews %}
+    <div class="col-md-4 mb-3">
+      <div class="card p-2">
+        <div class="d-flex align-items-center justify-content-between">
+          <div><strong>{{ p.client }}</strong><div class="small text-muted">{{ p.phone }}</div></div>
+          <div><a class="btn btn-sm btn-primary" href="{{ p.link }}" target="_blank">Open Draft</a></div>
+        </div>
+        <div class="mt-2"> <small>{{ p.message }}</small></div>
+        <div class="mt-2 text-center"><img src="{{ p.qr }}" alt="QR" style="max-width:150px;"/></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

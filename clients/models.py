@@ -411,3 +411,29 @@ class MessageTemplate(models.Model):
         except Exception as e:
             print("Render error:", e)
             return self.content
+
+
+class MessageLog(models.Model):
+    STATUS_CHOICES = [
+        ("queued", "Queued"),
+        ("sent", "Sent"),
+        ("failed", "Failed"),
+        ("skipped", "Skipped"),
+    ]
+
+    template = models.ForeignKey(MessageTemplate, null=True, blank=True, on_delete=models.SET_NULL)
+    client = models.ForeignKey('Client', null=True, blank=True, on_delete=models.SET_NULL)
+    recipient_phone = models.CharField(max_length=32)
+    message_text = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="queued")
+    provider_message_id = models.CharField(max_length=255, blank=True, null=True)
+    error = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Message to {self.recipient_phone} [{self.status}]"

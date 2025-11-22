@@ -72,6 +72,8 @@ urlpatterns = [
 
     # bulk messaging
     path("bulk_whatsapp/", views.bulk_whatsapp, name="bulk_whatsapp"),
+  path("wa-preview/", views.wa_preview_page, name="wa_preview_page"),
+  path("wa-preview-csv/", views.wa_preview_csv, name="wa_preview_csv"),
 
     # bulk shifting
     path('<int:client_id>/reassign/', views.client_reassign_view, name='reassign'),

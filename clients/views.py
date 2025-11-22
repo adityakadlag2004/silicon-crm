@@ -2475,6 +2475,11 @@ from django.views.decorators.http import require_POST
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from .models import Client, MessageTemplate
+from .utils.phone_utils import normalize_phone
+from django.views.decorators.http import require_GET
+from urllib.parse import quote as urlquote
+import csv
+from django.http import HttpResponse
 
 @login_required
 @require_POST
@@ -2499,40 +2504,156 @@ def bulk_whatsapp(request):
 
         messages_preview = []
         sent_count = 0
+        skipped = []
 
+        # Render messages using MessageTemplate.render which supports Django template syntax
         for client in clients:
-            # ✅ Replace placeholders dynamically
-            msg = template.content
-            placeholders = {
-                "name": client.name or "",
-                "email": client.email or "",
-                "phone": client.phone or "",
-                "sip_amount": client.sip_amount or 0,
-                "pms_amount": client.pms_amount or 0,
-                "life_cover": client.life_cover or 0,
-                "health_cover": client.health_cover or 0,
-            }
+            # normalize/validate phone
+            e164, wa_number = normalize_phone(client.phone)
+            if not e164:
+                skipped.append({"id": client.id, "name": client.name, "phone": client.phone})
+                continue
 
-            for key, val in placeholders.items():
-                msg = msg.replace(f"{{{{{key}}}}}", str(val))
+            try:
+                # Provide sender_name and any other useful context to templates
+                sender_name = None
+                try:
+                    # prefer full name from User or Employee if available
+                    if hasattr(request.user, 'get_full_name') and request.user.get_full_name():
+                        sender_name = request.user.get_full_name()
+                    elif hasattr(request.user, 'employee') and getattr(request.user.employee, 'name', None):
+                        sender_name = request.user.employee.name
+                    else:
+                        sender_name = getattr(request.user, 'username', '')
+                except Exception:
+                    sender_name = getattr(request.user, 'username', '')
+
+                rendered = template.render(client, extra_context={"sender_name": sender_name})
+            except Exception:
+                # fallback to raw content if render fails
+                rendered = template.content
 
             messages_preview.append({
+                "id": client.id,
                 "client": client.name,
-                "phone": client.phone,
-                "message": msg
+                "phone": e164,
+                "wa_number": wa_number,
+                "message": rendered
             })
 
-            if not preview_only:
-                # ✅ TODO: integrate actual WhatsApp API (like Twilio, Gupshup, etc.)
-                sent_count += 1
+        # If preview only, don't create logs / queue messages
+        if preview_only:
+            return JsonResponse({"messages_preview": messages_preview, "sent_count": 0, "skipped": skipped})
 
-        return JsonResponse({
-            "messages_preview": messages_preview,
-            "sent_count": sent_count
-        })
+        # Create MessageLog entries (queued). Actual delivery is handled by management command / background worker.
+        from .models import MessageLog
+
+        queued_count = 0
+        for msg in messages_preview:
+            # find original client object by id
+            try:
+                cli = Client.objects.get(id=msg.get('id'))
+            except Exception:
+                cli = None
+            ml = MessageLog.objects.create(
+                template=template,
+                client=cli,
+                recipient_phone=msg["phone"],
+                message_text=msg["message"],
+                status="queued",
+                created_by=request.user,
+            )
+            queued_count += 1
+
+        return JsonResponse({"messages_preview": messages_preview, "sent_count": queued_count, "skipped": skipped})
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+@require_GET
+def wa_preview_page(request):
+    """Render a simple page with wa.me links and QR codes for selected clients.
+
+    Expects GET params: template_id, client_ids (comma separated)
+    """
+    template_id = request.GET.get('template_id')
+    client_ids = request.GET.get('client_ids', '')
+    if not template_id or not client_ids:
+        return HttpResponse('Missing parameters', status=400)
+    try:
+        tpl = MessageTemplate.objects.get(id=int(template_id))
+    except Exception:
+        return HttpResponse('Template not found', status=404)
+    ids = [int(x) for x in client_ids.split(',') if x.strip().isdigit()]
+    clients = Client.objects.filter(id__in=ids)
+    previews = []
+    for c in clients:
+        e164, wa = normalize_phone(c.phone)
+        if not e164:
+            continue
+        # provide sender_name in rendering
+        sender_name = None
+        try:
+            if hasattr(request.user, 'get_full_name') and request.user.get_full_name():
+                sender_name = request.user.get_full_name()
+            elif hasattr(request.user, 'employee') and getattr(request.user.employee, 'name', None):
+                sender_name = request.user.employee.name
+            else:
+                sender_name = getattr(request.user, 'username', '')
+        except Exception:
+            sender_name = getattr(request.user, 'username', '')
+        msg = tpl.render(c, extra_context={"sender_name": sender_name})
+        # truncate to 1000 chars
+        if len(msg) > 1000:
+            msg = msg[:1000]
+        link = f"https://wa.me/{wa}?text={urlquote(msg)}"
+        qr_src = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urlquote(link)}"
+        previews.append({'client': c.name, 'phone': e164, 'wa': wa, 'message': msg, 'link': link, 'qr': qr_src})
+
+    return render(request, 'clients/wa_preview_page.html', {'previews': previews, 'template': tpl})
+
+
+@login_required
+@require_GET
+def wa_preview_csv(request):
+    template_id = request.GET.get('template_id')
+    client_ids = request.GET.get('client_ids', '')
+    if not template_id or not client_ids:
+        return HttpResponse('Missing parameters', status=400)
+    try:
+        tpl = MessageTemplate.objects.get(id=int(template_id))
+    except Exception:
+        return HttpResponse('Template not found', status=404)
+    ids = [int(x) for x in client_ids.split(',') if x.strip().isdigit()]
+    clients = Client.objects.filter(id__in=ids)
+
+    # Build CSV
+    resp = HttpResponse(content_type='text/csv')
+    resp['Content-Disposition'] = 'attachment; filename="wa_previews.csv"'
+    writer = csv.writer(resp)
+    writer.writerow(['client_id', 'client_name', 'phone_e164', 'wa_number', 'message', 'wa_link'])
+    for c in clients:
+        e164, wa = normalize_phone(c.phone)
+        if not e164:
+            continue
+        sender_name = None
+        try:
+            if hasattr(request.user, 'get_full_name') and request.user.get_full_name():
+                sender_name = request.user.get_full_name()
+            elif hasattr(request.user, 'employee') and getattr(request.user.employee, 'name', None):
+                sender_name = request.user.employee.name
+            else:
+                sender_name = getattr(request.user, 'username', '')
+        except Exception:
+            sender_name = getattr(request.user, 'username', '')
+        msg = tpl.render(c, extra_context={"sender_name": sender_name})
+        if len(msg) > 1000:
+            msg = msg[:1000]
+        link = f"https://wa.me/{wa}?text={urlquote(msg)}"
+        writer.writerow([c.id, c.name, e164, wa, msg, link])
+    return resp
 
 
 @login_required
