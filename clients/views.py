@@ -593,13 +593,13 @@ def net_business(request):
 
     # Grouping
     if gran == 'day':
-        sales_grouped = sales_qs.annotate(period=TruncDay('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        sales_grouped = sales_qs.annotate(period=TruncDay('date')).values('period', 'product').annotate(total=Sum('amount'), count=Count('id')).order_by('period')
         red_grouped = red_qs.annotate(period=TruncDay('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
     elif gran == 'year':
-        sales_grouped = sales_qs.annotate(period=TruncYear('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        sales_grouped = sales_qs.annotate(period=TruncYear('date')).values('period', 'product').annotate(total=Sum('amount'), count=Count('id')).order_by('period')
         red_grouped = red_qs.annotate(period=TruncYear('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
     else:
-        sales_grouped = sales_qs.annotate(period=TruncMonth('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        sales_grouped = sales_qs.annotate(period=TruncMonth('date')).values('period', 'product').annotate(total=Sum('amount'), count=Count('id')).order_by('period')
         red_grouped = red_qs.annotate(period=TruncMonth('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
 
     # Build a mapping: (period, product) -> totals
@@ -609,6 +609,11 @@ def net_business(request):
         key = (r['period'].date() if hasattr(r['period'], 'date') else r['period'], r['product'])
         data.setdefault(key, {'sales': 0, 'redemptions': 0})
         data[key]['sales'] = float(r['total'] or 0)
+        # include transaction count (number of sales) for this period+product
+        try:
+            data[key]['count'] = int(r.get('count', 0) or 0)
+        except Exception:
+            data[key]['count'] = 0
         products.add(r['product'])
 
     for r in red_grouped:
@@ -633,6 +638,12 @@ def net_business(request):
         total_sales = sum(r['sales'] for r in rows if r['product'] == prod)
         total_red = sum(r['redemptions'] for r in rows if r['product'] == prod)
         totals[prod] = {'sales': total_sales, 'redemptions': total_red, 'net': total_sales - total_red}
+
+    # Compute counts per product (number of sales transactions) in one query
+    counts_qs = sales_qs.values('product').annotate(cnt=Count('id'))
+    counts_map = {c['product']: int(c['cnt'] or 0) for c in counts_qs}
+    for prod in totals.keys():
+        totals[prod]['count'] = counts_map.get(prod, 0)
 
     # expose string versions of dates so HTML date inputs retain values
     start_str = start.isoformat() if hasattr(start, 'isoformat') else str(start)

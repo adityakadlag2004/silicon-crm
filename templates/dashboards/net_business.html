@@ -48,17 +48,28 @@
 
   <h5>Totals by product</h5>
   <table class="table table-sm">
-    <thead><tr><th>Product</th><th>Sales</th><th>Redemptions</th><th>Net</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>Transactions</th>
+        <th>Sales</th>
+        <th>Redemptions</th>
+        <th>Net</th>
+      </tr>
+    </thead>
     <tbody>
       {% for prod, vals in totals.items %}
         <tr>
-          <td>{{ prod }}</td>
+          <td>
+            <a href="{% url 'clients:all_sales' %}?product={{ prod|urlencode }}&start_date={{ start_str }}&end_date={{ end_str }}">{{ prod }}</a>
+          </td>
+          <td>{{ vals.count|default:0 }}</td>
           <td>₹{{ vals.sales|floatformat:2 }}</td>
-           <td class="redemption text-danger">₹{{ vals.redemptions|floatformat:2 }}</td>
+          <td class="redemption text-danger">₹{{ vals.redemptions|floatformat:2 }}</td>
           <td class="net-cell">₹{{ vals.net|floatformat:2 }}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="4" class="text-muted">No data</td></tr>
+        <tr><td colspan="5" class="text-muted">No data</td></tr>
       {% endfor %}
     </tbody>
   </table>
