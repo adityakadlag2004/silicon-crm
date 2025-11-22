@@ -4,6 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+phonenumbers = "==8.13.18"
 
 [dev-packages]
 

@@ -233,11 +233,11 @@
     <tbody>
       {% for client in clients_page %}
       <tr>
-        <td><input class="client-select" type="checkbox" value="{{ client.id }}" /></td>
+  <td><input class="client-select" type="checkbox" value="{{ client.id }}" data-phone="{{ client.phone|default:''|floatformat:0 }}" data-name="{{ client.name|escape }}" /></td>
         <td>{{ client.id }}</td>
         <td>{{ client.name }}</td>
         <td>{{ client.email }}</td>
-        <td>{{ client.phone }}</td>
+  <td>{{ client.phone|default:''|floatformat:0 }}</td>
         <td>₹{{ client.sip_amount|default:0 }}</td>
         <td>₹{{ client.pms_amount|default:0 }}</td>
         <td>₹{{ client.life_cover|default:0 }}</td>
@@ -363,21 +363,15 @@
 
   function getSelectedClients() {
     return clientCheckboxes().filter(cb=>cb.checked).map(cb=>{
-      const tr = cb.closest('tr');
-      const tds = tr ? tr.querySelectorAll('td') : [];
-      // name and phone positions may vary; fallback to selectors by column content
-      let name = '';
-      let phone = '';
-      if (tds.length) {
-        // name is likely in second or third td depending on table; attempt robustly:
-        // find cell that looks like a name (non-numeric, not phone)
-        for (let i=0;i<tds.length;i++){
-          const text = tds[i].innerText.trim();
-          if (!phone && /^[0-9\+\-\s]{6,}$/.test(text)) { phone = text; continue; }
-          if (!name && text && !/^[0-9\+\-\s]{6,}$/.test(text)) { name = text; continue; }
-        }
+      // sanitize phone: strip trailing .0 (from float storage) and whitespace
+      let raw = (cb.dataset.phone || '').toString().trim();
+      raw = raw.replace(/\.0+$/,'');
+      // also guard against scientific notation (e.g., 1.23e+9)
+      if (/e\+/i.test(raw)) {
+        // attempt to convert to number then to fixed integer string
+        try { raw = (Number(raw)).toString().replace(/\.0+$/,''); } catch(e) {}
       }
-      return { id: cb.value, name: name, phone: phone };
+      return { id: cb.value, name: cb.dataset.name || '', phone: raw };
     });
   }
 
@@ -407,14 +401,66 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Server error');
       modalBody.innerHTML = '';
-      (data.messages_preview || []).forEach(m=>{
-        const el = document.createElement('div');
-        el.style.padding = '0.6rem';
-        el.style.borderBottom = '1px solid #e6eef6';
-        el.innerHTML = `<strong>${m.client}</strong> — <small>${m.phone}</small>
-                        <pre style="white-space:pre-wrap;margin:0.45rem 0 0 0;font-family:inherit;">${m.message}</pre>`;
-        modalBody.appendChild(el);
+      const previews = data.messages_preview || [];
+      if (!previews.length) {
+        let msgHtml = `<div style="padding:0.6rem;color:#374151;">No preview messages were generated.`;
+        if (data.skipped && data.skipped.length) {
+          msgHtml += `<div class="small text-muted">Skipped (invalid/no phone): ` + data.skipped.map(s=>s.name).join(', ') + `</div>`;
+        }
+        msgHtml += `</div>`;
+        modalBody.innerHTML = msgHtml;
+      } else {
+        previews.forEach(m=>{
+          const el = document.createElement('div');
+          el.style.padding = '0.6rem';
+          el.style.borderBottom = '1px solid #e6eef6';
+          el.innerHTML = `<strong>${m.client}</strong> — <small>${m.phone}</small>
+                          <pre style="white-space:pre-wrap;margin:0.45rem 0 0 0;font-family:inherit;">${m.message}</pre>`;
+          modalBody.appendChild(el);
+        });
+      }
+      // add Open Drafts button
+      const openBtn = document.createElement('button');
+      openBtn.className = 'dashboard-link';
+      openBtn.style.marginTop = '0.6rem';
+      openBtn.innerText = 'Open Drafts (WhatsApp)';
+      openBtn.addEventListener('click', function(){
+        if (!data.messages_preview || !data.messages_preview.length) return alert('No messages to open');
+        // open a wa.me link per message. Browsers may block many popups; user must allow.
+        data.messages_preview.forEach((msg, idx)=>{
+          const text = encodeURIComponent(msg.message);
+          const wa = msg.wa_number || msg.phone.replace(/\D+/g, '');
+          const url = `https://wa.me/${wa}?text=${text}`;
+          window.open(url, '_blank');
+        });
       });
+      modalBody.appendChild(openBtn);
+      // Open Next Draft (one-by-one)
+      const openNext = document.createElement('button');
+      openNext.className = 'btn btn-sm btn-outline-primary';
+      openNext.style.marginLeft = '0.6rem';
+      openNext.innerText = 'Open Next Draft';
+      let openIdx = 0;
+      openNext.addEventListener('click', function(){
+        if (!data.messages_preview || !data.messages_preview.length) return alert('No messages to open');
+        if (openIdx >= data.messages_preview.length) { alert('All drafts opened'); openIdx = 0; return; }
+        const msg = data.messages_preview[openIdx++];
+        const text = encodeURIComponent(msg.message);
+        const wa = msg.wa_number || msg.phone.replace(/\D+/g, '');
+        const url = `https://wa.me/${wa}?text=${text}`;
+        window.open(url, '_blank');
+      });
+      modalBody.appendChild(openNext);
+      // Link to preview page and CSV
+      const actionsRow = document.createElement('div');
+      actionsRow.style.marginTop = '0.8rem';
+  const ids = (data.messages_preview || []).map(m=>m.id).join(',');
+      const previewUrl = `{% url 'clients:wa_preview_page' %}?template_id=${tpl}&client_ids=${ids}`;
+      const csvUrl = `{% url 'clients:wa_preview_csv' %}?template_id=${tpl}&client_ids=${ids}`;
+      const a1 = document.createElement('a'); a1.href = previewUrl; a1.target = '_blank'; a1.className='btn btn-sm btn-secondary ms-2'; a1.innerText='Open Preview Page';
+      const a2 = document.createElement('a'); a2.href = csvUrl; a2.target = '_blank'; a2.className='btn btn-sm btn-secondary ms-2'; a2.innerText='Download CSV';
+      actionsRow.appendChild(a1); actionsRow.appendChild(a2);
+      modalBody.appendChild(actionsRow);
     } catch(err){
       modalBody.innerHTML = `<div style="color:#9b2c2c;padding:0.6rem">Preview failed: ${err.message}</div>`;
     }
