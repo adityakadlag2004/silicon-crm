@@ -903,27 +903,31 @@ def employee_dashboard(request):
 
 @login_required
 def add_sale(request):
+    # allow choosing employee when creating a sale. use AdminSaleForm which includes `employee` field
     if request.method == "POST":
-        form = SaleForm(request.POST)
+        form = AdminSaleForm(request.POST)
         if form.is_valid():
             sale = form.save(commit=False)
 
-            # ✅ assign logged-in employee
-            sale.employee = request.user.employee  
+            # prefer the employee chosen in the form, otherwise default to logged-in employee
+            chosen_emp = form.cleaned_data.get("employee")
+            if chosen_emp:
+                sale.employee = chosen_emp
+            else:
+                sale.employee = getattr(request.user, "employee", None)
 
-            # ✅ assign client from hidden field
-            client_id = request.POST.get("client")
-            if not client_id:
-                messages.error(request, "Please select a client from search results.")
-                return render(request, "sales/add_sale.html", {"form": form})
-
-            try:
-                client = Client.objects.get(id=client_id)
-            except Client.DoesNotExist:
-                messages.error(request, "Selected client does not exist.")
-                return render(request, "sales/add_sale.html", {"form": form})
-
-            sale.client = client
+            # ensure client is set (form should populate it via the hidden client field)
+            if not sale.client:
+                client_id = request.POST.get("client")
+                if not client_id:
+                    messages.error(request, "Please select a client from search results.")
+                    # pass employees so template can re-render selector
+                    return render(request, "sales/add_sale.html", {"form": form, "employees": Employee.objects.select_related('user').all(), "current_employee_id": getattr(request.user, 'employee').id if hasattr(request.user, 'employee') else None})
+                try:
+                    sale.client = Client.objects.get(id=client_id)
+                except Client.DoesNotExist:
+                    messages.error(request, "Selected client does not exist.")
+                    return render(request, "sales/add_sale.html", {"form": form, "employees": Employee.objects.select_related('user').all(), "current_employee_id": getattr(request.user, 'employee').id if hasattr(request.user, 'employee') else None})
 
             # compute points before saving
             sale.compute_points()
@@ -932,9 +936,21 @@ def add_sale(request):
             messages.success(request, "Sale added successfully!")
             return redirect("clients:all_sales")
     else:
-        form = SaleForm()
+        # default to admin-capable form so employee selector is available
+        initial = {}
+        if hasattr(request.user, 'employee'):
+            initial['employee'] = request.user.employee.id
+            try:
+                initial['date'] = date.today()
+            except Exception:
+                pass
+        form = AdminSaleForm(initial=initial)
 
-    return render(request, "sales/add_sale.html", {"form": form})
+    # provide employees list and current employee id for template selector
+    employees_qs = Employee.objects.select_related('user').all()
+    current_emp_id = getattr(request.user, 'employee').id if hasattr(request.user, 'employee') else None
+
+    return render(request, "sales/add_sale.html", {"form": form, "employees": employees_qs, "current_employee_id": current_emp_id})
 # clients/views.py
 from django.db.models import Q
 from .models import MessageTemplate   # (add this import at top if not already)

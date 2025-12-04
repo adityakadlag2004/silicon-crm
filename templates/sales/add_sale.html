@@ -88,6 +88,14 @@
       <input type="hidden" name="client" id="client-id" required>
       <div id="client-results" class="list-group position-absolute w-100" style="z-index: 1000;"></div>
     </div>
+    <div class="form-group">
+      <label for="employee-select" class="form-label">Employee</label>
+      <select id="employee-select" name="employee" class="form-control">
+        {% for emp in employees %}
+          <option value="{{ emp.id }}" {% if emp.id == current_employee_id %}selected{% endif %}>{{ emp.user.get_full_name|default:emp.user.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <div class="form-group">{{ form.product.label_tag }}{{ form.product }}</div>
     <div class="form-group">{{ form.amount.label_tag }}{{ form.amount }}<small class="form-text text-muted">Business amount considered for points</small></div>
     <div class="form-group" id="cover-amount-group" style="display: none;"><label for="cover-amount" class="form-label">Cover Amount</label><input type="number" step="0.01" class="form-control" name="cover_amount" id="cover-amount"><small class="form-text text-muted">Enter insurance cover value (in ₹)</small></div>
