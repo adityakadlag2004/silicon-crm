@@ -149,6 +149,33 @@
 
 <div class="dashboard-section-title">Admin Dashboard</div>
 
+<div class="card mb-3" style="border-radius:12px;box-shadow:0 1px 8px rgba(0,0,0,0.06);">
+  <div class="card-header" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);color:#2d3748;display:flex;align-items:center;justify-content:space-between;">
+    <span><strong>Notifications</strong></span>
+    {% if unread_notifications %}
+      <span class="badge bg-danger">{{ unread_notifications }} new</span>
+    {% else %}
+      <span class="badge bg-secondary">All caught up</span>
+    {% endif %}
+  </div>
+  <ul class="list-group list-group-flush">
+    {% if notifications %}
+      {% for note in notifications %}
+        <li class="list-group-item" style="display:flex;flex-direction:column;align-items:flex-start;gap:0.2rem;">
+          <div style="font-weight:600;">{{ note.title }}</div>
+          <div style="font-size:0.95rem;color:#4a5568;">{{ note.body }}</div>
+          <div style="font-size:0.82rem;color:#718096;">{{ note.created_at|date:"M d, h:i A" }}</div>
+          {% if note.link %}
+            <a href="{{ note.link }}" class="dashboard-link" style="padding:0.35rem 0.75rem;font-size:0.9rem;">Open</a>
+          {% endif %}
+        </li>
+      {% endfor %}
+    {% else %}
+      <li class="list-group-item" style="font-size:0.95rem;color:#4a5568;">No notifications yet.</li>
+    {% endif %}
+  </ul>
+</div>
+
 <div class="dashboard-cards-row" style="display:flex;flex-wrap:wrap;gap:1rem;">
   <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
     <h5>Total Clients</h5>

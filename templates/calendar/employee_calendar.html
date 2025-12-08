@@ -61,6 +61,16 @@
     .calendar-card { padding: 0.5rem 0.1rem; }
     #calendar { padding: 2px; }
     h2 { font-size: 1.1rem; }
+    .fc .fc-toolbar.fc-header-toolbar { flex-direction: column; gap: 0.35rem; }
+    .fc .fc-toolbar-chunk { width: 100%; justify-content: center; }
+    .fc .fc-button-group { width: 100%; justify-content: center; flex-wrap: wrap; gap: 4px; }
+    .fc .fc-button { flex: 1 1 80px; min-width: 80px; padding: 4px 6px; font-size: 0.85rem; }
+    .d-flex.flex-wrap.justify-content-center.gap-2 { row-gap: 0.35rem; }
+    .filter-row { overflow-x: auto; flex-wrap: nowrap !important; padding: 0 4px; }
+    .filter-row::-webkit-scrollbar { height: 6px; }
+    .filter-row::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+    .filter-row .form-check-inline { margin-right: 0.35rem; white-space: nowrap; }
+    .badge { font-size: 0.78rem; }
   }
   /* Ensure modals appear above FullCalendar overlays */
   .modal {
@@ -73,8 +83,14 @@
 
 <div class="calendar-card">
   <h2>📅 My Calendar</h2>
+    <!-- Status chips -->
+    <div class="d-flex flex-wrap justify-content-center gap-2 mb-3">
+      <span class="badge rounded-pill bg-primary">Pending: {{ pending_count|default:0 }}</span>
+      <span class="badge rounded-pill bg-danger">Missed: {{ missed_count|default:0 }}</span>
+      <span class="badge rounded-pill bg-success">Completed: {{ completed_count|default:0 }}</span>
+    </div>
   <!-- Legend / quick filters -->
-  <div class="d-flex justify-content-center mb-3 gap-2 align-items-center">
+    <div class="d-flex justify-content-center mb-3 gap-2 align-items-center flex-wrap filter-row">
     <label class="small mb-0 me-2">Show:</label>
     <div class="form-check form-check-inline">
       <input class="form-check-input evt-filter" type="checkbox" id="f_followup" value="call_followup" checked>
@@ -95,6 +111,38 @@
     <div class="form-check form-check-inline">
       <input class="form-check-input evt-filter" type="checkbox" id="f_bday" value="birthday" checked>
       <label class="form-check-label badge" style="background:#ff9ccf; color:#641e16;" for="f_bday">Birthday</label>
+    </div>
+  </div>
+  <!-- Source filters -->
+  <div class="d-flex justify-content-center mb-3 gap-2 align-items-center flex-wrap filter-row">
+    <label class="small mb-0 me-2">Source:</label>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input src-filter" type="checkbox" id="src_manual" value="manual" checked>
+      <label class="form-check-label badge bg-secondary text-white" for="src_manual">Manual</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input src-filter" type="checkbox" id="src_calling" value="calling_list" checked>
+      <label class="form-check-label badge bg-info text-dark" for="src_calling">Calling List</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input src-filter" type="checkbox" id="src_bday" value="birthday" checked>
+      <label class="form-check-label badge" style="background:#ff9ccf; color:#641e16;" for="src_bday">Birthday</label>
+    </div>
+  </div>
+  <!-- Status filters -->
+  <div class="d-flex justify-content-center mb-3 gap-2 align-items-center flex-wrap filter-row">
+    <label class="small mb-0 me-2">Status:</label>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input status-filter" type="checkbox" id="st_pending" value="pending" checked>
+      <label class="form-check-label badge bg-primary" for="st_pending">Pending</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input status-filter" type="checkbox" id="st_missed" value="missed" checked>
+      <label class="form-check-label badge bg-danger" for="st_missed">Missed</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input status-filter" type="checkbox" id="st_completed" value="completed">
+      <label class="form-check-label badge bg-success" for="st_completed">Completed</label>
     </div>
   </div>
   <div id="calendar"></div>
@@ -121,6 +169,7 @@
         </p>
       </div>
       <div class="modal-footer">
+        <button id="modalBirthdayFollowup" type="button" class="btn btn-sm btn-warning" style="display:none;">Create Follow-up</button>
         <button id="eventDetailEdit" type="button" class="btn btn-sm btn-primary">Edit</button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
@@ -144,6 +193,10 @@
                 <div class="mb-2">
                   <label class="form-label small">When</label>
                   <input type="datetime-local" class="form-control form-control-sm" name="scheduled_time" id="evt_when" required />
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small">End</label>
+                  <input type="datetime-local" class="form-control form-control-sm" name="end_time" id="evt_end" />
                 </div>
                 <div class="mb-2">
                   <label class="form-label small">Type</label>
@@ -175,8 +228,10 @@
 document.addEventListener('DOMContentLoaded', function() {
   const calendarEl = document.getElementById('calendar');
 
+  const initialView = window.innerWidth < 700 ? 'timeGridDay' : 'dayGridMonth';
+
   const calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: 'dayGridMonth',
+    initialView: initialView,
     headerToolbar: {
       left: 'prev,next today,backButton',
       center: 'title',
@@ -201,8 +256,14 @@ document.addEventListener('DOMContentLoaded', function() {
     events: {
       url: "{% url 'clients:calendar_events_json' %}",
       extraParams: function() {
-        const checked = Array.from(document.querySelectorAll('.evt-filter:checked')).map(i=>i.value);
-        return { types: checked.join(',') };
+        const types = Array.from(document.querySelectorAll('.evt-filter:checked')).map(i=>i.value);
+        const sources = Array.from(document.querySelectorAll('.src-filter:checked')).map(i=>i.value);
+        const statuses = Array.from(document.querySelectorAll('.status-filter:checked')).map(i=>i.value);
+        return {
+          types: types.join(','),
+          sources: sources.join(','),
+          statuses: statuses.join(',')
+        };
       },
       failure: function() {
         alert('There was an error while fetching events.');
@@ -210,6 +271,7 @@ document.addEventListener('DOMContentLoaded', function() {
     },
 
     // 🔹 Event color coding
+    // 🔹 Event color coding + missed highlighting
     eventDidMount: function(info) {
       const colorMap = {
         call_followup: {bg: '#28a745', fg: '#fff'},
@@ -219,6 +281,7 @@ document.addEventListener('DOMContentLoaded', function() {
         birthday: {bg: '#ff9ccf', fg: '#641e16'}
       };
       const type = info.event.extendedProps.type;
+      const status = info.event.extendedProps.status;
       const cfg = colorMap[type] || colorMap['task'];
       info.el.style.backgroundColor = cfg.bg;
       info.el.style.borderColor = cfg.bg;
@@ -228,6 +291,32 @@ document.addEventListener('DOMContentLoaded', function() {
       if (type === 'birthday' && info.el.querySelector('.fc-event-title')) {
         const titleEl = info.el.querySelector('.fc-event-title');
         titleEl.innerHTML = '🎂 ' + titleEl.innerHTML;
+      }
+      // mark missed (pending but start in past) with red outline
+      if (status === 'pending' && info.event.start && info.event.start < new Date()) {
+        info.el.style.outline = '2px solid #e53e3e';
+        info.el.style.boxShadow = '0 0 0 2px rgba(229,62,62,0.25)';
+        info.el.title = (info.el.title || '') + ' (Missed)';
+      }
+
+      // Add source badge inline
+      const source = info.event.extendedProps.source;
+      if (source) {
+        const badge = document.createElement('span');
+        badge.className = 'ms-1 badge badge-sm';
+        if (source === 'calling_list') {
+          badge.className += ' bg-info text-dark';
+          badge.innerText = 'Calling List';
+        } else if (source === 'birthday') {
+          badge.style.background = '#ff9ccf';
+          badge.style.color = '#641e16';
+          badge.innerText = 'Birthday';
+        } else {
+          badge.className += ' bg-secondary text-white';
+          badge.innerText = 'Manual';
+        }
+        const titleEl = info.el.querySelector('.fc-event-title');
+        if (titleEl) titleEl.appendChild(badge);
       }
     },
 
@@ -250,6 +339,8 @@ document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('modalWhen').innerText = new Date(ev.start).toLocaleString();
       document.getElementById('modalType').innerText = props.type || '—';
       document.getElementById('modalNotes').innerText = props.notes || '—';
+        const sourceText = props.source === 'birthday' ? 'Birthday' : (props.source === 'calling_list' ? 'Calling List' : 'Manual');
+        document.getElementById('modalType').innerText = `${props.type || '—'} · ${sourceText}`;
 
       if (props.related_prospect_name) {
         document.getElementById('modalProspectName').innerText = props.related_prospect_name;
@@ -258,9 +349,16 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('modalProspect').style.display = 'none';
       }
 
+      // toggle birthday follow-up button and edit availability
+      const followBtn = document.getElementById('modalBirthdayFollowup');
+      const editBtn = document.getElementById('eventDetailEdit');
+      const isBirthday = String(ev.id).startsWith('birth-');
+      followBtn.style.display = isBirthday ? 'inline-block' : 'none';
+      editBtn.style.display = isBirthday ? 'none' : 'inline-block';
+
       new bootstrap.Modal(document.getElementById('eventDetailModal')).show();
       // set editing id so Edit from detail modal will edit this event
-      window.__editingEventId = ev.id;
+      window.__editingEventId = isBirthday ? null : ev.id;
       updateCreateButtonLabel();
     },
 
@@ -395,6 +493,17 @@ document.addEventListener('DOMContentLoaded', function() {
       const pad = (n)=> String(n).padStart(2,'0');
       const localStr = dt.getFullYear() + '-' + pad(dt.getMonth()+1) + '-' + pad(dt.getDate()) + 'T' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
       document.getElementById('evt_when').value = localStr;
+      // end time
+      const endInput = document.getElementById('evt_end');
+      if (endInput) {
+        const endDt = eventObj.end ? new Date(eventObj.end) : null;
+        if (endDt) {
+          const endLocal = endDt.getFullYear() + '-' + pad(endDt.getMonth()+1) + '-' + pad(endDt.getDate()) + 'T' + pad(endDt.getHours()) + ':' + pad(endDt.getMinutes());
+          endInput.value = endLocal;
+        } else {
+          endInput.value = '';
+        }
+      }
       document.getElementById('evt_type').value = (eventObj.extendedProps && eventObj.extendedProps.type) || 'task';
       document.getElementById('evt_notes').value = (eventObj.extendedProps && eventObj.extendedProps.notes) || '';
       // set editing id so submit uses update endpoint
@@ -405,20 +514,21 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // filter toggles → refetch events when a checkbox changes
-  document.querySelectorAll('.evt-filter').forEach(function(cb){
-    cb.addEventListener('change', function(){ calendar.refetchEvents(); });
-  });
+  const refetch = () => calendar.refetchEvents();
+  document.querySelectorAll('.evt-filter').forEach(cb => cb.addEventListener('change', refetch));
+  document.querySelectorAll('.src-filter').forEach(cb => cb.addEventListener('change', refetch));
+  document.querySelectorAll('.status-filter').forEach(cb => cb.addEventListener('change', refetch));
 
   // Mobile floating add button (visible on small screens)
   const addBtn = document.createElement('button');
   addBtn.className = 'btn btn-primary shadow-lg d-md-none';
   addBtn.style.position = 'fixed';
-  addBtn.style.right = '18px';
-  addBtn.style.bottom = '18px';
+  addBtn.style.right = '16px';
+  addBtn.style.bottom = '16px';
   addBtn.style.borderRadius = '50%';
-  addBtn.style.width = '56px';
-  addBtn.style.height = '56px';
-  addBtn.style.fontSize = '28px';
+  addBtn.style.width = '60px';
+  addBtn.style.height = '60px';
+  addBtn.style.fontSize = '30px';
   addBtn.innerHTML = '+';
   addBtn.title = 'Add Event';
   addBtn.addEventListener('click', function(){
@@ -433,9 +543,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Create event submit
   document.getElementById('createEventSubmit').addEventListener('click', function() {
+    const endInput = document.getElementById('evt_end');
     const payload = {
       title: document.getElementById('evt_title').value,
       scheduled_time: document.getElementById('evt_when').value ? new Date(document.getElementById('evt_when').value).toISOString() : new Date().toISOString(),
+      end_time: endInput && endInput.value ? new Date(endInput.value).toISOString() : null,
       type: document.getElementById('evt_type').value,
       notes: document.getElementById('evt_notes').value
     };
@@ -497,6 +609,22 @@ document.addEventListener('DOMContentLoaded', function() {
     if (detailModal) detailModal.hide();
   });
 
+  // Create follow-up for synthetic birthday events (read-only) -> adds real follow-up
+  document.getElementById('modalBirthdayFollowup').addEventListener('click', function(){
+    const modalTitle = document.getElementById('modalTitle').innerText || 'Birthday';
+    const modalWhen = document.getElementById('modalWhen').innerText;
+    const targetStart = modalWhen ? new Date(modalWhen).toISOString() : new Date().toISOString();
+    const title = `Birthday Follow-up: ${modalTitle.replace('Birthday:', '').trim()}`;
+    createEvent({
+      title: title,
+      scheduled_time: targetStart,
+      type: 'call_followup',
+      notes: 'Auto-created from birthday reminder'
+    }, true);
+    const detailModal = bootstrap.Modal.getInstance(document.getElementById('eventDetailModal'));
+    if (detailModal) detailModal.hide();
+  });
+
   // Helper to POST create event and add to calendar
   function createEvent(payload, closeModal) {
     fetch("{% url 'clients:create_calendar_event' %}", {
@@ -514,6 +642,7 @@ document.addEventListener('DOMContentLoaded', function() {
           id: data.event.id,
           title: data.event.title,
           start: data.event.start,
+          end: data.event.end || null,
           extendedProps: data.event.extendedProps
         });
         if (closeModal) new bootstrap.Modal(document.getElementById('createEventModal')).hide();
