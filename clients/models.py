@@ -344,6 +344,7 @@ class CalendarEvent(models.Model):
     type = models.CharField(max_length=20, choices=EVENT_TYPES, default="task")
     related_prospect = models.ForeignKey("Prospect", on_delete=models.SET_NULL, null=True, blank=True)
     scheduled_time = models.DateTimeField()
+    end_time = models.DateTimeField(null=True, blank=True)
     reminder_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=20,
@@ -437,3 +438,25 @@ class MessageLog(models.Model):
 
     def __str__(self):
         return f"Message to {self.recipient_phone} [{self.status}]"
+
+
+class Notification(models.Model):
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    link = models.CharField(max_length=255, blank=True)
+    related_sale = models.ForeignKey(
+        "Sale", null=True, blank=True, on_delete=models.CASCADE
+    )
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.title} -> {self.recipient}"

@@ -224,6 +224,15 @@
           {% if event.related_prospect %}
             – {{ event.related_prospect.name }}
           {% endif %}
+          <div class="mt-1">
+            {% if event.related_prospect and event.related_prospect.calling_list_id %}
+              <span class="badge bg-info text-dark" title="From Calling List">Calling List</span>
+            {% elif event.type == 'birthday' or 'birthday' in event.title|lower %}
+              <span class="badge bg-warning text-dark" title="Birthday follow-up">Birthday</span>
+            {% else %}
+              <span class="badge bg-secondary" title="Manual/other">General</span>
+            {% endif %}
+          </div>
           <br>
           <span style="color:#718096;">{{ event.scheduled_time|time:"h:i A" }} | {{ event.get_type_display }}</span>
         </div>

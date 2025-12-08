@@ -1,7 +1,9 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import Sum
-from .models import Sale, Client
+from .models import Sale, Client, Notification, Employee
+from django.contrib.auth import get_user_model
+from django.urls import reverse
 
 @receiver([post_save, post_delete], sender=Sale)
 def update_client_status(sender, instance, **kwargs):
@@ -21,6 +23,46 @@ def update_client_status(sender, instance, **kwargs):
     client.pms_status = client.pms_amount > 0
 
     client.save()
+
+
+@receiver(post_save, sender=Sale)
+def notify_admins_on_sale(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    User = get_user_model()
+    try:
+        dashboard_url = reverse("clients:admin_dashboard")
+    except Exception:
+        dashboard_url = ""
+
+    employee_name = getattr(instance.employee, "user", None)
+    if employee_name and hasattr(employee_name, "username"):
+        employee_name = employee_name.username
+    else:
+        employee_name = str(instance.employee)
+
+    client_name = getattr(instance.client, "name", str(instance.client))
+    amount_display = f"₹{instance.amount}"
+
+    body = (
+        f"{employee_name} logged a {instance.product} sale of {amount_display} "
+        f"for client {client_name}."
+    )
+
+    admin_users = set(User.objects.filter(is_superuser=True))
+    admin_users.update(
+        User.objects.filter(employee__role="admin")
+    )
+
+    for admin_user in admin_users:
+        Notification.objects.create(
+            recipient=admin_user,
+            title="New sale recorded",
+            body=body,
+            link=dashboard_url,
+            related_sale=instance,
+        )
 
 from django.db.models import Sum
 from django.utils.timezone import now

@@ -43,6 +43,7 @@ from .models import (
     MessageTemplate,
     IncentiveRule,
     Redemption,
+    Notification,
 )
 from .forms import SaleForm, AdminSaleForm, EditSaleForm
 from django.db.models import Count, Avg, Sum
@@ -727,6 +728,7 @@ from django.shortcuts import render
 from .models import Sale, Client
 
 @login_required
+@login_required
 def admin_dashboard(request):
     today = timezone.now().date()
     month = today.month
@@ -800,6 +802,13 @@ def admin_dashboard(request):
         "pms": pms_sales,
     }
 
+    # ---------------- Notifications ----------------
+    notifications = []
+    unread_notifications = 0
+    if request.user.is_authenticated:
+        notifications = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:10]
+        unread_notifications = Notification.objects.filter(recipient=request.user, is_read=False).count()
+
     # ---------------- Context ----------------
     context = {
         "total_clients": total_clients,
@@ -814,6 +823,8 @@ def admin_dashboard(request):
         "todays_summary": todays_summary,
         "monthly_progress": monthly_progress,
         "monthly_summary": monthly_summary,
+        "notifications": notifications,
+        "unread_notifications": unread_notifications,
     }
 
     return render(request, "dashboards/admin_dashboard.html", context)
@@ -2062,18 +2073,15 @@ def calling_workspace(request, list_id):
 @login_required
 def employee_calendar(request):
     employee = request.user.employee
-    today = timezone.now().date()
-
-    # fetch all events assigned to this employee
-    events = CalendarEvent.objects.filter(employee=employee).order_by("scheduled_time")
-
-    # split into today's events and future events
-    todays_events = events.filter(scheduled_time__date=today)
-    upcoming_events = events.filter(scheduled_time__date__gt=today)
+    now_ts = timezone.now()
+    events = CalendarEvent.objects.filter(employee=employee)
 
     context = {
-        "todays_events": todays_events,
-        "upcoming_events": upcoming_events,
+        "todays_events": events.filter(scheduled_time__date=now_ts.date()).order_by("scheduled_time"),
+        "upcoming_events": events.filter(scheduled_time__date__gt=now_ts.date()).order_by("scheduled_time"),
+        "pending_count": events.filter(status="pending").count(),
+        "missed_count": events.filter(status="pending", scheduled_time__lt=now_ts).count(),
+        "completed_count": events.filter(status="completed").count(),
     }
     return render(request, "calendar/employee_calendar.html", context)
 
@@ -2093,7 +2101,14 @@ def employee_calendar_page(request):
     Renders the page containing the FullCalendar instance.
     FullCalendar will call the events JSON endpoint to fetch events.
     """
-    return render(request, "calendar/employee_calendar.html")
+    now_ts = timezone.now()
+    events = CalendarEvent.objects.filter(employee=request.user.employee)
+    context = {
+        "pending_count": events.filter(status="pending").count(),
+        "missed_count": events.filter(status="pending", scheduled_time__lt=now_ts).count(),
+        "completed_count": events.filter(status="completed").count(),
+    }
+    return render(request, "calendar/employee_calendar.html", context)
 
 
 # Events JSON API used by FullCalendar
@@ -2121,6 +2136,9 @@ def calendar_events_json(request):
         except Exception:
             pass
 
+    statuses_param = request.GET.get("statuses")
+    sources_param = request.GET.get("sources")
+
     if start:
         try:
             start_dt = parse_datetime(start)
@@ -2141,15 +2159,46 @@ def calendar_events_json(request):
 
     # Build JSON in FullCalendar expected format
     events = []
+    now_ts = timezone.now()
+    allowed_statuses = None
+    if statuses_param:
+        try:
+            allowed_statuses = [s for s in statuses_param.split(',') if s]
+        except Exception:
+            allowed_statuses = None
+
+    allowed_sources = None
+    if sources_param:
+        try:
+            allowed_sources = [s for s in sources_param.split(',') if s]
+        except Exception:
+            allowed_sources = None
+
     for e in events_qs:
+        source = "manual"
+        if e.related_prospect and getattr(e.related_prospect, "calling_list_id", None):
+            source = "calling_list"
+
+        status_val = e.status
+        if e.status == "pending" and e.scheduled_time and e.scheduled_time < now_ts:
+            status_val = "missed"
+
+        # filter by source/status if provided
+        if allowed_sources is not None and source not in allowed_sources:
+            continue
+        if allowed_statuses is not None and status_val not in allowed_statuses:
+            continue
+
         events.append({
             "id": e.id,
             "title": e.title,
             "start": e.scheduled_time.isoformat(),
-            # Only include end if you add duration support later
+            "end": e.end_time.isoformat() if e.end_time else None,
             "extendedProps": {
                 "type": e.type,
                 "notes": e.notes,
+                "status": status_val,
+                "source": source,
                 "related_prospect_id": e.related_prospect.id if e.related_prospect else None,
                 "related_prospect_name": e.related_prospect.name if e.related_prospect else None,
             }
@@ -2189,46 +2238,57 @@ def calendar_events_json(request):
                             "id": f"birth-{obj.__class__.__name__}-{obj.id}-{yr}",
                             "title": f"{label_prefix}: {getattr(obj, 'name', getattr(obj, 'client', ''))}",
                             "start": bday_dt.isoformat(),
+                            "end": None,
                             "extendedProps": {
                                 "type": "birthday",
+                                "status": "pending",
+                                "source": "birthday",
                                 "notes": "Auto-generated birthday call",
                                 "related_prospect_id": obj.id if obj.__class__.__name__ == 'Prospect' else None,
                             }
                         })
 
         if not types_param or 'birthday' in (types_param or ''):
-            add_birthdays(Client.objects.filter(date_of_birth__isnull=False))
-            add_birthdays(Prospect.objects.filter(date_of_birth__isnull=False), label_prefix="Prospect Birthday")
+            add_birthdays(Client.objects.filter(date_of_birth__isnull=False, mapped_to=employee))
+            add_birthdays(Prospect.objects.filter(date_of_birth__isnull=False, assigned_to=employee), label_prefix="Prospect Birthday")
     except Exception:
         pass
 
     return JsonResponse(events, safe=False)
 
 
-from django.views.decorators.csrf import csrf_exempt
 import json
 from django.http import JsonResponse
+
+
 @login_required
-@csrf_exempt
+@require_POST
 def update_calendar_event(request):
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            event_id = data.get("id")
-            start = data.get("start")
-            end = data.get("end")
+    """Handle drag/resize updates from FullCalendar with CSRF protection."""
+    try:
+        data = json.loads(request.body)
+        event_id = data.get("id")
+        start = data.get("start")
+        end = data.get("end")
 
-            event = CalendarEvent.objects.get(id=event_id, employee=request.user.employee)
-            if start:
-                event.scheduled_time = start
-            if end:
-                event.reminder_time = end  # or use duration if you want
-            event.save()
+        event = CalendarEvent.objects.get(id=event_id, employee=request.user.employee)
 
-            return JsonResponse({"success": True})
-        except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)}, status=400)
-    return JsonResponse({"success": False}, status=405)
+        # parse datetimes safely and make them aware
+        if start:
+            dt = parse_datetime(start)
+            if dt and timezone.is_naive(dt):
+                dt = timezone.make_aware(dt)
+            event.scheduled_time = dt or event.scheduled_time
+        if end:
+            end_dt = parse_datetime(end)
+            if end_dt and timezone.is_naive(end_dt):
+                end_dt = timezone.make_aware(end_dt)
+            event.end_time = end_dt or event.end_time
+
+        event.save()
+        return JsonResponse({"success": True})
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=400)
 
 
 @login_required
@@ -2243,6 +2303,7 @@ def create_calendar_event(request):
         data = json.loads(request.body)
         title = data.get("title") or "Untitled"
         scheduled_time = data.get("scheduled_time")
+        end_time = data.get("end_time") or data.get("end")
         ev_type = data.get("type") or "task"
         notes = data.get("notes") or ""
         related_prospect_id = data.get("related_prospect_id")
@@ -2273,12 +2334,19 @@ def create_calendar_event(request):
             except Exception:
                 client = None
 
+        end_dt = None
+        if end_time:
+            end_dt = parse_datetime(end_time)
+            if end_dt and timezone.is_naive(end_dt):
+                end_dt = timezone.make_aware(end_dt)
+
         event = CalendarEvent.objects.create(
             employee=request.user.employee,
             title=title,
             type=ev_type,
             notes=notes,
             scheduled_time=scheduled_dt,
+            end_time=end_dt,
             related_prospect=related_prospect,
             client=client,
         )
@@ -2287,9 +2355,11 @@ def create_calendar_event(request):
             "id": event.id,
             "title": event.title,
             "start": event.scheduled_time.isoformat(),
+            "end": event.end_time.isoformat() if event.end_time else None,
             "extendedProps": {
                 "type": event.type,
                 "notes": event.notes,
+                "status": event.status,
                 "related_prospect_id": event.related_prospect.id if event.related_prospect else None,
                 "related_prospect_name": event.related_prospect.name if event.related_prospect else None,
             }
@@ -2349,6 +2419,7 @@ def update_calendar_event_details(request):
         scheduled_time = data.get('scheduled_time')
         ev_type = data.get('type')
         notes = data.get('notes')
+        end_time = data.get('end_time') or data.get('end')
 
         if title is not None:
             event.title = title
@@ -2362,15 +2433,23 @@ def update_calendar_event_details(request):
                 dt = timezone.make_aware(dt)
             event.scheduled_time = dt
 
+        if end_time is not None:
+            end_dt = parse_datetime(end_time)
+            if end_dt and timezone.is_naive(end_dt):
+                end_dt = timezone.make_aware(end_dt)
+            event.end_time = end_dt
+
         event.save()
 
         return JsonResponse({'success': True, 'event': {
             'id': event.id,
             'title': event.title,
             'start': event.scheduled_time.isoformat(),
+            'end': event.end_time.isoformat() if event.end_time else None,
             'extendedProps': {
                 'type': event.type,
                 'notes': event.notes,
+                'status': event.status,
             }
         }})
     except Exception as e:
