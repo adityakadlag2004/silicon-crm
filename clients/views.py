@@ -754,42 +754,76 @@ def admin_dashboard(request):
     motor_sales = monthly_sales_qs.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
     pms_sales = monthly_sales_qs.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
 
-    # ---------------- Section 1: Today's Summary ----------------
-    todays_summary = []
-    for emp in Employee.objects.all():
-        emp_sales = monthly_sales_qs.filter(employee=emp, created_at__date=today)
-        todays_summary.append({
+    # ---------------- Targets ----------------
+    daily_targets = Target.objects.filter(target_type="daily")
+    monthly_targets = Target.objects.filter(target_type="monthly")
+    daily_target_map = {t.product: t.target_value for t in daily_targets}
+    monthly_target_map = {t.product: t.target_value for t in monthly_targets}
+
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
+
+    # ---------------- Section 1: Company (self) performance vs targets ----------------
+    overall_daily_progress = []
+    for target in daily_targets:
+        achieved = Sale.objects.filter(product=target.product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+        progress = (achieved / target.target_value * 100) if target.target_value else 0
+        overall_daily_progress.append({"product": target.product, "achieved": achieved, "target": target.target_value, "progress": progress})
+
+    overall_monthly_progress = []
+    for target in monthly_targets:
+        achieved = monthly_sales_qs.filter(product=target.product).aggregate(total=Sum("amount"))['total'] or 0
+        progress = (achieved / target.target_value * 100) if target.target_value else 0
+        overall_monthly_progress.append({"product": target.product, "achieved": achieved, "target": target.target_value, "progress": progress})
+
+    employees = Employee.objects.select_related("user").all()
+
+    products = [p for p, _ in Sale.PRODUCT_CHOICES]
+
+    # ---------------- Section 2: Daily employee performance (product-wise) ----------------
+    daily_employee_product = []
+    for emp in employees:
+        emp_entry = {
             "employee": emp.user.username if hasattr(emp, "user") else emp.name,
-            "sales": emp_sales.aggregate(total=Sum("amount"))["total"] or 0,
-            "points": emp_sales.aggregate(total=Sum("points"))["total"] or 0,
-            "new_clients": Client.objects.filter(mapped_to=emp, created_at__date=today).count(),
-        })
+            "products": []
+        }
+        for product in products:
+            achieved = Sale.objects.filter(employee=emp, product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+            target = daily_target_map.get(product, 0)
+            progress = (achieved / target * 100) if target else 0
+            emp_entry["products"].append({
+                "product": product,
+                "achieved": achieved,
+                "target": target,
+                "progress": progress,
+            })
+        daily_employee_product.append(emp_entry)
 
-    # ---------------- Section 2: Monthly Progress (Employee × Product) ----------------
-    PRODUCT_MAP = {
-        "SIP": "sip",
-        "Lumsum": "lumpsum",
-        "Life Insurance": "life",
-        "Health Insurance": "health",
-        "Motor Insurance": "motor",
-        "PMS": "pms",
-    }
-
-    monthly_progress = []
-    for emp in Employee.objects.all():
-        row = {"employee": emp.user.username if hasattr(emp, "user") else emp.name}
-        total_emp_sales = 0
-        for product, key in PRODUCT_MAP.items():
-            amt = monthly_sales_qs.filter(
+    # ---------------- Section 3: Weekly employee performance (product-wise) ----------------
+    weekly_employee_product = []
+    for emp in employees:
+        emp_entry = {
+            "employee": emp.user.username if hasattr(emp, "user") else emp.name,
+            "products": []
+        }
+        for product in products:
+            achieved = Sale.objects.filter(
                 employee=emp,
                 product=product,
-            ).aggregate(total=Sum("amount"))["total"] or 0
-            row[key] = amt
-            total_emp_sales += amt
-        row["total"] = total_emp_sales
-        monthly_progress.append(row)
+                date__range=(week_start, week_end)
+            ).aggregate(total=Sum("amount"))['total'] or 0
+            target_daily = daily_target_map.get(product, 0)
+            target = target_daily * 7 if target_daily else 0
+            progress = (achieved / target * 100) if target else 0
+            emp_entry["products"].append({
+                "product": product,
+                "achieved": achieved,
+                "target": target,
+                "progress": progress,
+            })
+        weekly_employee_product.append(emp_entry)
 
-    # ---------------- Section 3: Monthly Cumulative Summary ----------------
+    # ---------------- Monthly Cumulative Summary ----------------
     monthly_summary = {
         "total_clients": Client.objects.filter(created_at__year=year, created_at__month=month).count(),
         "total_sales": total_sales,
@@ -820,8 +854,10 @@ def admin_dashboard(request):
         "health_sales": health_sales,
         "motor_sales": motor_sales,
         "pms_sales": pms_sales,
-        "todays_summary": todays_summary,
-        "monthly_progress": monthly_progress,
+        "overall_daily_progress": overall_daily_progress,
+        "overall_monthly_progress": overall_monthly_progress,
+        "daily_employee_product": daily_employee_product,
+        "weekly_employee_product": weekly_employee_product,
         "monthly_summary": monthly_summary,
         "notifications": notifications,
         "unread_notifications": unread_notifications,

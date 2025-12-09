@@ -96,6 +96,20 @@
     background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
     color: #1a202c;
   }
+  .modern-card {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+    padding: 1.25rem 1rem;
+    margin-bottom: 1rem;
+    transition: box-shadow 0.2s;
+  }
+  .modern-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
+  .modern-progress { height: 16px; border-radius: 10px; background: #edf2f7; overflow: hidden; }
+  .modern-progress-bar { height: 100%; border-radius: 10px; transition: width 0.5s ease; color: #fff; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; }
+  .bar-green { background: linear-gradient(90deg, #48bb78 0%, #38a169 100%); }
+  .bar-blue { background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%); }
+  .bar-amber { background: linear-gradient(90deg, #f6ad55 0%, #ed8936 100%); }
   
   .modern-table {
     width: 100%;
@@ -221,96 +235,102 @@
 
 <hr class="my-4" />
 
-<!-- ================== Section 1: Today’s Summary ================== -->
-<h4>Today's Summary (Per Employee)</h4>
-<div class="table-responsive mb-5" style="overflow-x:auto;">
-  {% for row in todays_summary %}
-    <div class="card mb-2" style="border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,0.05);">
-      <div class="card-header" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);color:#2d3748;cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#today-{{ forloop.counter }}" aria-expanded="false" aria-controls="today-{{ forloop.counter }}">
-        <strong>{{ row.employee }}</strong>
-      </div>
-      <div id="today-{{ forloop.counter }}" class="collapse">
-        <div class="card-body p-2">
-          <table class="table table-bordered text-center mb-0">
-            <thead class="table-light">
-              <tr>
-                <th>Sales (₹)</th>
-                <th>Points</th>
-                <th>New Clients</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>₹{{ row.sales }}</td>
-                <td>{{ row.points }}</td>
-                <td>{{ row.new_clients }}</td>
-              </tr>
-            </tbody>
-          </table>
+<!-- Section 1: Self performance vs targets -->
+<h4 style="font-weight:700;color:#2d3748;">Company Progress vs Targets</h4>
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
+    <div class="modern-card">
+      <h6 style="font-weight:700;color:#38a169;">Daily Progress</h6>
+      {% for row in overall_daily_progress %}
+        <div class="mb-3">
+          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
+            <span>{{ row.product }}</span>
+            <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
+          </div>
+          <div class="modern-progress mt-1">
+            <div class="modern-progress-bar bar-green" style="width: {{ row.progress|floatformat:0 }}%">{{ row.progress|floatformat:0 }}%</div>
+          </div>
         </div>
-      </div>
+      {% empty %}
+        <p class="text-muted mb-0">No daily targets set.</p>
+      {% endfor %}
     </div>
-  {% empty %}
-    <div class="card mb-2"><div class="card-body">No data for today</div></div>
-  {% endfor %}
-</div>
-<hr class="my-4" />
-<!-- ================== Section 2: Monthly Sales Progress ================== -->
-<h4>Monthly Sales Progress (Employee × Product)</h4>
-<div class="table-responsive mb-5" style="overflow-x:auto;">
-  {% for row in monthly_progress %}
-    <div class="card mb-2" style="border-radius:10px;box-shadow:0 1px 6px rgba(0,0,0,0.05);">
-      <div class="card-header" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);color:#2d3748;cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#employee-{{ forloop.counter }}" aria-expanded="false" aria-controls="employee-{{ forloop.counter }}">
-        <strong>{{ row.employee }}</strong>
-      </div>
-      <div id="employee-{{ forloop.counter }}" class="collapse">
-        <div class="card-body p-2">
-          <table class="table table-bordered text-center mb-0">
-            <thead class="table-light">
-              <tr>
-                <th>SIP (₹)</th>
-                <th>Lumpsum (₹)</th>
-                <th>Life Insurance (₹)</th>
-                <th>Health Insurance (₹)</th>
-                <th>Motor Insurance (₹)</th>
-                <th>PMS (₹)</th>
-                <th>Total (₹)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>₹{{ row.sip }}</td>
-                <td>₹{{ row.lumpsum }}</td>
-                <td>₹{{ row.life }}</td>
-                <td>₹{{ row.health }}</td>
-                <td>₹{{ row.motor }}</td>
-                <td>₹{{ row.pms }}</td>
-                <td><strong>₹{{ row.total }}</strong></td>
-              </tr>
-            </tbody>
-          </table>
+  </div>
+  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
+    <div class="modern-card">
+      <h6 style="font-weight:700;color:#3182ce;">Monthly Progress</h6>
+      {% for row in overall_monthly_progress %}
+        <div class="mb-3">
+          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
+            <span>{{ row.product }}</span>
+            <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
+          </div>
+          <div class="modern-progress mt-1">
+            <div class="modern-progress-bar bar-blue" style="width: {{ row.progress|floatformat:0 }}%">{{ row.progress|floatformat:0 }}%</div>
+          </div>
         </div>
-      </div>
+      {% empty %}
+        <p class="text-muted mb-0">No monthly targets set.</p>
+      {% endfor %}
     </div>
-  {% empty %}
-    <div class="card mb-2"><div class="card-body">No data available for this month</div></div>
-  {% endfor %}
+  </div>
 </div>
-<hr class="my-4" />
-<!-- ================== Section 3: Monthly Cumulative Summary ================== -->
-<!-- Insert into your admin dashboard template where links/cards are shown -->
-<!-- ADMIN PAST PERFORMANCE SECTION -->
-<!-- Admin past performance - plain style -->
-<div style="border-top:1px solid #e6eef2; padding-top:2rem;">
-  <h2 style="font-size:2rem; font-weight:700; color:#2d3748; margin:0 0 1rem 0;">
-    Admin Past Performance (Cumulative)
-  </h2>
 
+<!-- Section 2: Daily employee performance (product-wise) -->
+<h4 style="font-weight:700;color:#2d3748;" class="mt-4">Daily Employee Performance (Product-wise)</h4>
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  {% for row in daily_employee_product %}
+    <div class="col-md-4" style="flex:1 1 260px;min-width:240px;">
+      <div class="modern-card" style="padding:1rem 0.8rem;">
+        <div style="font-weight:700;color:#2b6cb0; margin-bottom:0.4rem;">{{ row.employee }}</div>
+        {% for p in row.products %}
+          <div class="mb-2">
+            <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:#4a5568;">
+              <span>{{ p.product }}</span>
+              <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
+            </div>
+            <div class="modern-progress mt-1">
+              <div class="modern-progress-bar bar-amber" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">No employees found.</p>
+  {% endfor %}
+</div>
+
+<!-- Section 3: Weekly employee performance (product-wise) -->
+<h4 style="font-weight:700;color:#2d3748;" class="mt-4">Weekly Employee Performance (Product-wise)</h4>
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  {% for row in weekly_employee_product %}
+    <div class="col-md-4" style="flex:1 1 260px;min-width:240px;">
+      <div class="modern-card" style="padding:1rem 0.8rem;">
+        <div style="font-weight:700;color:#2b6cb0; margin-bottom:0.4rem;">{{ row.employee }}</div>
+        {% for p in row.products %}
+          <div class="mb-2">
+            <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:#4a5568;">
+              <span>{{ p.product }}</span>
+              <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
+            </div>
+            <div class="modern-progress mt-1">
+              <div class="modern-progress-bar bar-blue" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">No employees found.</p>
+  {% endfor %}
+</div>
+
+<div style="border-top:1px solid #e6eef2; padding-top:2rem;">
+  <h2 style="font-size:2rem; font-weight:700; color:#2d3748; margin:0 0 1rem 0;">Admin Past Performance (Cumulative)</h2>
   <div class="mt-3">
-    <!-- plain link (browser default) -->
     <a href="{% url 'clients:admin_past_performance' %}" class="dashboard-link">View Detailed Past Performance</a>
   </div>
-  
 </div>
 <hr class="my-4" />
 
