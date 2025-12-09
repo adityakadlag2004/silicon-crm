@@ -1,7 +1,7 @@
 {
   "name": "KI BackOffice",
   "short_name": "KI CRM",
-  "start_url": "/clients/admin_dashboard/",
+  "start_url": "/clients/login/",
   "display": "standalone",
   "background_color": "#f8f9fa",
   "theme_color": "#f6e05e",

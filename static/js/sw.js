@@ -1,7 +1,5 @@
-const CACHE_NAME = 'ki-crm-shell-v1';
+const CACHE_NAME = 'ki-crm-shell-v2';
 const ASSETS = [
-  '/',
-  '/clients/admin_dashboard/',
   '/static/manifest.json',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png'
@@ -24,11 +22,22 @@ self.addEventListener('fetch', event => {
   const { request } = event;
   if (request.method !== 'GET') return;
 
+  const isStatic = request.url.includes('/static/') ||
+    ['style', 'script', 'image', 'font'].includes(request.destination);
+
+  if (!isStatic) {
+    event.respondWith(fetch(request).catch(() => caches.match(request)));
+    return;
+  }
+
   event.respondWith(
-    caches.match(request).then(cached => cached || fetch(request).then(response => {
-      const clone = response.clone();
-      caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-      return response;
-    }).catch(() => cached))
+    caches.match(request).then(cached => {
+      if (cached) return cached;
+      return fetch(request).then(response => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+        return response;
+      });
+    })
   );
 });
