@@ -301,10 +301,10 @@
   {% endfor %}
 </div>
 
-<!-- Section 3: Weekly employee performance (product-wise) -->
-<h4 style="font-weight:700;color:#2d3748;" class="mt-4">Weekly Employee Performance (Product-wise)</h4>
+<!-- Section 3: Monthly employee performance (product-wise) -->
+<h4 style="font-weight:700;color:#2d3748;" class="mt-4">Monthly Employee Performance (Product-wise)</h4>
 <div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
-  {% for row in weekly_employee_product %}
+  {% for row in monthly_employee_product %}
     <div class="col-md-4" style="flex:1 1 260px;min-width:240px;">
       <div class="modern-card" style="padding:1rem 0.8rem;">
         <div style="font-weight:700;color:#2b6cb0; margin-bottom:0.4rem;">{{ row.employee }}</div>

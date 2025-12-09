@@ -760,9 +760,6 @@ def admin_dashboard(request):
     daily_target_map = {t.product: t.target_value for t in daily_targets}
     monthly_target_map = {t.product: t.target_value for t in monthly_targets}
 
-    week_start = today - timedelta(days=today.weekday())
-    week_end = week_start + timedelta(days=6)
-
     # ---------------- Section 1: Company (self) performance vs targets ----------------
     overall_daily_progress = []
     for target in daily_targets:
@@ -799,8 +796,8 @@ def admin_dashboard(request):
             })
         daily_employee_product.append(emp_entry)
 
-    # ---------------- Section 3: Weekly employee performance (product-wise) ----------------
-    weekly_employee_product = []
+    # ---------------- Section 3: Monthly employee performance (product-wise) ----------------
+    monthly_employee_product = []
     for emp in employees:
         emp_entry = {
             "employee": emp.user.username if hasattr(emp, "user") else emp.name,
@@ -810,10 +807,10 @@ def admin_dashboard(request):
             achieved = Sale.objects.filter(
                 employee=emp,
                 product=product,
-                date__range=(week_start, week_end)
+                date__year=year,
+                date__month=month
             ).aggregate(total=Sum("amount"))['total'] or 0
-            target_daily = daily_target_map.get(product, 0)
-            target = target_daily * 7 if target_daily else 0
+            target = monthly_target_map.get(product, 0)
             progress = (achieved / target * 100) if target else 0
             emp_entry["products"].append({
                 "product": product,
@@ -821,7 +818,7 @@ def admin_dashboard(request):
                 "target": target,
                 "progress": progress,
             })
-        weekly_employee_product.append(emp_entry)
+        monthly_employee_product.append(emp_entry)
 
     # ---------------- Monthly Cumulative Summary ----------------
     monthly_summary = {
@@ -857,7 +854,7 @@ def admin_dashboard(request):
         "overall_daily_progress": overall_daily_progress,
         "overall_monthly_progress": overall_monthly_progress,
         "daily_employee_product": daily_employee_product,
-        "weekly_employee_product": weekly_employee_product,
+        "monthly_employee_product": monthly_employee_product,
         "monthly_summary": monthly_summary,
         "notifications": notifications,
         "unread_notifications": unread_notifications,
