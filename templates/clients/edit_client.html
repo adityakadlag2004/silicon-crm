@@ -3,51 +3,28 @@
 
 {% block content %}
 <style>
-  .modern-card {
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-    padding: 1.6rem;
-    margin: 1.5rem auto;
-    max-width: 1100px;
-  }
-  .section {
-    border-radius: 10px;
-    padding: 0.9rem;
-    margin-bottom: 1rem;
-    background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
-  }
-  .section h4 {
-    margin: 0 0 0.6rem 0;
-    font-size: 1rem;
-    font-weight: 700;
-    color: #2d3748;
-  }
-  .form-label { font-weight: 600; color: #4a5568; margin-bottom: 0.25rem; display:block; }
-  .form-control, select {
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    padding: 0.6rem 0.8rem;
-    background: #fff;
-    font-size: 0.95rem;
-    color: #2d3748;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  .row-gap { display:grid; grid-template-columns: repeat(3,1fr); gap: 0.9rem; }
-  .row-gap-2 { display:grid; grid-template-columns: repeat(2,1fr); gap: 0.9rem; }
-  .full-row { width: 100%; }
+  .modern-card { background:#fff; border-radius:16px; box-shadow:0 2px 14px rgba(0,0,0,0.06); padding:1.25rem; margin:1.25rem auto; max-width:1100px; }
+  .page-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem; }
+  .page-head h2 { margin:0; font-size:1.25rem; font-weight:800; color:#2d3748; }
+  .section { border-radius:12px; padding:1rem; margin-bottom:0.9rem; background:linear-gradient(180deg,#ffffff 0%,#f8fafc 100%); border:1px solid #edf2f7; }
+  .section h4 { margin:0 0 0.5rem 0; font-size:1rem; font-weight:800; color:#2d3748; display:flex; align-items:center; gap:0.4rem; }
+  .form-label { font-weight:700; color:#4a5568; margin-bottom:0.25rem; display:block; font-size:0.95rem; }
+  .form-control, select { border-radius:10px; border:1px solid #e2e8f0; padding:0.55rem 0.75rem; background:#fff; font-size:0.95rem; color:#2d3748; width:100%; box-sizing:border-box; }
+  .section input:not([type="checkbox"]), .section select, .section textarea { border-radius:10px; border:1px solid #e2e8f0; padding:0.55rem 0.75rem; background:#fff; font-size:0.95rem; color:#2d3748; width:100%; box-sizing:border-box; }
+  .section textarea { min-height:90px; resize:vertical; }
+  .grid-2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:1rem; }
+  .grid-3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; }
   .muted { color:#718096; font-size:0.9rem; margin-top:0.25rem; display:block; }
-  .btn-save { background: linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%); color:#1a202c; border:none; padding:0.6rem 1rem; border-radius:8px; font-weight:700; }
-  .btn-cancel { background:#e2e8f0; color:#2d3748; border:none; padding:0.55rem 0.9rem; border-radius:8px; font-weight:700; }
-  @media (max-width:900px) {
-    .row-gap, .row-gap-2 { grid-template-columns: 1fr; }
-  }
+  .btn-save { background: linear-gradient(90deg,#f6e05e 0%,#fbd38d 100%); color:#1a202c; border:none; padding:0.65rem 1.15rem; border-radius:10px; font-weight:800; box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+  .btn-cancel { background:#f8fafc; color:#2d3748; border:1px solid #e2e8f0; padding:0.6rem 1.05rem; border-radius:10px; font-weight:800; }
+  @media (max-width: 720px) { .page-head { flex-direction:column; align-items:flex-start; } }
 </style>
 
 <div class="modern-card">
-  <h2>Edit Client — {{ client.name }}</h2>
+  <div class="page-head">
+    <h2>Edit Client — {{ client.name }}</h2>
+    <a href="{% if request.user.employee and request.user.employee.role == 'admin' %}{% url 'clients:all_clients' %}{% else %}{% url 'clients:my_clients' %}{% endif %}" class="btn-cancel">Back</a>
+  </div>
   {% if messages %}
     {% for m in messages %}
       <div class="alert alert-{{ m.tags }}">{{ m }}</div>
@@ -60,7 +37,7 @@
     <!-- General -->
     <div class="section">
       <h4>General</h4>
-      <div class="row-gap-2">
+      <div class="grid-2">
         <div>
           <label class="form-label">Name</label>
           {{ form.name }}
@@ -71,7 +48,7 @@
         </div>
       </div>
 
-      <div class="row-gap">
+      <div class="grid-3" style="margin-top:0.5rem;">
         <div>
           <label class="form-label">Phone</label>
           {{ form.phone }}
@@ -95,7 +72,7 @@
         </div>
       </div>
 
-      <div>
+      <div style="margin-top:0.6rem;">
         <label class="form-label">Address</label>
         {{ form.address }}
       </div>
@@ -104,7 +81,7 @@
     <!-- SIP -->
     <div class="section">
       <h4>SIP</h4>
-      <div class="row-gap">
+      <div class="grid-3">
         <div><label class="form-label">SIP Status</label>{{ form.sip_status }}</div>
         <div><label class="form-label">SIP Amount (₹)</label>{{ form.sip_amount }}</div>
         <div><label class="form-label">SIP Top-up (₹)</label>{{ form.sip_topup }}</div>
@@ -114,7 +91,7 @@
     <!-- Life Insurance -->
     <div class="section">
       <h4>Life Insurance</h4>
-      <div class="row-gap">
+      <div class="grid-3">
         <div><label class="form-label">Life Status</label>{{ form.life_status }}</div>
         <div><label class="form-label">Life Cover (₹)</label>{{ form.life_cover }}</div>
         <div><label class="form-label">Life Product</label>{{ form.life_product }}</div>
@@ -124,18 +101,20 @@
     <!-- Health Insurance -->
     <div class="section">
       <h4>Health Insurance</h4>
-      <div class="row-gap">
+      <div class="grid-3">
         <div><label class="form-label">Health Status</label>{{ form.health_status }}</div>
         <div><label class="form-label">Health Cover (₹)</label>{{ form.health_cover }}</div>
         <div><label class="form-label">Health Top-up (₹)</label>{{ form.health_topup }}</div>
-        <div style="grid-column:1/-1;"><label class="form-label">Health Product</label>{{ form.health_product }}</div>
+      </div>
+      <div style="margin-top:0.7rem;">
+        <label class="form-label">Health Product</label>{{ form.health_product }}
       </div>
     </div>
 
     <!-- Motor Insurance -->
     <div class="section">
       <h4>Motor Insurance</h4>
-      <div class="row-gap">
+      <div class="grid-3">
         <div><label class="form-label">Motor Status</label>{{ form.motor_status }}</div>
         <div><label class="form-label">Insured Value (₹)</label>{{ form.motor_insured_value }}</div>
         <div><label class="form-label">Motor Product</label>{{ form.motor_product }}</div>
@@ -145,14 +124,14 @@
     <!-- PMS -->
     <div class="section">
       <h4>PMS</h4>
-      <div class="row-gap">
+      <div class="grid-3">
         <div><label class="form-label">PMS Status</label>{{ form.pms_status }}</div>
         <div><label class="form-label">PMS Amount (₹)</label>{{ form.pms_amount }}</div>
         <div><label class="form-label">PMS Start Date</label>{{ form.pms_start_date }}</div>
       </div>
     </div>
 
-    <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
+    <div style="display:flex;justify-content:flex-end;gap:0.6rem;">
       <button type="submit" class="btn-save">Save Changes</button>
       <a href="{% if request.user.employee and request.user.employee.role == 'admin' %}{% url 'clients:all_clients' %}{% else %}{% url 'clients:my_clients' %}{% endif %}" class="btn-cancel">Cancel</a>
     </div>
