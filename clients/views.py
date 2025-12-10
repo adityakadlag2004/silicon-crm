@@ -1819,6 +1819,36 @@ def admin_past_month_performance(request, year, month):
     return render(request, "dashboards/admin_past_month_performance.html", context)
 
 
+@login_required
+def notifications_json(request):
+    notes = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:20]
+    data = [
+        {
+            "id": n.id,
+            "title": n.title,
+            "body": n.body,
+            "link": n.link,
+            "created_at": n.created_at.strftime("%b %d, %I:%M %p"),
+            "is_read": n.is_read,
+        }
+        for n in notes
+    ]
+    unread_count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+    return JsonResponse({"notifications": data, "unread": unread_count})
+
+
+@login_required
+def notifications_mark_all_read(request):
+    Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+    return JsonResponse({"status": "ok"})
+
+
+@login_required
+def notifications_clear(request):
+    Notification.objects.filter(recipient=request.user).delete()
+    return JsonResponse({"status": "ok"})
+
+
 import io
 from django.contrib import messages
 from .models import CallingList, Prospect
