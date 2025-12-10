@@ -1,46 +1,57 @@
 {% extends "base.html" %}
+{% block title %}Month Detail — {{ month_label }}{% endblock %}
 {% block content %}
-<div class="dashboard-section-title">Month Detail — {{ month_label }}</div>
+<style>
+  .section-title { font-size: 1.2rem; font-weight: 700; color: #2d3748; margin: 1.3rem 0 0.8rem; }
+  .modern-card { background:#fff; border-radius:16px; box-shadow:0 2px 14px rgba(0,0,0,0.08); padding:1.2rem; margin-bottom:1rem; }
+  .mini { font-size:0.92rem; color:#4a5568; }
+  .bar { height:12px; background:#edf2f7; border-radius:8px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:8px; background:linear-gradient(90deg,#4299e1 0%, #3182ce 100%); }
+  .chip { display:inline-flex; align-items:center; gap:0.35rem; padding:0.35rem 0.75rem; border-radius:999px; background:#f6e05e; color:#2d3748; font-weight:700; }
+  @media (max-width: 768px) { .grid-two { display:grid; grid-template-columns:1fr; gap:1rem; } }
+  @media (min-width: 769px) { .grid-two { display:grid; grid-template-columns:2fr 1fr; gap:1rem; } }
+</style>
 
-<div class="mt-3">
-  <a href="{% url 'clients:admin_past_performance' %}" class="dashboard-link">Back to Admin Past Performance</a>
+<div class="section-title">{{ month_label }}</div>
+<div class="modern-card" style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+  <div class="chip">Period: {{ month_label }}</div>
+  <a href="{% url 'clients:admin_past_performance' %}" class="dashboard-link" style="padding:0.45rem 0.9rem;font-size:0.95rem;">Back to Past Performance</a>
 </div>
 
-<div class="row mt-4">
-  <div class="col-md-8">
-    <h5>Product-wise Sales</h5>
-    <table class="table">
-      <thead><tr><th>Product</th><th>Total Amount</th><th>Total Points</th><th>Target (sum)</th><th>Achieved (sum)</th></tr></thead>
-      <tbody>
-        {% for p in products %}
-        <tr>
-          <td>{{ p.product }}</td>
-          <td>{{ p.total_amount|floatformat:2 }}</td>
-          <td>{{ p.total_points }}</td>
-          <td>{% if p.target_value %}{{ p.target_value|floatformat:2 }}{% else %}-{% endif %}</td>
-          <td>{% if p.achieved_value %}{{ p.achieved_value|floatformat:2 }}{% else %}-{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="grid-two">
+  <div class="modern-card">
+    <div class="section-title" style="margin-top:0;">Product-wise Sales</div>
+    {% for p in products %}
+      <div style="margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-weight:700;color:#2d3748;">{{ p.product }}</div>
+          <div class="mini">₹{{ p.total_amount|floatformat:0 }} • {{ p.total_points }} pts</div>
+        </div>
+        {% if p.target_value %}
+          <div class="mini">Target: ₹{{ p.target_value|floatformat:0 }} | Achieved: ₹{{ p.achieved_value|floatformat:0 }}</div>
+          <div class="bar mt-1"><div class="bar-fill" style="width: {{ p.progress|floatformat:0 }}%"></div></div>
+        {% endif %}
+      </div>
+    {% empty %}
+      <p class="text-muted mb-0">No product data for this month.</p>
+    {% endfor %}
   </div>
 
-  <div class="col-md-4">
-    <h5>Top Performers — {{ month_label }}</h5>
+  <div class="modern-card">
+    <div class="section-title" style="margin-top:0;">Top Performers</div>
     {% if top_performers %}
-      <ol>
+      <div style="display:grid; gap:0.7rem;">
         {% for t in top_performers %}
-          <li>
-            <strong>{{ t.full_name }}</strong><br/>
-            Points: {{ t.total_points }}<br/>
-            Sales: {{ t.total_amount|floatformat:2 }}
-          </li>
+          <div style="border:1px solid #edf2f7; border-radius:12px; padding:0.8rem; box-shadow:0 1px 6px rgba(0,0,0,0.04);">
+            <div style="font-weight:700;color:#2d3748;">{{ t.full_name }}</div>
+            <div class="mini">Points: {{ t.total_points }}</div>
+            <div class="mini">Sales: ₹{{ t.total_amount|floatformat:0 }}</div>
+          </div>
         {% endfor %}
-      </ol>
+      </div>
     {% else %}
-      <p>No performers for this month.</p>
+      <p class="text-muted mb-0">No performers for this month.</p>
     {% endif %}
   </div>
 </div>
-
 {% endblock %}
