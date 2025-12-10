@@ -673,16 +673,6 @@ def login_view(request):
         if user:
             login(request, user)
 
-            # 🔥 Auto-recalc points for this user
-            if hasattr(user, "employee"):
-                if user.employee.role == "admin":
-                    sales = Sale.objects.all()
-                else:
-                    sales = Sale.objects.filter(employee=user.employee)
-                for s in sales:
-                    s.compute_points()
-                    s.save()
-
             # ✅ Redirect based on role
             if hasattr(user, "employee"):
                 role = user.employee.role.lower()
@@ -1304,6 +1294,8 @@ def admin_add_sale(request):
             if not sale.employee_id:
                 form.add_error("employee", "Please select an employee for this sale.")
             else:
+                # compute points at creation time instead of during login
+                sale.compute_points()
                 sale.save()
                 messages.success(request, "Sale added successfully!")
                 return redirect("clients:all_sales")  # show latest sales immediately
@@ -1412,37 +1404,11 @@ def delete_sale(request, sale_id):
     return render(request, "sales/delete_sale.html", {"sale": sale})
 
 
-def save_model(self, request, obj, form, change):
-    if not request.user.is_superuser:
-        emp = getattr(request.user, "employee", None)
-        if emp:
-            obj.employee = emp
-    super().save_model(request, obj, form, change)
-
-    # 🔹 Update client status based on this sale
-    client = obj.client
-    if obj.product == "SIP":
-        client.sip_status = True
-        client.sip_amount = (client.sip_amount or 0) + obj.amount
-    elif obj.product == "Lumsum":
-        # You may want to track lumpsum in SIP or separately
-        pass
-    elif obj.product == "Life Insurance":
-        client.life_status = True
-        client.life_cover = (client.life_cover or 0) + obj.amount
-    elif obj.product == "Health Insurance":
-        client.health_status = True
-        client.health_cover = (client.health_cover or 0) + obj.amount
-    elif obj.product == "Motor Insurance":
-        client.motor_status = True
-        client.motor_insured_value = (client.motor_insured_value or 0) + obj.amount
-    elif obj.product == "PMS":
-        client.pms_status = True
-        client.pms_amount = (client.pms_amount or 0) + obj.amount
-        if not client.pms_start_date:
-            client.pms_start_date = obj.date
-
-    client.save()
+"""
+NOTE: The old Django admin save_model override was defined at module scope and never used.
+It has been removed to avoid confusion. If you need admin-specific save hooks, implement
+them inside a ModelAdmin in admin.py.
+"""
 
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
@@ -2883,22 +2849,30 @@ def edit_client(request, client_id):
     client = get_object_or_404(Client, id=client_id)
 
     # ✅ Allow both admin and employees — but employee can only edit their own mapped clients
-    if hasattr(request.user, "employee") and request.user.employee.role == "employee":
-        if client.mapped_to != request.user.employee:
-            messages.error(request, "You can edit only your assigned clients.")
-            return redirect("clients:my_clients")
+    user_emp = getattr(request.user, "employee", None)
+    is_employee = bool(user_emp and getattr(user_emp, "role", None) == "employee")
+    if is_employee and client.mapped_to != user_emp:
+        messages.error(request, "You can edit only your assigned clients.")
+        return redirect("clients:my_clients")
 
     if request.method == "POST":
         form = ClientForm(request.POST, instance=client)
         if form.is_valid():
-            form.save()
+            updated = form.save(commit=False)
+            # Prevent employees from altering mapped_to; preserve existing mapping
+            if is_employee:
+                updated.mapped_to = client.mapped_to
+            updated.save()
             messages.success(request, "Client updated successfully!")
-            if request.user.employee.role == "admin":
+            if not is_employee:
                 return redirect("clients:all_clients")
-            else:
-                return redirect("clients:my_clients")
+            return redirect("clients:my_clients")
     else:
         form = ClientForm(instance=client)
+
+    # Hide mapping control from employees in the UI to avoid accidental clearing
+    if is_employee and 'mapped_to' in form.fields:
+        form.fields.pop('mapped_to')
 
     return render(request, "clients/edit_client.html", {"form": form, "client": client})
 
