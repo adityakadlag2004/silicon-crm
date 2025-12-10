@@ -4,65 +4,176 @@
 {% block title %}Past Performance{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto p-6 space-y-8">
-  
-  <!-- Header -->
-  <div class="flex items-center justify-between">
+<style>
+  .pp-hero {
+    background: linear-gradient(120deg, #e53935 0%, #f6e05e 100%);
+    border-radius: 18px;
+    padding: 2rem 2.35rem;
+    color: #1a202c;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.12);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+  .pp-hero h1 { font-size: 1.65rem; font-weight: 800; letter-spacing: 0.3px; }
+  .pp-hero p { margin: 0.1rem 0 0; color: rgba(0,0,0,0.72); font-weight: 500; }
+  .pp-btn {
+    background: #1a202c;
+    color: #fff;
+    padding: 0.7rem 1.2rem;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 600;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .pp-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(0,0,0,0.25); }
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1.4rem; }
+  .metric-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.25rem 1.1rem;
+    box-shadow: 0 2px 14px rgba(0,0,0,0.07);
+    position: relative;
+    overflow: hidden;
+  }
+  .metric-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 20% 20%, rgba(246,224,94,0.35), transparent 45%),
+                radial-gradient(circle at 90% 10%, rgba(229,57,53,0.18), transparent 50%);
+  }
+  .metric-title { font-weight: 700; color: #4a5568; margin-bottom: 0.35rem; }
+  .metric-value { font-size: 1.8rem; font-weight: 800; color: #2b6cb0; margin: 0; }
+  .metric-sub { font-size: 0.92rem; color: #718096; }
+  .pill { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; padding: 0.25rem 0.6rem; border-radius: 999px; font-weight: 700; }
+  .pill-up { background: rgba(72,187,120,0.15); color: #2f855a; }
+  .pill-down { background: rgba(229,62,62,0.15); color: #c53030; }
+  .pill-flat { background: rgba(113,128,150,0.15); color: #4a5568; }
+  .panel {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+    padding: 1.35rem 1.15rem;
+  }
+  .panel h3 { font-weight: 800; color: #2d3748; margin-bottom: 0.75rem; letter-spacing: 0.2px; }
+  .chart-wrap { height: 360px; margin-top: 0.35rem; }
+  .months-list { display: flex; flex-direction: column; gap: 0.9rem; }
+  .month-row { display: flex; align-items: center; justify-content: space-between; gap: 0.9rem; padding: 0.95rem 0.9rem; border-radius: 12px; background: #f7fafc; }
+  .month-meta { display: flex; flex-direction: column; }
+  .month-label { font-weight: 700; color: #2d3748; }
+  .month-points { color: #4a5568; font-weight: 600; }
+  .month-actions { display: flex; align-items: center; gap: 0.6rem; }
+  .view-link { color: #e53935; font-weight: 700; text-decoration: none; }
+  .view-link:hover { text-decoration: underline; }
+  .month-bar-wrap { width: 100%; background: #e2e8f0; height: 8px; border-radius: 999px; overflow: hidden; margin-top: 0.5rem; }
+  .month-bar { height: 100%; background: linear-gradient(90deg, #f6e05e 0%, #e53935 100%); width: 0%; transition: width 0.4s ease; }
+  .month-row[data-has-max="1"] .month-bar { width: calc((var(--points) / var(--max)) * 100%); }
+  @media (max-width: 768px) {
+    .pp-hero { flex-direction: column; align-items: flex-start; }
+    .pp-hero h1 { font-size: 1.35rem; }
+    .chart-wrap { height: 260px; }
+  }
+</style>
+
+<div class="max-w-6xl mx-auto p-6 space-y-6">
+  <div class="pp-hero">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">Past Performance</h1>
-      <p class="text-sm text-gray-500">Track your monthly points and performance history</p>
+      <h1>Performance History</h1>
+      <p>Last 12 months of points, milestones, and trends.</p>
     </div>
-    <a href="{% url 'clients:employee_dashboard' %}" 
-       class="inline-flex items-center px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium shadow transition">
-      Back to Dashboard
-    </a>
+    <a href="{% url 'clients:employee_dashboard' %}" class="pp-btn">Back to Dashboard</a>
   </div>
 
-  <!-- Main Content -->
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    
-    <!-- Chart Card -->
-    <div class="lg:col-span-2 bg-white rounded-xl shadow p-5">
-      <h3 class="text-lg font-semibold text-gray-800 mb-4">Monthly Points (Last 12 months)</h3>
-      <div class="h-64">
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-title">Total points (12 mo)</div>
+      <p class="metric-value">{{ total_points_12 }}</p>
+      <div class="metric-sub">Across all months in view</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-title">Avg points / month</div>
+      <p class="metric-value">{{ avg_points }}</p>
+      <div class="metric-sub">Smoothed view of consistency</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-title">Best month</div>
+      {% if best_month %}
+        <p class="metric-value">{{ best_month.points }}</p>
+        <div class="metric-sub">{{ best_month.label }}</div>
+      {% else %}
+        <p class="metric-value">—</p>
+        <div class="metric-sub">No data yet</div>
+      {% endif %}
+    </div>
+    <div class="metric-card">
+      <div class="metric-title">This month vs last</div>
+      {% if recent_month %}
+        <p class="metric-value">{{ recent_month.points }}</p>
+        <div class="metric-sub">{{ recent_month.label }}</div>
+        {% if trend_change is not None %}
+          <span class="pill {% if trend_direction == 'up' %}pill-up{% elif trend_direction == 'down' %}pill-down{% else %}pill-flat{% endif %}">
+            {% if trend_direction == 'up' %}+{% elif trend_direction == 'down' %}-{% else %}±{% endif %}{{ trend_change }} pts
+          </span>
+        {% else %}
+          <span class="pill pill-flat">No prior month</span>
+        {% endif %}
+      {% else %}
+        <p class="metric-value">—</p>
+        <div class="metric-sub">No data yet</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="lg:col-span-2 panel">
+      <div class="flex items-center justify-between mb-2">
+        <h3>Monthly Points (last 12)</h3>
+        <span class="pill pill-flat">Chart</span>
+      </div>
+      <div class="chart-wrap">
         <canvas id="pointsChart"></canvas>
       </div>
-      <p class="mt-3 text-xs text-gray-500">Line chart showing total points earned each month.</p>
+      <p class="text-xs text-gray-500 mt-3">Line shows cumulative points per month. Hover to inspect exact values.</p>
     </div>
 
-    <!-- Months List -->
-    <div class="bg-white rounded-xl shadow p-5">
-      <h3 class="text-lg font-semibold text-gray-800 mb-3">Monthly Records</h3>
-<ul class="text-sm text-gray-800">
-  {% for m in months_data %}
-  <li class="flex items-center justify-between">
-    <span>{{ m.label }}</span>
-    <div class="flex items-center space-x-3">
-      <span class="text-xs text-gray-500">{{ m.points }} pts</span>
-      <a href="{% url 'clients:past_month_performance' year=m.year month=m.month %}" 
-         class="text-xs text-yellow-600 hover:text-yellow-700 underline">
-        View
-      </a>
+    <div class="panel">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="mb-0">Monthly Records</h3>
+        <span class="pill pill-flat">12 months</span>
+      </div>
+      <div class="months-list">
+        {% for m in months_data %}
+          <div class="month-row" data-has-max="{% if max_points %}1{% else %}0{% endif %}" style="--points: {{ m.points }}; --max: {% if max_points %}{{ max_points }}{% else %}1{% endif %};">
+            <div class="month-meta">
+              <span class="month-label">{{ m.label }}</span>
+              <span class="month-points">{{ m.points }} pts</span>
+              <div class="month-bar-wrap"><div class="month-bar"></div></div>
+            </div>
+            <div class="month-actions">
+              <a class="view-link" href="{% url 'clients:past_month_performance' year=m.year month=m.month %}">View</a>
+            </div>
+          </div>
+        {% empty %}
+          <p class="text-gray-500">No records available.</p>
+        {% endfor %}
+      </div>
     </div>
-  </li>
-  {% empty %}
-  <li class="text-gray-500">No records available.</li>
-  {% endfor %}
-</ul>
-</div>
   </div>
 </div>
 
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   const labels = JSON.parse('{{ labels_json|escapejs }}');
   const points = JSON.parse('{{ points_json|escapejs }}');
 
   const ctx = document.getElementById('pointsChart').getContext('2d');
-  const gradient = ctx.createLinearGradient(0, 0, 0, 250);
-  gradient.addColorStop(0, 'rgba(255,214,0,0.25)'); // yellow
-  gradient.addColorStop(1, 'rgba(255,214,0,0)');
+  const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+  gradient.addColorStop(0, 'rgba(255,214,0,0.28)');
+  gradient.addColorStop(1, 'rgba(229,57,53,0)');
 
   new Chart(ctx, {
     type: 'line',
@@ -73,10 +184,10 @@
         data: points,
         fill: true,
         backgroundColor: gradient,
-        borderColor: '#E53935', // Kadlag red
+        borderColor: '#e53935',
         tension: 0.35,
-        pointBackgroundColor: '#FFD600', // Kadlag yellow
-        pointBorderColor: '#E53935',
+        pointBackgroundColor: '#f6e05e',
+        pointBorderColor: '#e53935',
         pointRadius: 4,
         pointHoverRadius: 6,
       }]
@@ -97,19 +208,17 @@
           },
           grid: { color: 'rgba(0,0,0,0.05)' }
         },
-        x: {
-          grid: { display: false }
-        }
+        x: { grid: { display: false } }
       },
       plugins: {
         legend: { display: false },
         tooltip: {
           mode: 'index',
           intersect: false,
-          backgroundColor: '#E53935',
-          titleColor: '#fff',
+          backgroundColor: '#1a202c',
+          titleColor: '#f6e05e',
           bodyColor: '#fff',
-          borderColor: '#FFD600',
+          borderColor: '#e53935',
           borderWidth: 1,
         }
       }

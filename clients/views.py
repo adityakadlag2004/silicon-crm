@@ -16,6 +16,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import HttpResponseForbidden
 from django.utils import timezone
 from django.utils.timezone import now
 from django.views.decorators.http import require_GET, require_POST
@@ -1594,10 +1595,34 @@ def employee_past_performance(request):
         points_data.append(int(pts))
         months_data.append({"year": y, "month": m, "label": label, "points": int(pts)})
 
+    total_points_12 = sum(points_data)
+    avg_points = round(total_points_12 / len(points_data), 1) if points_data else 0
+    best_month = max(months_data, key=lambda m: m["points"], default=None)
+    recent_month = months_data[-1] if months_data else None
+    prev_month_points = months_data[-2]["points"] if len(months_data) >= 2 else None
+    trend_change = None
+    trend_direction = "flat"
+
+    if recent_month and prev_month_points is not None:
+        trend_change = recent_month["points"] - prev_month_points
+        if trend_change > 0:
+            trend_direction = "up"
+        elif trend_change < 0:
+            trend_direction = "down"
+
+    max_points = max(points_data) if points_data else 0
+
     context = {
         "labels_json": json.dumps(labels),
         "points_json": json.dumps(points_data),
         "months_data": months_data,
+        "total_points_12": total_points_12,
+        "avg_points": avg_points,
+        "best_month": best_month,
+        "recent_month": recent_month,
+        "trend_change": trend_change,
+        "trend_direction": trend_direction,
+        "max_points": max_points,
     }
     return render(request, "dashboards/employee_past_performance.html", context)
 
@@ -1623,6 +1648,9 @@ def past_month_performance(request, year, month):
     target_map = {t.product: t for t in target_history}
 
     products = []
+    total_points = 0
+    total_amount = 0
+    max_points_product = 0
     for row in product_sales:
         prod = row["product"]
         prod_row = {
@@ -1632,6 +1660,10 @@ def past_month_performance(request, year, month):
             "target_value": target_map.get(prod).target_value if prod in target_map else None,
             "achieved_value": target_map.get(prod).achieved_value if prod in target_map else None,
         }
+        total_amount += prod_row["total_amount"]
+        total_points += prod_row["total_points"]
+        if prod_row["total_points"] > max_points_product:
+            max_points_product = prod_row["total_points"]
         products.append(prod_row)
 
     context = {
@@ -1639,6 +1671,10 @@ def past_month_performance(request, year, month):
         "month": month,
         "month_label": f"{month_name[month]} {year}",
         "products": products,
+        "total_points": total_points,
+        "total_amount": total_amount,
+        "products_count": len(products),
+        "max_points_product": max_points_product,
     }
     return render(request, "dashboards/past_month_performance.html", context)
 
@@ -1821,6 +1857,8 @@ def admin_past_month_performance(request, year, month):
 
 @login_required
 def notifications_json(request):
+    if not getattr(request.user, "employee", None) or request.user.employee.role != "admin":
+        return HttpResponseForbidden("Admins only")
     notes = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:20]
     data = [
         {
@@ -1839,12 +1877,16 @@ def notifications_json(request):
 
 @login_required
 def notifications_mark_all_read(request):
+    if not getattr(request.user, "employee", None) or request.user.employee.role != "admin":
+        return HttpResponseForbidden("Admins only")
     Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
     return JsonResponse({"status": "ok"})
 
 
 @login_required
 def notifications_clear(request):
+    if not getattr(request.user, "employee", None) or request.user.employee.role != "admin":
+        return HttpResponseForbidden("Admins only")
     Notification.objects.filter(recipient=request.user).delete()
     return JsonResponse({"status": "ok"})
 

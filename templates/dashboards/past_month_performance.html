@@ -2,37 +2,144 @@
 {% block title %}{{ month_label }} Performance{% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto p-4">
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold">{{ month_label }} — Product-wise</h1>
-    <a href="{% url 'clients:employee_past_performance' %}" class="text-sm text-gray-600 hover:underline">Back</a>
+<style>
+  .pm-hero {
+    background: linear-gradient(120deg, #e53935 0%, #f6e05e 100%);
+    border-radius: 18px;
+    padding: 1.9rem 2.2rem;
+    color: #1a202c;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.12);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+  .pm-hero h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: 0.3px; margin: 0; }
+  .pm-hero p { margin: 0.25rem 0 0; color: rgba(0,0,0,0.72); font-weight: 500; }
+  .pm-btn {
+    background: #1a202c;
+    color: #fff;
+    padding: 0.65rem 1.1rem;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 700;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .pm-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(0,0,0,0.25); }
+  .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.2rem; }
+  .metric-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 1rem 1rem;
+    box-shadow: 0 2px 14px rgba(0,0,0,0.08);
+    position: relative;
+    overflow: hidden;
+  }
+  .metric-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(circle at 20% 20%, rgba(246,224,94,0.3), transparent 50%),
+                radial-gradient(circle at 90% 15%, rgba(229,57,53,0.15), transparent 60%);
+  }
+  .metric-title { font-weight: 700; color: #4a5568; margin-bottom: 0.3rem; position: relative; }
+  .metric-value { font-size: 1.7rem; font-weight: 800; color: #2b6cb0; margin: 0; position: relative; }
+  .metric-sub { font-size: 0.92rem; color: #718096; position: relative; }
+  .panel {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+    padding: 1.2rem 1rem;
+    margin-top: 1.4rem;
+  }
+  .panel h3 { font-weight: 800; color: #2d3748; margin-bottom: 0.9rem; letter-spacing: 0.2px; }
+  .modern-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  .modern-table thead th {
+    text-align: left;
+    padding: 0.8rem 0.6rem;
+    background: linear-gradient(90deg, #f6e05e 0%, #fbd38d 100%);
+    color: #1a202c;
+    font-weight: 800;
+    font-size: 0.95rem;
+  }
+  .modern-table tbody td { padding: 0.75rem 0.65rem; border-bottom: 1px solid #e2e8f0; font-weight: 600; color: #2d3748; }
+  .modern-table tbody tr:hover { background: #f7fafc; }
+  .pill { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; padding: 0.25rem 0.6rem; border-radius: 999px; font-weight: 700; }
+  .pill-soft { background: rgba(113,128,150,0.14); color: #4a5568; }
+  .bar-wrap { width: 100%; background: #e2e8f0; height: 8px; border-radius: 999px; overflow: hidden; margin-top: 0.3rem; }
+  .bar { height: 100%; background: linear-gradient(90deg, #f6e05e 0%, #e53935 100%); width: 0%; transition: width 0.4s ease; }
+  .bar[data-has-max="1"] { width: calc((var(--points) / var(--max)) * 100%); }
+  @media (max-width: 768px) {
+    .pm-hero { flex-direction: column; align-items: flex-start; }
+    .pm-hero h1 { font-size: 1.35rem; }
+  }
+</style>
+
+<div class="max-w-5xl mx-auto p-5 space-y-5">
+  <div class="pm-hero">
+    <div>
+      <h1>{{ month_label }} performance</h1>
+      <p>Product-wise points and targets for this month.</p>
+    </div>
+    <a href="{% url 'clients:employee_past_performance' %}" class="pm-btn">Back to history</a>
   </div>
 
-  <div class="bg-white rounded-2xl shadow p-6">
-    <table class="min-w-full table-auto">
-      <thead>
-        <tr>
-          <th class="px-4 py-2 text-left">Product</th>
-          <th class="px-4 py-2 text-right">Amount</th>
-          <th class="px-4 py-2 text-right">Points</th>
-          <th class="px-4 py-2 text-right">Target</th>
-          <th class="px-4 py-2 text-right">Achieved</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y">
-        {% for p in products %}
-        <tr>
-          <td class="px-4 py-3">{{ p.product }}</td>
-          <td class="px-4 py-3 text-right">₹{{ p.total_amount|default:0 }}</td>
-          <td class="px-4 py-3 text-right">{{ p.total_points }}</td>
-          <td class="px-4 py-3 text-right">{% if p.target_value %}₹{{ p.target_value }}{% else %}-{% endif %}</td>
-          <td class="px-4 py-3 text-right">{% if p.achieved_value %}₹{{ p.achieved_value }}{% else %}-{% endif %}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5" class="px-4 py-4 text-center text-gray-500">No data for this month.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-title">Total points</div>
+      <p class="metric-value">{{ total_points }}</p>
+      <div class="metric-sub">All products combined</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-title">Total amount</div>
+      <p class="metric-value">₹{{ total_amount|floatformat:0 }}</p>
+      <div class="metric-sub">This month</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-title">Products active</div>
+      <p class="metric-value">{{ products_count }}</p>
+      <div class="metric-sub">With recorded sales</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="mb-0">Product details</h3>
+      <span class="pill pill-soft">{{ month_label }}</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="modern-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th class="text-right">Amount</th>
+            <th class="text-right">Points</th>
+            <th class="text-right">Target</th>
+            <th class="text-right">Achieved</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in products %}
+          <tr>
+            <td>
+              <div class="font-bold text-gray-800">{{ p.product }}</div>
+              <div class="bar-wrap">
+                <div class="bar" data-has-max="{% if max_points_product %}1{% else %}0{% endif %}" style="--points: {{ p.total_points }}; --max: {% if max_points_product %}{{ max_points_product }}{% else %}1{% endif %};"></div>
+              </div>
+            </td>
+            <td class="text-right">₹{{ p.total_amount|default:0 }}</td>
+            <td class="text-right">{{ p.total_points }}</td>
+            <td class="text-right">{% if p.target_value %}₹{{ p.target_value }}{% else %}-{% endif %}</td>
+            <td class="text-right">{% if p.achieved_value %}₹{{ p.achieved_value }}{% else %}-{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="px-4 py-4 text-center text-gray-500">No data for this month.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}
