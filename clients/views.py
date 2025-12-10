@@ -1761,12 +1761,21 @@ def admin_past_month_performance(request, year, month):
     products = []
     for row in product_sales:
         prod = row["product"]
+        target_val = target_map.get(prod, {}).get("target_value")
+        achieved_val = target_map.get(prod, {}).get("achieved_value")
+        progress = 0
+        if target_val:
+            try:
+                progress = (float(achieved_val or 0) / float(target_val)) * 100
+            except Exception:
+                progress = 0
         products.append({
             "product": prod,
             "total_amount": float(row["total_amount"] or 0),
             "total_points": int(row["total_points"] or 0),
-            "target_value": target_map.get(prod, {}).get("target_value"),
-            "achieved_value": target_map.get(prod, {}).get("achieved_value"),
+            "target_value": target_val,
+            "achieved_value": achieved_val,
+            "progress": progress,
         })
 
     # Top performers for that month (employee -> points/amount)
