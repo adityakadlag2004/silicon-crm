@@ -2,28 +2,37 @@
 {% block title %}My Clients{% endblock %}
 {% block content %}
 <style>
-  /* (same CSS as before) */
-  .dashboard-section-title { font-size: 1.25rem; font-weight: 600; color: #2d3748; margin-bottom: 1rem; margin-top: 2rem; }
-  .modern-card { background: #fff; border-radius: 18px; box-shadow: 0 2px 16px rgba(0,0,0,0.07); padding: 2rem 1.5rem; margin-bottom: 1.5rem; transition: box-shadow 0.2s; }
-  .modern-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
-  .dashboard-link { display: inline-flex; align-items: center; padding: 0.7rem 1.5rem; border-radius: 12px; background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%); color: #2d3748; font-weight: 600; text-decoration: none; box-shadow: 0 1px 6px rgba(0,0,0,0.07); transition: background 0.2s; }
-  .dashboard-link:hover { background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%); color: #1a202c; }
-  .pager-wrap { display:flex; justify-content:flex-end; padding:1rem 0; }
+  .dashboard-section-title { font-size: 1.2rem; font-weight: 700; color: #2d3748; margin: 1.5rem 0 1rem; }
+  .modern-card { background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 1rem; margin-bottom: 1rem; }
+  .filter-bar { display:flex; flex-wrap:wrap; gap: 0.75rem; align-items:flex-end; }
+  .filter-bar .form-label { font-size: 0.95rem; color:#4a5568; margin-bottom: 0.2rem; }
+  .filter-bar .form-select, .filter-bar .form-control { border-radius: 10px; border:1px solid #e2e8f0; background:#f8fafc; font-size:0.95rem; padding:0.45rem 0.75rem; }
+  .filter-toggle { font-size:0.95rem; font-weight:700; color:#e53935; cursor:pointer; display:inline-flex; align-items:center; gap:0.35rem; }
+  .filter-accordion { display:none; margin-top:0.75rem; padding-top:0.75rem; border-top:1px dashed #e2e8f0; }
+  .btn-primary-soft { background: linear-gradient(90deg, #f6e05e 0%, #fbd38d 100%); color:#1a202c; border:none; border-radius:10px; padding:0.55rem 1.1rem; font-weight:700; box-shadow:0 4px 12px rgba(0,0,0,0.08); text-decoration:none; }
+  .btn-ghost { background:#f8fafc; color:#2d3748; border:1px solid #e2e8f0; border-radius:10px; padding:0.55rem 1.1rem; font-weight:700; text-decoration:none; }
+  .table-wrap { overflow-x:auto; }
+  table.clients-table { width:100%; border-collapse:collapse; font-size:0.97rem; background:#fff; border-radius:14px; overflow:hidden; }
+  table.clients-table thead th { position:sticky; top:0; background:linear-gradient(90deg,#f6e05e 0%, #fbd38d 100%); color:#1a202c; padding:0.65rem 0.55rem; font-weight:800; border-bottom:2px solid #e2e8f0; z-index:1; text-align:left; }
+  table.clients-table tbody tr:nth-child(odd) { background:#f9fbfd; }
+  table.clients-table td { padding:0.65rem 0.55rem; border-bottom:1px solid #eef2f7; color:#2d3748; }
+  .chip-btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.35rem 0.75rem; border-radius:999px; font-weight:700; border:1px solid #e2e8f0; background:#fff; color:#1a202c; text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+  .chip-btn:hover { background:#fff8e1; }
+  .pager-wrap { display:flex; justify-content:flex-end; padding: 0.8rem 0; }
   .pagination { display:flex; gap:0.25rem; list-style:none; padding:0; margin:0; }
   .pagination .page-link { display:inline-block; padding:0.45rem 0.75rem; border-radius:8px; text-decoration:none; background:#fff; border:1px solid #e6e6e6; color:#2d3748; font-weight:600; }
   .pagination .page-item.active .page-link { background:#f6e05e; border-color:#ecc94b; }
-  .table { margin-bottom: 0; border-radius:12px; overflow:hidden; background:#fff; }
-  .table thead th { background:#f6e05e; color:#2d3748; font-weight:600; border-bottom:2px solid #ecc94b; padding:0.7rem 0.5rem; text-align:left; }
-  .table td { padding:0.6rem 0.5rem; border-top:1px solid #f7fafc; color:#2d3748; }
-  .table-striped tbody tr:nth-of-type(odd) { background:#f7fafc; }
+  .pagination .page-item.disabled .page-link { opacity:0.5; pointer-events:none; }
+  @media (max-width: 800px) {
+    .filter-bar { flex-direction:column; align-items:stretch; }
+  }
 </style>
 
 <div class="dashboard-section-title">My Clients</div>
 
 <div class="modern-card mb-4">
-  <form method="get" class="row g-3">
-    <!-- Status Filters -->
-    <div class="col-md-2">
+  <form method="get" class="filter-bar">
+    <div>
       <label class="form-label">SIP</label>
       <select name="sip_status" class="form-select">
         <option value="">All</option>
@@ -31,7 +40,7 @@
         <option value="no" {% if request.GET.sip_status == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-    <div class="col-md-2">
+    <div>
       <label class="form-label">PMS</label>
       <select name="pms_status" class="form-select">
         <option value="">All</option>
@@ -39,7 +48,7 @@
         <option value="no" {% if request.GET.pms_status == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-    <div class="col-md-2">
+    <div>
       <label class="form-label">Life</label>
       <select name="life_status" class="form-select">
         <option value="">All</option>
@@ -47,28 +56,55 @@
         <option value="no" {% if request.GET.life_status == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-    <div class="col-md-2">
-      <label class="form-label">Health</label>
-      <select name="health_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.health_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.health_status == "no" %}selected{% endif %}>No</option>
-      </select>
+    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+      <button type="submit" class="btn-primary-soft">Filter</button>
+      <a href="{% url 'clients:my_clients' %}" class="btn-ghost">Reset</a>
+      <span class="filter-toggle" id="moreFiltersToggle">More filters ▾</span>
     </div>
 
-    <!-- Range Filters -->
-    <div class="col-md-2"><label class="form-label">SIP Min</label><input type="number" name="sip_min" class="form-control" value="{{ request.GET.sip_min }}"></div>
-    <div class="col-md-2"><label class="form-label">SIP Max</label><input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}"></div>
-    <div class="col-md-2"><label class="form-label">PMS Min</label><input type="number" name="pms_min" class="form-control" value="{{ request.GET.pms_min }}"></div>
-    <div class="col-md-2"><label class="form-label">PMS Max</label><input type="number" name="pms_max" class="form-control" value="{{ request.GET.pms_max }}"></div>
-    <div class="col-md-2"><label class="form-label">Life Min</label><input type="number" name="life_min" class="form-control" value="{{ request.GET.life_min }}"></div>
-    <div class="col-md-2"><label class="form-label">Life Max</label><input type="number" name="life_max" class="form-control" value="{{ request.GET.life_max }}"></div>
-    <div class="col-md-2"><label class="form-label">Health Min</label><input type="number" name="health_min" class="form-control" value="{{ request.GET.health_min }}"></div>
-    <div class="col-md-2"><label class="form-label">Health Max</label><input type="number" name="health_max" class="form-control" value="{{ request.GET.health_max }}"></div>
-
-    <div class="col-md-12 mt-2">
-      <button type="submit" class="dashboard-link">Filter</button>
-      <a href="{% url 'clients:my_clients' %}" class="dashboard-link" style="background:linear-gradient(90deg,#e2e8f0 0%,#f7fafc 100%);color:#2d3748;">Reset</a>
+    <div class="filter-accordion" id="moreFiltersSection">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;">
+        <div>
+          <label class="form-label">SIP Min</label>
+          <input type="number" name="sip_min" class="form-control" value="{{ request.GET.sip_min }}">
+        </div>
+        <div>
+          <label class="form-label">SIP Max</label>
+          <input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}">
+        </div>
+        <div>
+          <label class="form-label">PMS Min</label>
+          <input type="number" name="pms_min" class="form-control" value="{{ request.GET.pms_min }}">
+        </div>
+        <div>
+          <label class="form-label">PMS Max</label>
+          <input type="number" name="pms_max" class="form-control" value="{{ request.GET.pms_max }}">
+        </div>
+        <div>
+          <label class="form-label">Life Min</label>
+          <input type="number" name="life_min" class="form-control" value="{{ request.GET.life_min }}">
+        </div>
+        <div>
+          <label class="form-label">Life Max</label>
+          <input type="number" name="life_max" class="form-control" value="{{ request.GET.life_max }}">
+        </div>
+        <div>
+          <label class="form-label">Health</label>
+          <select name="health_status" class="form-select">
+            <option value="">All</option>
+            <option value="yes" {% if request.GET.health_status == "yes" %}selected{% endif %}>Yes</option>
+            <option value="no" {% if request.GET.health_status == "no" %}selected{% endif %}>No</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Health Min</label>
+          <input type="number" name="health_min" class="form-control" value="{{ request.GET.health_min }}">
+        </div>
+        <div>
+          <label class="form-label">Health Max</label>
+          <input type="number" name="health_max" class="form-control" value="{{ request.GET.health_max }}">
+        </div>
+      </div>
     </div>
   </form>
 </div>
@@ -92,50 +128,36 @@
   <div id="bulkStatus" style="font-size:0.95rem;color:#374151;display:none;"></div>
 </div>
 
-<div class="modern-card">
-  <table class="table table-striped">
+<div class="modern-card table-wrap">
+  <table class="clients-table">
     <thead>
       <tr>
-        <th style="width:40px;"><input id="colSelectAll" type="checkbox" /></th>
-        <th>#</th>
-        <th>ID</th>
+        <th style="width:38px;"><input id="colSelectAll" type="checkbox" /></th>
         <th>Name</th>
-        <th>Email</th>
         <th>Phone</th>
+        <th>Email</th>
         <th>SIP</th>
         <th>PMS</th>
-        <th>Life Cover</th>
-        <th>Health Cover</th>
         <th>Mapped To</th>
-        <th>Actions</th>
+        <th style="width:140px;">Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for client in clients_page %}
       <tr>
-  <td><input class="client-select" type="checkbox" value="{{ client.id }}" data-phone="{{ client.phone|default:''|floatformat:0 }}" data-name="{{ client.name|escape }}" /></td>
-        <td>{{ clients_page.start_index|add:forloop.counter0 }}</td>
-        <td>{{ client.id }}</td>
+        <td><input class="client-select" type="checkbox" value="{{ client.id }}" data-phone="{{ client.phone|default:''|floatformat:0 }}" data-name="{{ client.name|escape }}" /></td>
         <td>{{ client.name }}</td>
+        <td>{{ client.phone|default:''|floatformat:0 }}</td>
         <td>{{ client.email }}</td>
-  <td>{{ client.phone|default:''|floatformat:0 }}</td>
         <td>₹{{ client.sip_amount|default:0 }}</td>
         <td>₹{{ client.pms_amount|default:0 }}</td>
-        <td>₹{{ client.life_cover|default:0 }}</td>
-        <td>₹{{ client.health_cover|default:0 }}</td>
-        </td>
-    
         <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
-    <td>
-
-  <a href="{% url 'clients:edit_client' client.id %}" class="btn btn-sm btn-warning">
-    Edit
-  </a>
+        <td style="display:flex;gap:0.35rem;flex-wrap:wrap;">
+          <a href="{% url 'clients:edit_client' client.id %}" class="chip-btn">Edit</a>
         </td>
-        
-        </tr>
+      </tr>
       {% empty %}
-      <tr><td colspan="10" class="text-center">No clients found</td></tr>
+      <tr><td colspan="8" class="text-center">No clients found</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -203,6 +225,17 @@
 </div>
 
 <script>
+// Toggle more filters accordion
+const toggle = document.getElementById('moreFiltersToggle');
+const moreFilters = document.getElementById('moreFiltersSection');
+if (toggle && moreFilters) {
+  toggle.addEventListener('click', function(){
+    const isOpen = moreFilters.style.display === 'block';
+    moreFilters.style.display = isOpen ? 'none' : 'block';
+    toggle.textContent = isOpen ? 'More filters ▾' : 'Hide filters ▴';
+  });
+}
+
 (function(){
   // CSRF cookie helper
   function getCookie(name) {

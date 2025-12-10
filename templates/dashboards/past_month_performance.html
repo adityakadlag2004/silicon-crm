@@ -69,8 +69,7 @@
   .pill { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; padding: 0.25rem 0.6rem; border-radius: 999px; font-weight: 700; }
   .pill-soft { background: rgba(113,128,150,0.14); color: #4a5568; }
   .bar-wrap { width: 100%; background: #e2e8f0; height: 8px; border-radius: 999px; overflow: hidden; margin-top: 0.3rem; }
-  .bar { height: 100%; background: linear-gradient(90deg, #f6e05e 0%, #e53935 100%); width: 0%; transition: width 0.4s ease; }
-  .bar[data-has-max="1"] { width: calc((var(--points) / var(--max)) * 100%); }
+  .bar { height: 100%; background: linear-gradient(90deg, #f6e05e 0%, #e53935 100%); width: var(--bar-pct, 0%); transition: width 0.4s ease; }
   @media (max-width: 768px) {
     .pm-hero { flex-direction: column; align-items: flex-start; }
     .pm-hero h1 { font-size: 1.35rem; }
@@ -126,13 +125,20 @@
             <td>
               <div class="font-bold text-gray-800">{{ p.product }}</div>
               <div class="bar-wrap">
-                <div class="bar" data-has-max="{% if max_points_product %}1{% else %}0{% endif %}" style="--points: {{ p.total_points }}; --max: {% if max_points_product %}{{ max_points_product }}{% else %}1{% endif %};"></div>
+                <div class="bar" style="--bar-pct: {{ p.percent_of_max|default:0 }}%;"></div>
               </div>
             </td>
             <td class="text-right">₹{{ p.total_amount|default:0 }}</td>
             <td class="text-right">{{ p.total_points }}</td>
             <td class="text-right">{% if p.target_value %}₹{{ p.target_value }}{% else %}-{% endif %}</td>
-            <td class="text-right">{% if p.achieved_value %}₹{{ p.achieved_value }}{% else %}-{% endif %}</td>
+            <td class="text-right">
+              {% if p.achieved_value %}
+                ₹{{ p.achieved_value }}
+                {% if p.achieved_percent is not None %}
+                  <span class="pill pill-soft">{{ p.achieved_percent }}%</span>
+                {% endif %}
+              {% else %}-{% endif %}
+            </td>
           </tr>
           {% empty %}
           <tr><td colspan="5" class="px-4 py-4 text-center text-gray-500">No data for this month.</td></tr>

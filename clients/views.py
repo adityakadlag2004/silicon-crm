@@ -1666,6 +1666,19 @@ def past_month_performance(request, year, month):
             max_points_product = prod_row["total_points"]
         products.append(prod_row)
 
+    # Enrich rows with percentages after max is known
+    for prod_row in products:
+        if max_points_product:
+            prod_row["percent_of_max"] = round((prod_row["total_points"] / max_points_product) * 100, 1)
+        else:
+            prod_row["percent_of_max"] = 0
+
+        if prod_row["target_value"]:
+            achieved_val = prod_row.get("achieved_value") or 0
+            prod_row["achieved_percent"] = round((achieved_val / prod_row["target_value"]) * 100, 1) if prod_row["target_value"] else None
+        else:
+            prod_row["achieved_percent"] = None
+
     context = {
         "year": year,
         "month": month,

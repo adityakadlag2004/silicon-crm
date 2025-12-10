@@ -2,222 +2,270 @@
 {% load static %}
 
 {% block content %}
-<div class="container py-4">
-  <h2>Calling List Generator</h2>
+<style>
+  .lg-container { max-width: 1200px; margin: 0 auto; padding: 1.25rem; }
+  .hero { background: linear-gradient(120deg, #e53935 0%, #f6e05e 100%); border-radius: 16px; padding: 1.4rem 1.6rem; color:#1a202c; box-shadow:0 10px 30px rgba(0,0,0,0.12); display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+  .hero h2 { margin:0; font-size:1.35rem; font-weight:800; }
+  .hero p { margin:0.15rem 0 0; color:rgba(0,0,0,0.72); font-weight:500; }
+  .modern-card { background:#fff; border-radius:14px; box-shadow:0 2px 12px rgba(0,0,0,0.06); padding:1rem; margin-top:1rem; }
+  .filter-bar { display:flex; flex-wrap:wrap; gap:0.75rem; align-items:flex-end; }
+  .filter-bar .form-label { font-size:0.95rem; color:#4a5568; margin-bottom:0.2rem; }
+  .filter-bar .form-select, .filter-bar .form-control { border-radius:10px; border:1px solid #e2e8f0; background:#f8fafc; font-size:0.95rem; padding:0.5rem 0.75rem; }
+  .filter-toggle { font-size:0.95rem; font-weight:700; color:#e53935; cursor:pointer; display:inline-flex; align-items:center; gap:0.35rem; }
+  .filter-accordion { display:none; margin-top:0.75rem; padding-top:0.75rem; border-top:1px dashed #e2e8f0; }
+  .btn-primary-soft { background: linear-gradient(90deg, #f6e05e 0%, #fbd38d 100%); color:#1a202c; border:none; border-radius:10px; padding:0.55rem 1.15rem; font-weight:800; box-shadow:0 4px 12px rgba(0,0,0,0.08); text-decoration:none; }
+  .btn-ghost { background:#f8fafc; color:#2d3748; border:1px solid #e2e8f0; border-radius:10px; padding:0.55rem 1.1rem; font-weight:700; text-decoration:none; }
+  .table-wrap { overflow:auto; max-height:60vh; border:1px solid #edf2f7; border-radius:12px; }
+  table.modern-table { width:100%; border-collapse:collapse; font-size:0.95rem; background:#fff; }
+  table.modern-table thead th { position:sticky; top:0; background:linear-gradient(90deg,#f6e05e 0%,#fbd38d 100%); color:#1a202c; padding:0.65rem 0.55rem; font-weight:800; border-bottom:2px solid #e2e8f0; z-index:1; text-align:left; }
+  table.modern-table tbody tr:nth-child(odd) { background:#f9fbfd; }
+  table.modern-table td { padding:0.65rem 0.55rem; border-bottom:1px solid #eef2f7; color:#2d3748; }
+  .chip-btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.35rem 0.75rem; border-radius:999px; font-weight:700; border:1px solid #e2e8f0; background:#fff; color:#1a202c; text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
+  .chip-btn:hover { background:#fff8e1; }
+  .actions-row { display:flex; gap:0.5rem; flex-wrap:wrap; }
+  @media (max-width: 820px) { .hero { flex-direction:column; align-items:flex-start; } .filter-bar { flex-direction:column; align-items:stretch; } }
+</style>
 
-  <form method="get" class="row g-3 my-3" id="filter-form">
-    <div class="col-md-2">
-      <label class="form-label">Source</label>
-      <select name="source" class="form-select">
-        <option value="clients" {% if source != 'prospects' %}selected{% endif %}>Clients</option>
-        <option value="prospects" {% if source == 'prospects' %}selected{% endif %}>Prospects</option>
-      </select>
+<div class="lg-container">
+  <div class="hero">
+    <div>
+      <h2>Calling List Generator</h2>
+      <p>Filter clients or prospects and create/export curated calling lists.</p>
     </div>
-    <div class="col-12">
-      <div class="row g-2">
-        <div class="col-md-4">
-          <label class="form-label">SIP</label>
-          <div class="input-group">
-            <select name="sip" class="form-select">
-              <option value="any" {% if sip_status == 'any' %}selected{% endif %}>Any</option>
-              <option value="yes" {% if sip_status == 'yes' %}selected{% endif %}>Yes</option>
-              <option value="no" {% if sip_status == 'no' %}selected{% endif %}>No</option>
-            </select>
+  </div>
+
+  <div class="modern-card">
+    <form method="get" class="filter-bar" id="filter-form">
+      <div>
+        <label class="form-label">Source</label>
+        <select name="source" class="form-select">
+          <option value="clients" {% if source != 'prospects' %}selected{% endif %}>Clients</option>
+          <option value="prospects" {% if source == 'prospects' %}selected{% endif %}>Prospects</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">SIP</label>
+        <select name="sip" class="form-select">
+          <option value="any" {% if sip_status == 'any' %}selected{% endif %}>Any</option>
+          <option value="yes" {% if sip_status == 'yes' %}selected{% endif %}>Yes</option>
+          <option value="no" {% if sip_status == 'no' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">PMS</label>
+        <select name="pms" class="form-select">
+          <option value="any" {% if pms_status == 'any' %}selected{% endif %}>Any</option>
+          <option value="yes" {% if pms_status == 'yes' %}selected{% endif %}>Yes</option>
+          <option value="no" {% if pms_status == 'no' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Life</label>
+        <select name="life" class="form-select">
+          <option value="any" {% if life_status == 'any' %}selected{% endif %}>Any</option>
+          <option value="yes" {% if life_status == 'yes' %}selected{% endif %}>Yes</option>
+          <option value="no" {% if life_status == 'no' %}selected{% endif %}>No</option>
+        </select>
+      </div>
+      <div class="actions-row" style="margin-top:0.35rem;">
+        <button class="btn-primary-soft" type="submit" name="generate" value="1">Generate</button>
+        <a href="{{ request.path }}" class="btn-ghost">Reset</a>
+        <span class="filter-toggle" id="moreFiltersToggle">More filters ▾</span>
+        <div style="display:flex;align-items:center;gap:0.35rem; margin-left:auto;">
+          <label class="form-label mb-0" style="margin-bottom:0;">Per page</label>
+          <select name="per_page" class="form-select" style="width:120px;">
+            <option value="25" {% if per_page|default:25 == 25 %}selected{% endif %}>25</option>
+            <option value="50" {% if per_page|default:25 == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if per_page|default:25 == 100 %}selected{% endif %}>100</option>
+            <option value="200" {% if per_page|default:25 == 200 %}selected{% endif %}>200</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="filter-accordion" id="moreFiltersSection">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:0.75rem;">
+          <div>
+            <label class="form-label">SIP Min</label>
             <input name="sip_min" class="form-control" placeholder="min" value="{{ sip_min }}" />
+          </div>
+          <div>
+            <label class="form-label">SIP Max</label>
             <input name="sip_max" class="form-control" placeholder="max" value="{{ sip_max }}" />
           </div>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Health Insurance</label>
-          <div class="input-group">
+          <div>
+            <label class="form-label">Health</label>
             <select name="health" class="form-select">
               <option value="any" {% if health_status == 'any' %}selected{% endif %}>Any</option>
               <option value="yes" {% if health_status == 'yes' %}selected{% endif %}>Yes</option>
               <option value="no" {% if health_status == 'no' %}selected{% endif %}>No</option>
             </select>
+          </div>
+          <div>
+            <label class="form-label">Health Min</label>
             <input name="health_min" class="form-control" placeholder="min cover" value="{{ health_min }}" />
+          </div>
+          <div>
+            <label class="form-label">Health Max</label>
             <input name="health_max" class="form-control" placeholder="max cover" value="{{ health_max }}" />
           </div>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">Life Insurance</label>
-          <div class="input-group">
-            <select name="life" class="form-select">
-              <option value="any" {% if life_status == 'any' %}selected{% endif %}>Any</option>
-              <option value="yes" {% if life_status == 'yes' %}selected{% endif %}>Yes</option>
-              <option value="no" {% if life_status == 'no' %}selected{% endif %}>No</option>
-            </select>
+          <div>
+            <label class="form-label">Life Min</label>
             <input name="life_min" class="form-control" placeholder="min cover" value="{{ life_min }}" />
+          </div>
+          <div>
+            <label class="form-label">Life Max</label>
             <input name="life_max" class="form-control" placeholder="max cover" value="{{ life_max }}" />
           </div>
-        </div>
-
-        <div class="col-md-4 mt-2">
-          <label class="form-label">Motor Insurance</label>
-          <div class="input-group">
+          <div>
+            <label class="form-label">Motor</label>
             <select name="motor" class="form-select">
               <option value="any" {% if motor_status == 'any' %}selected{% endif %}>Any</option>
               <option value="yes" {% if motor_status == 'yes' %}selected{% endif %}>Yes</option>
               <option value="no" {% if motor_status == 'no' %}selected{% endif %}>No</option>
             </select>
+          </div>
+          <div>
+            <label class="form-label">Motor Min</label>
             <input name="motor_min" class="form-control" placeholder="min insured" value="{{ motor_min }}" />
+          </div>
+          <div>
+            <label class="form-label">Motor Max</label>
             <input name="motor_max" class="form-control" placeholder="max insured" value="{{ motor_max }}" />
           </div>
-        </div>
-
-        <div class="col-md-4 mt-2">
-          <label class="form-label">PMS</label>
-          <div class="input-group">
-            <select name="pms" class="form-select">
-              <option value="any" {% if pms_status == 'any' %}selected{% endif %}>Any</option>
-              <option value="yes" {% if pms_status == 'yes' %}selected{% endif %}>Yes</option>
-              <option value="no" {% if pms_status == 'no' %}selected{% endif %}>No</option>
-            </select>
+          <div>
+            <label class="form-label">PMS Min</label>
             <input name="pms_min" class="form-control" placeholder="min" value="{{ pms_min }}" />
+          </div>
+          <div>
+            <label class="form-label">PMS Max</label>
             <input name="pms_max" class="form-control" placeholder="max" value="{{ pms_max }}" />
           </div>
+          <div>
+            <label class="form-label">Min Amount</label>
+            <input name="min_amount" class="form-control" value="{{ min_amount }}" />
+          </div>
+          <div>
+            <label class="form-label">Max Amount</label>
+            <input name="max_amount" class="form-control" value="{{ max_amount }}" />
+          </div>
+          {% if not is_employee %}
+          <div style="grid-column:1/-1;">
+            <label class="form-label">Mapped Employee</label>
+            <select name="mapped" class="form-select">
+              <option value="">-- Any --</option>
+              <option value="__unmapped__" {% if unmapped_only %}selected{% endif %}>Unmapped Only</option>
+              {% for e in employees %}
+                <option value="{{ e.id }}" {% if mapped_emp|default:'' == e.id|stringformat:"s" %}selected{% endif %}>{{ e.user.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
         </div>
-
       </div>
-    </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Min Amount</label>
-      <input name="min_amount" class="form-control" value="{{ min_amount }}" />
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Max Amount</label>
-      <input name="max_amount" class="form-control" value="{{ max_amount }}" />
-    </div>
-
-    {% if not is_employee %}
-    <div class="col-md-3">
-      <label class="form-label">Mapped Employee</label>
-      <select name="mapped" class="form-select">
-        <option value="">-- Any --</option>
-        <option value="__unmapped__" {% if unmapped_only %}selected{% endif %}>Unmapped Only</option>
-        {% for e in employees %}
-          <option value="{{ e.id }}" {% if mapped_emp|default:'' == e.id|stringformat:"s" %}selected{% endif %}>{{ e.user.username }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% endif %}
-
-    <div class="col-12 d-flex align-items-end gap-2">
-      <div>
-        <button class="btn btn-primary" type="submit" name="generate" value="1">Generate</button>
-        <a href="" class="btn btn-outline-secondary">Reset</a>
-      </div>
-      <div class="ms-auto d-flex align-items-center gap-2">
-        <label class="mb-0">Per page</label>
-        <select name="per_page" class="form-select form-select-sm" style="width:120px">
-          <option value="25" {% if per_page|default:25 == 25 %}selected{% endif %}>25</option>
-          <option value="50" {% if per_page|default:25 == 50 %}selected{% endif %}>50</option>
-          <option value="100" {% if per_page|default:25 == 100 %}selected{% endif %}>100</option>
-          <option value="200" {% if per_page|default:25 == 200 %}selected{% endif %}>200</option>
-        </select>
-      </div>
-    </div>
-  </form>
+    </form>
+  </div>
 
   <form method="post" enctype="multipart/form-data" id="results-form">
     {% csrf_token %}
     <input type="hidden" name="action" id="action-input" value="" />
 
-    <div class="my-3 d-flex justify-content-between align-items-center">
-      <div>
-        {% if can_create %}
-          <button type="button" class="btn btn-success" id="btn-create-list">Create Calling List</button>
-        {% else %}
-          <button type="button" class="btn btn-success" id="btn-create-list" disabled title="Managers/Admins only">Create Calling List</button>
-        {% endif %}
-        <button type="button" class="btn btn-secondary" id="btn-export-csv">Export CSV</button>
-      </div>
-      <div>Showing page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} results)</div>
-    </div>
-    <div class="table-container border rounded" style="max-height:60vh; overflow:auto;">
-      <table class="table table-striped mb-0">
-      <thead>
-        <tr>
-          <th><input type="checkbox" id="select-all" /></th>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Phone</th>
-          <th>Email</th>
-          <th>Mapped To</th>
-          <th>SIP</th>
-          <th>SIP Amount</th>
-          <th>Last Sale</th>
-        </tr>
-  </thead>
-      <tbody>
-        {% for client in page_obj.object_list %}
-        {% if source == 'prospects' %}
-        <tr>
-          <td><input type="checkbox" name="selected_ids" value="{{ client.id }}" class="row-check" /></td>
-          <td>P-{{ client.id }}</td>
-          <td>{{ client.name }}</td>
-          <td>{{ client.phone }}</td>
-          <td>{{ client.email }}</td>
-          <td>{% if client.assigned_to %}{{ client.assigned_to.user.username }}{% else %}-{% endif %}</td>
-          <td>{{ client.notes|default:'-' }}</td>
-          <td>-</td>
-        </tr>
-        {% else %}
-        <tr>
-          <td><input type="checkbox" name="selected_ids" value="{{ client.id }}" class="row-check" /></td>
-          <td>{{ client.id }}</td>
-          <td>{{ client.name }}</td>
-          <td>{{ client.phone }}</td>
-          <td>{{ client.email }}</td>
-          <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
-          <td>{% if client.sip_status %}Yes{% else %}No{% endif %}</td>
-          <td>{{ client.sip_amount }}</td>
-          <td>
-            {% if client.last_sale_date %}
-              {{ client.last_sale_date }} / {{ client.last_sale_product }}
-            {% else %}
-              -
-            {% endif %}
-          </td>
-        </tr>
-        {% endif %}
-  {% empty %}
-  <tr><td colspan="9">No clients found matching filters.</td></tr>
-        {% endfor %}
-      </table>
-    </div>
-
-    <nav aria-label="page navigation" class="mt-3">
-      <ul class="pagination">
-        {% if page_obj.has_previous %}
-          <li class="page-item"><a class="page-link" href="?page=1&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">« First</a></li>
-          <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">‹ Prev</a></li>
-        {% else %}
-          <li class="page-item disabled"><span class="page-link">« First</span></li>
-          <li class="page-item disabled"><span class="page-link">‹ Prev</span></li>
-        {% endif %}
-
-        {# show a window of pages around current #}
-        {% for p in page_obj.paginator.page_range %}
-          {% if p >= page_obj.number|add:-2 and p <= page_obj.number|add:2 %}
-            {% if p == page_obj.number %}
-              <li class="page-item active" aria-current="page"><span class="page-link">{{ p }}</span></li>
-            {% else %}
-              <li class="page-item"><a class="page-link" href="?page={{ p }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">{{ p }}</a></li>
-            {% endif %}
+    <div class="modern-card" style="margin-top:1rem;">
+      <div class="actions-row" style="justify-content:space-between; align-items:center; gap:0.75rem;">
+        <div class="actions-row">
+          {% if can_create %}
+            <button type="button" class="chip-btn" id="btn-create-list">➕ Create Calling List</button>
+          {% else %}
+            <button type="button" class="chip-btn" id="btn-create-list" disabled title="Managers/Admins only">➕ Create Calling List</button>
           {% endif %}
-        {% endfor %}
+          <button type="button" class="chip-btn" id="btn-export-csv">⬇️ Export CSV</button>
+        </div>
+        <div style="font-weight:700; color:#2d3748;">Page {{ page_obj.number }} of {{ paginator.num_pages }} • {{ paginator.count }} results</div>
+      </div>
+      <div class="table-wrap" style="margin-top:0.75rem;">
+        <table class="modern-table">
+        <thead>
+          <tr>
+            <th style="width:42px;"><input type="checkbox" id="select-all" /></th>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Mapped To</th>
+            <th>SIP</th>
+            <th>SIP Amount</th>
+            <th>Last Sale</th>
+          </tr>
+    </thead>
+        <tbody>
+          {% for client in page_obj.object_list %}
+          {% if source == 'prospects' %}
+          <tr>
+            <td><input type="checkbox" name="selected_ids" value="{{ client.id }}" class="row-check" /></td>
+            <td>P-{{ client.id }}</td>
+            <td>{{ client.name }}</td>
+            <td>{{ client.phone }}</td>
+            <td>{{ client.email }}</td>
+            <td>{% if client.assigned_to %}{{ client.assigned_to.user.username }}{% else %}-{% endif %}</td>
+            <td>{{ client.notes|default:'-' }}</td>
+            <td>-</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td><input type="checkbox" name="selected_ids" value="{{ client.id }}" class="row-check" /></td>
+            <td>{{ client.id }}</td>
+            <td>{{ client.name }}</td>
+            <td>{{ client.phone }}</td>
+            <td>{{ client.email }}</td>
+            <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
+            <td>{% if client.sip_status %}Yes{% else %}No{% endif %}</td>
+            <td>{{ client.sip_amount }}</td>
+            <td>
+              {% if client.last_sale_date %}
+                {{ client.last_sale_date }} / {{ client.last_sale_product }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+          {% endif %}
+    {% empty %}
+    <tr><td colspan="9">No clients found matching filters.</td></tr>
+          {% endfor %}
+        </tbody>
+        </table>
+      </div>
 
-        {% if page_obj.has_next %}
-          <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Next ›</a></li>
-          <li class="page-item"><a class="page-link" href="?page={{ paginator.num_pages }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Last »</a></li>
-        {% else %}
-          <li class="page-item disabled"><span class="page-link">Next ›</span></li>
-          <li class="page-item disabled"><span class="page-link">Last »</span></li>
-        {% endif %}
-      </ul>
-    </nav>
+      <nav aria-label="page navigation" class="mt-3" style="display:flex; justify-content:center;">
+        <ul class="pagination">
+          {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page=1&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">« First</a></li>
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">‹ Prev</a></li>
+          {% else %}
+            <li class="page-item disabled"><span class="page-link">« First</span></li>
+            <li class="page-item disabled"><span class="page-link">‹ Prev</span></li>
+          {% endif %}
+
+          {# show a window of pages around current #}
+          {% for p in page_obj.paginator.page_range %}
+            {% if p >= page_obj.number|add:-2 and p <= page_obj.number|add:2 %}
+              {% if p == page_obj.number %}
+                <li class="page-item active" aria-current="page"><span class="page-link">{{ p }}</span></li>
+              {% else %}
+                <li class="page-item"><a class="page-link" href="?page={{ p }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">{{ p }}</a></li>
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+
+          {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Next ›</a></li>
+            <li class="page-item"><a class="page-link" href="?page={{ paginator.num_pages }}&per_page={{ per_page }}{% if request.GET %}&{{ request.GET.urlencode|safe }}{% endif %}">Last »</a></li>
+          {% else %}
+            <li class="page-item disabled"><span class="page-link">Next ›</span></li>
+            <li class="page-item disabled"><span class="page-link">Last »</span></li>
+          {% endif %}
+        </ul>
+      </nav>
+    </div>
 
     <!-- Create list modal -->
     <div class="modal fade" id="createListModal" tabindex="-1" aria-hidden="true">
@@ -275,11 +323,16 @@ document.getElementById('select-all').addEventListener('change', function(e){
   checks.forEach(function(c){ c.checked = e.target.checked; });
 });
 
-// make table header sticky (in case CSS is slow to load)
-document.addEventListener('DOMContentLoaded', function(){
-  var ths = document.querySelectorAll('.table thead th');
-  ths.forEach(function(th){ th.style.position = 'sticky'; th.style.top = '0'; th.style.zIndex = '2'; th.style.background = 'white'; });
-});
+// more filters toggle
+const toggle = document.getElementById('moreFiltersToggle');
+const accordion = document.getElementById('moreFiltersSection');
+if (toggle && accordion) {
+  toggle.addEventListener('click', function(){
+    const isOpen = accordion.style.display === 'block';
+    accordion.style.display = isOpen ? 'none' : 'block';
+    toggle.textContent = isOpen ? 'More filters ▾' : 'Hide filters ▴';
+  });
+}
 
 // Export CSV handler
 document.getElementById('btn-export-csv').addEventListener('click', function(){
