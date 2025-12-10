@@ -205,9 +205,11 @@
             {% endif %}
           </ul>
           <!-- Right side -->
+          {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
           <button class="btn btn-outline-dark btn-sm me-2" type="button" data-bs-toggle="modal" data-bs-target="#notificationsModal" title="Notifications">
             🔔 <span class="badge bg-danger" id="nav-unread" style="display:none;">0</span>
           </button>
+          {% endif %}
           <span class="navbar-text" style="color:#2d3748;font-weight:600;">Hi, {{ request.user.username }}</span>
           <a href="{% url 'clients:logout' %}" class="btn btn-outline-dark btn-sm ms-2">Logout</a>
         </div>
@@ -218,6 +220,7 @@
       {% block content %}{% endblock %}
     </div>
 
+    {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
     <!-- Notifications Modal -->
     <div class="modal fade" id="notificationsModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-dialog-scrollable">
@@ -236,6 +239,7 @@
         </div>
       </div>
     </div>
+    {% endif %}
 
     <script>
       if ('serviceWorker' in navigator) {
@@ -286,6 +290,7 @@
       }
 
       document.addEventListener('DOMContentLoaded', () => {
+        {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
         loadNotifications();
         const modal = document.getElementById('notificationsModal');
         modal && modal.addEventListener('show.bs.modal', loadNotifications);
@@ -301,6 +306,7 @@
           await fetch('{% url "clients:notifications_clear" %}', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}});
           loadNotifications();
         });
+        {% endif %}
       });
     </script>
   </body>
