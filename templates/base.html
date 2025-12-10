@@ -205,6 +205,9 @@
             {% endif %}
           </ul>
           <!-- Right side -->
+          <button class="btn btn-outline-dark btn-sm me-2" type="button" data-bs-toggle="modal" data-bs-target="#notificationsModal" title="Notifications">
+            🔔 <span class="badge bg-danger" id="nav-unread" style="display:none;">0</span>
+          </button>
           <span class="navbar-text" style="color:#2d3748;font-weight:600;">Hi, {{ request.user.username }}</span>
           <a href="{% url 'clients:logout' %}" class="btn btn-outline-dark btn-sm ms-2">Logout</a>
         </div>
@@ -213,6 +216,25 @@
 
     <div class="container mt-4">
       {% block content %}{% endblock %}
+    </div>
+
+    <!-- Notifications Modal -->
+    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);">
+            <h5 class="modal-title" style="color:#2d3748;">Notifications</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="modal-notes-body" style="max-height:60vh; overflow-y:auto;">
+            <p class="text-muted mb-0">Loading…</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-mark-read">Mark all read</button>
+            <button class="btn btn-danger btn-sm" id="btn-clear-notes">Clear all</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -228,5 +250,58 @@
     <!-- Select2 JS -->
     <script src="{% static 'django_select2/django_select2.js' %}"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+      function renderNotifications(data) {
+        const body = document.getElementById('modal-notes-body');
+        const badge = document.getElementById('nav-unread');
+        if (!body || !badge) return;
+
+        badge.style.display = data.unread > 0 ? 'inline-block' : 'none';
+        badge.textContent = data.unread;
+
+        if (!data.notifications.length) {
+          body.innerHTML = '<p class="text-muted mb-0">No notifications.</p>';
+          return;
+        }
+
+        body.innerHTML = data.notifications.map(n => `
+          <div class="mb-3" style="border:1px solid #edf2f7;border-radius:10px;padding:0.6rem;box-shadow:0 1px 6px rgba(0,0,0,0.04);background:${n.is_read ? '#fff' : '#fefcbf'};">
+            <div style="font-weight:700;color:#2d3748;">${n.title}</div>
+            <div style="color:#4a5568;font-size:0.95rem;">${n.body}</div>
+            <div style="color:#718096;font-size:0.85rem;">${n.created_at}</div>
+            ${n.link ? `<a class="btn btn-sm btn-outline-primary mt-1" href="${n.link}">Open</a>` : ''}
+          </div>
+        `).join('');
+      }
+
+      async function loadNotifications() {
+        try {
+          const res = await fetch('{% url "clients:notifications_json" %}', {credentials: 'same-origin'});
+          if (!res.ok) return;
+          const data = await res.json();
+          renderNotifications(data);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        loadNotifications();
+        const modal = document.getElementById('notificationsModal');
+        modal && modal.addEventListener('show.bs.modal', loadNotifications);
+
+        const btnRead = document.getElementById('btn-mark-read');
+        btnRead && btnRead.addEventListener('click', async () => {
+          await fetch('{% url "clients:notifications_mark_all_read" %}', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}});
+          loadNotifications();
+        });
+
+        const btnClear = document.getElementById('btn-clear-notes');
+        btnClear && btnClear.addEventListener('click', async () => {
+          await fetch('{% url "clients:notifications_clear" %}', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}});
+          loadNotifications();
+        });
+      });
+    </script>
   </body>
 </html>

@@ -163,33 +163,6 @@
 
 <div class="dashboard-section-title">Admin Dashboard</div>
 
-<div class="card mb-3" style="border-radius:12px;box-shadow:0 1px 8px rgba(0,0,0,0.06);">
-  <div class="card-header" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);color:#2d3748;display:flex;align-items:center;justify-content:space-between;">
-    <span><strong>Notifications</strong></span>
-    {% if unread_notifications %}
-      <span class="badge bg-danger">{{ unread_notifications }} new</span>
-    {% else %}
-      <span class="badge bg-secondary">All caught up</span>
-    {% endif %}
-  </div>
-  <ul class="list-group list-group-flush">
-    {% if notifications %}
-      {% for note in notifications %}
-        <li class="list-group-item" style="display:flex;flex-direction:column;align-items:flex-start;gap:0.2rem;">
-          <div style="font-weight:600;">{{ note.title }}</div>
-          <div style="font-size:0.95rem;color:#4a5568;">{{ note.body }}</div>
-          <div style="font-size:0.82rem;color:#718096;">{{ note.created_at|date:"M d, h:i A" }}</div>
-          {% if note.link %}
-            <a href="{{ note.link }}" class="dashboard-link" style="padding:0.35rem 0.75rem;font-size:0.9rem;">Open</a>
-          {% endif %}
-        </li>
-      {% endfor %}
-    {% else %}
-      <li class="list-group-item" style="font-size:0.95rem;color:#4a5568;">No notifications yet.</li>
-    {% endif %}
-  </ul>
-</div>
-
 <div class="dashboard-cards-row" style="display:flex;flex-wrap:wrap;gap:1rem;">
   <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
     <h5>Total Clients</h5>
@@ -276,29 +249,34 @@
   </div>
 </div>
 
-<!-- Section 2: Daily employee performance (product-wise) -->
-<h4 style="font-weight:700;color:#2d3748;" class="mt-4">Daily Employee Performance (Product-wise)</h4>
-<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
-  {% for row in daily_employee_product %}
-    <div class="col-md-4" style="flex:1 1 260px;min-width:240px;">
-      <div class="modern-card" style="padding:1rem 0.8rem;">
-        <div style="font-weight:700;color:#2b6cb0; margin-bottom:0.4rem;">{{ row.employee }}</div>
-        {% for p in row.products %}
-          <div class="mb-2">
-            <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:#4a5568;">
-              <span>{{ p.product }}</span>
-              <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
+<!-- Section 2: Daily employee performance (product-wise, collapsible) -->
+<div class="d-flex align-items-center mt-4" style="gap:0.5rem;">
+  <h4 style="font-weight:700;color:#2d3748; margin:0;">Daily Employee Performance (Product-wise)</h4>
+  <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#dailyPerf" aria-expanded="false" aria-controls="dailyPerf">Toggle</button>
+</div>
+<div class="collapse show" id="dailyPerf">
+  <div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+    {% for row in daily_employee_product %}
+      <div class="col-md-4" style="flex:1 1 260px;min-width:240px;">
+        <div class="modern-card" style="padding:1rem 0.8rem;">
+          <div style="font-weight:700;color:#2b6cb0; margin-bottom:0.4rem;">{{ row.employee }}</div>
+          {% for p in row.products %}
+            <div class="mb-2">
+              <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:#4a5568;">
+                <span>{{ p.product }}</span>
+                <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
+              </div>
+              <div class="modern-progress mt-1">
+                <div class="modern-progress-bar bar-amber" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
+              </div>
             </div>
-            <div class="modern-progress mt-1">
-              <div class="modern-progress-bar bar-amber" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
-            </div>
-          </div>
-        {% endfor %}
+          {% endfor %}
+        </div>
       </div>
-    </div>
-  {% empty %}
-    <p class="text-muted">No employees found.</p>
-  {% endfor %}
+    {% empty %}
+      <p class="text-muted">No employees found.</p>
+    {% endfor %}
+  </div>
 </div>
 
 <!-- Section 3: Monthly employee performance (product-wise) -->

@@ -15,6 +15,11 @@ urlpatterns = [
     path("admin/past-performance/", views.admin_past_performance, name="admin_past_performance"),
     path("admin/past-performance/<int:year>/<int:month>/", views.admin_past_month_performance, name="admin_past_month_performance"),
 
+    # Notifications
+    path("notifications/json/", views.notifications_json, name="notifications_json"),
+    path("notifications/mark-all-read/", views.notifications_mark_all_read, name="notifications_mark_all_read"),
+    path("notifications/clear/", views.notifications_clear, name="notifications_clear"),
+
 
     # New
     # sales CRUD
