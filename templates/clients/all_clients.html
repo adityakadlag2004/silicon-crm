@@ -35,6 +35,10 @@
 <div class="modern-card mb-4">
 <div class="modern-card mb-4">
   <form method="get" class="filter-bar">
+    <div style="min-width:220px;">
+      <label class="form-label">Search</label>
+      <input type="text" name="q" class="form-control" placeholder="Name, email, phone, PAN" value="{{ request.GET.q|default:'' }}">
+    </div>
     <div>
       <label class="form-label">SIP</label>
       <select name="sip_status" class="form-select">

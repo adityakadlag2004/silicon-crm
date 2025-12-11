@@ -128,6 +128,10 @@
 <!-- 🔹 Filters -->
 <div class="modern-card mb-4">
   <form method="get" class="filter-form">
+    <div style="min-width:220px;">
+      <label class="form-label">Search</label>
+      <input type="text" name="q" class="form-control" placeholder="Client, phone, employee, product" value="{{ request.GET.q|default:'' }}">
+    </div>
     <div>
       <label class="form-label">Product</label>
       <select name="product" class="form-select">
