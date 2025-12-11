@@ -10,11 +10,11 @@
     {% endfor %}
   {% endif %}
 
-  <!-- Step: choose source and optionally target -->
+  <!-- Step: choose source/target or load unmapped with search -->
   <form method="post" id="load-form">
     {% csrf_token %}
     <div class="row mb-3">
-      <div class="col-md-5">
+      <div class="col-md-4">
         <label for="source_employee">Source employee (move FROM)</label>
         <select name="source_employee" id="source_employee" class="form-control">
           <option value="">-- Select source employee --</option>
@@ -27,7 +27,7 @@
         </select>
       </div>
 
-      <div class="col-md-5">
+      <div class="col-md-4">
         <label for="target_employee">Target employee (move TO)</label>
         <select name="target_employee" id="target_employee" class="form-control">
           <option value="">-- Select target employee --</option>
@@ -40,26 +40,48 @@
         </select>
       </div>
 
-      <div class="col-md-2 align-self-end">
-        <!-- action=load triggers preview -->
-        <input type="hidden" name="action" value="load">
-        <button class="btn btn-outline-primary" type="submit">Load clients</button>
+      <div class="col-md-4">
+        <label for="search_clients">Search clients</label>
+        <input type="text" name="q" id="search_clients" class="form-control" placeholder="Name, email, phone, PAN" value="{{ q }}">
+      </div>
+
+      <div class="col-md-12 d-flex gap-2 align-items-end mt-2 flex-wrap">
+        <button class="btn btn-outline-primary" type="submit" name="action" value="load">Load from source</button>
+        <button class="btn btn-outline-secondary" type="submit" name="action" value="load_unmapped">Load unmapped clients</button>
+        <small class="text-muted">Use search to narrow the list before loading.</small>
       </div>
     </div>
   </form>
 
   {% if clients_preview %}
     <hr>
-    <h5>Clients currently mapped to {{ source_emp.user.username }}</h5>
+    {% if mode == 'unmapped' %}
+      <h5>Unmapped clients</h5>
+    {% else %}
+      <h5>Clients currently mapped to {{ source_emp.user.username }}</h5>
+    {% endif %}
     <form method="post" id="apply-form">
       {% csrf_token %}
       <input type="hidden" name="action" value="apply">
-      <input type="hidden" name="source_employee" value="{{ source_emp.id }}">
-      {% if target_emp %}
-  <input type="hidden" name="target_employee" value="{{ target_emp.id }}">
-{% elif request.POST.target_employee %}
-  <input type="hidden" name="target_employee" value="{{ request.POST.target_employee }}">
-{% endif %}
+      <input type="hidden" name="mode" value="{{ mode|default:'mapped' }}">
+      {% if source_emp %}
+        <input type="hidden" name="source_employee" value="{{ source_emp.id }}">
+      {% endif %}
+
+      <div class="row mb-3">
+        <div class="col-md-6">
+          <label for="target_employee_apply">Assign to employee</label>
+          <select name="target_employee" id="target_employee_apply" class="form-control" required>
+            <option value="">-- Select target employee --</option>
+            {% for emp in employees %}
+              <option value="{{ emp.id }}"
+                {% if target_emp and target_emp.id == emp.id %}selected{% elif request.POST.target_employee == emp.id|stringformat:'s' %}selected{% endif %}>
+                {{ emp.user.username }} — {{ emp.role }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
 
 
       <div class="mb-2">

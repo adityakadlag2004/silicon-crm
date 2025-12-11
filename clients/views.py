@@ -998,6 +998,16 @@ PER_PAGE = 50  # change to how many clients you want per page
 def all_clients(request):
     clients_qs = Client.objects.select_related("mapped_to").order_by('id')
 
+    # Text search across basic fields
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        clients_qs = clients_qs.filter(
+            Q(name__icontains=q) |
+            Q(email__icontains=q) |
+            Q(phone__icontains=q) |
+            Q(pan__icontains=q)
+        )
+
     # Filters
     sip_status = request.GET.get("sip_status")
     pms_status = request.GET.get("pms_status")
@@ -1095,6 +1105,7 @@ def all_clients(request):
         "pms_min": pms_min, "pms_max": pms_max,
         "life_min": life_min, "life_max": life_max,
         "health_min": health_min, "health_max": health_max,
+        "q": q,
         "base_qs": base_qs,
     }
     templates = MessageTemplate.objects.all()     # fetch all message templates
@@ -1107,9 +1118,23 @@ PER_PAGE = getattr(settings, "PER_PAGE", 50)
 
 @login_required
 def my_clients(request):
+    # Ensure the user has an associated employee record
+    if not hasattr(request.user, 'employee'):
+        messages.error(request, "You are not assigned as an employee.")
+        return redirect('home')
+
+    employee = request.user.employee
     # Base queryset: clients mapped to the logged-in user's employee record
-    # adapt `mapped_to=request.user.employee` if your relation differs
-    clients_qs = Client.objects.filter(mapped_to=request.user.employee).order_by('id')
+    clients_qs = Client.objects.filter(mapped_to=employee).order_by('id')
+
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        clients_qs = clients_qs.filter(
+            Q(name__icontains=q) |
+            Q(email__icontains=q) |
+            Q(phone__icontains=q) |
+            Q(pan__icontains=q)
+        )
 
     # --- Filters from GET ---
     sip_status = request.GET.get("sip_status")
@@ -1195,18 +1220,23 @@ def my_clients(request):
     if 'page' in get_params:
         del get_params['page']
     base_qs = get_params.urlencode()  # empty string if no params
-      # (add this import at top if not already)
-
-
-    templates = MessageTemplate.objects.all()     # fetch all message templates
-        # make them available in template
+    
+    templates = MessageTemplate.objects.all()
     context = {
         "clients_page": page_obj,
         "page_range": page_range,
         "total_pages": total_pages,
         "base_qs": base_qs,
+        "q": q,
+        # keep filters in context if template needs them later
+        "sip_status": sip_status, "pms_status": pms_status,
+        "life_status": life_status, "health_status": health_status,
+        "sip_min": sip_min, "sip_max": sip_max,
+        "pms_min": pms_min, "pms_max": pms_max,
+        "life_min": life_min, "life_max": life_max,
+        "health_min": health_min, "health_max": health_max,
     }
-    context.update({"templates": templates})  
+    context.update({"templates": templates})
     return render(request, "clients/my_clients.html", context)
 
 @login_required
@@ -1243,6 +1273,18 @@ def all_sales(request):
     employee = request.GET.get("employee")
     start_date = request.GET.get("start_date")
     end_date = request.GET.get("end_date")
+    q = (request.GET.get("q") or "").strip()
+
+    if q:
+        sales_qs = sales_qs.filter(
+            Q(client__name__icontains=q) |
+            Q(client__email__icontains=q) |
+            Q(client__phone__icontains=q) |
+            Q(employee__user__username__icontains=q) |
+            Q(employee__user__first_name__icontains=q) |
+            Q(employee__user__last_name__icontains=q) |
+            Q(product__icontains=q)
+        )
 
     if product:
         sales_qs = sales_qs.filter(product=product)
@@ -1260,7 +1302,7 @@ def all_sales(request):
         sales_qs = sales_qs.filter(date__range=[start_date, end_date])
 
     # Default: show only today's sales unless any filter is present
-    if not (product or client or employee or start_date or end_date):
+    if not (product or client or employee or start_date or end_date or q):
         sales_qs = sales_qs.filter(date=date.today())
 
     # Pagination
@@ -1277,6 +1319,7 @@ def all_sales(request):
         "sales": page_obj,  # page object used by template
         "is_employee": hasattr(request.user, "employee") and request.user.employee.role == "employee",
         "qstring": qstring,
+        "q": q,
     }
     return render(request, "sales/all_sales.html", context)
 
@@ -2922,10 +2965,28 @@ def bulk_reassign_view(request):
     - POST action='apply': perform reassign for selected client ids to target_employee
     """
     employees = Employee.objects.all().select_related('user')
-    context = {'employees': employees, 'clients_preview': None, 'source_emp': None, 'target_emp': None}
+    context = {
+        'employees': employees,
+        'clients_preview': None,
+        'source_emp': None,
+        'target_emp': None,
+        'mode': None,
+        'q': '',
+    }
 
     if request.method == 'POST':
         action = request.POST.get('action')
+        q = (request.POST.get('q') or '').strip()
+        context['q'] = q
+        # Persist target selection across loads without 404ing on invalid id
+        target_emp = None
+        target_id_val = request.POST.get('target_employee')
+        if target_id_val:
+            try:
+                target_emp = Employee.objects.select_related('user').filter(pk=int(target_id_val)).first()
+            except (TypeError, ValueError):
+                target_emp = None
+        context['target_emp'] = target_emp
 
         # LOAD clients for preview
         if action == 'load':
@@ -2935,22 +2996,44 @@ def bulk_reassign_view(request):
                 messages.error(request, "Please choose a source employee.")
                 return render(request, 'clients/bulk_reassign.html', context)
 
-            source_emp = get_object_or_404(Employee, pk=source_id)
+            source_emp = Employee.objects.select_related('user').filter(pk=source_id).first()
+            if not source_emp:
+                messages.error(request, "Source employee not found.")
+                return render(request, 'clients/bulk_reassign.html', context)
             clients_qs = Client.objects.filter(mapped_to=source_emp).order_by('id')
+            if q:
+                clients_qs = clients_qs.filter(
+                    Q(name__icontains=q) |
+                    Q(email__icontains=q) |
+                    Q(phone__icontains=q) |
+                    Q(pan__icontains=q)
+                )
             context.update({
                 'clients_preview': clients_qs,
                 'source_emp': source_emp,
-                'target_emp': None,
+                'mode': 'mapped',
+            })
+            return render(request, 'clients/bulk_reassign.html', context)
+
+        if action == 'load_unmapped':
+            clients_qs = Client.objects.filter(mapped_to__isnull=True).order_by('id')
+            if q:
+                clients_qs = clients_qs.filter(
+                    Q(name__icontains=q) |
+                    Q(email__icontains=q) |
+                    Q(phone__icontains=q) |
+                    Q(pan__icontains=q)
+                )
+            context.update({
+                'clients_preview': clients_qs,
+                'source_emp': None,
+                'mode': 'unmapped',
             })
             return render(request, 'clients/bulk_reassign.html', context)
 
         # APPLY reassignment for selected client ids
         if action == 'apply':
-            try:
-                source_id = int(request.POST.get('source_employee') or 0)
-            except (TypeError, ValueError):
-                messages.error(request, "Source employee missing.")
-                return redirect('clients:bulk_reassign')
+            mode = request.POST.get('mode') or 'mapped'
 
             try:
                 target_id = int(request.POST.get('target_employee') or 0)
@@ -2958,8 +3041,10 @@ def bulk_reassign_view(request):
                 messages.error(request, "Target employee missing.")
                 return redirect('clients:bulk_reassign')
 
-            source_emp = get_object_or_404(Employee, pk=source_id)
-            target_emp = get_object_or_404(Employee, pk=target_id)
+            target_emp = Employee.objects.select_related('user').filter(pk=target_id).first()
+            if not target_emp:
+                messages.error(request, "Target employee not found.")
+                return redirect('clients:bulk_reassign')
 
             # collect selected client ids from checkboxes named selected_client
             selected = request.POST.getlist('selected_client')
@@ -2967,22 +3052,36 @@ def bulk_reassign_view(request):
                 messages.error(request, "No clients selected for reassignment.")
                 return redirect('clients:bulk_reassign')
 
-            # validate they actually belong to source_emp (safety)
-            clients_to_move = Client.objects.filter(id__in=selected, mapped_to=source_emp)
+            if mode == 'unmapped':
+                clients_to_move = Client.objects.filter(id__in=selected, mapped_to__isnull=True)
+                source_emp = None
+            else:
+                try:
+                    source_id = int(request.POST.get('source_employee') or 0)
+                except (TypeError, ValueError):
+                    messages.error(request, "Source employee missing.")
+                    return redirect('clients:bulk_reassign')
+                source_emp = Employee.objects.select_related('user').filter(pk=source_id).first()
+                if not source_emp:
+                    messages.error(request, "Source employee not found.")
+                    return redirect('clients:bulk_reassign')
+                clients_to_move = Client.objects.filter(id__in=selected, mapped_to=source_emp)
 
             if not clients_to_move.exists():
                 messages.error(request, "No valid clients found to reassign (maybe selection mismatch).")
                 return redirect('clients:bulk_reassign')
 
             moved_count = 0
-            # Do reassign within transaction
             with transaction.atomic():
                 for c in clients_to_move:
                     changed, prev, new = c.reassign_to(target_emp, changed_by=request.user, note="Bulk reassign via admin page")
                     if changed:
                         moved_count += 1
 
-            messages.success(request, f"Reassigned {moved_count} client(s) from {source_emp.user.username} to {target_emp.user.username}.")
+            if mode == 'unmapped':
+                messages.success(request, f"Mapped {moved_count} unmapped client(s) to {target_emp.user.username}.")
+            else:
+                messages.success(request, f"Reassigned {moved_count} client(s) from {source_emp.user.username} to {target_emp.user.username}.")
             return redirect('clients:bulk_reassign')
 
     return render(request, 'clients/bulk_reassign.html', context)
