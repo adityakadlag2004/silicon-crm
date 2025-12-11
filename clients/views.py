@@ -2893,17 +2893,21 @@ def edit_client(request, client_id):
 
     # ✅ Allow both admin and employees — but employee can only edit their own mapped clients
     user_emp = getattr(request.user, "employee", None)
-    is_employee = bool(user_emp and getattr(user_emp, "role", None) == "employee")
+    role = getattr(user_emp, "role", None)
+    is_admin = request.user.is_superuser or role == "admin"
+    is_employee = bool(user_emp and role == "employee")
     if is_employee and client.mapped_to != user_emp:
         messages.error(request, "You can edit only your assigned clients.")
         return redirect("clients:my_clients")
 
     if request.method == "POST":
         form = ClientForm(request.POST, instance=client)
+        # Remove mapping field entirely for non-admins before validation to avoid nulling
+        if not is_admin and 'mapped_to' in form.fields:
+            form.fields.pop('mapped_to')
         if form.is_valid():
             updated = form.save(commit=False)
-            # Prevent employees from altering mapped_to; preserve existing mapping
-            if is_employee:
+            if not is_admin:
                 updated.mapped_to = client.mapped_to
             updated.save()
             messages.success(request, "Client updated successfully!")
@@ -2912,10 +2916,8 @@ def edit_client(request, client_id):
             return redirect("clients:my_clients")
     else:
         form = ClientForm(instance=client)
-
-    # Hide mapping control from employees in the UI to avoid accidental clearing
-    if is_employee and 'mapped_to' in form.fields:
-        form.fields.pop('mapped_to')
+        if not is_admin and 'mapped_to' in form.fields:
+            form.fields.pop('mapped_to')
 
     return render(request, "clients/edit_client.html", {"form": form, "client": client})
 
