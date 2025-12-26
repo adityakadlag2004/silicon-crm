@@ -61,6 +61,7 @@ class ClientForm(forms.ModelForm):
         fields = [
             "name", "email", "phone", "pan", "address", "mapped_to",
             "sip_status", "sip_amount", "sip_topup",
+            "lumsum_status", "lumsum_amount",
             "life_status", "life_cover", "life_product",
             "health_status", "health_cover", "health_topup", "health_product",
             "motor_status", "motor_insured_value", "motor_product",

@@ -24,7 +24,17 @@
   <canvas id="adminPerformanceChart" height="100" class="mt-3"></canvas>
 </div>
 
-<div class="section-title">Monthly Snapshots</div>
+<div class="section-title" style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+  <span>Monthly Snapshots — {{ selected_year }}</span>
+  <form method="get" style="display:flex;align-items:center;gap:0.5rem;">
+    <label for="year" class="mini" style="font-weight:600;">Year</label>
+    <select name="year" id="year" onchange="this.form.submit()" style="padding:0.35rem 0.6rem;border-radius:8px;border:1px solid #cbd5e0;">
+      {% for y in year_options %}
+        <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
 <div class="grid grid-3">
   {% for m in months_data %}
     <div class="modern-card" style="padding:1rem;">
