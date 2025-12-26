@@ -1012,12 +1012,15 @@ def all_clients(request):
 
     # Filters
     sip_status = request.GET.get("sip_status")
+    lumsum_status = request.GET.get("lumsum_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
     health_status = request.GET.get("health_status")
 
     sip_min = request.GET.get("sip_min")
     sip_max = request.GET.get("sip_max")
+    lumsum_min = request.GET.get("lumsum_min")
+    lumsum_max = request.GET.get("lumsum_max")
     pms_min = request.GET.get("pms_min")
     pms_max = request.GET.get("pms_max")
     life_min = request.GET.get("life_min")
@@ -1027,6 +1030,8 @@ def all_clients(request):
 
     if sip_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(sip_status=(sip_status == "yes"))
+    if lumsum_status in ["yes", "no"]:
+        clients_qs = clients_qs.filter(lumsum_status=(lumsum_status == "yes"))
     if pms_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(pms_status=(pms_status == "yes"))
     if life_status in ["yes", "no"]:
@@ -1042,6 +1047,16 @@ def all_clients(request):
     if sip_max:
         try:
             clients_qs = clients_qs.filter(sip_amount__lte=float(sip_max))
+        except ValueError:
+            pass
+    if lumsum_min:
+        try:
+            clients_qs = clients_qs.filter(lumsum_amount__gte=float(lumsum_min))
+        except ValueError:
+            pass
+    if lumsum_max:
+        try:
+            clients_qs = clients_qs.filter(lumsum_amount__lte=float(lumsum_max))
         except ValueError:
             pass
     if pms_min:
@@ -1102,8 +1117,10 @@ def all_clients(request):
         "total_pages": total_pages,
         # keep filters in context if you want to use them individually
         "sip_status": sip_status, "pms_status": pms_status,
+        "lumsum_status": lumsum_status,
         "life_status": life_status, "health_status": health_status,
         "sip_min": sip_min, "sip_max": sip_max,
+        "lumsum_min": lumsum_min, "lumsum_max": lumsum_max,
         "pms_min": pms_min, "pms_max": pms_max,
         "life_min": life_min, "life_max": life_max,
         "health_min": health_min, "health_max": health_max,
@@ -1140,12 +1157,15 @@ def my_clients(request):
 
     # --- Filters from GET ---
     sip_status = request.GET.get("sip_status")
+    lumsum_status = request.GET.get("lumsum_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
     health_status = request.GET.get("health_status")
 
     sip_min = request.GET.get("sip_min")
     sip_max = request.GET.get("sip_max")
+    lumsum_min = request.GET.get("lumsum_min")
+    lumsum_max = request.GET.get("lumsum_max")
     pms_min = request.GET.get("pms_min")
     pms_max = request.GET.get("pms_max")
     life_min = request.GET.get("life_min")
@@ -1155,6 +1175,8 @@ def my_clients(request):
 
     if sip_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(sip_status=(sip_status == "yes"))
+    if lumsum_status in ["yes", "no"]:
+        clients_qs = clients_qs.filter(lumsum_status=(lumsum_status == "yes"))
     if pms_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(pms_status=(pms_status == "yes"))
     if life_status in ["yes", "no"]:
@@ -1170,6 +1192,16 @@ def my_clients(request):
     if sip_max:
         try:
             clients_qs = clients_qs.filter(sip_amount__lte=float(sip_max))
+        except ValueError:
+            pass
+    if lumsum_min:
+        try:
+            clients_qs = clients_qs.filter(lumsum_amount__gte=float(lumsum_min))
+        except ValueError:
+            pass
+    if lumsum_max:
+        try:
+            clients_qs = clients_qs.filter(lumsum_amount__lte=float(lumsum_max))
         except ValueError:
             pass
     if pms_min:
@@ -1203,6 +1235,10 @@ def my_clients(request):
         except ValueError:
             pass
 
+    edited_filter_active = request.GET.get("edited") == "1"
+    if edited_filter_active:
+        clients_qs = clients_qs.filter(edited_at__isnull=False)
+
     # --- Pagination ---
     paginator = Paginator(clients_qs, PER_PAGE)
     page_num = request.GET.get("page", 1)
@@ -1222,6 +1258,10 @@ def my_clients(request):
     if 'page' in get_params:
         del get_params['page']
     base_qs = get_params.urlencode()  # empty string if no params
+    qs_without_edited = get_params.copy()
+    if 'edited' in qs_without_edited:
+        del qs_without_edited['edited']
+    edited_toggle_qs = qs_without_edited.urlencode()
     
     templates = MessageTemplate.objects.all()
     context = {
@@ -1232,11 +1272,15 @@ def my_clients(request):
         "q": q,
         # keep filters in context if template needs them later
         "sip_status": sip_status, "pms_status": pms_status,
+        "lumsum_status": lumsum_status,
         "life_status": life_status, "health_status": health_status,
         "sip_min": sip_min, "sip_max": sip_max,
+        "lumsum_min": lumsum_min, "lumsum_max": lumsum_max,
         "pms_min": pms_min, "pms_max": pms_max,
         "life_min": life_min, "life_max": life_max,
         "health_min": health_min, "health_max": health_max,
+        "edited_filter_active": edited_filter_active,
+        "edited_toggle_qs": edited_toggle_qs,
     }
     context.update({"templates": templates})
     return render(request, "clients/my_clients.html", context)
@@ -1327,7 +1371,8 @@ def all_sales(request):
 
 @login_required
 def admin_add_sale(request):
-    if not request.user.is_superuser and request.user.employee.role != "admin":
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
         return redirect("clients:employee_dashboard")  # block non-admins
 
     if request.method == "POST":
@@ -1357,8 +1402,9 @@ from .models import IncentiveRule
 
 @login_required
 def manage_incentive_rules(request):
-    # Role check OR hardcoded pass
-    if request.user.employee.role != "admin" and request.GET.get("pass") != "SuperSecret123":
+    # Strict role check (no backdoor bypass)
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
         messages.error(request, "You do not have permission to access incentive rules.")
         return redirect("clients:admin_dashboard")
 
@@ -1380,11 +1426,15 @@ def manage_incentive_rules(request):
 
 @login_required
 def recalc_points(request):
+    user_emp = getattr(request.user, "employee", None)
     # Admin sees all sales, Employee sees only their own
-    if request.user.employee.role == "admin":
+    if request.user.is_superuser or (user_emp and user_emp.role == "admin"):
         sales = Sale.objects.all()
+    elif user_emp:
+        sales = Sale.objects.filter(employee=user_emp)
     else:
-        sales = Sale.objects.filter(employee=request.user.employee)
+        messages.error(request, "You are not mapped to an employee.")
+        return redirect("clients:login")
 
     count = 0
     for s in sales:
@@ -1715,11 +1765,21 @@ def admin_past_performance(request, n_months=12):
     today = now().date()
     months = _last_n_months(today, n=n_months)
 
+    year_options = sorted({y for (y, _) in months}, reverse=True)
+    try:
+        selected_year = int(request.GET.get("year"))
+    except (TypeError, ValueError):
+        selected_year = None
+    if selected_year not in year_options:
+        selected_year = year_options[0] if year_options else today.year
+
+    months_for_year = [(y, m) for (y, m) in months if y == selected_year] or months
+
     labels = []
     totals_data = []
     months_data = []
 
-    for (y, m) in months:
+    for (y, m) in months_for_year:
         label = f"{month_name[m]} {y}"
 
         total_points = (
@@ -1743,8 +1803,8 @@ def admin_past_performance(request, n_months=12):
             "amount": float(total_amount),
         })
 
-    # Top performers for the most recent month:
-    latest_year, latest_month = months[-1]
+    # Top performers for the most recent month in the selected year (fallback to latest overall)
+    latest_year, latest_month = months_for_year[-1] if months_for_year else months[-1]
 
     # Use user first/last name fields (safe), fallback to username
     top_performers_qs = (
@@ -1784,6 +1844,8 @@ def admin_past_performance(request, n_months=12):
         "latest_month_label": months_data[-1]["label"],
         "latest_year": latest_year,
         "latest_month": latest_month,
+        "year_options": year_options,
+        "selected_year": selected_year,
     }
 
     return render(request, "dashboards/admin_past_performance.html", context)
@@ -2186,17 +2248,26 @@ def calling_workspace(request, list_id):
 
         # ---- Add Follow-up ----
         elif action == "add_followup":
-            followup_date = request.POST.get("followup_date")
+            followup_raw = request.POST.get("followup_date")
             notes = request.POST.get("notes", "")
-            if followup_date:
-                CalendarEvent.objects.create(
-                    employee=employee,
-                    title=f"Follow-up: {prospect.name}",
-                    description=notes,
-                    event_date=followup_date,
-                    related_prospect=prospect,
-                )
-                messages.success(request, f"Follow-up added for {prospect.name}.")
+            if followup_raw:
+                followup_dt = parse_datetime(followup_raw)
+                if followup_dt and timezone.is_naive(followup_dt):
+                    followup_dt = timezone.make_aware(followup_dt)
+                if followup_dt:
+                    CalendarEvent.objects.create(
+                        employee=employee,
+                        title=f"Follow-up: {prospect.name}",
+                        scheduled_time=followup_dt,
+                        type="follow_up",
+                        notes=notes,
+                        related_prospect=prospect,
+                    )
+                    messages.success(request, f"Follow-up added for {prospect.name}.")
+                else:
+                    messages.error(request, "Could not parse follow-up date/time.")
+            else:
+                messages.error(request, "Follow-up date is required.")
 
         return redirect("clients:callingworkspace", list_id=list_id)
 
@@ -2598,7 +2669,8 @@ def delete_calling_list(request, list_id):
     calling_list = get_object_or_404(CallingList, id=list_id)
 
     # Only admin should delete
-    if request.user.employee.role != "admin":
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
         messages.error(request, "You are not authorized to delete lists.")
         return redirect("clients:admin_lists")
 
@@ -2695,11 +2767,16 @@ def reschedule_event(request, event_id):
     if request.method == "POST":
         new_time = request.POST.get("scheduled_time")
         if new_time:
-            event.scheduled_time = new_time
-            event.status = "rescheduled"
-            event.save()
-            messages.success(request, "Event rescheduled 🔄")
-            return redirect("clients:employee_dashboard")
+            parsed = parse_datetime(new_time)
+            if parsed and timezone.is_naive(parsed):
+                parsed = timezone.make_aware(parsed)
+            if parsed:
+                event.scheduled_time = parsed
+                event.status = "rescheduled"
+                event.save()
+                messages.success(request, "Event rescheduled 🔄")
+                return redirect("clients:employee_dashboard")
+            messages.error(request, "Could not parse new time; please use a valid date/time.")
 
     return render(request, "calendar/reschedule_event.html", {"event": event})
 import json
@@ -2911,6 +2988,8 @@ def edit_client(request, client_id):
             updated = form.save(commit=False)
             if not is_admin:
                 updated.mapped_to = client.mapped_to
+                updated.edited_at = timezone.now()
+                updated.edited_by = user_emp
             updated.save()
             messages.success(request, "Client updated successfully!")
             if not is_employee:

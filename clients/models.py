@@ -34,6 +34,10 @@ class Client(models.Model):
     sip_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     sip_topup = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
+    # Lumsum details
+    lumsum_status = models.BooleanField(default=False)
+    lumsum_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
     # Health Insurance details
     health_status = models.BooleanField(default=False)
     health_cover = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -57,6 +61,8 @@ class Client(models.Model):
 
     status = models.CharField(max_length=20, default="Unmapped")
     created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    edited_by = models.ForeignKey('Employee', null=True, blank=True, on_delete=models.SET_NULL, related_name='edited_clients')
 
     def __str__(self):
         return f"{self.id} - {self.name}"
@@ -240,6 +246,24 @@ class Target(models.Model):
 
     def __str__(self):
         return f"{self.product} ({self.target_type})"
+
+
+class BusinessTarget(models.Model):
+    metric = models.CharField(max_length=100)
+    target_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    unit = models.CharField(max_length=50, blank=True, default="")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    active = models.BooleanField(default=True)
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-start_date", "-end_date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.metric} {self.start_date}–{self.end_date}"
 
 
 class MonthlyTargetHistory(models.Model):
