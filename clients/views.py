@@ -1012,15 +1012,12 @@ def all_clients(request):
 
     # Filters
     sip_status = request.GET.get("sip_status")
-    lumsum_status = request.GET.get("lumsum_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
     health_status = request.GET.get("health_status")
 
     sip_min = request.GET.get("sip_min")
     sip_max = request.GET.get("sip_max")
-    lumsum_min = request.GET.get("lumsum_min")
-    lumsum_max = request.GET.get("lumsum_max")
     pms_min = request.GET.get("pms_min")
     pms_max = request.GET.get("pms_max")
     life_min = request.GET.get("life_min")
@@ -1030,8 +1027,6 @@ def all_clients(request):
 
     if sip_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(sip_status=(sip_status == "yes"))
-    if lumsum_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(lumsum_status=(lumsum_status == "yes"))
     if pms_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(pms_status=(pms_status == "yes"))
     if life_status in ["yes", "no"]:
@@ -1047,16 +1042,6 @@ def all_clients(request):
     if sip_max:
         try:
             clients_qs = clients_qs.filter(sip_amount__lte=float(sip_max))
-        except ValueError:
-            pass
-    if lumsum_min:
-        try:
-            clients_qs = clients_qs.filter(lumsum_amount__gte=float(lumsum_min))
-        except ValueError:
-            pass
-    if lumsum_max:
-        try:
-            clients_qs = clients_qs.filter(lumsum_amount__lte=float(lumsum_max))
         except ValueError:
             pass
     if pms_min:
@@ -1117,10 +1102,8 @@ def all_clients(request):
         "total_pages": total_pages,
         # keep filters in context if you want to use them individually
         "sip_status": sip_status, "pms_status": pms_status,
-        "lumsum_status": lumsum_status,
         "life_status": life_status, "health_status": health_status,
         "sip_min": sip_min, "sip_max": sip_max,
-        "lumsum_min": lumsum_min, "lumsum_max": lumsum_max,
         "pms_min": pms_min, "pms_max": pms_max,
         "life_min": life_min, "life_max": life_max,
         "health_min": health_min, "health_max": health_max,
@@ -1157,15 +1140,12 @@ def my_clients(request):
 
     # --- Filters from GET ---
     sip_status = request.GET.get("sip_status")
-    lumsum_status = request.GET.get("lumsum_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
     health_status = request.GET.get("health_status")
 
     sip_min = request.GET.get("sip_min")
     sip_max = request.GET.get("sip_max")
-    lumsum_min = request.GET.get("lumsum_min")
-    lumsum_max = request.GET.get("lumsum_max")
     pms_min = request.GET.get("pms_min")
     pms_max = request.GET.get("pms_max")
     life_min = request.GET.get("life_min")
@@ -1175,8 +1155,6 @@ def my_clients(request):
 
     if sip_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(sip_status=(sip_status == "yes"))
-    if lumsum_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(lumsum_status=(lumsum_status == "yes"))
     if pms_status in ["yes", "no"]:
         clients_qs = clients_qs.filter(pms_status=(pms_status == "yes"))
     if life_status in ["yes", "no"]:
@@ -1192,16 +1170,6 @@ def my_clients(request):
     if sip_max:
         try:
             clients_qs = clients_qs.filter(sip_amount__lte=float(sip_max))
-        except ValueError:
-            pass
-    if lumsum_min:
-        try:
-            clients_qs = clients_qs.filter(lumsum_amount__gte=float(lumsum_min))
-        except ValueError:
-            pass
-    if lumsum_max:
-        try:
-            clients_qs = clients_qs.filter(lumsum_amount__lte=float(lumsum_max))
         except ValueError:
             pass
     if pms_min:
@@ -1272,10 +1240,8 @@ def my_clients(request):
         "q": q,
         # keep filters in context if template needs them later
         "sip_status": sip_status, "pms_status": pms_status,
-        "lumsum_status": lumsum_status,
         "life_status": life_status, "health_status": health_status,
         "sip_min": sip_min, "sip_max": sip_max,
-        "lumsum_min": lumsum_min, "lumsum_max": lumsum_max,
         "pms_min": pms_min, "pms_max": pms_max,
         "life_min": life_min, "life_max": life_max,
         "health_min": health_min, "health_max": health_max,
@@ -2988,7 +2954,8 @@ def edit_client(request, client_id):
             updated = form.save(commit=False)
             if not is_admin:
                 updated.mapped_to = client.mapped_to
-                updated.edited_at = timezone.now()
+            updated.edited_at = timezone.now()
+            if user_emp:
                 updated.edited_by = user_emp
             updated.save()
             messages.success(request, "Client updated successfully!")

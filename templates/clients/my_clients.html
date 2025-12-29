@@ -45,14 +45,6 @@
       </select>
     </div>
     <div>
-      <label class="form-label">Lumsum</label>
-      <select name="lumsum_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.lumsum_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.lumsum_status == "no" %}selected{% endif %}>No</option>
-      </select>
-    </div>
-    <div>
       <label class="form-label">PMS</label>
       <select name="pms_status" class="form-select">
         <option value="">All</option>
@@ -86,14 +78,6 @@
         <div>
           <label class="form-label">SIP Max</label>
           <input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}">
-        </div>
-        <div>
-          <label class="form-label">Lumsum Min</label>
-          <input type="number" name="lumsum_min" class="form-control" value="{{ request.GET.lumsum_min }}">
-        </div>
-        <div>
-          <label class="form-label">Lumsum Max</label>
-          <input type="number" name="lumsum_max" class="form-control" value="{{ request.GET.lumsum_max }}">
         </div>
         <div>
           <label class="form-label">PMS Min</label>
@@ -160,7 +144,6 @@
         <th>Phone</th>
         <th>Email</th>
         <th>SIP</th>
-        <th>Lumsum</th>
         <th>PMS</th>
         <th>Mapped To</th>
         <th style="width:140px;">Actions</th>
@@ -174,7 +157,6 @@
         <td>{{ client.phone|default:''|floatformat:0 }}</td>
         <td>{{ client.email }}</td>
         <td>₹{{ client.sip_amount|default:0 }}</td>
-        <td>₹{{ client.lumsum_amount|default:0 }}</td>
         <td>₹{{ client.pms_amount|default:0 }}</td>
         <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
         <td style="display:flex;gap:0.35rem;flex-wrap:wrap;">

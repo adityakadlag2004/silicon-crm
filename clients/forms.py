@@ -61,7 +61,6 @@ class ClientForm(forms.ModelForm):
         fields = [
             "name", "email", "phone", "pan", "address", "mapped_to",
             "sip_status", "sip_amount", "sip_topup",
-            "lumsum_status", "lumsum_amount",
             "life_status", "life_cover", "life_product",
             "health_status", "health_cover", "health_topup", "health_product",
             "motor_status", "motor_insured_value", "motor_product",
@@ -74,8 +73,14 @@ class ClientForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.update({"class": "form-control"})
+        for name, field in self.fields.items():
+            widget = field.widget
+            # Style checkboxes distinctly so they stay visible
+            if getattr(widget, "input_type", "") == "checkbox":
+                widget.attrs["class"] = "form-check-input"
+                widget.attrs.pop("style", None)
+            else:
+                widget.attrs["class"] = "form-control"
         # optional: uppercase PAN
         if "pan" in self.fields:
             self.fields["pan"].widget.attrs["style"] = "text-transform: uppercase;"

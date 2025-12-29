@@ -34,10 +34,6 @@ class Client(models.Model):
     sip_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     sip_topup = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
-    # Lumsum details
-    lumsum_status = models.BooleanField(default=False)
-    lumsum_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-
     # Health Insurance details
     health_status = models.BooleanField(default=False)
     health_cover = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -69,10 +65,16 @@ class Client(models.Model):
 
     def save(self, *args, **kwargs):
         # Auto-generate sequential id if not set
+        is_new = self._state.adding
         if self.id is None:
             with transaction.atomic():
                 max_id = Client.objects.aggregate(max_id=Max('id'))['max_id'] or 0
                 self.id = max_id + 1
+        else:
+            # Ensure edited_at is set at least once after the first edit so
+            # the "Show Edited" filter can surface historical edits.
+            if self.edited_at is None and not is_new:
+                self.edited_at = timezone.now()
         super().save(*args, **kwargs)
     
     def reassign_to(self, new_employee, changed_by=None, note=''):
