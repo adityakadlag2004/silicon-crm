@@ -316,6 +316,26 @@ class Redemption(models.Model):
         return f"{self.get_entry_type_display()} - {self.product} : ₹{self.amount} on {self.date}"
 
 
+class NetBusinessEntry(models.Model):
+    ENTRY_CHOICES = [
+        ("sale", "Sale"),
+        ("redemption", "Redemption"),
+    ]
+
+    entry_type = models.CharField(max_length=20, choices=ENTRY_CHOICES)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    date = models.DateField(default=timezone.now)
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.entry_type.title()} ₹{self.amount} on {self.date}"
+
+
 from django.conf import settings
 # Calling and Calender
 # Prospect status choices
