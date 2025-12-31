@@ -88,6 +88,19 @@
       </div>
     </div>
 
+    <!-- Lumsum Investment -->
+    <div class="section">
+      <h4>Lumsum Investment</h4>
+      <div class="grid-3">
+        <div>
+          <label class="form-label">Amount (₹)</label>
+          <input type="number" step="0.01" name="lumsum_investment" class="form-control"
+                 value="{{ form.lumsum_investment.value|default_if_none:form.instance.lumsum_investment|default_if_none:0 }}" placeholder="0">
+          <small class="muted">Default is 0 — update anytime.</small>
+        </div>
+      </div>
+    </div>
+
     <!-- Life Insurance -->
     <div class="section">
       <h4>Life Insurance</h4>

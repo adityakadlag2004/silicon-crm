@@ -34,6 +34,9 @@ class Client(models.Model):
     sip_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     sip_topup = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
 
+    # Lumsum investment (separate from SIP)
+    lumsum_investment = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, default=0)
+
     # Health Insurance details
     health_status = models.BooleanField(default=False)
     health_cover = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -75,6 +78,9 @@ class Client(models.Model):
             # the "Show Edited" filter can surface historical edits.
             if self.edited_at is None and not is_new:
                 self.edited_at = timezone.now()
+        # Normalize lumsum investment to 0 if missing
+        if self.lumsum_investment is None:
+            self.lumsum_investment = Decimal("0.00")
         super().save(*args, **kwargs)
     
     def reassign_to(self, new_employee, changed_by=None, note=''):

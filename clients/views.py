@@ -46,7 +46,7 @@ from .models import (
     Redemption,
     Notification,
 )
-from .forms import SaleForm, AdminSaleForm, EditSaleForm
+from .forms import SaleForm, AdminSaleForm, EditSaleForm, ClientForm
 from django.db.models import Count, Avg, Sum
 from django.db.models.functions import TruncDay, TruncMonth, TruncYear
 from django.core.exceptions import FieldError
@@ -694,17 +694,6 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect("clients:login")
-
-# Client Form
-class ClientForm(forms.ModelForm):
-    class Meta:
-        model = Client
-        fields = ["name", "email", "phone", "pan", "address", "mapped_to",
-                  "sip_status", "sip_amount", "sip_topup",
-                  "health_status", "health_cover", "health_topup", "health_product",
-                  "life_status", "life_cover", "life_product",
-                  "motor_status", "motor_insured_value", "motor_product",
-                  "pms_status", "pms_amount", "pms_start_date"]
 
 from django.db.models import Sum, Value
 from django.db.models.functions import Coalesce
@@ -2954,6 +2943,8 @@ def edit_client(request, client_id):
             updated = form.save(commit=False)
             if not is_admin:
                 updated.mapped_to = client.mapped_to
+            # Ensure lumsum investment binds and saves explicitly
+            updated.lumsum_investment = form.cleaned_data.get("lumsum_investment")
             updated.edited_at = timezone.now()
             if user_emp:
                 updated.edited_by = user_emp
