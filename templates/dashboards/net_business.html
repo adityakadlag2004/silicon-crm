@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static custom_filters %}
 {% block title %}Net Business{% endblock %}
 {% block content %}
 <style>
@@ -147,9 +147,9 @@
 					{% for row in month_table %}
 						<tr>
 							<td>{{ row.label }}</td>
-							<td class="text-end">₹{{ row.sales|floatformat:2 }}</td>
-							<td class="text-end text-danger">₹{{ row.redemptions|floatformat:2 }}</td>
-							<td class="text-end fw-bold {% if row.net < 0 %}text-danger{% else %}text-success{% endif %}">₹{{ row.net|floatformat:2 }}</td>
+							<td class="text-end">₹{{ row.sales|indian_number:2 }}</td>
+							<td class="text-end text-danger">₹{{ row.redemptions|indian_number:2 }}</td>
+							<td class="text-end fw-bold {% if row.net < 0 %}text-danger{% else %}text-success{% endif %}">₹{{ row.net|indian_number:2 }}</td>
 						</tr>
 					{% endfor %}
 				{% else %}
