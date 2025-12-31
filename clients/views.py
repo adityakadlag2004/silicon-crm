@@ -44,6 +44,7 @@ from .models import (
     MessageTemplate,
     IncentiveRule,
     Redemption,
+    NetBusinessEntry,
     Notification,
 )
 from .forms import SaleForm, AdminSaleForm, EditSaleForm, ClientForm
@@ -548,119 +549,201 @@ def net_business(request):
         messages.error(request, 'You do not have permission to view Net Business.')
         return redirect('clients:admin_dashboard')
 
-    # handle POST to add redemption
+    # handle POST to add/update/delete manual net business entry
     if request.method == 'POST':
-        product = request.POST.get('product')
-        entry_type = request.POST.get('entry_type', 'redemption')
-        amount = request.POST.get('amount')
-        date_str = request.POST.get('date')
-        note = request.POST.get('note', '')
+        action = request.POST.get('action', 'add')
         try:
-            amt = float(amount)
-            d = date.fromisoformat(date_str) if date_str else date.today()
-            Redemption.objects.create(product=product, entry_type=entry_type, amount=amt, date=d, note=note, created_by=request.user)
-            messages.success(request, 'Redemption entry added')
+            if action == 'delete':
+                entry_id = request.POST.get('entry_id')
+                if not entry_id:
+                    raise ValueError('Missing entry id')
+                NetBusinessEntry.objects.filter(id=entry_id).delete()
+                messages.success(request, 'Entry deleted')
+                return redirect('clients:net_business')
+
+            # shared fields
+            entry_type = request.POST.get('entry_type')
+            amount = float(request.POST.get('amount'))
+            month_val = int(request.POST.get('month'))
+            year_val = int(request.POST.get('year'))
+            note = request.POST.get('note', '')
+
+            if entry_type not in ('sale', 'redemption'):
+                raise ValueError('Choose Sale or Redemption')
+            if month_val < 1 or month_val > 12:
+                raise ValueError('Month must be 1-12')
+
+            entry_date = date(year_val, month_val, 1)
+
+            if action == 'update':
+                entry_id = request.POST.get('entry_id')
+                if not entry_id:
+                    raise ValueError('Missing entry id')
+                entry = NetBusinessEntry.objects.get(id=entry_id)
+                entry.entry_type = entry_type
+                entry.amount = amount
+                entry.date = entry_date
+                entry.note = note
+                entry.save(update_fields=['entry_type', 'amount', 'date', 'note'])
+                messages.success(request, 'Entry updated')
+            else:
+                NetBusinessEntry.objects.create(
+                    entry_type=entry_type,
+                    amount=amount,
+                    date=entry_date,
+                    note=note,
+                    created_by=request.user,
+                )
+                messages.success(request, 'Entry added')
             return redirect('clients:net_business')
         except Exception as e:
             messages.error(request, f'Invalid input: {e}')
 
     # Filters
     try:
-        start_str = request.GET.get('start')
-        end_str = request.GET.get('end')
-        if start_str:
-            start = date.fromisoformat(start_str)
-        else:
-            start = date(date.today().year, 1, 1)
-        if end_str:
-            end = date.fromisoformat(end_str)
-        else:
-            end = date.today()
+        year_picker_raw = request.GET.get('year_picker')
+        selected_year = int(year_picker_raw) if year_picker_raw else date.today().year
     except Exception:
-        start = date(date.today().year, 1, 1)
-        end = date.today()
+        selected_year = date.today().year
 
     gran = request.GET.get('granularity', 'month')  # day|month|year
-    product_filter = request.GET.get('product')
+    series_mode = request.GET.get('series_mode', 'net')  # net|sales|redemptions for client-side toggling
 
-    # Base sales queryset
-    sales_qs = Sale.objects.filter(date__range=(start, end))
-    if product_filter:
-        sales_qs = sales_qs.filter(product=product_filter)
+    current_year = date.today().year
+    entry_years = list(NetBusinessEntry.objects.values_list('date__year', flat=True).distinct())
+    year_options = sorted(set(list(range(current_year + 1, current_year - 5, -1)) + entry_years), reverse=True)
 
-    # Base redemptions
-    red_qs = Redemption.objects.filter(date__range=(start, end))
-    if product_filter:
-        red_qs = red_qs.filter(product=product_filter)
+    # Determine date window
+    if gran == 'year':
+        max_year = max(entry_years + [current_year]) if entry_years else current_year
+        min_year = max_year - 4
+        start = date(min_year, 1, 1)
+        end = date(max_year, 12, 31)
+    else:
+        start = date(selected_year, 1, 1)
+        end = date(selected_year, 12, 31)
+
+    # Year used for the month-wise table on the right
+    try:
+        table_year = int(request.GET.get('table_year', selected_year))
+    except Exception:
+        table_year = selected_year
+
+    # Manual entry queryset
+    entries_qs = NetBusinessEntry.objects.filter(date__range=(start, end))
 
     # Grouping
     if gran == 'day':
-        sales_grouped = sales_qs.annotate(period=TruncDay('date')).values('period', 'product').annotate(total=Sum('amount'), count=Count('id')).order_by('period')
-        red_grouped = red_qs.annotate(period=TruncDay('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        entries_grouped = entries_qs.annotate(period=TruncDay('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
     elif gran == 'year':
-        sales_grouped = sales_qs.annotate(period=TruncYear('date')).values('period', 'product').annotate(total=Sum('amount'), count=Count('id')).order_by('period')
-        red_grouped = red_qs.annotate(period=TruncYear('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        entries_grouped = entries_qs.annotate(period=TruncYear('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
     else:
-        sales_grouped = sales_qs.annotate(period=TruncMonth('date')).values('period', 'product').annotate(total=Sum('amount'), count=Count('id')).order_by('period')
-        red_grouped = red_qs.annotate(period=TruncMonth('date')).values('period', 'product').annotate(total=Sum('amount')).order_by('period')
+        entries_grouped = entries_qs.annotate(period=TruncMonth('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
 
-    # Build a mapping: (period, product) -> totals
     data = {}
-    products = set()
-    for r in sales_grouped:
-        key = (r['period'].date() if hasattr(r['period'], 'date') else r['period'], r['product'])
-        data.setdefault(key, {'sales': 0, 'redemptions': 0})
-        data[key]['sales'] = float(r['total'] or 0)
-        # include transaction count (number of sales) for this period+product
-        try:
-            data[key]['count'] = int(r.get('count', 0) or 0)
-        except Exception:
-            data[key]['count'] = 0
-        products.add(r['product'])
+    for r in entries_grouped:
+        key = r['period'].date() if hasattr(r['period'], 'date') else r['period']
+        if key not in data:
+            data[key] = {'sales': 0, 'redemptions': 0}
+        if r['entry_type'] == 'sale':
+            data[key]['sales'] = float(r['total'] or 0)
+        else:
+            data[key]['redemptions'] = float(r['total'] or 0)
 
-    for r in red_grouped:
-        key = (r['period'].date() if hasattr(r['period'], 'date') else r['period'], r['product'])
-        data.setdefault(key, {'sales': 0, 'redemptions': 0})
-        data[key]['redemptions'] = float(r['total'] or 0)
-        products.add(r['product'])
+    # Determine periods for chart
+    period_totals = []
+    if gran == 'year':
+        min_year = start.year
+        max_year = end.year
+        for yr in range(min_year, max_year + 1):
+            key = date(yr, 1, 1)
+            sales_total = data.get(key, {}).get('sales', 0)
+            red_total = data.get(key, {}).get('redemptions', 0)
+            net_total = sales_total - red_total
+            period_totals.append({
+                'period': key.isoformat(),
+                'label': str(yr),
+                'sales': round(sales_total, 2),
+                'redemptions': round(red_total, 2),
+                'net': round(net_total, 2),
+            })
+    else:
+        # month view: fill all 12 months of selected_year
+        periods = [date(start.year, m, 1) for m in range(1, 13)]
+        for p in periods:
+            sales_total = data.get(p, {}).get('sales', 0)
+            red_total = data.get(p, {}).get('redemptions', 0)
+            net_total = sales_total - red_total
+            label = p.strftime('%b %Y') if gran == 'month' else p.strftime('%d %b %Y')
+            period_totals.append({
+                'period': p.isoformat(),
+                'label': label,
+                'sales': round(sales_total, 2),
+                'redemptions': round(red_total, 2),
+                'net': round(net_total, 2),
+            })
 
-    # Prepare rows sorted by period
-    rows = []
-    # get sorted unique periods
-    periods = sorted({k[0] for k in data.keys()})
-    for p in periods:
-        for prod in sorted(products):
-            s = data.get((p, prod), {'sales': 0, 'redemptions': 0})
-            net = s['sales'] - s['redemptions']
-            rows.append({'period': p, 'product': prod, 'sales': s['sales'], 'redemptions': s['redemptions'], 'net': net})
+    # Table data switches with granularity: month view lists months of selected year; year view lists years (last 5 window)
+    if gran == 'year':
+        table_entries = NetBusinessEntry.objects.filter(date__range=(start, end))
+        table_grouped = table_entries.annotate(period=TruncYear('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
 
-    # totals by product
-    totals = {}
-    for prod in products:
-        total_sales = sum(r['sales'] for r in rows if r['product'] == prod)
-        total_red = sum(r['redemptions'] for r in rows if r['product'] == prod)
-        totals[prod] = {'sales': total_sales, 'redemptions': total_red, 'net': total_sales - total_red}
+        table_map = {date(y, 1, 1): {'sales': 0, 'redemptions': 0} for y in range(start.year, end.year + 1)}
+        for r in table_grouped:
+            k = r['period'].date() if hasattr(r['period'], 'date') else r['period']
+            if k not in table_map:
+                table_map[k] = {'sales': 0, 'redemptions': 0}
+            if r['entry_type'] == 'sale':
+                table_map[k]['sales'] += float(r['total'] or 0)
+            else:
+                table_map[k]['redemptions'] += float(r['total'] or 0)
 
-    # Compute counts per product (number of sales transactions) in one query
-    counts_qs = sales_qs.values('product').annotate(cnt=Count('id'))
-    counts_map = {c['product']: int(c['cnt'] or 0) for c in counts_qs}
-    for prod in totals.keys():
-        totals[prod]['count'] = counts_map.get(prod, 0)
+        table_rows = []
+        for k in sorted(table_map.keys()):
+            val = table_map[k]
+            label = k.strftime('%Y') if hasattr(k, 'strftime') else str(k)
+            net_val = val['sales'] - val['redemptions']
+            table_rows.append({'period': k.isoformat() if hasattr(k, 'isoformat') else str(k), 'label': label, 'sales': val['sales'], 'redemptions': val['redemptions'], 'net': net_val})
+    else:
+        table_entries = NetBusinessEntry.objects.filter(date__year=table_year)
+        table_grouped = table_entries.annotate(period=TruncMonth('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
+
+        table_map = {date(table_year, m, 1): {'sales': 0, 'redemptions': 0} for m in range(1, 13)}
+        for r in table_grouped:
+            k = r['period'].date() if hasattr(r['period'], 'date') else r['period']
+            if k not in table_map:
+                table_map[k] = {'sales': 0, 'redemptions': 0}
+            if r['entry_type'] == 'sale':
+                table_map[k]['sales'] += float(r['total'] or 0)
+            else:
+                table_map[k]['redemptions'] += float(r['total'] or 0)
+
+        table_rows = []
+        for k in sorted(table_map.keys()):
+            val = table_map[k]
+            label = k.strftime('%b %Y') if hasattr(k, 'strftime') else str(k)
+            net_val = val['sales'] - val['redemptions']
+            table_rows.append({'period': k.isoformat() if hasattr(k, 'isoformat') else str(k), 'label': label, 'sales': val['sales'], 'redemptions': val['redemptions'], 'net': net_val})
+
+    # Recent entries for edit/delete
+    entry_list = NetBusinessEntry.objects.order_by('-date', '-created_at')[:200]
 
     # expose string versions of dates so HTML date inputs retain values
     start_str = start.isoformat() if hasattr(start, 'isoformat') else str(start)
     end_str = end.isoformat() if hasattr(end, 'isoformat') else str(end)
 
     context = {
-        'rows': rows,
-        'totals': totals,
         'start': start,
         'end': end,
         'start_str': start_str,
         'end_str': end_str,
         'granularity': gran,
-        'products': [c[0] for c in Sale.PRODUCT_CHOICES],
-        'selected_product': product_filter,
+        'series_mode': series_mode,
+        'period_totals_json': json.dumps(period_totals),
+        'month_table': table_rows,
+        'table_year': table_year,
+        'year_options': year_options,
+        'entry_list': entry_list,
     }
 
     return render(request, 'dashboards/net_business.html', context)
