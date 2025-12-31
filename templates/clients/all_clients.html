@@ -144,6 +144,7 @@
         <th>Phone</th>
         <th>Email</th>
         <th>SIP</th>
+        <th>Lumsum Inv.</th>
         <th>PMS</th>
         <th>Mapped To</th>
         <th style="width:160px;">Actions</th>
@@ -157,6 +158,7 @@
         <td>{{ client.phone|default:''|floatformat:0 }}</td>
         <td>{{ client.email }}</td>
         <td>₹{{ client.sip_amount|default:0 }}</td>
+        <td>₹{{ client.lumsum_investment|default:0 }}</td>
         <td>₹{{ client.pms_amount|default:0 }}</td>
         <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
         <td style="display:flex;gap:0.35rem;flex-wrap:wrap;">

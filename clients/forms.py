@@ -61,6 +61,7 @@ class ClientForm(forms.ModelForm):
         fields = [
             "name", "email", "phone", "pan", "address", "mapped_to",
             "sip_status", "sip_amount", "sip_topup",
+            "lumsum_investment",
             "life_status", "life_cover", "life_product",
             "health_status", "health_cover", "health_topup", "health_product",
             "motor_status", "motor_insured_value", "motor_product",
@@ -69,6 +70,7 @@ class ClientForm(forms.ModelForm):
         widgets = {
             "address": forms.Textarea(attrs={"rows": 3}),
             "pms_start_date": forms.DateInput(attrs={"type": "date"}),
+            "lumsum_investment": forms.NumberInput(attrs={"step": "0.01", "placeholder": "0"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -81,9 +83,19 @@ class ClientForm(forms.ModelForm):
                 widget.attrs.pop("style", None)
             else:
                 widget.attrs["class"] = "form-control"
+                if name == "lumsum_investment":
+                    widget.attrs.setdefault("step", "0.01")
+                    widget.attrs.setdefault("placeholder", "0")
         # optional: uppercase PAN
         if "pan" in self.fields:
             self.fields["pan"].widget.attrs["style"] = "text-transform: uppercase;"
+
+    def clean_lumsum_investment(self):
+        val = self.cleaned_data.get("lumsum_investment")
+        # Default to 0.00 if left blank
+        if val is None:
+            return 0
+        return val
 
 
 # app/forms.py
