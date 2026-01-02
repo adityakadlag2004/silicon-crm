@@ -45,6 +45,7 @@ from .models import (
     IncentiveRule,
     Redemption,
     NetBusinessEntry,
+    NetSipEntry,
     Notification,
 )
 from .forms import SaleForm, AdminSaleForm, EditSaleForm, ClientForm
@@ -748,6 +749,201 @@ def net_business(request):
 
     return render(request, 'dashboards/net_business.html', context)
 
+
+@login_required
+def net_sip(request):
+    """Net SIP dashboard: SIP fresh minus SIP stopped."""
+    if not (request.user.is_superuser or (hasattr(request.user, 'employee') and request.user.employee.role in ('admin', 'manager'))):
+        messages.error(request, 'You do not have permission to view Net SIP.')
+        return redirect('clients:admin_dashboard')
+
+    if request.method == 'POST':
+        action = request.POST.get('action', 'add')
+        try:
+            if action == 'delete':
+                entry_id = request.POST.get('entry_id')
+                if not entry_id:
+                    raise ValueError('Missing entry id')
+                NetSipEntry.objects.filter(id=entry_id).delete()
+                messages.success(request, 'Entry deleted')
+                return redirect('clients:net_sip')
+
+            entry_type = request.POST.get('entry_type')
+            amount = float(request.POST.get('amount'))
+            month_val = int(request.POST.get('month'))
+            year_val = int(request.POST.get('year'))
+            note = request.POST.get('note', '')
+
+            if entry_type not in ('fresh', 'stopped'):
+                raise ValueError('Choose SIP Fresh or SIP Stopped')
+            if month_val < 1 or month_val > 12:
+                raise ValueError('Month must be 1-12')
+
+            entry_date = date(year_val, month_val, 1)
+
+            if action == 'update':
+                entry_id = request.POST.get('entry_id')
+                if not entry_id:
+                    raise ValueError('Missing entry id')
+                entry = NetSipEntry.objects.get(id=entry_id)
+                entry.entry_type = entry_type
+                entry.amount = amount
+                entry.date = entry_date
+                entry.note = note
+                entry.save(update_fields=['entry_type', 'amount', 'date', 'note'])
+                messages.success(request, 'Entry updated')
+            else:
+                NetSipEntry.objects.create(
+                    entry_type=entry_type,
+                    amount=amount,
+                    date=entry_date,
+                    note=note,
+                    created_by=request.user,
+                )
+                messages.success(request, 'Entry added')
+            return redirect('clients:net_sip')
+        except Exception as e:
+            messages.error(request, f'Invalid input: {e}')
+
+    try:
+        year_picker_raw = request.GET.get('year_picker')
+        selected_year = int(year_picker_raw) if year_picker_raw else date.today().year
+    except Exception:
+        selected_year = date.today().year
+
+    gran = request.GET.get('granularity', 'month')
+    series_mode = request.GET.get('series_mode', 'net')  # net|fresh|stopped
+
+    current_year = date.today().year
+    entry_years = list(NetSipEntry.objects.values_list('date__year', flat=True).distinct())
+    year_options = sorted(set(list(range(current_year + 1, current_year - 5, -1)) + entry_years), reverse=True)
+
+    if gran == 'year':
+        max_year = max(entry_years + [current_year]) if entry_years else current_year
+        min_year = max_year - 4
+        start = date(min_year, 1, 1)
+        end = date(max_year, 12, 31)
+    else:
+        start = date(selected_year, 1, 1)
+        end = date(selected_year, 12, 31)
+
+    try:
+        table_year = int(request.GET.get('table_year', selected_year))
+    except Exception:
+        table_year = selected_year
+
+    entries_qs = NetSipEntry.objects.filter(date__range=(start, end))
+
+    if gran == 'day':
+        entries_grouped = entries_qs.annotate(period=TruncDay('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
+    elif gran == 'year':
+        entries_grouped = entries_qs.annotate(period=TruncYear('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
+    else:
+        entries_grouped = entries_qs.annotate(period=TruncMonth('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
+
+    data = {}
+    for r in entries_grouped:
+        key = r['period'].date() if hasattr(r['period'], 'date') else r['period']
+        if key not in data:
+            data[key] = {'fresh': 0, 'stopped': 0}
+        if r['entry_type'] == 'fresh':
+            data[key]['fresh'] = float(r['total'] or 0)
+        else:
+            data[key]['stopped'] = float(r['total'] or 0)
+
+    period_totals = []
+    if gran == 'year':
+        min_year = start.year
+        max_year = end.year
+        for yr in range(min_year, max_year + 1):
+            key = date(yr, 1, 1)
+            fresh_total = data.get(key, {}).get('fresh', 0)
+            stopped_total = data.get(key, {}).get('stopped', 0)
+            net_total = fresh_total - stopped_total
+            period_totals.append({
+                'period': key.isoformat(),
+                'label': str(yr),
+                'fresh': round(fresh_total, 2),
+                'stopped': round(stopped_total, 2),
+                'net': round(net_total, 2),
+            })
+    else:
+        periods = [date(start.year, m, 1) for m in range(1, 13)]
+        for p in periods:
+            fresh_total = data.get(p, {}).get('fresh', 0)
+            stopped_total = data.get(p, {}).get('stopped', 0)
+            net_total = fresh_total - stopped_total
+            label = p.strftime('%b %Y') if gran == 'month' else p.strftime('%d %b %Y')
+            period_totals.append({
+                'period': p.isoformat(),
+                'label': label,
+                'fresh': round(fresh_total, 2),
+                'stopped': round(stopped_total, 2),
+                'net': round(net_total, 2),
+            })
+
+    if gran == 'year':
+        table_entries = NetSipEntry.objects.filter(date__range=(start, end))
+        table_grouped = table_entries.annotate(period=TruncYear('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
+
+        table_map = {date(y, 1, 1): {'fresh': 0, 'stopped': 0} for y in range(start.year, end.year + 1)}
+        for r in table_grouped:
+            k = r['period'].date() if hasattr(r['period'], 'date') else r['period']
+            if k not in table_map:
+                table_map[k] = {'fresh': 0, 'stopped': 0}
+            if r['entry_type'] == 'fresh':
+                table_map[k]['fresh'] += float(r['total'] or 0)
+            else:
+                table_map[k]['stopped'] += float(r['total'] or 0)
+
+        table_rows = []
+        for k in sorted(table_map.keys()):
+            val = table_map[k]
+            label = k.strftime('%Y') if hasattr(k, 'strftime') else str(k)
+            net_val = val['fresh'] - val['stopped']
+            table_rows.append({'period': k.isoformat() if hasattr(k, 'isoformat') else str(k), 'label': label, 'fresh': val['fresh'], 'stopped': val['stopped'], 'net': net_val})
+    else:
+        table_entries = NetSipEntry.objects.filter(date__year=table_year)
+        table_grouped = table_entries.annotate(period=TruncMonth('date')).values('period', 'entry_type').annotate(total=Sum('amount')).order_by('period')
+
+        table_map = {date(table_year, m, 1): {'fresh': 0, 'stopped': 0} for m in range(1, 13)}
+        for r in table_grouped:
+            k = r['period'].date() if hasattr(r['period'], 'date') else r['period']
+            if k not in table_map:
+                table_map[k] = {'fresh': 0, 'stopped': 0}
+            if r['entry_type'] == 'fresh':
+                table_map[k]['fresh'] += float(r['total'] or 0)
+            else:
+                table_map[k]['stopped'] += float(r['total'] or 0)
+
+        table_rows = []
+        for k in sorted(table_map.keys()):
+            val = table_map[k]
+            label = k.strftime('%b %Y') if hasattr(k, 'strftime') else str(k)
+            net_val = val['fresh'] - val['stopped']
+            table_rows.append({'period': k.isoformat() if hasattr(k, 'isoformat') else str(k), 'label': label, 'fresh': val['fresh'], 'stopped': val['stopped'], 'net': net_val})
+
+    entry_list = NetSipEntry.objects.order_by('-date', '-created_at')[:200]
+
+    start_str = start.isoformat() if hasattr(start, 'isoformat') else str(start)
+    end_str = end.isoformat() if hasattr(end, 'isoformat') else str(end)
+
+    context = {
+        'start': start,
+        'end': end,
+        'start_str': start_str,
+        'end_str': end_str,
+        'granularity': gran,
+        'series_mode': series_mode,
+        'period_totals_json': json.dumps(period_totals),
+        'month_table': table_rows,
+        'table_year': table_year,
+        'year_options': year_options,
+        'entry_list': entry_list,
+    }
+
+    return render(request, 'dashboards/net_sip.html', context)
+
 def login_view(request):
     if request.method == "POST":
         username = request.POST.get("username")
@@ -780,8 +976,7 @@ def logout_view(request):
 
 from django.db.models import Sum, Value
 from django.db.models.functions import Coalesce
-
-from django.db.models import Sum
+from decimal import Decimal
 from django.utils.timezone import now
 from datetime import datetime
 
@@ -806,8 +1001,13 @@ def admin_dashboard(request):
     # ---------------- Overall summary ----------------
     total_clients = Client.objects.count()
     # If "Total Sales (This Month)" is what you want in the card, use monthly_sales_qs
-    total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or 0
-    total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or 0
+    total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or Decimal("0")
+    total_salary_all = Employee.objects.aggregate(total=Sum("salary"))["total"] or Decimal("0")
+    admin_points_scale = max(total_points, total_salary_all, Decimal("1"))
+    admin_salary_ratio = (total_salary_all / admin_points_scale) * Decimal("100") if admin_points_scale else Decimal("0")
+    admin_points_ratio = (total_points / admin_points_scale) * Decimal("100") if admin_points_scale else Decimal("0")
+    admin_extra_points = max(total_points - total_salary_all, Decimal("0"))
 
     # ---------------- Product-wise totals (THIS MONTH) ----------------
     sip_sales = monthly_sales_qs.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
@@ -910,6 +1110,10 @@ def admin_dashboard(request):
         "total_clients": total_clients,
         "total_sales": total_sales,
         "total_points": total_points,
+        "total_salary_all": total_salary_all,
+        "admin_salary_ratio": admin_salary_ratio,
+        "admin_points_ratio": admin_points_ratio,
+        "admin_extra_points": admin_extra_points,
         "sip_sales": sip_sales,
         "lumsum_sales": lumsum_sales,
         "life_sales": life_sales,
@@ -942,8 +1146,15 @@ def employee_dashboard(request):
     today_sales_qs = monthly_sales_qs.filter(date=today)
 
     # --- Totals for this employee (THIS MONTH only) ---
-    total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or 0
-    total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or 0
+    total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or Decimal("0")
+    salary_points = getattr(emp, "salary", Decimal("0")) or Decimal("0")
+    if not isinstance(salary_points, Decimal):
+        salary_points = Decimal(str(salary_points))
+    points_scale = max(total_points, salary_points, Decimal("1"))
+    salary_ratio = (salary_points / points_scale) * Decimal("100") if points_scale else Decimal("0")
+    points_ratio = (total_points / points_scale) * Decimal("100") if points_scale else Decimal("0")
+    extra_points = max(total_points - salary_points, Decimal("0"))
 
     # --- Product-wise totals (THIS MONTH only) ---
     sip_sales = monthly_sales_qs.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
@@ -994,6 +1205,10 @@ def employee_dashboard(request):
     context = {
         "total_sales": total_sales,
         "total_points": total_points,
+        "salary_points": salary_points,
+        "salary_ratio": salary_ratio,
+        "points_ratio": points_ratio,
+        "extra_points": extra_points,
         "sip_sales": sip_sales,
         "lumsum_sales": lumsum_sales,
         "life_sales": life_sales,

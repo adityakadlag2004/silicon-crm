@@ -13,8 +13,8 @@ from .models import IncentiveRule
 from .models import Target
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ('user', 'role')  # show linked User + role
-    search_fields = ('user__username', 'user__email')  # search by Django user fields
+    list_display = ("user", "role", "salary")  # show linked User + role + salary
+    search_fields = ("user__username", "user__email")  # search by Django user fields
 
 # app/admin.py
 from django.contrib import admin, messages

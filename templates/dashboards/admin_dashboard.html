@@ -105,7 +105,7 @@
     transition: box-shadow 0.2s;
   }
   .modern-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
-  .modern-progress { height: 16px; border-radius: 10px; background: #edf2f7; overflow: hidden; }
+  .modern-progress { height: 16px; border-radius: 10px; background: #edf2f7; overflow: visible; position: relative; }
   .modern-progress-bar { height: 100%; border-radius: 10px; transition: width 0.5s ease; color: #fff; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; }
   .bar-green { background: linear-gradient(90deg, #48bb78 0%, #38a169 100%); }
   .bar-blue { background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%); }
@@ -142,6 +142,29 @@
     background: #f7fafc;
     transition: background 0.2s;
   }
+  .salary-meter { margin-top: 0.5rem; }
+  .salary-track { position: relative; height: 12px; border-radius: 8px; background: #e2e8f0; overflow: hidden; }
+  .salary-fill { height: 100%; background: linear-gradient(90deg, #2b6cb0 0%, #4299e1 100%); border-radius: 8px; }
+  .salary-line { position: absolute; top: -4px; width: 3px; height: 20px; background: #ed8936; border-radius: 3px; box-shadow: 0 0 0 2px rgba(237,137,54,0.15); }
+  @keyframes pulseGlow {
+    0% { box-shadow: 0 0 0 0 rgba(66,153,225,0.45); }
+    100% { box-shadow: 0 0 0 16px rgba(66,153,225,0); }
+  }
+  @keyframes riseFade {
+    0% { opacity: 1; transform: translateY(0) scale(0.9); }
+    100% { opacity: 0; transform: translateY(-12px) scale(1.35); }
+  }
+  .pulse-glow { animation: pulseGlow 1s ease-out; }
+  .spark-pop {
+    position: absolute;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f6e05e 0%, #ed8936 100%);
+    animation: riseFade 0.9s ease-out forwards;
+    pointer-events: none;
+  }
   @media (max-width: 900px) {
     .dashboard-cards-row, .dashboard-products-row { flex-direction: column; gap: 0.7rem; }
     .dashboard-card, .dashboard-product-card { min-width: 0; }
@@ -175,6 +198,19 @@
   <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
     <h5>Total Points (This Month)</h5>
     <h3 id="points-counter" data-points="{{ total_points }}">0</h3>
+    {% if total_salary_all %}
+    <div class="salary-meter" data-salary-meter data-salary="{{ total_salary_all }}" data-salary-ratio="{{ admin_salary_ratio|floatformat:0 }}" data-points-ratio="{{ admin_points_ratio|floatformat:0 }}">
+      <div class="d-flex justify-content-between" style="font-size:0.9rem;color:#4a5568;">
+        <span>Salary pool: {{ total_salary_all|floatformat:0 }}</span>
+        <span>Extra: {{ admin_extra_points|floatformat:0 }}</span>
+      </div>
+      <div class="salary-track mt-2">
+        <div class="salary-fill" data-progress="{{ admin_points_ratio|floatformat:0 }}" style="width: {{ admin_points_ratio|floatformat:0 }}%;"></div>
+        <div class="salary-line" data-salary-ratio="{{ admin_salary_ratio|floatformat:0 }}" style="left: {{ admin_salary_ratio|floatformat:0 }}%;"></div>
+      </div>
+      <div class="text-muted" style="font-size:0.85rem;margin-top:0.35rem;">Salary barline shows baseline vs points</div>
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -221,7 +257,7 @@
             <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
           </div>
           <div class="modern-progress mt-1">
-            <div class="modern-progress-bar bar-green" style="width: {{ row.progress|floatformat:0 }}%">{{ row.progress|floatformat:0 }}%</div>
+            <div class="modern-progress-bar bar-green" data-progress="{{ row.progress|floatformat:0 }}" style="width: {{ row.progress|floatformat:0 }}%">{{ row.progress|floatformat:0 }}%</div>
           </div>
         </div>
       {% empty %}
@@ -239,7 +275,7 @@
             <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
           </div>
           <div class="modern-progress mt-1">
-            <div class="modern-progress-bar bar-blue" style="width: {{ row.progress|floatformat:0 }}%">{{ row.progress|floatformat:0 }}%</div>
+            <div class="modern-progress-bar bar-blue" data-progress="{{ row.progress|floatformat:0 }}" style="width: {{ row.progress|floatformat:0 }}%">{{ row.progress|floatformat:0 }}%</div>
           </div>
         </div>
       {% empty %}
@@ -267,7 +303,7 @@
                 <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
               </div>
               <div class="modern-progress mt-1">
-                <div class="modern-progress-bar bar-amber" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
+                <div class="modern-progress-bar bar-amber" data-progress="{{ p.progress|floatformat:0 }}" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
               </div>
             </div>
           {% endfor %}
@@ -293,7 +329,7 @@
               <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
             </div>
             <div class="modern-progress mt-1">
-              <div class="modern-progress-bar bar-blue" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
+                <div class="modern-progress-bar bar-blue" data-progress="{{ p.progress|floatformat:0 }}" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
             </div>
           </div>
         {% endfor %}
@@ -331,6 +367,37 @@
         }
       }
       animate();
+    }
+
+    const thresholds = [25, 50, 75, 100];
+    const progressBars = document.querySelectorAll('[data-progress]');
+    progressBars.forEach((bar) => {
+      const progress = parseFloat(bar.dataset.progress || '0');
+      if (progress >= 25) {
+        bar.classList.add('pulse-glow');
+        setTimeout(() => bar.classList.remove('pulse-glow'), 1200);
+      }
+      thresholds.forEach((t, idx) => {
+        if (progress >= t && bar.parentElement) {
+          const spark = document.createElement('span');
+          spark.className = 'spark-pop';
+          spark.style.left = `${Math.min(96, t)}%`;
+          bar.parentElement.appendChild(spark);
+          setTimeout(() => spark.remove(), 1000 + idx * 60);
+        }
+      });
+    });
+
+    const salaryMeter = document.querySelector('[data-salary-meter]');
+    if (salaryMeter) {
+      const salary = parseFloat(salaryMeter.dataset.salary || '0');
+      const salaryRatio = parseFloat(salaryMeter.dataset.salaryRatio || '0');
+      const pointsRatio = parseFloat(salaryMeter.dataset.pointsRatio || '0');
+      const salaryFill = salaryMeter.querySelector('.salary-fill');
+      if (salary > 0 && salaryFill && pointsRatio >= salaryRatio) {
+        salaryFill.classList.add('pulse-glow');
+        setTimeout(() => salaryFill.classList.remove('pulse-glow'), 1200);
+      }
     }
   });
 </script>

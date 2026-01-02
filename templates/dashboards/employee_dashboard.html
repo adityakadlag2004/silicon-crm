@@ -37,7 +37,8 @@
     height: 18px;
     border-radius: 9px;
     background: #e9ecef;
-    overflow: hidden;
+    overflow: visible;  /* allow celebration sparks to show */
+    position: relative;
   }
   .modern-progress-bar {
     height: 100%;
@@ -97,6 +98,29 @@
     background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
     color: #1a202c;
   }
+  .salary-meter { margin-top: 0.75rem; }
+  .salary-track { position: relative; height: 12px; border-radius: 8px; background: #e2e8f0; overflow: hidden; }
+  .salary-fill { height: 100%; background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%); border-radius: 8px; }
+  .salary-line { position: absolute; top: -4px; width: 3px; height: 20px; background: #ed8936; border-radius: 3px; box-shadow: 0 0 0 2px rgba(237,137,54,0.15); }
+  @keyframes pulseGlow {
+    0% { box-shadow: 0 0 0 0 rgba(66,153,225,0.45); }
+    100% { box-shadow: 0 0 0 16px rgba(66,153,225,0); }
+  }
+  @keyframes riseFade {
+    0% { opacity: 1; transform: translateY(0) scale(0.9); }
+    100% { opacity: 0; transform: translateY(-12px) scale(1.35); }
+  }
+  .pulse-glow { animation: pulseGlow 1s ease-out; }
+  .spark-pop {
+    position: absolute;
+    top: 0;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f6e05e 0%, #ed8936 100%);
+    animation: riseFade 0.9s ease-out forwards;
+    pointer-events: none;
+  }
   @media (max-width: 900px) {
     .dashboard-header h2 { font-size: 1.3rem; }
     .modern-card { padding: 1rem 0.5rem; }
@@ -131,6 +155,19 @@
     <div class="modern-card text-center">
       <h5 style="color:#3182ce;font-weight:600;">Total Points (This Month)</h5>
       <h2 style="color:#4299e1;font-weight:700;" id="points-counter" data-points="{{ total_points }}">0</h2>
+      {% if salary_points %}
+      <div class="salary-meter" data-salary-meter data-salary="{{ salary_points }}" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" data-points-ratio="{{ points_ratio|floatformat:0 }}">
+        <div class="d-flex justify-content-between" style="font-size:0.9rem;color:#4a5568;">
+          <span>Salary point: {{ salary_points|floatformat:0 }}</span>
+          <span>Extra: {{ extra_points|floatformat:0 }}</span>
+        </div>
+        <div class="salary-track mt-2">
+          <div class="salary-fill" data-progress="{{ points_ratio|floatformat:0 }}" style="width: {{ points_ratio|floatformat:0 }}%;"></div>
+          <div class="salary-line" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" style="left: {{ salary_ratio|floatformat:0 }}%;"></div>
+        </div>
+        <div class="text-muted" style="font-size:0.85rem;margin-top:0.35rem;">Beyond salary = incentive points</div>
+      </div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -181,7 +218,7 @@
   <div class="mb-3">
     <strong style="color:#319795;">{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
     <div class="modern-progress mt-2">
-      <div class="modern-progress-bar modern-progress-bar-success" style="width: {{ target.progress|floatformat:0 }}%">
+      <div class="modern-progress-bar modern-progress-bar-success" data-progress="{{ target.progress|floatformat:0 }}" style="width: {{ target.progress|floatformat:0 }}%">
         {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
       </div>
     </div>
@@ -197,7 +234,7 @@
   <div class="mb-3">
     <strong style="color:#3182ce;">{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
     <div class="modern-progress mt-2">
-      <div class="modern-progress-bar modern-progress-bar-info" style="width: {{ target.progress|floatformat:0 }}%">
+      <div class="modern-progress-bar modern-progress-bar-info" data-progress="{{ target.progress|floatformat:0 }}" style="width: {{ target.progress|floatformat:0 }}%">
         {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
       </div>
     </div>
@@ -265,6 +302,37 @@
         }
       }
       animate();
+    }
+
+    const thresholds = [25, 50, 75, 100];
+    const progressBars = document.querySelectorAll('[data-progress]');
+    progressBars.forEach((bar) => {
+      const progress = parseFloat(bar.dataset.progress || '0');
+      if (progress >= 25) {
+        bar.classList.add('pulse-glow');
+        setTimeout(() => bar.classList.remove('pulse-glow'), 1200);
+      }
+      thresholds.forEach((t, idx) => {
+        if (progress >= t && bar.parentElement) {
+          const spark = document.createElement('span');
+          spark.className = 'spark-pop';
+          spark.style.left = `${Math.min(96, t)}%`;
+          bar.parentElement.appendChild(spark);
+          setTimeout(() => spark.remove(), 1000 + idx * 60);
+        }
+      });
+    });
+
+    const salaryMeter = document.querySelector('[data-salary-meter]');
+    if (salaryMeter) {
+      const salary = parseFloat(salaryMeter.dataset.salary || '0');
+      const salaryRatio = parseFloat(salaryMeter.dataset.salaryRatio || '0');
+      const pointsRatio = parseFloat(salaryMeter.dataset.pointsRatio || '0');
+      const salaryFill = salaryMeter.querySelector('.salary-fill');
+      if (salary > 0 && salaryFill && pointsRatio >= salaryRatio) {
+        salaryFill.classList.add('pulse-glow');
+        setTimeout(() => salaryFill.classList.remove('pulse-glow'), 1200);
+      }
     }
   });
 </script>
