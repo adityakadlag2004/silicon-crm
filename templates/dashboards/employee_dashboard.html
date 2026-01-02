@@ -218,7 +218,7 @@
   <div class="mb-3">
     <strong style="color:#319795;">{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
     <div class="modern-progress mt-2">
-      <div class="modern-progress-bar modern-progress-bar-success" data-progress="{{ target.progress|floatformat:0 }}" style="width: {{ target.progress|floatformat:0 }}%">
+      <div class="modern-progress-bar modern-progress-bar-success" data-progress="{{ target.progress|floatformat:0 }}">
         {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
       </div>
     </div>
@@ -234,7 +234,7 @@
   <div class="mb-3">
     <strong style="color:#3182ce;">{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
     <div class="modern-progress mt-2">
-      <div class="modern-progress-bar modern-progress-bar-info" data-progress="{{ target.progress|floatformat:0 }}" style="width: {{ target.progress|floatformat:0 }}%">
+      <div class="modern-progress-bar modern-progress-bar-info" data-progress="{{ target.progress|floatformat:0 }}">
         {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
       </div>
     </div>
@@ -305,9 +305,13 @@
     }
 
     const thresholds = [25, 50, 75, 100];
-    const progressBars = document.querySelectorAll('[data-progress]');
+    const progressBars = document.querySelectorAll('.modern-progress [data-progress]');
     progressBars.forEach((bar) => {
       const progress = parseFloat(bar.dataset.progress || '0');
+      const clamped = Math.min(progress, 100);
+      bar.style.width = `${clamped}%`;
+      bar.textContent = `${Math.round(progress)}%`;
+
       if (progress >= 25) {
         bar.classList.add('pulse-glow');
         setTimeout(() => bar.classList.remove('pulse-glow'), 1200);
