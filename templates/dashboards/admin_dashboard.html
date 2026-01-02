@@ -257,7 +257,7 @@
             <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
           </div>
           <div class="modern-progress mt-1">
-            <div class="modern-progress-bar bar-green" data-progress="{{ row.progress|floatformat:0 }}" style="width: {{ row.progress|floatformat:0 }}%">{{ row.progress|floatformat:0 }}%</div>
+            <div class="modern-progress-bar bar-green" data-progress="{{ row.progress|floatformat:0 }}">{{ row.progress|floatformat:0 }}%</div>
           </div>
         </div>
       {% empty %}
@@ -275,7 +275,7 @@
             <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
           </div>
           <div class="modern-progress mt-1">
-            <div class="modern-progress-bar bar-blue" data-progress="{{ row.progress|floatformat:0 }}" style="width: {{ row.progress|floatformat:0 }}%">{{ row.progress|floatformat:0 }}%</div>
+            <div class="modern-progress-bar bar-blue" data-progress="{{ row.progress|floatformat:0 }}">{{ row.progress|floatformat:0 }}%</div>
           </div>
         </div>
       {% empty %}
@@ -303,7 +303,7 @@
                 <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
               </div>
               <div class="modern-progress mt-1">
-                <div class="modern-progress-bar bar-amber" data-progress="{{ p.progress|floatformat:0 }}" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
+                <div class="modern-progress-bar bar-amber" data-progress="{{ p.progress|floatformat:0 }}">{{ p.progress|floatformat:0 }}%</div>
               </div>
             </div>
           {% endfor %}
@@ -329,7 +329,7 @@
               <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
             </div>
             <div class="modern-progress mt-1">
-                <div class="modern-progress-bar bar-blue" data-progress="{{ p.progress|floatformat:0 }}" style="width: {{ p.progress|floatformat:0 }}%">{{ p.progress|floatformat:0 }}%</div>
+                <div class="modern-progress-bar bar-blue" data-progress="{{ p.progress|floatformat:0 }}">{{ p.progress|floatformat:0 }}%</div>
             </div>
           </div>
         {% endfor %}
@@ -370,9 +370,13 @@
     }
 
     const thresholds = [25, 50, 75, 100];
-    const progressBars = document.querySelectorAll('[data-progress]');
+    const progressBars = document.querySelectorAll('.modern-progress [data-progress]');
     progressBars.forEach((bar) => {
       const progress = parseFloat(bar.dataset.progress || '0');
+      const clamped = Math.min(progress, 100);
+      bar.style.width = `${clamped}%`;
+      bar.textContent = `${Math.round(progress)}%`;
+
       if (progress >= 25) {
         bar.classList.add('pulse-glow');
         setTimeout(() => bar.classList.remove('pulse-glow'), 1200);
