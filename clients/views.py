@@ -733,6 +733,13 @@ def net_business(request):
     start_str = start.isoformat() if hasattr(start, 'isoformat') else str(start)
     end_str = end.isoformat() if hasattr(end, 'isoformat') else str(end)
 
+    table_len = len(table_rows)
+    sales_sum = sum(r.get('sales', 0) for r in table_rows)
+    reds_sum = sum(r.get('redemptions', 0) for r in table_rows)
+    net_sum = sum(r.get('net', 0) for r in table_rows)
+    def _avg(total):
+        return total / table_len if table_len else 0
+
     context = {
         'start': start,
         'end': end,
@@ -745,6 +752,14 @@ def net_business(request):
         'table_year': table_year,
         'year_options': year_options,
         'entry_list': entry_list,
+        'table_totals': {
+            'sales_sum': sales_sum,
+            'reds_sum': reds_sum,
+            'net_sum': net_sum,
+            'sales_avg': _avg(sales_sum),
+            'reds_avg': _avg(reds_sum),
+            'net_avg': _avg(net_sum),
+        },
     }
 
     return render(request, 'dashboards/net_business.html', context)
@@ -928,6 +943,13 @@ def net_sip(request):
     start_str = start.isoformat() if hasattr(start, 'isoformat') else str(start)
     end_str = end.isoformat() if hasattr(end, 'isoformat') else str(end)
 
+    table_len = len(table_rows)
+    fresh_sum = sum(r.get('fresh', 0) for r in table_rows)
+    stopped_sum = sum(r.get('stopped', 0) for r in table_rows)
+    net_sum = sum(r.get('net', 0) for r in table_rows)
+    def _avg(total):
+        return total / table_len if table_len else 0
+
     context = {
         'start': start,
         'end': end,
@@ -940,6 +962,14 @@ def net_sip(request):
         'table_year': table_year,
         'year_options': year_options,
         'entry_list': entry_list,
+        'table_totals': {
+            'fresh_sum': fresh_sum,
+            'stopped_sum': stopped_sum,
+            'net_sum': net_sum,
+            'fresh_avg': _avg(fresh_sum),
+            'stopped_avg': _avg(stopped_sum),
+            'net_avg': _avg(net_sum),
+        },
     }
 
     return render(request, 'dashboards/net_sip.html', context)

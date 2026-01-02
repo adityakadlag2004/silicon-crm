@@ -152,6 +152,18 @@
 							<td class="text-end fw-bold {% if row.net < 0 %}text-danger{% else %}text-success{% endif %}">₹{{ row.net|indian_number:2 }}</td>
 						</tr>
 					{% endfor %}
+					<tr class="table-light fw-bold">
+						<td>Sum (12 months)</td>
+						<td class="text-end">₹{{ table_totals.sales_sum|indian_number:2 }}</td>
+						<td class="text-end text-danger">₹{{ table_totals.reds_sum|indian_number:2 }}</td>
+						<td class="text-end">₹{{ table_totals.net_sum|indian_number:2 }}</td>
+					</tr>
+					<tr class="table-light">
+						<td>Average per month</td>
+						<td class="text-end">₹{{ table_totals.sales_avg|indian_number:2 }}</td>
+						<td class="text-end text-danger">₹{{ table_totals.reds_avg|indian_number:2 }}</td>
+						<td class="text-end">₹{{ table_totals.net_avg|indian_number:2 }}</td>
+					</tr>
 				{% else %}
 					<tr><td colspan="4" class="text-center text-muted">No data for the selected year.</td></tr>
 				{% endif %}
