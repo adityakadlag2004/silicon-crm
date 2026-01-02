@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% load static custom_filters %}
+{% block title %}Net SIP{% endblock %}
+{% block content %}
+<style>
+	.page-title { font-weight: 800; font-size: 1.4rem; color: #1a202c; }
+	.surface { background: #fff; border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.06); padding: 1.2rem; }
+	.pill-tab { padding: 0.35rem 0.9rem; border: 1px solid #cbd5e0; border-radius: 999px; font-weight: 600; color: #2d3748; background: #fff; }
+	.pill-tab.active { background: #1a202c; color: #fff; border-color: #1a202c; }
+	.mini-label { font-size: 0.85rem; font-weight: 600; color: #4a5568; }
+	.stat { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border: 1px solid #edf2f7; border-radius: 12px; }
+	.stat strong { color: #1a202c; }
+	.chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.7rem; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 999px; font-weight: 600; color: #2d3748; }
+	.table thead { background: #f7fafc; }
+	.table thead th { border-bottom-width: 1px; }
+	@media (max-width: 900px) {
+		.filters-row { grid-template-columns: repeat(1,minmax(0,1fr)); }
+	}
+</style>
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+	<div>
+		<div class="page-title">Net SIP</div>
+		<div class="text-muted">SIP fresh minus SIP stopped, updated live as you add entries.</div>
+	</div>
+	<div class="chip">Granularity: <span id="granularityLabel">{{ granularity|capfirst }}</span></div>
+</div>
+
+<div class="surface mb-3">
+	<form method="post" class="row g-3 align-items-end">
+		{% csrf_token %}
+		<input type="hidden" name="action" value="add">
+		<div class="col-md-3">
+			<label class="mini-label" for="entryAmount">Amount</label>
+			<input type="number" step="0.01" min="0" class="form-control" id="entryAmount" name="amount" required>
+		</div>
+		<div class="col-md-2">
+			<label class="mini-label" for="entryType">Category</label>
+			<select class="form-select" id="entryType" name="entry_type" required>
+				<option value="fresh">SIP Fresh</option>
+				<option value="stopped">SIP Stopped</option>
+			</select>
+		</div>
+		<div class="col-md-2">
+			<label class="mini-label" for="entryMonth">Month</label>
+			<select class="form-select" id="entryMonth" name="month" required>
+				<option value="1" {% if start.month == 1 %}selected{% endif %}>Jan</option>
+				<option value="2" {% if start.month == 2 %}selected{% endif %}>Feb</option>
+				<option value="3" {% if start.month == 3 %}selected{% endif %}>Mar</option>
+				<option value="4" {% if start.month == 4 %}selected{% endif %}>Apr</option>
+				<option value="5" {% if start.month == 5 %}selected{% endif %}>May</option>
+				<option value="6" {% if start.month == 6 %}selected{% endif %}>Jun</option>
+				<option value="7" {% if start.month == 7 %}selected{% endif %}>Jul</option>
+				<option value="8" {% if start.month == 8 %}selected{% endif %}>Aug</option>
+				<option value="9" {% if start.month == 9 %}selected{% endif %}>Sep</option>
+				<option value="10" {% if start.month == 10 %}selected{% endif %}>Oct</option>
+				<option value="11" {% if start.month == 11 %}selected{% endif %}>Nov</option>
+				<option value="12" {% if start.month == 12 %}selected{% endif %}>Dec</option>
+			</select>
+		</div>
+		<div class="col-md-2">
+			<label class="mini-label" for="entryYear">Year</label>
+			<select class="form-select" id="entryYear" name="year" required>
+				{% for y in year_options %}
+					<option value="{{ y }}" {% if y == table_year %}selected{% endif %}>{{ y }}</option>
+				{% endfor %}
+			</select>
+		</div>
+		<div class="col-md-2">
+			<label class="mini-label" for="entryNote">Note (optional)</label>
+			<input type="text" class="form-control" id="entryNote" name="note" placeholder="Reference" />
+		</div>
+		<div class="col-md-1 d-flex align-items-end">
+			<button class="btn btn-dark w-100">Add</button>
+		</div>
+	</form>
+</div>
+
+<div class="surface mb-3">
+	<form id="netFilters" method="get" class="row g-3 align-items-end filters-row">
+		<div class="col-md-4">
+			<label for="yearPicker" class="mini-label">Year (for month view)</label>
+			<select id="yearPicker" name="year_picker" class="form-select">
+				{% for y in year_options %}
+					<option value="{{ y }}" {% if y == start.year %}selected{% endif %}>{{ y }}</option>
+				{% endfor %}
+			</select>
+		</div>
+		<div class="col-md-4">
+			<label class="mini-label">Show series</label>
+			<select id="seriesMode" name="series_mode" class="form-select">
+				<option value="net" {% if series_mode == 'net' %}selected{% endif %}>Net (Fresh - Stopped)</option>
+				<option value="fresh" {% if series_mode == 'fresh' %}selected{% endif %}>SIP Fresh only</option>
+				<option value="stopped" {% if series_mode == 'stopped' %}selected{% endif %}>SIP Stopped only</option>
+			</select>
+		</div>
+		<div class="col-md-4 d-flex align-items-center gap-2 justify-content-end">
+			<button type="button" class="pill-tab {% if granularity == 'month' %}active{% endif %}" data-gran="month">Month view</button>
+			<button type="button" class="pill-tab {% if granularity == 'year' %}active{% endif %}" data-gran="year">Year view</button>
+			<input type="hidden" id="startInput" name="start" value="{{ start_str }}">
+			<input type="hidden" id="endInput" name="end" value="{{ end_str }}">
+			<input type="hidden" id="granInput" name="granularity" value="{{ granularity }}">
+			<input type="hidden" id="tableYearInput" name="table_year" value="{{ table_year }}">
+			<button type="submit" class="btn btn-dark px-4">Apply</button>
+		</div>
+	</form>
+</div>
+
+<div class="surface mb-3">
+	<div class="d-flex justify-content-between align-items-center mb-2">
+		<div class="fw-bold text-uppercase" style="letter-spacing:0.5px;">Net SIP Graph</div>
+		<div class="text-muted">Live totals from SIP fresh and stoppage entries</div>
+	</div>
+	<canvas id="netSipChart" height="120"></canvas>
+</div>
+
+<div class="surface">
+	<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+		<div class="fw-bold text-uppercase" style="letter-spacing:0.5px;">Net SIP List ({{ granularity|capfirst }})</div>
+		<form method="get" class="d-flex align-items-center gap-2" id="tableYearForm">
+			<label class="mini-label mb-0" for="tableYearSelect">Year</label>
+			<select id="tableYearSelect" name="table_year" class="form-select" style="max-width:130px;">
+				{% for y in year_options %}
+					<option value="{{ y }}" {% if y == table_year %}selected{% endif %}>{{ y }}</option>
+				{% endfor %}
+			</select>
+			<input type="hidden" name="start" value="{{ start_str }}">
+			<input type="hidden" name="end" value="{{ end_str }}">
+			<input type="hidden" name="granularity" value="{{ granularity }}">
+			<input type="hidden" name="series_mode" value="{{ series_mode }}">
+			<button class="btn btn-outline-dark">Update</button>
+		</form>
+	</div>
+
+	<div class="table-responsive">
+		<table class="table align-middle">
+			<thead>
+				<tr>
+					<th>Period</th>
+					<th class="text-end">SIP Fresh</th>
+					<th class="text-end">SIP Stopped</th>
+					<th class="text-end">Net SIP</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% if month_table %}
+					{% for row in month_table %}
+						<tr>
+							<td>{{ row.label }}</td>
+							<td class="text-end">₹{{ row.fresh|indian_number:2 }}</td>
+							<td class="text-end text-danger">₹{{ row.stopped|indian_number:2 }}</td>
+							<td class="text-end fw-bold {% if row.net < 0 %}text-danger{% else %}text-success{% endif %}">₹{{ row.net|indian_number:2 }}</td>
+						</tr>
+					{% endfor %}
+				{% else %}
+					<tr><td colspan="4" class="text-center text-muted">No data for the selected year.</td></tr>
+				{% endif %}
+			</tbody>
+		</table>
+	</div>
+</div>
+
+<div class="surface mt-3">
+	<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+		<div class="fw-bold text-uppercase" style="letter-spacing:0.5px;">View / Edit Entries</div>
+		<div class="text-muted">Showing latest 200 entries</div>
+	</div>
+	<div class="table-responsive">
+		<table class="table align-middle">
+			<thead>
+				<tr>
+					<th style="width:60px;">ID</th>
+					<th>Type</th>
+					<th style="width:120px;">Amount</th>
+					<th style="width:140px;">Month</th>
+					<th style="width:140px;">Year</th>
+					<th>Note</th>
+					<th style="width:140px;" class="text-end">Actions</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% if entry_list %}
+					{% for e in entry_list %}
+					<tr>
+						<td colspan="7" class="p-0">
+							<form method="post">
+								{% csrf_token %}
+								<input type="hidden" name="entry_id" value="{{ e.id }}">
+								<table class="w-100">
+									<tr>
+										<td style="width:60px;" class="align-middle ps-3">{{ e.id }}</td>
+										<td style="max-width:120px;" class="align-middle">
+											<select name="entry_type" class="form-select form-select-sm">
+												<option value="fresh" {% if e.entry_type == 'fresh' %}selected{% endif %}>SIP Fresh</option>
+												<option value="stopped" {% if e.entry_type == 'stopped' %}selected{% endif %}>SIP Stopped</option>
+											</select>
+										</td>
+										<td style="width:120px;" class="align-middle"><input type="number" step="0.01" min="0" name="amount" value="{{ e.amount }}" class="form-control form-control-sm"></td>
+										<td style="width:140px;" class="align-middle">
+											<select name="month" class="form-select form-select-sm">
+												<option value="1" {% if e.date.month == 1 %}selected{% endif %}>Jan</option>
+												<option value="2" {% if e.date.month == 2 %}selected{% endif %}>Feb</option>
+												<option value="3" {% if e.date.month == 3 %}selected{% endif %}>Mar</option>
+												<option value="4" {% if e.date.month == 4 %}selected{% endif %}>Apr</option>
+												<option value="5" {% if e.date.month == 5 %}selected{% endif %}>May</option>
+												<option value="6" {% if e.date.month == 6 %}selected{% endif %}>Jun</option>
+												<option value="7" {% if e.date.month == 7 %}selected{% endif %}>Jul</option>
+												<option value="8" {% if e.date.month == 8 %}selected{% endif %}>Aug</option>
+												<option value="9" {% if e.date.month == 9 %}selected{% endif %}>Sep</option>
+												<option value="10" {% if e.date.month == 10 %}selected{% endif %}>Oct</option>
+												<option value="11" {% if e.date.month == 11 %}selected{% endif %}>Nov</option>
+												<option value="12" {% if e.date.month == 12 %}selected{% endif %}>Dec</option>
+											</select>
+										</td>
+										<td style="width:140px;" class="align-middle">
+											<select name="year" class="form-select form-select-sm">
+												{% for y in year_options %}
+												<option value="{{ y }}" {% if y == e.date.year %}selected{% endif %}>{{ y }}</option>
+												{% endfor %}
+											</select>
+										</td>
+										<td class="align-middle"><input type="text" name="note" value="{{ e.note }}" class="form-control form-control-sm" placeholder="Note"></td>
+										<td style="width:180px;" class="align-middle text-end pe-3">
+											<div class="d-flex justify-content-end gap-2">
+												<button name="action" value="update" class="btn btn-sm btn-outline-dark">Update</button>
+												<button name="action" value="delete" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this entry?');">Delete</button>
+											</div>
+										</td>
+									</tr>
+								</table>
+							</form>
+						</td>
+					</tr>
+					{% endfor %}
+				{% else %}
+					<tr><td colspan="8" class="text-center text-muted">No entries yet.</td></tr>
+				{% endif %}
+			</tbody>
+		</table>
+	</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+	(function() {
+		const periodTotals = JSON.parse('{{ period_totals_json|escapejs }}');
+		const labels = periodTotals.map(p => p.label);
+		const nets = periodTotals.map(p => p.net);
+		const fresh = periodTotals.map(p => p.fresh);
+		const stopped = periodTotals.map(p => p.stopped);
+
+		const ctx = document.getElementById('netSipChart');
+		let chart;
+
+		function buildDataset(mode) {
+			if (mode === 'fresh') {
+				return [{ label: 'SIP Fresh', data: fresh, backgroundColor: 'rgba(56, 161, 105, 0.25)', borderColor: '#2f855a', borderWidth: 2, tension: 0.25, fill: true }];
+			}
+			if (mode === 'stopped') {
+				return [{ label: 'SIP Stopped', data: stopped, backgroundColor: 'rgba(229, 62, 62, 0.18)', borderColor: '#c53030', borderWidth: 2, tension: 0.25, fill: true }];
+			}
+			return [{ label: 'Net SIP', data: nets, backgroundColor: 'rgba(49, 130, 206, 0.2)', borderColor: '#2b6cb0', borderWidth: 2.3, tension: 0.25, fill: true }];
+		}
+
+		function render(mode) {
+			if (chart) { chart.destroy(); }
+			chart = new Chart(ctx, {
+				type: 'line',
+				data: { labels, datasets: buildDataset(mode) },
+				options: {
+					responsive: true,
+					interaction: { mode: 'index', intersect: false },
+					plugins: { legend: { display: true } },
+					scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + v } } }
+				}
+			});
+		}
+
+		const seriesSelect = document.getElementById('seriesMode');
+		render(seriesSelect.value);
+		seriesSelect.addEventListener('change', () => render(seriesSelect.value));
+
+		const granButtons = document.querySelectorAll('.pill-tab');
+		const granInput = document.getElementById('granInput');
+		const granLabel = document.getElementById('granularityLabel');
+		granButtons.forEach(btn => {
+			btn.addEventListener('click', () => {
+				granButtons.forEach(b => b.classList.remove('active'));
+				btn.classList.add('active');
+				granInput.value = btn.dataset.gran;
+				granLabel.textContent = btn.dataset.gran.charAt(0).toUpperCase() + btn.dataset.gran.slice(1);
+			});
+		});
+
+		const filterForm = document.getElementById('netFilters');
+		const startInput = document.getElementById('startInput');
+		const endInput = document.getElementById('endInput');
+		const yearPicker = document.getElementById('yearPicker');
+		const tableYearInput = document.getElementById('tableYearInput');
+		const tableYearSelect = document.getElementById('tableYearSelect');
+
+		filterForm.addEventListener('submit', () => {
+			const yearVal = yearPicker.value;
+			granInput.value = granInput.value || 'month';
+			startInput.value = '';
+			endInput.value = '';
+			tableYearInput.value = yearVal || tableYearInput.value;
+			if (tableYearSelect) {
+				tableYearSelect.value = tableYearInput.value;
+			}
+		});
+	})();
+</script>
+{% endblock %}
