@@ -52,21 +52,21 @@
     gap: 1.2rem;
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
-    justify-content: stretch;
+    justify-content: center;
+    align-items: stretch;
     width: 100%;
   }
   .dashboard-product-card {
     background: #f7fafc;
     border-radius: 12px;
     box-shadow: 0 1px 6px rgba(0,0,0,0.05);
-    padding: 1.5rem 2.2rem;
-    margin: 0.5rem 0.5rem 0.8rem 0.5rem;
-    min-width: 180px;
-    flex: 1 1 0;
+    padding: 1.2rem 1.6rem;
+    margin: 0.5rem;
+    min-width: 160px;
+    max-width: 200px;
+    flex: 0 1 180px;
     text-align: center;
-    font-size: 1.12rem;
-    width: 100%;
-    max-width: none;
+    font-size: 1.08rem;
   }
   .dashboard-product-card h6 {
     font-size: 0.98rem;
@@ -215,28 +215,28 @@
 </div>
 
 <div class="dashboard-section-title">Product-wise Sales (This Month)</div>
-<div class="dashboard-products-row" style="display:flex;flex-wrap:wrap;gap:1.2rem;width:100%;">
-  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+<div class="dashboard-products-row" style="display:flex;flex-wrap:wrap;gap:1.2rem;width:100%;justify-content:center;">
+  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <h6>SIP</h6>
     <h5>₹{{ sip_sales }}</h5>
   </div>
-  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <h6>Lumpsum</h6>
     <h5>₹{{ lumsum_sales }}</h5>
   </div>
-  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <h6>Life Insurance</h6>
     <h5>₹{{ life_sales }}</h5>
   </div>
-  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <h6>Health Insurance</h6>
     <h5>₹{{ health_sales }}</h5>
   </div>
-  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <h6>Motor Insurance</h6>
     <h5>₹{{ motor_sales }}</h5>
   </div>
-  <div class="dashboard-product-card" style="flex:1 1 120px;min-width:90px;max-width:180px;">
+  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <h6>PMS</h6>
     <h5>₹{{ pms_sales }}</h5>
   </div>
