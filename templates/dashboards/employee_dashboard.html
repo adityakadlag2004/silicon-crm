@@ -30,6 +30,15 @@
     margin-bottom: 1.5rem;
     transition: box-shadow 0.2s;
   }
+  .metric-card {
+    min-height: 220px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0.35rem;
+  }
   .modern-card:hover {
     box-shadow: 0 4px 24px rgba(0,0,0,0.12);
   }
@@ -70,7 +79,9 @@
     box-shadow: 0 1px 6px rgba(0,0,0,0.05);
     padding: 1.2rem 0.8rem;
     text-align: center;
-    margin-bottom: 1rem;
+    margin: 0.5rem;
+    min-width: 160px;
+    max-width: 200px;
   }
   .product-card h6 {
     font-weight: 600;
@@ -144,15 +155,15 @@
   
 </div>
 
-<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:stretch;">
   <div class="col-md-6 mb-3" style="flex:1 1 300px;min-width:220px;">
-    <div class="modern-card text-center">
+    <div class="modern-card text-center metric-card">
       <h5 style="color:#319795;font-weight:600;">Total Sales (This Month)</h5>
       <h2 style="color:#38b2ac;font-weight:700;">₹{{ total_sales }}</h2>
     </div>
   </div>
   <div class="col-md-6 mb-3" style="flex:1 1 300px;min-width:220px;">
-    <div class="modern-card text-center">
+    <div class="modern-card text-center metric-card">
       <h5 style="color:#3182ce;font-weight:600;">Total Points (This Month)</h5>
       <h2 style="color:#4299e1;font-weight:700;" id="points-counter" data-points="{{ total_points }}">0</h2>
       {% if salary_points %}
@@ -173,38 +184,38 @@
 </div>
 
 <div class="dashboard-section-title">Product-wise Sales (This Month)</div>
-<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
-  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;align-items:stretch;">
+  <div class="col-md-2 col-6" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <div class="product-card">
       <h6>SIP</h6>
       <h5>₹{{ sip_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+  <div class="col-md-2 col-6" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <div class="product-card">
       <h6>Lumpsum</h6>
       <h5>₹{{ lumsum_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+  <div class="col-md-2 col-6" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <div class="product-card">
       <h6>Life Insurance</h6>
       <h5>₹{{ life_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+  <div class="col-md-2 col-6" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <div class="product-card">
       <h6>Health Insurance</h6>
       <h5>₹{{ health_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+  <div class="col-md-2 col-6" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <div class="product-card">
       <h6>Motor Insurance</h6>
       <h5>₹{{ motor_sales }}</h5>
     </div>
   </div>
-  <div class="col-md-2 col-6" style="flex:1 1 120px;min-width:120px;max-width:180px;">
+  <div class="col-md-2 col-6" style="flex:0 1 180px;min-width:150px;max-width:200px;">
     <div class="product-card">
       <h6>PMS</h6>
       <h5>₹{{ pms_sales }}</h5>
@@ -212,36 +223,44 @@
   </div>
 </div>
 
-<div class="dashboard-section-title">Today's Progress</div>
-<div class="modern-card">
-  {% for target in daily_targets %}
-  <div class="mb-3">
-    <strong style="color:#319795;">{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
-    <div class="modern-progress mt-2">
-      <div class="modern-progress-bar modern-progress-bar-success" data-progress="{{ target.progress|floatformat:0 }}">
-        {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
-      </div>
+<div class="dashboard-section-title">Progress vs Targets</div>
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
+    <div class="modern-card">
+      <h6 style="font-weight:700;color:#319795;">Daily Progress</h6>
+      {% for target in daily_targets %}
+        <div class="mb-3">
+          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
+            <span>{{ target.product }}</span>
+            <span>₹{{ target.achieved|floatformat:0 }} / ₹{{ target.target_value|floatformat:0 }}</span>
+          </div>
+          <div class="modern-progress mt-1">
+            <div class="modern-progress-bar modern-progress-bar-success" data-progress="{{ target.progress|floatformat:0 }}">{{ target.progress|floatformat:0 }}%</div>
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-muted mb-0">No daily targets set.</p>
+      {% endfor %}
     </div>
   </div>
-  {% empty %}
-  <p class="text-muted">No daily targets set.</p>
-  {% endfor %}
-</div>
-
-<div class="dashboard-section-title">This Month's Progress</div>
-<div class="modern-card">
-  {% for target in monthly_targets %}
-  <div class="mb-3">
-    <strong style="color:#3182ce;">{{ target.product }}</strong> — Target: ₹{{ target.target_value }} | Achieved: ₹{{ target.achieved }}
-    <div class="modern-progress mt-2">
-      <div class="modern-progress-bar modern-progress-bar-info" data-progress="{{ target.progress|floatformat:0 }}">
-        {{ target.achieved|floatformat:0 }}/{{ target.target_value }}
-      </div>
+  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
+    <div class="modern-card">
+      <h6 style="font-weight:700;color:#3182ce;">Monthly Progress</h6>
+      {% for target in monthly_targets %}
+        <div class="mb-3">
+          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
+            <span>{{ target.product }}</span>
+            <span>₹{{ target.achieved|floatformat:0 }} / ₹{{ target.target_value|floatformat:0 }}</span>
+          </div>
+          <div class="modern-progress mt-1">
+            <div class="modern-progress-bar modern-progress-bar-info" data-progress="{{ target.progress|floatformat:0 }}">{{ target.progress|floatformat:0 }}%</div>
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-muted mb-0">No monthly targets set.</p>
+      {% endfor %}
     </div>
   </div>
-  {% empty %}
-  <p class="text-muted">No monthly targets set.</p>
-  {% endfor %}
 </div>
 
 <div class="dashboard-section-title">Past Performance (Last 6 Months)</div>
