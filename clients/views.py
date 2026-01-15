@@ -10,10 +10,12 @@ from datetime import date, datetime, timedelta
 from calendar import month_name
 import csv
 import io
+from itertools import cycle
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http import HttpResponseForbidden
@@ -48,7 +50,14 @@ from .models import (
     NetSipEntry,
     Notification,
 )
-from .forms import SaleForm, AdminSaleForm, EditSaleForm, ClientForm
+from .forms import (
+    SaleForm,
+    AdminSaleForm,
+    EditSaleForm,
+    ClientForm,
+    EmployeeCreateForm,
+    EmployeeDeactivateForm,
+)
 from django.db.models import Count, Avg, Sum
 from django.db.models.functions import TruncDay, TruncMonth, TruncYear
 from django.core.exceptions import FieldError
@@ -398,7 +407,7 @@ def calling_list_generator(request):
         'pms_status': pms_status,
         'pms_min': pms_min or '',
         'pms_max': pms_max or '',
-        'employees': Employee.objects.select_related('user').all(),
+        'employees': Employee.objects.select_related('user').filter(active=True),
         'products': [c[0] for c in Sale.PRODUCT_CHOICES],
         'mapped_emp': mapped_emp or '',
         'unmapped_only': bool(unmapped_only),
@@ -1161,6 +1170,96 @@ def admin_dashboard(request):
     }
 
     return render(request, "dashboards/admin_dashboard.html", context)
+
+
+@login_required
+def employee_management(request):
+    admin_emp = getattr(request.user, "employee", None)
+    if not admin_emp or admin_emp.role != "admin":
+        return HttpResponseForbidden("Admins only.")
+
+    create_form = EmployeeCreateForm()
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "create":
+            create_form = EmployeeCreateForm(request.POST)
+            if create_form.is_valid():
+                with transaction.atomic():
+                    user = User.objects.create_user(
+                        username=create_form.cleaned_data["username"],
+                        email=create_form.cleaned_data.get("email"),
+                        password=create_form.cleaned_data["password"],
+                        is_active=True,
+                    )
+                    Employee.objects.create(
+                        user=user,
+                        role=create_form.cleaned_data["role"],
+                        salary=create_form.cleaned_data["salary"],
+                        active=True,
+                    )
+                messages.success(request, "Employee created successfully.")
+                return redirect("clients:employee_management")
+            else:
+                error_text = "; ".join([
+                    "; ".join([str(msg) for msg in errs]) for errs in create_form.errors.values()
+                ])
+                messages.error(request, error_text or "Please correct the errors in the form.")
+        elif action in ("deactivate", "activate"):
+            status_form = EmployeeDeactivateForm(request.POST)
+            if status_form.is_valid():
+                emp = get_object_or_404(Employee, pk=status_form.cleaned_data["employee_id"])
+                if action == "deactivate":
+                    if not emp.active:
+                        messages.info(request, "Employee is already inactive.")
+                        return redirect("clients:employee_management")
+
+                    other_emps = list(Employee.objects.filter(active=True).exclude(id=emp.id))
+                    mapped_clients = list(Client.objects.filter(mapped_to=emp))
+
+                    if mapped_clients and not other_emps:
+                        messages.error(request, "Cannot deactivate the last active employee while they have mapped clients. Reassign or add another employee first.")
+                        return redirect("clients:employee_management")
+
+                    if other_emps:
+                        rr = cycle(other_emps)
+                        for client in mapped_clients:
+                            new_emp = next(rr)
+                            client.reassign_to(new_emp, changed_by=request.user, note="Auto-reassigned on deactivation")
+
+                    with transaction.atomic():
+                        emp.active = False
+                        emp.save(update_fields=["active"])
+                        if emp.user_id:
+                            emp.user.is_active = False
+                            emp.user.save(update_fields=["is_active"])
+
+                    messages.success(request, f"Deactivated {emp.user.username} and reassigned {len(mapped_clients)} clients evenly.")
+                    return redirect("clients:employee_management")
+
+                # activate
+                if emp.active:
+                    messages.info(request, "Employee is already active.")
+                    return redirect("clients:employee_management")
+
+                with transaction.atomic():
+                    emp.active = True
+                    emp.save(update_fields=["active"])
+                    if emp.user_id:
+                        emp.user.is_active = True
+                        emp.user.save(update_fields=["is_active"])
+
+                messages.success(request, f"Reactivated {emp.user.username}.")
+                return redirect("clients:employee_management")
+            else:
+                messages.error(request, "Invalid employee action request.")
+
+    employees = Employee.objects.select_related("user").all().order_by("-active", "user__username")
+    context = {
+        "employees": employees,
+        "create_form": create_form,
+    }
+    return render(request, "employees/manage.html", context)
 
 
 @login_required

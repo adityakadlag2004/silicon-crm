@@ -10,6 +10,7 @@ urlpatterns = [
     path("clients/<int:client_id>/edit/", views.edit_client, name="edit_client"),
     
     path("dashboard/admin/", views.admin_dashboard, name="admin_dashboard"),
+    path("admin/employees/", views.employee_management, name="employee_management"),
     path("dashboard/employee/", views.employee_dashboard, name="employee_dashboard"),
   # ----- Admin past performance -----
     path("admin/past-performance/", views.admin_past_performance, name="admin_past_performance"),

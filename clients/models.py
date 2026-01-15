@@ -9,6 +9,7 @@ from django.utils import timezone
 class Employee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     role = models.CharField(max_length=50, choices=(("admin", "Admin"), ("employee", "Employee")))
+    active = models.BooleanField(default=True)
     salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     def __str__(self):

@@ -160,6 +160,11 @@
   </ul>
 </li>
 
+                <!-- Employee Management (placed last) -->
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:employee_management' %}">Employee Management</a>
+                </li>
+
 
               {% elif request.user.employee.role == "employee" %}
                 <!-- Employee -->

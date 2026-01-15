@@ -33,6 +33,11 @@ class AdminSaleForm(forms.ModelForm):
             "date": forms.DateInput(attrs={"type": "date"}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "employee" in self.fields:
+            self.fields["employee"].queryset = Employee.objects.filter(active=True)
+
 class EditSaleForm(forms.ModelForm):
     class Meta:
         model = Sale
@@ -50,7 +55,7 @@ class CallingListUploadForm(forms.Form):
         help_text="Number of calls per employee per day"
     )
     employees = forms.ModelMultipleChoiceField(
-        queryset=Employee.objects.filter(role="employee"),
+        queryset=Employee.objects.filter(role="employee", active=True),
         required=False,
         widget=forms.CheckboxSelectMultiple
     )
@@ -75,6 +80,8 @@ class ClientForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "mapped_to" in self.fields:
+            self.fields["mapped_to"].queryset = Employee.objects.filter(active=True)
         for name, field in self.fields.items():
             widget = field.widget
             # Style checkboxes distinctly so they stay visible
@@ -104,9 +111,29 @@ from .models import Employee
 
 class ClientReassignForm(forms.Form):
     new_employee = forms.ModelChoiceField(
-        queryset=Employee.objects.all(),
+        queryset=Employee.objects.filter(active=True),
         required=False,
         empty_label="-- Unassign --",
         label="Assign to"
     )
     note = forms.CharField(widget=forms.Textarea(attrs={'rows': 2}), required=False)
+
+
+class EmployeeCreateForm(forms.Form):
+    username = forms.CharField(max_length=150)
+    email = forms.EmailField(required=False)
+    password = forms.CharField(widget=forms.PasswordInput)
+    role = forms.ChoiceField(choices=(("admin", "Admin"), ("employee", "Employee")))
+    salary = forms.DecimalField(max_digits=12, decimal_places=2, initial=0)
+
+    def clean_username(self):
+        from django.contrib.auth.models import User
+
+        username = self.cleaned_data["username"]
+        if User.objects.filter(username=username).exists():
+            raise forms.ValidationError("Username already exists")
+        return username
+
+
+class EmployeeDeactivateForm(forms.Form):
+    employee_id = forms.IntegerField()
