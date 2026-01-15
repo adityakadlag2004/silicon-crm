@@ -175,12 +175,21 @@
 <div class="surface mt-3">
 	<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
 		<div class="fw-bold text-uppercase" style="letter-spacing:0.5px;">View / Edit Entries</div>
-		<div class="text-muted">Showing latest 200 entries</div>
+		<div class="d-flex align-items-center gap-2 flex-wrap">
+			<div class="text-muted">Showing latest 200 entries</div>
+			<form id="bulkDeleteForm" method="post" class="d-flex align-items-center gap-2">
+				{% csrf_token %}
+				<input type="hidden" name="action" value="bulk_delete">
+				<button type="submit" class="btn btn-sm btn-outline-danger" id="bulkDeleteBtn" disabled>Delete selected</button>
+				<span class="text-muted small" id="selectedCount"></span>
+			</form>
+		</div>
 	</div>
 	<div class="table-responsive">
 		<table class="table align-middle">
 			<thead>
 				<tr>
+					<th style="width:50px;" class="text-center"><input type="checkbox" id="selectAllEntries"></th>
 					<th style="width:60px;">ID</th>
 					<th>Type</th>
 					<th style="width:120px;">Amount</th>
@@ -194,12 +203,13 @@
 				{% if entry_list %}
 					{% for e in entry_list %}
 					<tr>
-						<td colspan="7" class="p-0">
+						<td colspan="8" class="p-0">
 							<form method="post">
 								{% csrf_token %}
 								<input type="hidden" name="entry_id" value="{{ e.id }}">
 								<table class="w-100">
 									<tr>
+										<td style="width:50px;" class="align-middle text-center"><input type="checkbox" class="entry-checkbox" name="selected_ids" value="{{ e.id }}" form="bulkDeleteForm"></td>
 										<td style="width:60px;" class="align-middle ps-3">{{ e.id }}</td>
 										<td style="max-width:120px;" class="align-middle">
 											<select name="entry_type" class="form-select form-select-sm">
@@ -324,6 +334,49 @@
 				tableYearSelect.value = tableYearInput.value;
 			}
 		});
+
+			// Bulk delete selection handling
+			const selectAll = document.getElementById('selectAllEntries');
+			const rowCheckboxes = Array.from(document.querySelectorAll('.entry-checkbox'));
+			const bulkForm = document.getElementById('bulkDeleteForm');
+			const bulkBtn = document.getElementById('bulkDeleteBtn');
+			const selectedCount = document.getElementById('selectedCount');
+
+			function syncSelection() {
+				const selected = rowCheckboxes.filter(cb => cb.checked);
+				if (selectAll) {
+					selectAll.checked = rowCheckboxes.length > 0 && selected.length === rowCheckboxes.length;
+				}
+				if (bulkBtn) {
+					bulkBtn.disabled = selected.length === 0;
+				}
+				if (selectedCount) {
+					selectedCount.textContent = selected.length ? `${selected.length} selected` : '';
+				}
+			}
+
+			if (selectAll) {
+				selectAll.addEventListener('change', () => {
+					rowCheckboxes.forEach(cb => { cb.checked = selectAll.checked; });
+					syncSelection();
+				});
+			}
+			rowCheckboxes.forEach(cb => cb.addEventListener('change', syncSelection));
+
+			if (bulkForm) {
+				bulkForm.addEventListener('submit', (evt) => {
+					const hasSelection = rowCheckboxes.some(cb => cb.checked);
+					if (!hasSelection) {
+						evt.preventDefault();
+						return;
+					}
+					if (!confirm('Delete selected entries?')) {
+						evt.preventDefault();
+					}
+				});
+			}
+
+			syncSelection();
 	})();
 </script>
 {% endblock %}
