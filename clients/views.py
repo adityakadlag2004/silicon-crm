@@ -563,6 +563,14 @@ def net_business(request):
     if request.method == 'POST':
         action = request.POST.get('action', 'add')
         try:
+            if action == 'bulk_delete':
+                selected_ids = request.POST.getlist('selected_ids')
+                if not selected_ids:
+                    raise ValueError('Select at least one entry to delete')
+                deleted_count, _ = NetBusinessEntry.objects.filter(id__in=selected_ids).delete()
+                messages.success(request, f'Deleted {deleted_count} entries')
+                return redirect('clients:net_business')
+
             if action == 'delete':
                 entry_id = request.POST.get('entry_id')
                 if not entry_id:
@@ -784,6 +792,14 @@ def net_sip(request):
     if request.method == 'POST':
         action = request.POST.get('action', 'add')
         try:
+            if action == 'bulk_delete':
+                selected_ids = request.POST.getlist('selected_ids')
+                if not selected_ids:
+                    raise ValueError('Select at least one entry to delete')
+                deleted_count, _ = NetSipEntry.objects.filter(id__in=selected_ids).delete()
+                messages.success(request, f'Deleted {deleted_count} entries')
+                return redirect('clients:net_sip')
+
             if action == 'delete':
                 entry_id = request.POST.get('entry_id')
                 if not entry_id:
