@@ -22,7 +22,7 @@ class Command(BaseCommand):
         # Fetch monthly targets (global targets set by admin)
         monthly_targets = Target.objects.filter(target_type="monthly")
 
-        for emp in Employee.objects.all():
+        for emp in Employee.objects.filter(active=True):
             # Employee's product-wise sales for that month
             month_sales = (
                 Sale.objects.filter(employee=emp, date__year=year, date__month=month)

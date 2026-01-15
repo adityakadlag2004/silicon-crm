@@ -62,6 +62,10 @@ class Command(BaseCommand):
                 self.stdout.write(f"Skipping unknown employee id {emp_id}")
                 continue
 
+            if not getattr(emp, "active", True):
+                self.stdout.write(f"Skipping inactive employee {emp.user.username}")
+                continue
+
             obj, created = MonthlyIncentive.objects.update_or_create(
                 employee=emp,
                 year=year,
