@@ -38,6 +38,8 @@ from .models import (
     Sale,
     CalendarEvent,
     Employee,
+    Lead,
+    LeadProductProgress,
     Target,
     MonthlyTargetHistory,
     CallRecord,
@@ -57,11 +59,445 @@ from .forms import (
     ClientForm,
     EmployeeCreateForm,
     EmployeeDeactivateForm,
+    LeadForm,
+    LeadFamilyMemberFormSet,
+    LeadProductProgressFormSet,
 )
 from django.db.models import Count, Avg, Sum
 from django.db.models.functions import TruncDay, TruncMonth, TruncYear
 from django.core.exceptions import FieldError
 from django.views.decorators.csrf import csrf_protect
+
+
+def _lead_queryset_for_request(request):
+    qs = Lead.objects.select_related("assigned_to__user").prefetch_related(
+        "progress_entries",
+        "family_members",
+    )
+    emp = getattr(request.user, "employee", None)
+    if emp and getattr(emp, "role", "") == "employee":
+        qs = qs.filter(assigned_to=emp)
+    return qs
+
+
+@login_required
+def lead_list_by_stage(request, stage):
+    stage_labels = {
+        Lead.STAGE_PENDING: "Pending Leads",
+        Lead.STAGE_HALF: "Half Sold Leads",
+        Lead.STAGE_PROCESSED: "Processed Leads",
+    }
+
+    if stage not in stage_labels:
+        return redirect("clients:lead_stage_list", stage=Lead.STAGE_PENDING)
+
+    base_qs = _lead_queryset_for_request(request).filter(is_discarded=False)
+    search_term = request.GET.get("q", "").strip()
+    if search_term:
+        base_qs = base_qs.filter(customer_name__icontains=search_term)
+
+    leads = base_qs.filter(stage=stage).order_by("-updated_at")
+    for lead in leads:
+        lead.progress_map = {p.product: p for p in lead.progress_entries.all()}
+    counts = {
+        Lead.STAGE_PENDING: base_qs.filter(stage=Lead.STAGE_PENDING).count(),
+        Lead.STAGE_HALF: base_qs.filter(stage=Lead.STAGE_HALF).count(),
+        Lead.STAGE_PROCESSED: base_qs.filter(stage=Lead.STAGE_PROCESSED).count(),
+    }
+
+    context = {
+        "leads": leads,
+        "stage": stage,
+        "stage_label": stage_labels.get(stage, "Leads"),
+        "counts": counts,
+        "search_term": search_term,
+    }
+    return render(request, "clients/leads/lead_list.html", context)
+
+
+@login_required
+def lead_detail(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    lead.progress_map = {p.product: p for p in lead.progress_entries.all()}
+    return render(request, "clients/leads/lead_detail.html", {"lead": lead})
+
+
+@login_required
+def lead_bulk_import(request):
+    emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (emp and getattr(emp, "role", "") == "admin")):
+        return HttpResponseForbidden()
+
+    sample_headers = [
+        "customer_name",
+        "assigned_to_number" ,
+        "phone",
+        "email",
+        "stage",  # pending | half_sold | processed
+        "data_received",  # true/false
+        "data_received_on",  # YYYY-MM-DD
+        "notes",
+    ]
+
+    if request.method == "POST":
+        upload = request.FILES.get("file")
+        if not upload:
+            messages.error(request, "Please upload a CSV file.")
+            return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
+
+        try:
+            content = upload.read().decode("utf-8-sig")
+        except UnicodeDecodeError:
+            messages.error(request, "File must be UTF-8 encoded CSV.")
+            return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
+
+        reader = csv.DictReader(io.StringIO(content))
+        if not reader.fieldnames:
+            messages.error(request, "No headers found in CSV.")
+            return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
+
+        required = ["customer_name", "assigned_to_number"]
+        missing = [c for c in required if c not in reader.fieldnames]
+        if missing:
+            messages.error(request, f"Missing required columns: {', '.join(missing)}")
+            return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
+
+        created = 0
+        errors = []
+
+        # cache employees by employee_number
+        employee_map = {e.employee_number: e for e in Employee.objects.exclude(employee_number__isnull=True)}
+        valid_stages = {c[0] for c in Lead.STAGE_CHOICES}
+
+        for idx, row in enumerate(reader, start=2):  # start=2 to account for header line 1
+            try:
+                customer_name = (row.get("customer_name") or "").strip()
+                if not customer_name:
+                    raise ValueError("customer_name is required")
+
+                assigned_number = (row.get("assigned_to_number") or "").strip()
+                emp_obj = employee_map.get(assigned_number)
+                if not emp_obj:
+                    raise ValueError(f"assigned_to_number '{assigned_number}' not found")
+
+                phone = (row.get("phone") or "").strip() or None
+                email = (row.get("email") or "").strip() or None
+                notes = (row.get("notes") or "").strip()
+
+                stage_val = (row.get("stage") or Lead.STAGE_PENDING).strip()
+                if stage_val not in valid_stages:
+                    stage_val = Lead.STAGE_PENDING
+
+                dr_val = (row.get("data_received") or "").strip().lower()
+                data_received = dr_val in ["1", "true", "yes", "y"]
+
+                data_received_on = None
+                date_raw = (row.get("data_received_on") or "").strip()
+                if date_raw:
+                    try:
+                        data_received_on = datetime.strptime(date_raw, "%Y-%m-%d").date()
+                    except ValueError:
+                        raise ValueError("data_received_on must be YYYY-MM-DD")
+
+                lead = Lead(
+                    customer_name=customer_name,
+                    phone=phone,
+                    email=email,
+                    data_received=data_received,
+                    data_received_on=data_received_on,
+                    notes=notes,
+                    assigned_to=emp_obj,
+                    created_by=request.user,
+                    stage=stage_val,
+                )
+                lead.save()
+                created += 1
+            except Exception as exc:  # pragma: no cover - basic logging
+                errors.append(f"Row {idx}: {exc}")
+
+        if created:
+            messages.success(request, f"Imported {created} leads.")
+        if errors:
+            truncated = errors[:5]
+            more = "" if len(errors) <= 5 else f" (and {len(errors)-5} more)"
+            messages.warning(request, "Errors: " + " | ".join(truncated) + more)
+
+    return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
+
+
+@login_required
+def lead_management(request):
+    base_qs = _lead_queryset_for_request(request)
+    # view filter: current (default), completed, discarded
+    view_mode = request.GET.get("view", "current")
+    if view_mode == "completed":
+        base_qs = base_qs.filter(is_discarded=False, stage=Lead.STAGE_PROCESSED)
+    elif view_mode == "discarded":
+        base_qs = base_qs.filter(is_discarded=True)
+    else:
+        view_mode = "current"
+        base_qs = base_qs.filter(is_discarded=False).exclude(stage=Lead.STAGE_PROCESSED)
+    search_term = request.GET.get("q", "").strip()
+    if search_term:
+        base_qs = base_qs.filter(customer_name__icontains=search_term)
+
+    leads = base_qs.order_by("-updated_at")
+    for lead in leads:
+        lead.progress_map = {p.product: p for p in lead.progress_entries.all()}
+
+    # Stats for admin only
+    stage_counts = {
+        Lead.STAGE_PENDING: base_qs.filter(stage=Lead.STAGE_PENDING).count(),
+        Lead.STAGE_HALF: base_qs.filter(stage=Lead.STAGE_HALF).count(),
+        Lead.STAGE_PROCESSED: base_qs.filter(stage=Lead.STAGE_PROCESSED).count(),
+    }
+
+    # counts for tabs (not affected by search)
+    tab_base = _lead_queryset_for_request(request)
+    tab_counts = {
+        "current": tab_base.filter(is_discarded=False).exclude(stage=Lead.STAGE_PROCESSED).count(),
+        "completed": tab_base.filter(is_discarded=False, stage=Lead.STAGE_PROCESSED).count(),
+        "discarded": tab_base.filter(is_discarded=True).count(),
+    }
+
+    progress_counts = {}
+    can_see_stats = getattr(getattr(request.user, "employee", None), "role", "") == "admin" or request.user.is_superuser
+    if can_see_stats:
+        agg = (
+            LeadProductProgress.objects.filter(lead__in=base_qs.values_list("id", flat=True))
+            .values("product", "status")
+            .order_by()
+            .annotate(total=Count("id"))
+        )
+        for row in agg:
+            product = row["product"]
+            status = row["status"]
+            progress_counts.setdefault(product, {})[status] = row["total"]
+
+    context = {
+        "leads": leads,
+        "search_term": search_term,
+        "stage_counts": stage_counts,
+        "progress_counts": progress_counts if can_see_stats else {},
+        "can_see_stats": can_see_stats,
+        "view_mode": view_mode,
+        "tab_counts": tab_counts,
+    }
+    return render(request, "clients/leads/lead_management.html", context)
+
+
+@login_required
+@require_POST
+def lead_mark_complete(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    lead.is_discarded = False
+    lead.stage = Lead.STAGE_PROCESSED
+    lead.save(update_fields=["is_discarded", "stage", "updated_at"])
+    messages.success(request, "Lead marked as completed.")
+    return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+
+@login_required
+@require_POST
+def lead_discard(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    lead.is_discarded = True
+    lead.save(update_fields=["is_discarded", "updated_at"])
+    messages.info(request, "Lead discarded.")
+    return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+
+@login_required
+def lead_progress_overview_admin(request):
+    emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (emp and getattr(emp, "role", "") == "admin")):
+        return HttpResponseForbidden()
+
+    base_qs = Lead.objects.select_related("assigned_to__user")
+    stage_counts = {
+        Lead.STAGE_PENDING: base_qs.filter(stage=Lead.STAGE_PENDING).count(),
+        Lead.STAGE_HALF: base_qs.filter(stage=Lead.STAGE_HALF).count(),
+        Lead.STAGE_PROCESSED: base_qs.filter(stage=Lead.STAGE_PROCESSED).count(),
+    }
+    total = sum(stage_counts.values()) or 0
+    stage_pct = {k: (v / total * 100) if total else 0 for k, v in stage_counts.items()}
+
+    per_employee = (
+        base_qs.values("assigned_to__user__username")
+        .annotate(
+            pending=Count("id", filter=Q(stage=Lead.STAGE_PENDING)),
+            half=Count("id", filter=Q(stage=Lead.STAGE_HALF)),
+            processed=Count("id", filter=Q(stage=Lead.STAGE_PROCESSED)),
+        )
+        .order_by("assigned_to__user__username")
+    )
+
+    progress_counts = (
+        LeadProductProgress.objects.values("product", "status")
+        .order_by()
+        .annotate(total=Count("id"))
+    )
+    progress_map = {}
+    for row in progress_counts:
+        product = row["product"]
+        status = row["status"]
+        progress_map.setdefault(product, {})[status] = row["total"]
+
+    personal_stage = None
+    personal_stage_pct = None
+    if emp:
+        mine = base_qs.filter(assigned_to=emp)
+        personal_stage = {
+            Lead.STAGE_PENDING: mine.filter(stage=Lead.STAGE_PENDING).count(),
+            Lead.STAGE_HALF: mine.filter(stage=Lead.STAGE_HALF).count(),
+            Lead.STAGE_PROCESSED: mine.filter(stage=Lead.STAGE_PROCESSED).count(),
+        }
+        personal_total = sum(personal_stage.values()) or 0
+        personal_stage_pct = {k: (v / personal_total * 100) if personal_total else 0 for k, v in personal_stage.items()}
+
+    context = {
+        "scope_label": "Team Leads",
+        "stage_counts": stage_counts,
+        "stage_pct": stage_pct,
+        "per_employee": per_employee,
+        "progress_map": progress_map,
+        "personal_stage": personal_stage,
+        "personal_stage_pct": personal_stage_pct,
+    }
+    return render(request, "clients/leads/lead_progress_overview.html", context)
+
+
+@login_required
+def lead_progress_overview_employee(request):
+    emp = getattr(request.user, "employee", None)
+    if not emp:
+        return HttpResponseForbidden()
+
+    base_qs = Lead.objects.filter(assigned_to=emp)
+    stage_counts = {
+        Lead.STAGE_PENDING: base_qs.filter(stage=Lead.STAGE_PENDING).count(),
+        Lead.STAGE_HALF: base_qs.filter(stage=Lead.STAGE_HALF).count(),
+        Lead.STAGE_PROCESSED: base_qs.filter(stage=Lead.STAGE_PROCESSED).count(),
+    }
+    total = sum(stage_counts.values()) or 0
+    stage_pct = {k: (v / total * 100) if total else 0 for k, v in stage_counts.items()}
+
+    progress_counts = (
+        LeadProductProgress.objects.filter(lead__assigned_to=emp)
+        .values("product", "status")
+        .order_by()
+        .annotate(total=Count("id"))
+    )
+    progress_map = {}
+    for row in progress_counts:
+        product = row["product"]
+        status = row["status"]
+        progress_map.setdefault(product, {})[status] = row["total"]
+
+    context = {
+        "scope_label": "My Leads",
+        "stage_counts": stage_counts,
+        "stage_pct": stage_pct,
+        "per_employee": None,
+        "progress_map": progress_map,
+        "personal_stage": stage_counts,
+        "personal_stage_pct": stage_pct,
+    }
+    return render(request, "clients/leads/lead_progress_overview.html", context)
+
+
+@login_required
+def lead_create(request):
+    initial_lead = Lead()
+    if hasattr(request.user, "employee") and getattr(request.user.employee, "role", "") == "employee":
+        initial_lead.assigned_to = request.user.employee
+
+    default_products = [
+        {"product": LeadProductProgress.PRODUCT_HEALTH},
+        {"product": LeadProductProgress.PRODUCT_LIFE},
+        {"product": LeadProductProgress.PRODUCT_WEALTH},
+    ]
+
+    if request.method == "POST":
+        form = LeadForm(request.POST, instance=initial_lead, user=request.user)
+        family_formset = LeadFamilyMemberFormSet(request.POST, instance=initial_lead, prefix="family")
+        product_formset = LeadProductProgressFormSet(request.POST, instance=initial_lead, prefix="product")
+
+        if form.is_valid() and family_formset.is_valid() and product_formset.is_valid():
+            lead = form.save(commit=False)
+            if hasattr(request.user, "employee") and getattr(request.user.employee, "role", "") == "employee":
+                lead.assigned_to = request.user.employee
+            lead.created_by = request.user
+            lead.save()
+
+            family_formset.instance = lead
+            product_formset.instance = lead
+            family_formset.save()
+            product_formset.save()
+            lead.recompute_stage(save=True)
+
+            messages.success(request, "Lead created successfully.")
+            return redirect("clients:lead_stage_list", stage=lead.stage)
+    else:
+        form = LeadForm(instance=initial_lead, user=request.user)
+        family_formset = LeadFamilyMemberFormSet(instance=initial_lead, prefix="family")
+        product_formset = LeadProductProgressFormSet(instance=initial_lead, prefix="product", initial=default_products)
+
+    return render(
+        request,
+        "clients/leads/lead_form.html",
+        {
+            "form": form,
+            "family_formset": family_formset,
+            "product_formset": product_formset,
+            "mode": "create",
+        },
+    )
+
+
+@login_required
+def lead_update(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+
+    if request.method == "POST":
+        form = LeadForm(request.POST, instance=lead, user=request.user)
+        family_formset = LeadFamilyMemberFormSet(request.POST, instance=lead, prefix="family")
+        product_formset = LeadProductProgressFormSet(request.POST, instance=lead, prefix="product")
+
+        if form.is_valid() and family_formset.is_valid() and product_formset.is_valid():
+            lead = form.save(commit=False)
+            if hasattr(request.user, "employee") and getattr(request.user.employee, "role", "") == "employee":
+                lead.assigned_to = request.user.employee
+            lead.save()
+
+            family_formset.save()
+            product_formset.save()
+            lead.recompute_stage(save=True)
+            messages.success(request, "Lead updated successfully.")
+            return redirect("clients:lead_detail", lead_id=lead.id)
+    else:
+        form = LeadForm(instance=lead, user=request.user)
+        family_formset = LeadFamilyMemberFormSet(instance=lead, prefix="family")
+        product_initial = None
+        if lead.progress_entries.count() == 0:
+            product_initial = [
+                {"product": LeadProductProgress.PRODUCT_HEALTH},
+                {"product": LeadProductProgress.PRODUCT_LIFE},
+                {"product": LeadProductProgress.PRODUCT_WEALTH},
+            ]
+        product_formset = LeadProductProgressFormSet(instance=lead, prefix="product", initial=product_initial)
+
+    return render(
+        request,
+        "clients/leads/lead_form.html",
+        {
+            "form": form,
+            "family_formset": family_formset,
+            "product_formset": product_formset,
+            "lead": lead,
+            "mode": "update",
+        },
+    )
 
 
 @login_required

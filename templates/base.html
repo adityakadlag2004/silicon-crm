@@ -134,6 +134,7 @@
                     <li><a class="dropdown-item" href="{% url 'clients:recalc_points' %}">Recalculate Points</a></li>
                     <li><a class="dropdown-item" href="{% url 'clients:client_analysis' %}">Client Analysis</a></li>
           <li><a class="dropdown-item" href="{% url 'clients:employee_performance' %}">Employee Performance</a></li>
+          <li><hr class="dropdown-divider"></li>
                   </ul>
                 </li>
                 <!-- 🔹 Calling Dropdown (Admin) -->
@@ -163,6 +164,10 @@
                 <!-- Employee Management (placed last) -->
                 <li class="nav-item">
                   <a class="nav-link" href="{% url 'clients:employee_management' %}">Employee Management</a>
+                </li>
+
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
                 </li>
 
 
@@ -206,6 +211,10 @@
                     <li><a class="dropdown-item" href="{% url 'clients:employee_calendar' %}">My Calendar</a></li>
                     <li><a class="dropdown-item" href="{% url 'clients:calling_list_generator' %}">List Generator</a></li>
                   </ul>
+                </li>
+
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
                 </li>
               {% endif %}
             {% endif %}

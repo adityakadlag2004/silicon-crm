@@ -1,10 +1,7 @@
 from django import forms
-from .models import Sale, Client
-
-
-from django import forms
 from django_select2.forms import ModelSelect2Widget
-from .models import Sale, Client, Employee
+from django.forms import inlineformset_factory
+from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress
 
 class SaleForm(forms.ModelForm):
     class Meta:
@@ -104,11 +101,6 @@ class ClientForm(forms.ModelForm):
             return 0
         return val
 
-
-# app/forms.py
-from django import forms
-from .models import Employee
-
 class ClientReassignForm(forms.Form):
     new_employee = forms.ModelChoiceField(
         queryset=Employee.objects.filter(active=True),
@@ -137,3 +129,79 @@ class EmployeeCreateForm(forms.Form):
 
 class EmployeeDeactivateForm(forms.Form):
     employee_id = forms.IntegerField()
+
+
+class LeadForm(forms.ModelForm):
+    class Meta:
+        model = Lead
+        fields = [
+            "customer_name",
+            "phone",
+            "email",
+            "data_received",
+            "data_received_on",
+            "income",
+            "expenses",
+            "notes",
+            "assigned_to",
+            "stage",
+        ]
+        widgets = {
+            "data_received_on": forms.DateInput(attrs={"type": "date"}),
+            "income": forms.NumberInput(attrs={"step": "0.01"}),
+            "expenses": forms.NumberInput(attrs={"step": "0.01"}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        user = kwargs.pop("user", None)
+        super().__init__(*args, **kwargs)
+        self.fields["assigned_to"].queryset = Employee.objects.filter(active=True)
+        self.fields["stage"].widget = forms.HiddenInput()
+
+        if user and hasattr(user, "employee") and getattr(user.employee, "role", "") == "employee":
+            self.fields["assigned_to"].initial = user.employee
+            self.fields["assigned_to"].disabled = True
+
+        for name, field in self.fields.items():
+            widget = field.widget
+            if getattr(widget, "input_type", "") == "checkbox":
+                widget.attrs.setdefault("class", "form-check-input")
+            else:
+                widget.attrs.setdefault("class", "form-control")
+
+
+class LeadFamilyMemberForm(forms.ModelForm):
+    class Meta:
+        model = LeadFamilyMember
+        fields = ["name", "relation", "date_of_birth", "notes"]
+        widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class LeadProductProgressForm(forms.ModelForm):
+    class Meta:
+        model = LeadProductProgress
+        fields = ["product", "target_amount", "achieved_amount", "status", "remark"]
+        widgets = {
+            "remark": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+LeadFamilyMemberFormSet = inlineformset_factory(
+    Lead,
+    LeadFamilyMember,
+    form=LeadFamilyMemberForm,
+    extra=1,
+    can_delete=True,
+)
+
+LeadProductProgressFormSet = inlineformset_factory(
+    Lead,
+    LeadProductProgress,
+    form=LeadProductProgressForm,
+    extra=3,
+    can_delete=True,
+)

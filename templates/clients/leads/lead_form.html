@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "update" %}Edit Lead{% else %}Add Lead{% endif %}{% endblock %}
+{% block content %}
+<h3 class="mb-3">{% if mode == "update" %}Edit Lead{% else %}Add Lead{% endif %}</h3>
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% if form.errors or family_formset.non_form_errors or product_formset.non_form_errors %}
+    <div class="alert alert-danger">Please fix the errors below and try again.</div>
+  {% endif %}
+  <div class="card mb-3 shadow-sm">
+    <div class="card-header bg-light">Lead Basics</div>
+    <div class="card-body row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Customer Name</label>
+        {{ form.customer_name }}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Phone</label>
+        {{ form.phone }}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Email</label>
+        {{ form.email }}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Data Received?</label>
+        {{ form.data_received }}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Data Received On</label>
+        {{ form.data_received_on }}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Income</label>
+        {{ form.income }}
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Expenses</label>
+        {{ form.expenses }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Assigned To</label>
+        {{ form.assigned_to }}
+      </div>
+      <div class="col-12">
+        <label class="form-label">Notes</label>
+        {{ form.notes }}
+      </div>
+      {{ form.stage }}
+    </div>
+  </div>
+
+  <div class="card mb-3 shadow-sm">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <span>Family Members</span>
+      <div class="d-flex gap-2">
+        <small class="text-muted me-2 align-self-center">Capture key relations from the sheet.</small>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="add-family-btn">+ Add</button>
+      </div>
+    </div>
+    <div class="card-body">
+      {{ family_formset.management_form }}
+      <div class="row g-3">
+        <div class="col-lg-8">
+          <div class="row g-3" id="family-formset" data-prefix="family">
+            {% for f in family_formset %}
+              <div class="col-md-6 formset-card">
+                <div class="border rounded p-3 h-100">
+                  {{ f.id }}
+                  <div class="mb-2"><label class="form-label">Name</label>{{ f.name }}</div>
+                  <div class="mb-2"><label class="form-label">Relation</label>{{ f.relation }}</div>
+                  <div class="mb-2"><label class="form-label">DOB</label>{{ f.date_of_birth }}</div>
+                  <div class="mb-2"><label class="form-label">Notes</label>{{ f.notes }}</div>
+                  {% if family_formset.can_delete %}
+                    <div class="d-flex justify-content-between align-items-center">
+                      {{ f.DELETE }}
+                      <button type="button" class="btn btn-sm btn-outline-danger" data-remove-form>Remove</button>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="border rounded p-3 bg-light h-100">
+            <div class="fw-semibold mb-2">Family Summary</div>
+            <div id="family-summary" class="list-group list-group-flush small">
+              {% for f in family_formset %}
+                <div class="list-group-item px-0">
+                  {{ f.name.value|default:"(Name pending)" }}
+                  {% if f.relation.value %} - {{ f.relation.value }}{% endif %}
+                  {% if f.date_of_birth.value %} ({{ f.date_of_birth.value }}){% endif %}
+                </div>
+              {% empty %}
+                <div class="text-muted small">No members yet.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mb-3 shadow-sm">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <span>Products & Progress</span>
+      <div class="d-flex gap-2">
+        <small class="text-muted me-2 align-self-center">Health, Life, Wealth targets vs achieved.</small>
+        <button type="button" class="btn btn-sm btn-outline-primary" id="add-product-btn">+ Add</button>
+      </div>
+    </div>
+    <div class="card-body">
+      {{ product_formset.management_form }}
+      <div class="row g-3" id="product-formset" data-prefix="product">
+        {% for f in product_formset %}
+          <div class="col-md-4 formset-card">
+            <div class="border rounded p-3 h-100">
+              {{ f.id }}
+              <div class="mb-2"><label class="form-label">Product</label>{{ f.product }}</div>
+              <div class="mb-2"><label class="form-label">Target Amount</label>{{ f.target_amount }}</div>
+              <div class="mb-2"><label class="form-label">Achieved Amount</label>{{ f.achieved_amount }}</div>
+              <div class="mb-2"><label class="form-label">Status</label>{{ f.status }}</div>
+              <div class="mb-2"><label class="form-label">Notes</label>{{ f.remark }}</div>
+              {% if product_formset.can_delete %}
+                <div class="d-flex justify-content-between align-items-center">
+                  {{ f.DELETE }}
+                  <button type="button" class="btn btn-sm btn-outline-danger" data-remove-form>Remove</button>
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-end gap-2">
+    <a class="btn btn-outline-secondary" href="{% url 'clients:lead_stage_list' 'pending' %}">Cancel</a>
+    <button class="btn btn-warning" type="submit">Save</button>
+  </div>
+</form>
+
+<template id="family-empty-template">
+  <div class="col-md-6 formset-card">
+    <div class="border rounded p-3 h-100">
+      {{ family_formset.empty_form.id }}
+      <div class="mb-2"><label class="form-label">Name</label>{{ family_formset.empty_form.name }}</div>
+      <div class="mb-2"><label class="form-label">Relation</label>{{ family_formset.empty_form.relation }}</div>
+      <div class="mb-2"><label class="form-label">DOB</label>{{ family_formset.empty_form.date_of_birth }}</div>
+      <div class="mb-2"><label class="form-label">Notes</label>{{ family_formset.empty_form.notes }}</div>
+      {% if family_formset.can_delete %}
+        <div class="d-flex justify-content-between align-items-center">
+          {{ family_formset.empty_form.DELETE }}
+          <button type="button" class="btn btn-sm btn-outline-danger" data-remove-form>Remove</button>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</template>
+
+<template id="product-empty-template">
+  <div class="col-md-4 formset-card">
+    <div class="border rounded p-3 h-100">
+      {{ product_formset.empty_form.id }}
+      <div class="mb-2"><label class="form-label">Product</label>{{ product_formset.empty_form.product }}</div>
+      <div class="mb-2"><label class="form-label">Target Amount</label>{{ product_formset.empty_form.target_amount }}</div>
+      <div class="mb-2"><label class="form-label">Achieved Amount</label>{{ product_formset.empty_form.achieved_amount }}</div>
+      <div class="mb-2"><label class="form-label">Status</label>{{ product_formset.empty_form.status }}</div>
+      <div class="mb-2"><label class="form-label">Notes</label>{{ product_formset.empty_form.remark }}</div>
+      {% if product_formset.can_delete %}
+        <div class="d-flex justify-content-between align-items-center">
+          {{ product_formset.empty_form.DELETE }}
+          <button type="button" class="btn btn-sm btn-outline-danger" data-remove-form>Remove</button>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</template>
+
+<script>
+  (function() {
+    function addForm(prefix, containerId, templateId) {
+      const totalInput = document.getElementById(`id_${prefix}-TOTAL_FORMS`);
+      if (!totalInput) return;
+      const index = parseInt(totalInput.value, 10);
+      const tpl = document.getElementById(templateId);
+      if (!tpl) return;
+      const html = tpl.innerHTML.replace(/__prefix__/g, index);
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = html.trim();
+      const node = wrapper.firstElementChild;
+      const container = document.getElementById(containerId);
+      if (!container || !node) return;
+      container.appendChild(node);
+      totalInput.value = index + 1;
+      wireRemoveButtons(node);
+      refreshFamilySummary();
+    }
+
+    function wireRemoveButtons(scope) {
+      const buttons = (scope || document).querySelectorAll('[data-remove-form]');
+      buttons.forEach(btn => {
+        btn.onclick = () => {
+          const card = btn.closest('.formset-card');
+          if (!card) return;
+          const del = card.querySelector('input[type="checkbox"][name$="-DELETE"]');
+          if (del) {
+            del.checked = true;
+          }
+          card.style.display = 'none';
+          refreshFamilySummary();
+        };
+      });
+    }
+
+    function refreshFamilySummary() {
+      const summary = document.getElementById('family-summary');
+      if (!summary) return;
+      summary.innerHTML = '';
+      const forms = document.querySelectorAll('[name^="family-"][name$="-name"]');
+      let count = 0;
+      forms.forEach(input => {
+        const card = input.closest('.formset-card');
+        if (card && card.style.display === 'none') return;
+        const prefix = input.name.replace(/-name$/, '');
+        const relation = document.querySelector(`[name="${prefix}-relation"]`);
+        const dob = document.querySelector(`[name="${prefix}-date_of_birth"]`);
+        const del = document.querySelector(`[name="${prefix}-DELETE"]`);
+        if (del && del.checked) return;
+        const nameVal = input.value || '(Name pending)';
+        const relationVal = relation ? relation.value : '';
+        const dobVal = dob ? dob.value : '';
+        const row = document.createElement('div');
+        row.className = 'list-group-item px-0';
+        row.textContent = nameVal;
+        if (relationVal) row.textContent += ` - ${relationVal}`;
+        if (dobVal) row.textContent += ` (${dobVal})`;
+        summary.appendChild(row);
+        count += 1;
+      });
+      if (count === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-muted small';
+        empty.textContent = 'No members yet.';
+        summary.appendChild(empty);
+      }
+    }
+
+    document.getElementById('add-family-btn')?.addEventListener('click', () => {
+      addForm('family', 'family-formset', 'family-empty-template');
+    });
+    document.getElementById('add-product-btn')?.addEventListener('click', () => {
+      addForm('product', 'product-formset', 'product-empty-template');
+    });
+
+    document.addEventListener('input', (e) => {
+      const name = e.target.name || '';
+      if (name.startsWith('family-') && (name.endsWith('-name') || name.endsWith('-relation') || name.endsWith('-date_of_birth'))) {
+        refreshFamilySummary();
+      }
+    });
+
+    wireRemoveButtons(document);
+    refreshFamilySummary();
+  })();
+</script>
+{% endblock %}
