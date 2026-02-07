@@ -212,6 +212,21 @@
     </div>
     {% endif %}
   </div>
+  <div class="dashboard-card" style="flex:1 1 260px;min-width:220px;text-align:left;">
+    <h5>Upcoming Lead Follow-ups (7d)</h5>
+    {% if upcoming_followups %}
+      <div style="font-size:0.96rem;">
+        {% for f in upcoming_followups %}
+          <div class="mb-1">
+            <strong>{{ f.lead.customer_name }}</strong>
+            <div class="text-muted">{{ f.scheduled_time|date:"Y-m-d H:i" }} • {{ f.assigned_to.user.username }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-muted">No follow-ups due.</div>
+    {% endif %}
+  </div>
 </div>
 
 <div class="dashboard-section-title">Product-wise Sales (This Month)</div>
