@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block title %}Leads - {{ stage_label }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="mb-1">{{ stage_label }}</h3>
+    <div class="text-muted small">See only the leads you are allowed to access.</div>
+  </div>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_stage_list' 'pending' %}">Pending ({{ counts.pending }})</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_stage_list' 'half_sold' %}">Half Sold ({{ counts.half_sold }})</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_stage_list' 'processed' %}">Processed ({{ counts.processed }})</a>
+    <a class="btn btn-warning btn-sm" href="{% url 'clients:lead_create' %}">+ Add Lead</a>
+  </div>
+</div>
+
+<form method="get" class="row g-2 align-items-center mb-3">
+  <div class="col-sm-4">
+    <input type="search" name="q" value="{{ search_term }}" class="form-control" placeholder="Search customer name" />
+  </div>
+  <div class="col-auto">
+    <button class="btn btn-outline-dark btn-sm" type="submit">Search</button>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead class="table-light">
+      <tr>
+        <th>Customer</th>
+        <th>Assigned To</th>
+        <th>Data Received</th>
+        <th>Health</th>
+        <th>Life</th>
+        <th>Wealth</th>
+        <th>Stage</th>
+        <th>Updated</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lead in leads %}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{ lead.customer_name }}</div>
+            <div class="text-muted small">{{ lead.phone|default:"No phone" }}</div>
+          </td>
+          <td>{{ lead.assigned_to.user.username }}</td>
+          <td>
+            {% if lead.data_received %}
+              <span class="badge bg-success">Yes</span>
+              {% if lead.data_received_on %}<div class="small text-muted">{{ lead.data_received_on }}</div>{% endif %}
+            {% else %}
+              <span class="badge bg-secondary">No</span>
+            {% endif %}
+          </td>
+          {% with health=lead.progress_map.health %}
+            <td>
+              {% if health %}
+                <div class="fw-semibold">{{ health.get_status_display }}</div>
+                {% with target=health.target_amount|default_if_none:0 achieved=health.achieved_amount|default_if_none:0 %}
+                  {% if target %}
+                    {% widthratio achieved target 100 as health_completion %}
+                    <div class="small text-muted">Target ₹{{ target|floatformat:0 }} | Ach ₹{{ achieved|floatformat:0 }} | {{ health_completion }}%</div>
+                    <div class="progress" style="height:6px;">
+                      <div class="progress-bar bg-success" role="progressbar" style="width: {{ health_completion }}%;" aria-valuenow="{{ health_completion }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                  {% else %}
+                    <div class="small text-muted">Target - | Ach ₹{{ achieved|floatformat:0 }}</div>
+                    <div class="progress" style="height:6px;">
+                      <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                  {% endif %}
+                {% endwith %}
+              {% else %}<span class="text-muted">-</span>{% endif %}
+            </td>
+          {% endwith %}
+          {% with life=lead.progress_map.life %}
+            <td>
+              {% if life %}
+                <div class="fw-semibold">{{ life.get_status_display }}</div>
+                {% with target=life.target_amount|default_if_none:0 achieved=life.achieved_amount|default_if_none:0 %}
+                  {% if target %}
+                    {% widthratio achieved target 100 as life_completion %}
+                    <div class="small text-muted">Target ₹{{ target|floatformat:0 }} | Ach ₹{{ achieved|floatformat:0 }} | {{ life_completion }}%</div>
+                    <div class="progress" style="height:6px;">
+                      <div class="progress-bar bg-success" role="progressbar" style="width: {{ life_completion }}%;" aria-valuenow="{{ life_completion }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                  {% else %}
+                    <div class="small text-muted">Target - | Ach ₹{{ achieved|floatformat:0 }}</div>
+                    <div class="progress" style="height:6px;">
+                      <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                  {% endif %}
+                {% endwith %}
+              {% else %}<span class="text-muted">-</span>{% endif %}
+            </td>
+          {% endwith %}
+          {% with wealth=lead.progress_map.wealth %}
+            <td>
+              {% if wealth %}
+                <div class="fw-semibold">{{ wealth.get_status_display }}</div>
+                {% with target=wealth.target_amount|default_if_none:0 achieved=wealth.achieved_amount|default_if_none:0 %}
+                  {% if target %}
+                    {% widthratio achieved target 100 as wealth_completion %}
+                    <div class="small text-muted">Target ₹{{ target|floatformat:0 }} | Ach ₹{{ achieved|floatformat:0 }} | {{ wealth_completion }}%</div>
+                    <div class="progress" style="height:6px;">
+                      <div class="progress-bar bg-success" role="progressbar" style="width: {{ wealth_completion }}%;" aria-valuenow="{{ wealth_completion }}" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                  {% else %}
+                    <div class="small text-muted">Target - | Ach ₹{{ achieved|floatformat:0 }}</div>
+                    <div class="progress" style="height:6px;">
+                      <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                  {% endif %}
+                {% endwith %}
+              {% else %}<span class="text-muted">-</span>{% endif %}
+            </td>
+          {% endwith %}
+          <td><span class="badge bg-light text-dark border">{{ lead.get_stage_display }}</span></td>
+          <td class="small text-muted">{{ lead.updated_at|date:"Y-m-d H:i" }}</td>
+          <td class="text-end">
+            <div class="dropdown">
+              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">⋯</button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="{% url 'clients:lead_detail' lead.id %}">Open lead</a></li>
+                <li>
+                  <form method="post" action="{% url 'clients:lead_mark_complete' lead.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item">Mark completed</button>
+                  </form>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                  <form method="post" action="{% url 'clients:lead_discard' lead.id %}" onsubmit="return confirm('Discard this lead?');">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item text-danger">Discard lead</button>
+                  </form>
+                </li>
+              </ul>
+            </div>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9" class="text-center text-muted">No leads found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

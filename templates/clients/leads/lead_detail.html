@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Lead {{ lead.customer_name }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
+  <div>
+    <h3 class="mb-1">{{ lead.customer_name }}</h3>
+    <div class="text-muted">Assigned to {{ lead.assigned_to.user.username }}</div>
+  </div>
+  <div class="d-flex gap-2">
+    <span class="badge bg-light text-dark border align-self-center">{{ lead.get_stage_display }}</span>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_stage_list' lead.stage %}">Back to list</a>
+    <a class="btn btn-warning btn-sm" href="{% url 'clients:lead_update' lead.id %}">Edit Lead</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-light">Lead Snapshot</div>
+      <div class="card-body">
+        <div class="mb-2"><strong>Phone:</strong> {{ lead.phone|default:"-" }}</div>
+        <div class="mb-2"><strong>Email:</strong> {{ lead.email|default:"-" }}</div>
+        <div class="mb-2"><strong>Data Received:</strong>
+          {% if lead.data_received %}Yes{% else %}No{% endif %}
+          {% if lead.data_received_on %}<span class="text-muted">on {{ lead.data_received_on }}</span>{% endif %}
+        </div>
+        <div class="mb-2"><strong>Income:</strong> Rs {{ lead.income|default:"-" }}</div>
+        <div class="mb-2"><strong>Expenses:</strong> Rs {{ lead.expenses|default:"-" }}</div>
+        <div class="mb-2"><strong>Notes:</strong><br><span class="text-muted">{{ lead.notes|default:"No notes yet." }}</span></div>
+        <div class="text-muted small">Updated {{ lead.updated_at|date:"Y-m-d H:i" }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-light">Family Members</div>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+          {% for member in lead.family_members.all %}
+            <li class="list-group-item">
+              <div class="fw-semibold">{{ member.name }}</div>
+              <div class="text-muted small">{{ member.relation|default:"" }}{% if member.date_of_birth %} • DOB {{ member.date_of_birth }}{% endif %}</div>
+              {% if member.notes %}<div class="small">{{ member.notes }}</div>{% endif %}
+            </li>
+          {% empty %}
+            <li class="list-group-item text-muted">No family members captured.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header bg-light">Product Progress</div>
+  <div class="card-body p-0">
+    <table class="table mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Product</th>
+          <th>Status</th>
+          <th>Target</th>
+          <th>Achieved</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for progress in lead.progress_entries.all %}
+          <tr>
+            <td>{{ progress.get_product_display }}</td>
+            <td>{{ progress.get_status_display }}</td>
+            <td>{{ progress.target_amount|default:"-" }}</td>
+            <td>{{ progress.achieved_amount|default:"-" }}</td>
+            <td class="small text-muted">{{ progress.remark|default:"-" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">No progress added yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

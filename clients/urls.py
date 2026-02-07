@@ -30,6 +30,17 @@ urlpatterns = [
     path("sales/<int:sale_id>/delete/", views.delete_sale, name="delete_sale"),
     path("sales/recalc/", views.recalc_points, name="recalc_points"),
     path("sales/all/", views.all_sales, name="all_sales"),
+    path("leads/", views.lead_management, name="lead_management"),
+    path("leads/stats/team/", views.lead_progress_overview_admin, name="lead_progress_admin"),
+    path("leads/stats/mine/", views.lead_progress_overview_employee, name="lead_progress_employee"),
+    # Lead management
+    path("leads/bulk-import/", views.lead_bulk_import, name="lead_bulk_import"),
+    path("leads/stage/<str:stage>/", views.lead_list_by_stage, name="lead_stage_list"),
+    path("leads/new/", views.lead_create, name="lead_create"),
+    path("leads/<int:lead_id>/complete/", views.lead_mark_complete, name="lead_mark_complete"),
+    path("leads/<int:lead_id>/discard/", views.lead_discard, name="lead_discard"),
+    path("leads/<int:lead_id>/", views.lead_detail, name="lead_detail"),
+    path("leads/<int:lead_id>/edit/", views.lead_update, name="lead_update"),
   # Employee performance
   path("sales/performance/", views.employee_performance, name="employee_performance"),
   path("dashboard/net-business/", views.net_business, name="net_business"),
