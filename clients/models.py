@@ -474,6 +474,40 @@ class Lead(models.Model):
         return new_stage
 
 
+class LeadRemark(models.Model):
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="remarks")
+    text = models.TextField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Remark for {self.lead_id}"
+
+
+class LeadFollowUp(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("done", "Done"),
+    ]
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="followups")
+    assigned_to = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="lead_followups")
+    scheduled_time = models.DateTimeField()
+    note = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["scheduled_time"]
+
+    def __str__(self):
+        return f"Follow-up for {self.lead_id} at {self.scheduled_time}"
+
+
 class LeadFamilyMember(models.Model):
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="family_members")
     name = models.CharField(max_length=255)

@@ -51,6 +51,8 @@ from .models import (
     NetBusinessEntry,
     NetSipEntry,
     Notification,
+    LeadFollowUp,
+    LeadRemark,
 )
 from .forms import (
     SaleForm,
@@ -120,6 +122,51 @@ def lead_detail(request, lead_id):
     lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
     lead.progress_map = {p.product: p for p in lead.progress_entries.all()}
     return render(request, "clients/leads/lead_detail.html", {"lead": lead})
+
+
+@login_required
+@require_POST
+def lead_add_followup(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    when_raw = request.POST.get("scheduled_time")
+    note = (request.POST.get("note") or "").strip()
+    if not when_raw:
+        messages.error(request, "Please choose a follow-up date/time.")
+        return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+    try:
+        when_dt = parse_datetime(when_raw)
+        if when_dt and timezone.is_naive(when_dt):
+            when_dt = timezone.make_aware(when_dt)
+    except Exception:
+        when_dt = None
+
+    if not when_dt:
+        messages.error(request, "Invalid date/time format.")
+        return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+    LeadFollowUp.objects.create(
+        lead=lead,
+        assigned_to=lead.assigned_to,
+        scheduled_time=when_dt,
+        note=note,
+        created_by=request.user,
+    )
+    messages.success(request, "Follow-up added.")
+    return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+
+@login_required
+@require_POST
+def lead_add_remark(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    text = (request.POST.get("text") or "").strip()
+    if not text:
+        messages.error(request, "Remark cannot be empty.")
+        return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+    LeadRemark.objects.create(lead=lead, text=text, created_by=request.user)
+    messages.success(request, "Remark added.")
+    return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
 
 
 @login_required
@@ -1483,6 +1530,13 @@ def admin_dashboard(request):
     month = today.month
     year = today.year
 
+    now_ts = timezone.now()
+    upcoming_followups = (
+        LeadFollowUp.objects.filter(status="pending", scheduled_time__gte=now_ts, scheduled_time__lte=now_ts + timedelta(days=7))
+        .select_related("lead", "assigned_to__user")
+        .order_by("scheduled_time")[:8]
+    )
+
     # All-time sales (if you use it elsewhere)
     all_sales_qs = Sale.objects.all()
 
@@ -1619,6 +1673,7 @@ def admin_dashboard(request):
         "monthly_summary": monthly_summary,
         "notifications": notifications,
         "unread_notifications": unread_notifications,
+        "upcoming_followups": upcoming_followups,
     }
 
     return render(request, "dashboards/admin_dashboard.html", context)
@@ -1718,6 +1773,13 @@ def employee_management(request):
 def employee_dashboard(request):
     emp = request.user.employee
     today = now().date()
+
+    now_ts = timezone.now()
+    upcoming_followups = (
+        LeadFollowUp.objects.filter(status="pending", assigned_to=emp, scheduled_time__gte=now_ts, scheduled_time__lte=now_ts + timedelta(days=7))
+        .select_related("lead")
+        .order_by("scheduled_time")[:8]
+    )
 
     products = [p for p, _ in Sale.PRODUCT_CHOICES]
 
@@ -1820,6 +1882,7 @@ def employee_dashboard(request):
         "daily_targets": daily_targets_display,
         "monthly_targets": monthly_targets_display,
         "history": history,   # 👈 important for template
+        "upcoming_followups": upcoming_followups,
     }
     return render(request, "dashboards/employee_dashboard.html", context)
 

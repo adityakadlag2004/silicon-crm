@@ -39,6 +39,8 @@ urlpatterns = [
     path("leads/new/", views.lead_create, name="lead_create"),
     path("leads/<int:lead_id>/complete/", views.lead_mark_complete, name="lead_mark_complete"),
     path("leads/<int:lead_id>/discard/", views.lead_discard, name="lead_discard"),
+    path("leads/<int:lead_id>/add-followup/", views.lead_add_followup, name="lead_add_followup"),
+    path("leads/<int:lead_id>/add-remark/", views.lead_add_remark, name="lead_add_remark"),
     path("leads/<int:lead_id>/", views.lead_detail, name="lead_detail"),
     path("leads/<int:lead_id>/edit/", views.lead_update, name="lead_update"),
   # Employee performance
