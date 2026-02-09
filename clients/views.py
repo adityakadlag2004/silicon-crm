@@ -53,6 +53,7 @@ from .models import (
     Notification,
     LeadFollowUp,
     LeadRemark,
+    ManagerAccessConfig,
 )
 from .forms import (
     SaleForm,
@@ -65,6 +66,10 @@ from .forms import (
     LeadFamilyMemberFormSet,
     LeadProductProgressFormSet,
 )
+
+
+def get_manager_access():
+    return ManagerAccessConfig.current()
 from django.db.models import Count, Avg, Sum
 from django.db.models.functions import TruncDay, TruncMonth, TruncYear
 from django.core.exceptions import FieldError
@@ -327,6 +332,7 @@ def lead_management(request):
         "stage_counts": stage_counts,
         "progress_counts": progress_counts if can_see_stats else {},
         "can_see_stats": can_see_stats,
+        "can_bulk_import": True,  # employees/managers can import leads
         "view_mode": view_mode,
         "tab_counts": tab_counts,
     }
@@ -1495,6 +1501,8 @@ def login_view(request):
                 role = user.employee.role.lower()
                 if role == "admin":
                     return redirect("clients:admin_dashboard")   # fixed
+                elif role == "manager":
+                    return redirect("clients:employee_dashboard")
                 elif role == "employee":
                     return redirect("clients:employee_dashboard")  # fixed
             else:
@@ -1530,6 +1538,8 @@ def admin_dashboard(request):
     month = today.month
     year = today.year
 
+    admin_emp = getattr(request.user, "employee", None)
+
     now_ts = timezone.now()
     upcoming_followups = (
         LeadFollowUp.objects.filter(status="pending", scheduled_time__gte=now_ts, scheduled_time__lte=now_ts + timedelta(days=7))
@@ -1555,6 +1565,16 @@ def admin_dashboard(request):
     admin_points_ratio = (total_points / admin_points_scale) * Decimal("100") if admin_points_scale else Decimal("0")
     admin_extra_points = max(total_points - total_salary_all, Decimal("0"))
 
+    # ---------------- Admin self business (this month) ----------------
+    admin_self_sales = Decimal("0")
+    admin_self_points = Decimal("0")
+    admin_self_pending_points = Decimal("0")
+    if admin_emp:
+        self_sales_qs = Sale.objects.filter(employee=admin_emp, status=Sale.STATUS_APPROVED, date__year=year, date__month=month)
+        admin_self_sales = self_sales_qs.aggregate(total=Sum("amount"))['total'] or Decimal("0")
+        admin_self_points = self_sales_qs.aggregate(total=Sum("points"))['total'] or Decimal("0")
+        admin_self_pending_points = Sale.objects.filter(employee=admin_emp, status=Sale.STATUS_PENDING, date__year=year, date__month=month).aggregate(total=Sum("points"))['total'] or Decimal("0")
+
     # ---------------- Product-wise totals (THIS MONTH) ----------------
     sip_sales = monthly_sales_qs.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
     lumsum_sales = monthly_sales_qs.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
@@ -1569,6 +1589,39 @@ def admin_dashboard(request):
     daily_target_map = {t.product: t.target_value for t in daily_targets}
     monthly_target_map = {t.product: t.target_value for t in monthly_targets}
     employee_count = Employee.objects.filter(role="employee").count()
+
+    # Admin self targets vs progress (similar to employee dashboard)
+    admin_daily_targets_display = []
+    admin_monthly_targets_display = []
+    if admin_emp:
+        products = [p for p, _ in Sale.PRODUCT_CHOICES]
+        # today's and month-to-date approved sales for admin
+        admin_today_sales = monthly_sales_qs.filter(employee=admin_emp, date=today).values("product").annotate(total=Sum("amount"))
+        admin_today_map = {s["product"]: s["total"] for s in admin_today_sales}
+        admin_month_sales = monthly_sales_qs.filter(employee=admin_emp).values("product").annotate(total=Sum("amount"))
+        admin_month_map = {s["product"]: s["total"] for s in admin_month_sales}
+
+        for product in products:
+            target_val = daily_target_map.get(product, Decimal("0"))
+            achieved = admin_today_map.get(product, Decimal("0"))
+            progress = (achieved / target_val * 100) if target_val else 0
+            admin_daily_targets_display.append({
+                "product": product,
+                "target_value": target_val,
+                "achieved": achieved,
+                "progress": progress,
+            })
+
+        for product in products:
+            target_val = monthly_target_map.get(product, Decimal("0"))
+            achieved = admin_month_map.get(product, Decimal("0"))
+            progress = (achieved / target_val * 100) if target_val else 0
+            admin_monthly_targets_display.append({
+                "product": product,
+                "target_value": target_val,
+                "achieved": achieved,
+                "progress": progress,
+            })
 
     # ---------------- Section 1: Company (self) performance vs targets ----------------
     overall_daily_progress = []
@@ -1661,6 +1714,11 @@ def admin_dashboard(request):
         "admin_salary_ratio": admin_salary_ratio,
         "admin_points_ratio": admin_points_ratio,
         "admin_extra_points": admin_extra_points,
+        "admin_self_sales": admin_self_sales,
+        "admin_self_points": admin_self_points,
+        "admin_self_pending_points": admin_self_pending_points,
+        "admin_daily_targets": admin_daily_targets_display,
+        "admin_monthly_targets": admin_monthly_targets_display,
         "sip_sales": sip_sales,
         "lumsum_sales": lumsum_sales,
         "life_sales": life_sales,
@@ -1687,6 +1745,7 @@ def employee_management(request):
         return HttpResponseForbidden("Admins only.")
 
     create_form = EmployeeCreateForm()
+    manager_access = ManagerAccessConfig.current()
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -1713,6 +1772,24 @@ def employee_management(request):
                     "; ".join([str(msg) for msg in errs]) for errs in create_form.errors.values()
                 ])
                 messages.error(request, error_text or "Please correct the errors in the form.")
+        elif action == "update_manager_access":
+            bool_fields = [
+                "allow_view_all_sales",
+                "allow_approve_sales",
+                "allow_edit_sales",
+                "allow_manage_incentives",
+                "allow_recalc_points",
+                "allow_client_analysis",
+                "allow_employee_performance",
+                "allow_lead_management",
+                "allow_calling_admin",
+                "allow_business_tracking",
+            ]
+            for field in bool_fields:
+                setattr(manager_access, field, field in request.POST)
+            manager_access.save(update_fields=bool_fields + ["updated_at"])
+            messages.success(request, "Manager rights updated.")
+            return redirect("clients:employee_management")
         elif action in ("deactivate", "activate"):
             status_form = EmployeeDeactivateForm(request.POST)
             if status_form.is_valid():
@@ -1766,6 +1843,7 @@ def employee_management(request):
     context = {
         "employees": employees,
         "create_form": create_form,
+        "manager_access": manager_access,
     }
     return render(request, "employees/manage.html", context)
 
@@ -1774,6 +1852,11 @@ def employee_management(request):
 def employee_dashboard(request):
     emp = request.user.employee
     today = now().date()
+    role = getattr(emp, "role", "")
+    is_manager = role == "manager"
+    is_admin = role == "admin"
+    manager_access = get_manager_access() if is_manager else None
+    allow_company_sections = is_admin or (is_manager and manager_access and manager_access.allow_employee_performance)
 
     now_ts = timezone.now()
     upcoming_followups = (
@@ -1872,6 +1955,70 @@ def employee_dashboard(request):
         status="pending",   # 👈 only show pending
     ).order_by("scheduled_time")
 
+    # Company-wide aggregates for managers/admins
+    overall_daily_progress = []
+    overall_monthly_progress = []
+    daily_employee_product = []
+    monthly_employee_product = []
+
+    if allow_company_sections:
+        approved_sales_all = Sale.objects.filter(status=Sale.STATUS_APPROVED)
+        monthly_sales_qs = approved_sales_all.filter(date__year=today.year, date__month=today.month)
+
+        for product in products:
+            target_value = daily_target_map.get(product, Decimal("0"))
+            achieved = approved_sales_all.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+            progress = (achieved / target_value * 100) if target_value else 0
+            overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
+
+        employee_count = Employee.objects.filter(role="employee").count()
+        for product in products:
+            achieved = monthly_sales_qs.filter(product=product).aggregate(total=Sum("amount"))['total'] or 0
+            target_base = monthly_target_map.get(product, Decimal("0"))
+            target_value = (target_base or 0) * (employee_count or 0)
+            progress = (achieved / target_value * 100) if target_value else 0
+            overall_monthly_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
+
+        employees = Employee.objects.select_related("user").all()
+        for e in employees:
+            emp_entry_daily = {
+                "employee": e.user.username if hasattr(e, "user") else getattr(e, "name", ""),
+                "products": [],
+            }
+            for product in products:
+                achieved = approved_sales_all.filter(employee=e, product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+                target = daily_target_map.get(product, 0)
+                progress = (achieved / target * 100) if target else 0
+                emp_entry_daily["products"].append({
+                    "product": product,
+                    "achieved": achieved,
+                    "target": target,
+                    "progress": progress,
+                })
+            daily_employee_product.append(emp_entry_daily)
+
+        for e in employees:
+            emp_entry_monthly = {
+                "employee": e.user.username if hasattr(e, "user") else getattr(e, "name", ""),
+                "products": [],
+            }
+            for product in products:
+                achieved = approved_sales_all.filter(
+                    employee=e,
+                    product=product,
+                    date__year=today.year,
+                    date__month=today.month,
+                ).aggregate(total=Sum("amount"))['total'] or 0
+                target = monthly_target_map.get(product, 0)
+                progress = (achieved / target * 100) if target else 0
+                emp_entry_monthly["products"].append({
+                    "product": product,
+                    "achieved": achieved,
+                    "target": target,
+                    "progress": progress,
+                })
+            monthly_employee_product.append(emp_entry_monthly)
+
     context = {
         "total_sales": total_sales,
         "total_points": total_points,
@@ -1893,6 +2040,10 @@ def employee_dashboard(request):
         "history": history,   # 👈 important for template
         "upcoming_followups": upcoming_followups,
         "pending_points": pending_points,
+        "show_company_sections": allow_company_sections,
+        "overall_daily_progress": overall_daily_progress,
+        "overall_monthly_progress": overall_monthly_progress,
+        "monthly_employee_product": monthly_employee_product,
     }
     return render(request, "dashboards/employee_dashboard.html", context)
 
@@ -2250,8 +2401,14 @@ def all_sales(request):
     """
     sales_qs = Sale.objects.all().order_by("-date", "-created_at")
 
+    user_emp = getattr(request.user, "employee", None)
+    is_manager = bool(user_emp and user_emp.role == "manager")
+    manager_access = get_manager_access() if is_manager else None
+
     # Role-based filtering: employees only see their own sales
     if hasattr(request.user, "employee") and request.user.employee.role == "employee":
+        sales_qs = sales_qs.filter(employee=request.user.employee)
+    elif is_manager and manager_access and not manager_access.allow_view_all_sales:
         sales_qs = sales_qs.filter(employee=request.user.employee)
 
     # Filters from GET
@@ -2308,6 +2465,8 @@ def all_sales(request):
     context = {
         "sales": page_obj,  # page object used by template
         "is_employee": hasattr(request.user, "employee") and request.user.employee.role == "employee",
+        "is_manager": is_manager,
+        "manager_can_edit": bool(is_manager and manager_access and manager_access.allow_edit_sales),
         "qstring": qstring,
         "q": q,
         "status": status,
@@ -2760,10 +2919,14 @@ def past_month_performance(request, year, month):
 
 @login_required
 def admin_past_performance(request, n_months=12):
-    # allow staff OR superuser
-    # if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
-    #     from django.http import HttpResponseForbidden
-    #     return HttpResponseForbidden("Forbidden: staff or superuser required")
+    emp = getattr(request.user, "employee", None)
+    is_admin = bool(emp and emp.role == "admin")
+    is_manager = bool(emp and emp.role == "manager")
+    mgr_access = get_manager_access() if is_manager else None
+    if not (is_admin or is_manager):
+        return HttpResponseForbidden("Admins or managers only.")
+    if is_manager and not (mgr_access and mgr_access.allow_employee_performance):
+        return HttpResponseForbidden("Manager not allowed to view performance.")
 
     today = now().date()
     months = _last_n_months(today, n=n_months)
@@ -2778,6 +2941,15 @@ def admin_past_performance(request, n_months=12):
 
     months_for_year = [(y, m) for (y, m) in months if y == selected_year] or months
 
+    employees_qs = Employee.objects.select_related("user").order_by("user__username")
+    selected_employee_id = request.GET.get("employee")
+    selected_employee = None
+    if selected_employee_id and selected_employee_id != "all":
+        try:
+            selected_employee = employees_qs.get(pk=int(selected_employee_id))
+        except (Employee.DoesNotExist, ValueError, TypeError):
+            selected_employee = None
+
     labels = []
     totals_data = []
     months_data = []
@@ -2785,18 +2957,21 @@ def admin_past_performance(request, n_months=12):
     for (y, m) in months_for_year:
         label = f"{month_name[m]} {y}"
 
+        sale_filter = {"date__year": y, "date__month": m}
+        if selected_employee:
+            sale_filter["employee"] = selected_employee
+
         total_points = (
-            Sale.objects.filter(date__year=y, date__month=m)
+            Sale.objects.filter(**sale_filter)
             .aggregate(total=Sum("points"))["total"]
             or 0
         )
         total_amount = (
-            Sale.objects.filter(date__year=y, date__month=m)
+            Sale.objects.filter(**sale_filter)
             .aggregate(total=Sum("amount"))["total"]
             or 0
         )
 
-        labels.append(label)
         totals_data.append(int(total_points))
         months_data.append({
             "year": y,
@@ -2805,13 +2980,21 @@ def admin_past_performance(request, n_months=12):
             "points": int(total_points),
             "amount": float(total_amount),
         })
+        labels.append(label)
+
+    max_points = max(totals_data) if totals_data else 0
+    for m in months_data:
+        m["percent_of_max"] = round((m["points"] / max_points) * 100, 1) if max_points else 0
 
     # Top performers for the most recent month in the selected year (fallback to latest overall)
     latest_year, latest_month = months_for_year[-1] if months_for_year else months[-1]
 
-    # Use user first/last name fields (safe), fallback to username
+    top_performers_qs = Sale.objects.filter(date__year=latest_year, date__month=latest_month)
+    if selected_employee:
+        top_performers_qs = top_performers_qs.filter(employee=selected_employee)
+
     top_performers_qs = (
-        Sale.objects.filter(date__year=latest_year, date__month=latest_month)
+        top_performers_qs
         .values(
             "employee__id",
             "employee__user__username",
@@ -2849,6 +3032,10 @@ def admin_past_performance(request, n_months=12):
         "latest_month": latest_month,
         "year_options": year_options,
         "selected_year": selected_year,
+        "employees": employees_qs,
+        "selected_employee_id": int(selected_employee.id) if selected_employee else None,
+        "chart_label": "Total Points (all employees)" if not selected_employee else f"Points ({selected_employee.user.username})",
+        "scope_label": "All Employees" if not selected_employee else f"{selected_employee.user.username}",
     }
 
     return render(request, "dashboards/admin_past_performance.html", context)
