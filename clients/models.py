@@ -9,7 +9,7 @@ from django.utils import timezone
 
 class Employee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    role = models.CharField(max_length=50, choices=(("admin", "Admin"), ("employee", "Employee")))
+    role = models.CharField(max_length=50, choices=(("admin", "Admin"), ("manager", "Manager"), ("employee", "Employee")))
     active = models.BooleanField(default=True)
     salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     employee_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
@@ -315,6 +315,31 @@ class MonthlyTargetHistory(models.Model):
 
     def __str__(self):
         return f"{self.employee} - {self.product} ({self.month}/{self.year})"
+
+
+class ManagerAccessConfig(models.Model):
+    """Singleton-style config describing which features managers can access."""
+
+    allow_view_all_sales = models.BooleanField(default=True)
+    allow_approve_sales = models.BooleanField(default=False)
+    allow_edit_sales = models.BooleanField(default=False)
+    allow_manage_incentives = models.BooleanField(default=False)
+    allow_recalc_points = models.BooleanField(default=False)
+    allow_client_analysis = models.BooleanField(default=False)
+    allow_employee_performance = models.BooleanField(default=True)
+    allow_lead_management = models.BooleanField(default=False)
+    allow_calling_admin = models.BooleanField(default=False)
+    allow_business_tracking = models.BooleanField(default=False)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return "Manager Access Config"
+
+    @classmethod
+    def current(cls):
+        cfg, _ = cls.objects.get_or_create(id=1)
+        return cfg
 
 
 class Redemption(models.Model):

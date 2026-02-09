@@ -115,7 +115,7 @@ class EmployeeCreateForm(forms.Form):
     username = forms.CharField(max_length=150)
     email = forms.EmailField(required=False)
     password = forms.CharField(widget=forms.PasswordInput)
-    role = forms.ChoiceField(choices=(("admin", "Admin"), ("employee", "Employee")))
+    role = forms.ChoiceField(choices=(("admin", "Admin"), ("manager", "Manager"), ("employee", "Employee")))
     salary = forms.DecimalField(max_digits=12, decimal_places=2, initial=0)
 
     def clean_username(self):

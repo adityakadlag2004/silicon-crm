@@ -60,6 +60,9 @@
     align-items: center;
     justify-content: center;
   }
+  .bar-green { background: linear-gradient(90deg, #48bb78 0%, #38a169 100%); }
+  .bar-blue { background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%); }
+  .bar-amber { background: linear-gradient(90deg, #f6ad55 0%, #ed8936 100%); }
   .modern-progress-bar-success {
     background: linear-gradient(90deg, #38b2ac 0%, #319795 100%);
   }
@@ -280,6 +283,73 @@
     </div>
   </div>
 </div>
+
+{% if show_company_sections %}
+<hr class="my-4" />
+<h4 style="font-weight:700;color:#2d3748;">Company Progress vs Targets</h4>
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
+    <div class="modern-card">
+      <h6 style="font-weight:700;color:#38a169;">Daily Progress</h6>
+      {% for row in overall_daily_progress %}
+        <div class="mb-3">
+          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
+            <span>{{ row.product }}</span>
+            <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
+          </div>
+          <div class="modern-progress mt-1">
+            <div class="modern-progress-bar bar-green" data-progress="{{ row.progress|floatformat:0 }}">{{ row.progress|floatformat:0 }}%</div>
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-muted mb-0">No daily targets set.</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
+    <div class="modern-card">
+      <h6 style="font-weight:700;color:#3182ce;">Monthly Progress</h6>
+      {% for row in overall_monthly_progress %}
+        <div class="mb-3">
+          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
+            <span>{{ row.product }}</span>
+            <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
+          </div>
+          <div class="modern-progress mt-1">
+            <div class="modern-progress-bar bar-blue" data-progress="{{ row.progress|floatformat:0 }}">{{ row.progress|floatformat:0 }}%</div>
+          </div>
+        </div>
+      {% empty %}
+        <p class="text-muted mb-0">No monthly targets set.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<h4 style="font-weight:700;color:#2d3748;" class="mt-4">Monthly Employee Performance (Product-wise)</h4>
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  {% for row in monthly_employee_product %}
+    <div class="col-md-4" style="flex:1 1 260px;min-width:240px;">
+      <div class="modern-card" style="padding:1rem 0.8rem;">
+        <div style="font-weight:700;color:#2b6cb0; margin-bottom:0.4rem;">{{ row.employee }}</div>
+        {% for p in row.products %}
+          <div class="mb-2">
+            <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:#4a5568;">
+              <span>{{ p.product }}</span>
+              <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
+            </div>
+            <div class="modern-progress mt-1">
+              <div class="modern-progress-bar bar-blue" data-progress="{{ p.progress|floatformat:0 }}">{{ p.progress|floatformat:0 }}%</div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted">No employees found.</p>
+  {% endfor %}
+</div>
+{% endif %}
 
 <div class="dashboard-section-title">Past Performance (Last 6 Months)</div>
 <div class="mt-3">

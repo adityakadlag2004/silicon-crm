@@ -172,6 +172,75 @@
                 </li>
 
 
+              {% elif request.user.employee.role == "manager" %}
+                <!-- Manager (inherits employee links; gated by manager_access) -->
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:employee_dashboard' %}">Dashboard</a>
+                </li>
+                <!-- Clients Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrClientsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Clients
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrClientsDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:my_clients' %}">My Clients</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:add_client' %}">Add Client</a></li>
+                  </ul>
+                </li>
+                <!-- Sales Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrSalesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Sales
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrSalesDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:add_sale' %}">Add Sale</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:all_sales' %}">All Sales</a></li>
+                    {% if manager_access.allow_approve_sales %}<li><a class="dropdown-item" href="{% url 'clients:approve_sales' %}">Approve Sales</a></li>{% endif %}
+                    {% if manager_access.allow_manage_incentives %}<li><a class="dropdown-item" href="{% url 'clients:manage_incentive_rules' %}">Incentive Rules</a></li>{% endif %}
+                    {% if manager_access.allow_recalc_points %}<li><a class="dropdown-item" href="{% url 'clients:recalc_points' %}">Recalculate Points</a></li>{% endif %}
+                    {% if manager_access.allow_client_analysis %}<li><a class="dropdown-item" href="{% url 'clients:client_analysis' %}">Client Analysis</a></li>{% endif %}
+                    {% if manager_access.allow_employee_performance %}<li><a class="dropdown-item" href="{% url 'clients:employee_performance' %}">Employee Performance</a></li>{% endif %}
+                    {% if manager_access.allow_employee_performance %}<li><a class="dropdown-item" href="{% url 'clients:admin_past_performance' %}">Past Performance</a></li>{% endif %}
+                  </ul>
+                </li>
+                <!-- Calling Dropdown (manager) -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrCallingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Calling
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrCallingDropdown">
+                    {% if manager_access.allow_calling_admin %}
+                      <li><a class="dropdown-item" href="{% url 'clients:upload_list' %}">Upload Calling List</a></li>
+                      <li><a class="dropdown-item" href="{% url 'clients:admin_lists' %}">Manage Calling Lists</a></li>
+                    {% else %}
+                      <li><a class="dropdown-item" href="{% url 'clients:employee_lists' %}">My Calling Lists</a></li>
+                      <li><a class="dropdown-item" href="{% url 'clients:employee_calendar' %}">My Calendar</a></li>
+                    {% endif %}
+                    <li><a class="dropdown-item" href="{% url 'clients:calling_list_generator' %}">List Generator</a></li>
+                  </ul>
+                </li>
+
+                {% if manager_access.allow_business_tracking %}
+                <!-- Business Tracking (manager if allowed) -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrBusinessDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Business Tracking
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrBusinessDropdown">
+                    <li><a href="{% url 'clients:admin_past_performance' %}" class="dropdown-item">Business Tracking</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:net_business' %}">Net Business</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:net_sip' %}">Net SIP</a></li>
+                  </ul>
+                </li>
+                {% endif %}
+
+                {% if manager_access.allow_lead_management %}
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
+                </li>
+                {% endif %}
+
+
               {% elif request.user.employee.role == "employee" %}
                 <!-- Employee -->
                 <li class="nav-item">
@@ -284,14 +353,16 @@
           return;
         }
 
-        body.innerHTML = data.notifications.map(n => `
+        body.innerHTML = data.notifications.map(n => {
+          const targetLink = '{% url "clients:approve_sales" %}';
+          return `
           <div class="mb-3" style="border:1px solid #edf2f7;border-radius:10px;padding:0.6rem;box-shadow:0 1px 6px rgba(0,0,0,0.04);background:${n.is_read ? '#fff' : '#fefcbf'};">
             <div style="font-weight:700;color:#2d3748;">${n.title}</div>
             <div style="color:#4a5568;font-size:0.95rem;">${n.body}</div>
             <div style="color:#718096;font-size:0.85rem;">${n.created_at}</div>
-            ${n.link ? `<a class="btn btn-sm btn-outline-primary mt-1" href="${n.link}">Open</a>` : ''}
+            <a class="btn btn-sm btn-outline-primary mt-1" href="${targetLink}">Open</a>
           </div>
-        `).join('');
+        `;}).join('');
       }
 
       async function loadNotifications() {
