@@ -166,6 +166,7 @@
     <div class="modern-card text-center metric-card">
       <h5 style="color:#3182ce;font-weight:600;">Total Points (This Month)</h5>
       <h2 style="color:#4299e1;font-weight:700;" id="points-counter" data-points="{{ total_points }}">0</h2>
+      <div class="text-muted" style="font-size:0.95rem;">Pending points awaiting approval: {{ pending_points }}</div>
       {% if salary_points %}
       <div class="salary-meter" data-salary-meter data-salary="{{ salary_points }}" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" data-points-ratio="{{ points_ratio|floatformat:0 }}">
         <div class="d-flex justify-content-between" style="font-size:0.9rem;color:#4a5568;">
