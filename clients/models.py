@@ -148,6 +148,7 @@ class IncentiveRule(models.Model):
         ("Health Insurance", "Health Insurance"),
         ("Motor Insurance", "Motor Insurance"),
         ("PMS", "PMS"),
+        ("COB", "COB"),
     ]
 
     product = models.CharField(max_length=50, choices=PRODUCT_CHOICES, unique=True)
@@ -182,6 +183,7 @@ class Sale(models.Model):
         ("Health Insurance", "Health Insurance"),
         ("Motor Insurance", "Motor Insurance"),
         ("PMS", "PMS"),
+        ("COB", "COB"),
     ]
 
     client = models.ForeignKey("Client", on_delete=models.CASCADE, related_name="sales")
