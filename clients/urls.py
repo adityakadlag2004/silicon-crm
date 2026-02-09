@@ -26,6 +26,7 @@ urlpatterns = [
     # sales CRUD
     path("sales/add/", views.add_sale, name="add_sale"),
     path("sales/admin_add/", views.admin_add_sale, name="admin_add_sale"),
+    path("sales/approve/", views.approve_sales, name="approve_sales"),
     path("sales/<int:sale_id>/edit/", views.edit_sale, name="edit_sale"),
     path("sales/<int:sale_id>/delete/", views.delete_sale, name="delete_sale"),
     path("sales/recalc/", views.recalc_points, name="recalc_points"),

@@ -176,6 +176,15 @@ from decimal import Decimal
 
 
 class Sale(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_APPROVED, "Approved"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
     PRODUCT_CHOICES = [
         ("SIP", "SIP"),
         ("Lumsum", "Lumsum"),
@@ -195,6 +204,17 @@ class Sale(models.Model):
 
     # New: Cover amount (only relevant for Life & Health Insurance)
     cover_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="approved_sales",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True)
 
     date = models.DateField(default=timezone.now)   # not auto_now_add
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))

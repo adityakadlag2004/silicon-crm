@@ -142,6 +142,16 @@
         <option value="Health Insurance" {% if request.GET.product == "Health Insurance" %}selected{% endif %}>Health Insurance</option>
         <option value="Motor Insurance" {% if request.GET.product == "Motor Insurance" %}selected{% endif %}>Motor Insurance</option>
         <option value="PMS" {% if request.GET.product == "PMS" %}selected{% endif %}>PMS</option>
+        <option value="COB" {% if request.GET.product == "COB" %}selected{% endif %}>COB</option>
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Status</label>
+      <select name="status" class="form-select">
+        <option value="">All</option>
+        <option value="pending" {% if request.GET.status == "pending" %}selected{% endif %}>Pending</option>
+        <option value="approved" {% if request.GET.status == "approved" %}selected{% endif %}>Approved</option>
+        <option value="rejected" {% if request.GET.status == "rejected" %}selected{% endif %}>Rejected</option>
       </select>
     </div>
     {% if not is_employee %}
@@ -170,6 +180,7 @@
         <th>Amount</th>
         <th>Points</th>
         <th>Employee</th>
+        <th>Status</th>
         {% if not is_employee %}<th>Actions</th>{% endif %}
       </tr>
     </thead>
@@ -182,6 +193,7 @@
         <td>₹{{ sale.amount }}</td>
         <td>{{ sale.points }}</td>
         <td>{{ sale.employee.user.username }}</td>
+        <td>{{ sale.status|title }}</td>
         {% if not is_employee %}
         <td>
           <a href="{% url 'clients:edit_sale' sale.id %}" class="btn btn-sm btn-warning">Edit</a>
@@ -190,7 +202,7 @@
         {% endif %}
       </tr>
       {% empty %}
-      <tr><td colspan="7" class="text-center">No sales found</td></tr>
+      <tr><td colspan="{% if is_employee %}7{% else %}8{% endif %}" class="text-center">No sales found</td></tr>
       {% endfor %}
     </tbody>
   </table>

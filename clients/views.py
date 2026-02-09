@@ -1540,8 +1540,9 @@ def admin_dashboard(request):
     # All-time sales (if you use it elsewhere)
     all_sales_qs = Sale.objects.all()
 
-    # --- IMPORTANT: use month-scoped queryset for 'This Month' widgets ---
-    monthly_sales_qs = Sale.objects.filter(created_at__year=year, created_at__month=month)
+    # --- IMPORTANT: use approved-only queryset for 'This Month' widgets ---
+    monthly_sales_qs = Sale.objects.filter(status=Sale.STATUS_APPROVED, created_at__year=year, created_at__month=month)
+    approved_sales_all = Sale.objects.filter(status=Sale.STATUS_APPROVED)
 
     # ---------------- Overall summary ----------------
     total_clients = Client.objects.count()
@@ -1574,7 +1575,7 @@ def admin_dashboard(request):
     products = [p for p, _ in Sale.PRODUCT_CHOICES]
     for product in products:
         target_value = daily_target_map.get(product, Decimal("0"))
-        achieved = Sale.objects.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+        achieved = approved_sales_all.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
         progress = (achieved / target_value * 100) if target_value else 0
         overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
@@ -1596,7 +1597,7 @@ def admin_dashboard(request):
             "products": []
         }
         for product in products:
-            achieved = Sale.objects.filter(employee=emp, product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+            achieved = approved_sales_all.filter(employee=emp, product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
             target = daily_target_map.get(product, 0)
             progress = (achieved / target * 100) if target else 0
             emp_entry["products"].append({
@@ -1615,7 +1616,7 @@ def admin_dashboard(request):
             "products": []
         }
         for product in products:
-            achieved = Sale.objects.filter(
+            achieved = approved_sales_all.filter(
                 employee=emp,
                 product=product,
                 date__year=year,
@@ -1784,16 +1785,24 @@ def employee_dashboard(request):
     products = [p for p, _ in Sale.PRODUCT_CHOICES]
 
     # --- Querysets restricted by time ---
-    monthly_sales_qs = Sale.objects.filter(
+    monthly_sales_approved = Sale.objects.filter(
         employee=emp,
+        status=Sale.STATUS_APPROVED,
         date__year=today.year,
         date__month=today.month
     )
-    today_sales_qs = monthly_sales_qs.filter(date=today)
+    monthly_sales_pending = Sale.objects.filter(
+        employee=emp,
+        status=Sale.STATUS_PENDING,
+        date__year=today.year,
+        date__month=today.month
+    )
+    today_sales_qs = monthly_sales_approved.filter(date=today)
 
     # --- Totals for this employee (THIS MONTH only) ---
-    total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or Decimal("0")
+    total_sales = monthly_sales_approved.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    total_points = monthly_sales_approved.aggregate(total=Sum("points"))["total"] or Decimal("0")
+    pending_points = monthly_sales_pending.aggregate(total=Sum("points"))["total"] or Decimal("0")
     salary_points = getattr(emp, "salary", Decimal("0")) or Decimal("0")
     if not isinstance(salary_points, Decimal):
         salary_points = Decimal(str(salary_points))
@@ -1803,12 +1812,12 @@ def employee_dashboard(request):
     extra_points = max(total_points - salary_points, Decimal("0"))
 
     # --- Product-wise totals (THIS MONTH only) ---
-    sip_sales = monthly_sales_qs.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
-    lumsum_sales = monthly_sales_qs.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
-    life_sales = monthly_sales_qs.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    health_sales = monthly_sales_qs.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    motor_sales = monthly_sales_qs.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    pms_sales = monthly_sales_qs.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
+    sip_sales = monthly_sales_approved.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
+    lumsum_sales = monthly_sales_approved.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
+    life_sales = monthly_sales_approved.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    health_sales = monthly_sales_approved.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    motor_sales = monthly_sales_approved.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
+    pms_sales = monthly_sales_approved.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
 
     # --- Today's sales (resets daily) ---
     today_sales = today_sales_qs.values("product").annotate(total=Sum("amount"))
@@ -1820,7 +1829,7 @@ def employee_dashboard(request):
     ).order_by("scheduled_time")
 
     # --- Monthly sales (resets monthly) ---
-    month_sales = monthly_sales_qs.values("product").annotate(total=Sum("amount"))
+    month_sales = monthly_sales_approved.values("product").annotate(total=Sum("amount"))
     month_sales_dict = {s["product"]: s["total"] for s in month_sales}
 
     # --- Global targets mapped for completeness ---
@@ -1883,6 +1892,7 @@ def employee_dashboard(request):
         "monthly_targets": monthly_targets_display,
         "history": history,   # 👈 important for template
         "upcoming_followups": upcoming_followups,
+        "pending_points": pending_points,
     }
     return render(request, "dashboards/employee_dashboard.html", context)
 
@@ -1894,6 +1904,9 @@ def add_sale(request):
         form = AdminSaleForm(request.POST)
         if form.is_valid():
             sale = form.save(commit=False)
+            is_admin_user = request.user.is_superuser or (
+                hasattr(request.user, "employee") and getattr(request.user.employee, "role", "") == "admin"
+            )
 
             # prefer the employee chosen in the form, otherwise default to logged-in employee
             chosen_emp = form.cleaned_data.get("employee")
@@ -1917,6 +1930,19 @@ def add_sale(request):
 
             # compute points before saving
             sale.compute_points()
+
+            # Approval handling
+            if is_admin_user:
+                sale.status = Sale.STATUS_APPROVED
+                sale.approved_by = request.user
+                sale.approved_at = timezone.now()
+                sale.rejection_reason = ""
+            else:
+                sale.status = Sale.STATUS_PENDING
+                sale.approved_by = None
+                sale.approved_at = None
+                sale.rejection_reason = ""
+
             sale.save()
 
             messages.success(request, "Sale added successfully!")
@@ -2232,6 +2258,7 @@ def all_sales(request):
     product = request.GET.get("product")
     client = request.GET.get("client")
     employee = request.GET.get("employee")
+    status = request.GET.get("status")
     start_date = request.GET.get("start_date")
     end_date = request.GET.get("end_date")
     q = (request.GET.get("q") or "").strip()
@@ -2259,6 +2286,8 @@ def all_sales(request):
             sales_qs = sales_qs.filter(client__name__icontains=client)
     if employee:
         sales_qs = sales_qs.filter(employee__user__username__icontains=employee)
+    if status in [Sale.STATUS_PENDING, Sale.STATUS_APPROVED, Sale.STATUS_REJECTED]:
+        sales_qs = sales_qs.filter(status=status)
     if start_date and end_date:
         sales_qs = sales_qs.filter(date__range=[start_date, end_date])
 
@@ -2281,6 +2310,7 @@ def all_sales(request):
         "is_employee": hasattr(request.user, "employee") and request.user.employee.role == "employee",
         "qstring": qstring,
         "q": q,
+        "status": status,
     }
     return render(request, "sales/all_sales.html", context)
 
@@ -2301,6 +2331,10 @@ def admin_add_sale(request):
             else:
                 # compute points at creation time instead of during login
                 sale.compute_points()
+                sale.status = Sale.STATUS_APPROVED
+                sale.approved_by = request.user
+                sale.approved_at = timezone.now()
+                sale.rejection_reason = ""
                 sale.save()
                 messages.success(request, "Sale added successfully!")
                 return redirect("clients:all_sales")  # show latest sales immediately
@@ -2308,6 +2342,60 @@ def admin_add_sale(request):
         form = AdminSaleForm()
 
     return render(request, "sales/admin_add_sale.html", {"form": form})
+
+
+@login_required
+def approve_sales(request):
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+        return HttpResponseForbidden("Admins only.")
+
+    # Handle approval/rejection
+    if request.method == "POST":
+        action = request.POST.get("action")
+        sale_id = request.POST.get("sale_id")
+        reason = (request.POST.get("reason") or "").strip()
+        sale = get_object_or_404(Sale, id=sale_id)
+        if action == "approve":
+            sale.status = Sale.STATUS_APPROVED
+            sale.approved_by = request.user
+            sale.approved_at = timezone.now()
+            sale.rejection_reason = ""
+            sale.save()
+            messages.success(request, f"Approved sale #{sale.id}.")
+        elif action == "reject":
+            sale.status = Sale.STATUS_REJECTED
+            sale.approved_by = request.user
+            sale.approved_at = timezone.now()
+            sale.rejection_reason = reason
+            sale.save()
+            messages.info(request, f"Rejected sale #{sale.id}.")
+        return redirect("clients:approve_sales")
+
+    # Filters
+    employee = request.GET.get("employee", "").strip()
+    start_date = request.GET.get("start_date")
+    end_date = request.GET.get("end_date")
+
+    sales_qs = Sale.objects.filter(status=Sale.STATUS_PENDING).select_related("client", "employee__user")
+    if employee:
+        sales_qs = sales_qs.filter(
+            Q(employee__user__username__icontains=employee) |
+            Q(employee__user__first_name__icontains=employee) |
+            Q(employee__user__last_name__icontains=employee)
+        )
+    if start_date and end_date:
+        sales_qs = sales_qs.filter(date__range=[start_date, end_date])
+
+    sales_qs = sales_qs.order_by("-date", "-created_at")
+
+    context = {
+        "sales": sales_qs,
+        "employee_filter": employee,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+    return render(request, "sales/approve_sales.html", context)
 
 
 
