@@ -229,9 +229,58 @@ class Sale(models.Model):
 
         try:
             rule = IncentiveRule.objects.get(product=self.product, active=True)
+            # Apply product-specific gating before point math
+            if self.product == "Life Insurance":
+                premium = self.amount or Decimal("0")
+                # If rule toggled off, issue no points regardless of amount
+                if not rule.active:
+                    self.points = Decimal("0.000")
+                    self.incentive_amount = Decimal("0.00")
+                    return
+
+                # Cumulative premium for this employee in the sale month (including this sale)
+                sale_month = self.date.month if self.date else timezone.now().month
+                sale_year = self.date.year if self.date else timezone.now().year
+                qs = Sale.objects.filter(
+                    employee=self.employee,
+                    product="Life Insurance",
+                    date__year=sale_year,
+                    date__month=sale_month,
+                )
+                if self.pk:
+                    qs = qs.exclude(pk=self.pk)
+                cumulative_amount = (qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")) + premium
+
+                # WNPS slab payouts (points == payout rupees) based on cumulative amount
+                slabs = [
+                    (Decimal("1500000"), Decimal("40000")),
+                    (Decimal("1200000"), Decimal("32000")),
+                    (Decimal("900000"), Decimal("24000")),
+                    (Decimal("600000"), Decimal("16000")),
+                    (Decimal("300000"), Decimal("8000")),
+                ]
+                payout = Decimal("0.00")
+                for threshold, amount in slabs:
+                    if cumulative_amount >= threshold:
+                        payout = amount
+                        break
+
+                # Already awarded life points this month (exclude this row to avoid double)
+                already_awarded = qs.aggregate(total=Sum("points"))["total"] or Decimal("0.00")
+                delta = payout - already_awarded
+                if delta < 0:
+                    delta = Decimal("0.00")
+
+                self.points = delta
+                self.incentive_amount = delta
+                return
+
             if rule.unit_amount > 0:
                 self.points = (self.amount / rule.unit_amount) * rule.points_per_unit
                 self.incentive_amount = self.points  # You can later define ₹ conversion
+            else:
+                self.points = Decimal("0.000")
+                self.incentive_amount = Decimal("0.00")
         except IncentiveRule.DoesNotExist:
             self.points = Decimal("0.000")
             self.incentive_amount = Decimal("0.00")
