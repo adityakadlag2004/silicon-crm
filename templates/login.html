@@ -80,7 +80,9 @@
 
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-danger py-2">{{ message }}</div>
+                {% if message.level_tag == 'error' %}
+                    <div class="alert alert-danger py-2">{{ message }}</div>
+                {% endif %}
             {% endfor %}
         {% endif %}
 
