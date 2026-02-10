@@ -1922,6 +1922,30 @@ def employee_dashboard(request):
     motor_sales = monthly_sales_approved.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
     pms_sales = monthly_sales_approved.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
 
+    # --- Product-wise points (THIS MONTH only) ---
+    product_points_map = {p: Decimal("0") for p in products}
+    product_points_qs = monthly_sales_approved.values("product").annotate(total=Sum("points"))
+    for entry in product_points_qs:
+        product_points_map[entry["product"]] = entry["total"] or Decimal("0")
+
+    product_labels = {
+        "SIP": "SIP",
+        "Lumsum": "Lumpsum",
+        "Life Insurance": "Life Insurance",
+        "Health Insurance": "Health Insurance",
+        "Motor Insurance": "Motor Insurance",
+        "PMS": "PMS",
+        "COB": "COB",
+    }
+    product_point_breakup = [
+        {
+            "product": product,
+            "label": product_labels.get(product, product),
+            "points": product_points_map.get(product, Decimal("0")),
+        }
+        for product in products
+    ]
+
     # --- Today's sales (resets daily) ---
     today_sales = today_sales_qs.values("product").annotate(total=Sum("amount"))
     today_sales_dict = {s["product"]: s["total"] for s in today_sales}
@@ -2060,6 +2084,7 @@ def employee_dashboard(request):
         "history": history,   # 👈 important for template
         "upcoming_followups": upcoming_followups,
         "pending_points": pending_points,
+        "product_point_breakup": product_point_breakup,
         "show_company_sections": allow_company_sections,
         "overall_daily_progress": overall_daily_progress,
         "overall_monthly_progress": overall_monthly_progress,
@@ -2596,9 +2621,13 @@ def manage_incentive_rules(request):
         for rule in rules:
             unit_field = f"unit_{rule.id}"
             points_field = f"points_{rule.id}"
+            active_field = f"active_{rule.id}"
             if unit_field in request.POST and points_field in request.POST:
                 rule.unit_amount = request.POST[unit_field]
                 rule.points_per_unit = request.POST[points_field]
+                # Only Life Insurance uses the toggle per requirement; others remain unchanged unless provided
+                if rule.product == "Life Insurance":
+                    rule.active = bool(request.POST.get(active_field))
                 rule.save()
         messages.success(request, "Incentive rules updated successfully!")
         return redirect("clients:manage_incentive_rules")
