@@ -344,6 +344,7 @@ def lead_management(request):
         "view_mode": view_mode,
         "tab_counts": tab_counts,
         "show_my_tab": show_my_tab,
+        "show_my_progress": bool(emp) and role in ["employee", "manager"],
     }
     return render(request, "clients/leads/lead_management.html", context)
 
@@ -375,7 +376,7 @@ def lead_progress_overview_admin(request):
     if not (request.user.is_superuser or (emp and getattr(emp, "role", "") in ["admin", "manager"])):
         return HttpResponseForbidden()
 
-    base_qs = Lead.objects.select_related("assigned_to__user")
+    base_qs = Lead.objects.filter(is_discarded=False).select_related("assigned_to__user")
     stage_counts = {
         Lead.STAGE_PENDING: base_qs.filter(stage=Lead.STAGE_PENDING).count(),
         Lead.STAGE_HALF: base_qs.filter(stage=Lead.STAGE_HALF).count(),
@@ -404,7 +405,8 @@ def lead_progress_overview_admin(request):
         row["total_sales"] = sales_map.get(row["assigned_to__user__username"], 0)
 
     progress_counts = (
-        LeadProductProgress.objects.values("product", "status")
+        LeadProductProgress.objects.filter(lead__is_discarded=False)
+        .values("product", "status")
         .order_by()
         .annotate(total=Count("id"))
     )
@@ -444,7 +446,7 @@ def lead_progress_overview_employee(request):
     if not emp:
         return HttpResponseForbidden()
 
-    base_qs = Lead.objects.filter(assigned_to=emp)
+    base_qs = Lead.objects.filter(assigned_to=emp, is_discarded=False)
     stage_counts = {
         Lead.STAGE_PENDING: base_qs.filter(stage=Lead.STAGE_PENDING).count(),
         Lead.STAGE_HALF: base_qs.filter(stage=Lead.STAGE_HALF).count(),
@@ -454,7 +456,7 @@ def lead_progress_overview_employee(request):
     stage_pct = {k: (v / total * 100) if total else 0 for k, v in stage_counts.items()}
 
     progress_counts = (
-        LeadProductProgress.objects.filter(lead__assigned_to=emp)
+        LeadProductProgress.objects.filter(lead__assigned_to=emp, lead__is_discarded=False)
         .values("product", "status")
         .order_by()
         .annotate(total=Count("id"))
