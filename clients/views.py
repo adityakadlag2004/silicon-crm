@@ -177,7 +177,8 @@ def lead_add_remark(request, lead_id):
 @login_required
 def lead_bulk_import(request):
     emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (emp and getattr(emp, "role", "") == "admin")):
+    # Allow all signed-in employees/managers (and superusers) to import leads
+    if not (request.user.is_superuser or emp):
         return HttpResponseForbidden()
 
     sample_headers = [
@@ -280,9 +281,14 @@ def lead_bulk_import(request):
 @login_required
 def lead_management(request):
     base_qs = _lead_queryset_for_request(request)
+    emp = getattr(request.user, "employee", None)
+    role = getattr(emp, "role", "")
+    show_my_tab = role in ["admin", "manager"]
     # view filter: current (default), completed, discarded
     view_mode = request.GET.get("view", "current")
-    if view_mode == "completed":
+    if view_mode == "my" and show_my_tab:
+        base_qs = base_qs.filter(assigned_to=emp, is_discarded=False).exclude(stage=Lead.STAGE_PROCESSED)
+    elif view_mode == "completed":
         base_qs = base_qs.filter(is_discarded=False, stage=Lead.STAGE_PROCESSED)
     elif view_mode == "discarded":
         base_qs = base_qs.filter(is_discarded=True)
@@ -311,9 +317,11 @@ def lead_management(request):
         "completed": tab_base.filter(is_discarded=False, stage=Lead.STAGE_PROCESSED).count(),
         "discarded": tab_base.filter(is_discarded=True).count(),
     }
+    if show_my_tab:
+        tab_counts["my"] = tab_base.filter(assigned_to=emp, is_discarded=False).exclude(stage=Lead.STAGE_PROCESSED).count()
 
     progress_counts = {}
-    can_see_stats = getattr(getattr(request.user, "employee", None), "role", "") == "admin" or request.user.is_superuser
+    can_see_stats = getattr(getattr(request.user, "employee", None), "role", "") in ["admin", "manager"] or request.user.is_superuser
     if can_see_stats:
         agg = (
             LeadProductProgress.objects.filter(lead__in=base_qs.values_list("id", flat=True))
@@ -335,6 +343,7 @@ def lead_management(request):
         "can_bulk_import": True,  # employees/managers can import leads
         "view_mode": view_mode,
         "tab_counts": tab_counts,
+        "show_my_tab": show_my_tab,
     }
     return render(request, "clients/leads/lead_management.html", context)
 
@@ -363,7 +372,7 @@ def lead_discard(request, lead_id):
 @login_required
 def lead_progress_overview_admin(request):
     emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (emp and getattr(emp, "role", "") == "admin")):
+    if not (request.user.is_superuser or (emp and getattr(emp, "role", "") in ["admin", "manager"])):
         return HttpResponseForbidden()
 
     base_qs = Lead.objects.select_related("assigned_to__user")
@@ -375,7 +384,7 @@ def lead_progress_overview_admin(request):
     total = sum(stage_counts.values()) or 0
     stage_pct = {k: (v / total * 100) if total else 0 for k, v in stage_counts.items()}
 
-    per_employee = (
+    per_employee = list(
         base_qs.values("assigned_to__user__username")
         .annotate(
             pending=Count("id", filter=Q(stage=Lead.STAGE_PENDING)),
@@ -384,6 +393,15 @@ def lead_progress_overview_admin(request):
         )
         .order_by("assigned_to__user__username")
     )
+
+    sales_map = {
+        row["employee__user__username"]: row["total_sales"] or 0
+        for row in Sale.objects.filter(status=Sale.STATUS_APPROVED)
+        .values("employee__user__username")
+        .annotate(total_sales=Sum("amount"))
+    }
+    for row in per_employee:
+        row["total_sales"] = sales_map.get(row["assigned_to__user__username"], 0)
 
     progress_counts = (
         LeadProductProgress.objects.values("product", "status")

@@ -224,15 +224,18 @@
     </div>
     {% endif %}
   </div>
-  <div class="dashboard-card" style="flex:1 1 260px;min-width:220px;text-align:left;">
-    <h5>Upcoming Lead Follow-ups (7d)</h5>
+  <div class="dashboard-card" style="flex:1 1 100%;min-width:280px;text-align:left;">
+    <h5 style="margin-bottom:0.5rem;">Upcoming Lead Follow-ups (7d)</h5>
     {% if upcoming_followups %}
-      <div style="font-size:0.96rem;">
+      <div class="list-group" style="max-height:360px; overflow-y:auto; border-radius:12px;">
         {% for f in upcoming_followups %}
-          <div class="mb-1">
-            <strong>{{ f.lead.customer_name }}</strong>
-            <div class="text-muted">{{ f.scheduled_time|date:"Y-m-d H:i" }} • {{ f.assigned_to.user.username }}</div>
-          </div>
+          <a href="{% url 'clients:lead_detail' f.lead.id %}" class="list-group-item list-group-item-action" style="border:none;border-bottom:1px solid #edf2f7; padding:0.8rem 0.85rem;">
+            <div style="font-weight:700;color:#2d3748;">{{ f.lead.customer_name }}</div>
+            <div style="color:#4a5568;font-size:0.95rem;">{{ f.scheduled_time|date:"Y-m-d H:i" }} • {{ f.assigned_to.user.username }}</div>
+            {% if f.note %}
+              <div style="color:#718096;font-size:0.92rem; margin-top:0.15rem;">{{ f.note }}</div>
+            {% endif %}
+          </a>
         {% endfor %}
       </div>
     {% else %}

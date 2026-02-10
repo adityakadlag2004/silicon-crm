@@ -10,7 +10,8 @@
     <a class="btn btn-warning btn-sm" href="{% url 'clients:lead_create' %}">+ Add Lead</a>
     {% if can_see_stats %}
       <a class="btn btn-outline-dark btn-sm" href="{% url 'clients:lead_progress_admin' %}">Team Progress</a>
-    {% elif request.user.employee.role == "employee" or request.user.employee.role == "manager" %}
+    {% endif %}
+    {% if request.user.employee.role == "employee" or request.user.employee.role == "manager" %}
       <a class="btn btn-outline-dark btn-sm" href="{% url 'clients:lead_progress_employee' %}">My Progress</a>
     {% endif %}
     {% if can_bulk_import %}
@@ -32,6 +33,9 @@
   <a class="btn btn-sm {% if view_mode == 'current' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="?view=current">Current ({{ tab_counts.current }})</a>
   <a class="btn btn-sm {% if view_mode == 'completed' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="?view=completed">Completed ({{ tab_counts.completed }})</a>
   <a class="btn btn-sm {% if view_mode == 'discarded' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="?view=discarded">Discarded ({{ tab_counts.discarded }})</a>
+  {% if show_my_tab %}
+    <a class="btn btn-sm {% if view_mode == 'my' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="?view=my">My Leads ({{ tab_counts.my|default:0 }})</a>
+  {% endif %}
 </div>
 
 <div class="table-responsive mb-4">
