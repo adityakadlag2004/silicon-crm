@@ -60,6 +60,7 @@
               <th>Pending</th>
               <th>Half</th>
               <th>Processed</th>
+              <th>Sales (Approved)</th>
             </tr>
           </thead>
           <tbody>
@@ -70,10 +71,11 @@
                   <td>{{ row.pending }}</td>
                   <td>{{ row.half }}</td>
                   <td>{{ row.processed }}</td>
+                  <td>₹{{ row.total_sales|default:0|floatformat:0 }}</td>
                 </tr>
               {% endwith %}
             {% empty %}
-              <tr><td colspan="4" class="text-center text-muted">No data.</td></tr>
+              <tr><td colspan="5" class="text-center text-muted">No data.</td></tr>
             {% endfor %}
           </tbody>
         </table>
