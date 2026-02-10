@@ -135,6 +135,9 @@
     animation: riseFade 0.9s ease-out forwards;
     pointer-events: none;
   }
+  .modern-card, .product-card {
+    border: 1px solid rgba(236, 201, 75, 0.18);
+  }
   @media (max-width: 900px) {
     .dashboard-header h2 { font-size: 1.3rem; }
     .modern-card { padding: 1rem 0.5rem; }
@@ -152,11 +155,6 @@
     .row { gap: 0.3rem; }
   }
 </style>
-
-<div class="dashboard-header">
-  
-  
-</div>
 
 <div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:stretch;">
   <div class="col-md-6 mb-3" style="flex:1 1 300px;min-width:220px;">
@@ -189,16 +187,18 @@
     <div class="modern-card" style="text-align:left;">
       <h6 style="font-weight:700;color:#2d3748;">Upcoming Lead Follow-ups (7d)</h6>
       {% if upcoming_followups %}
-        <div class="list-group" style="max-height:360px; overflow-y:auto; border-radius:12px;">
-          {% for f in upcoming_followups %}
-            <a href="{% url 'clients:lead_detail' f.lead.id %}" class="list-group-item list-group-item-action" style="border:none;border-bottom:1px solid #edf2f7; padding:0.8rem 0.85rem;">
-              <div style="font-weight:700;color:#2d3748;">{{ f.lead.customer_name }}</div>
-              <div style="color:#4a5568;font-size:0.95rem;">{{ f.scheduled_time|date:"Y-m-d H:i" }} • {{ f.assigned_to.user.username }}</div>
-              {% if f.note %}
-                <div style="color:#718096;font-size:0.92rem; margin-top:0.15rem;">{{ f.note }}</div>
-              {% endif %}
-            </a>
-          {% endfor %}
+        <div style="max-height:320px; overflow-y:auto; padding:0.2rem 0;">
+          <div class="list-group list-group-flush">
+            {% for f in upcoming_followups %}
+              <a href="{% url 'clients:lead_detail' f.lead.id %}" class="list-group-item list-group-item-action" style="padding:0.5rem 0.25rem; display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center; border-color:#edf2f7;">
+                <span style="font-weight:700; color:#2d3748;">{{ f.lead.customer_name }}</span>
+                {% if f.note %}
+                  <span style="color:#744210; background:#fff9e6; border-radius:8px; padding:0.15rem 0.4rem; font-size:0.85rem;">{{ f.note }}</span>
+                {% endif %}
+                <span style="color:#4a5568; font-size:0.9rem;">{{ f.scheduled_time|date:"Y-m-d H:i" }} • {{ f.assigned_to.user.username }}</span>
+              </a>
+            {% endfor %}
+          </div>
         </div>
       {% else %}
         <div class="text-muted">No follow-ups due.</div>

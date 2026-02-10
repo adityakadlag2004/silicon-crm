@@ -11,7 +11,7 @@
     {% if can_see_stats %}
       <a class="btn btn-outline-dark btn-sm" href="{% url 'clients:lead_progress_admin' %}">Team Progress</a>
     {% endif %}
-    {% if request.user.employee.role == "employee" or request.user.employee.role == "manager" %}
+    {% if show_my_progress %}
       <a class="btn btn-outline-dark btn-sm" href="{% url 'clients:lead_progress_employee' %}">My Progress</a>
     {% endif %}
     {% if can_bulk_import %}
