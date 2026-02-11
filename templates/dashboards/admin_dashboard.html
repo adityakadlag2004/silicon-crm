@@ -8,22 +8,22 @@
     font-size: 1.3rem;
     font-weight: 700;
     color: #2d3748;
-    margin-bottom: 1.5rem;
-    margin-top: 2rem;
+    margin-bottom: 1rem;
+    margin-top: 1.5rem;
     letter-spacing: 0.5px;
   }
   .dashboard-cards-row {
-    display: flex;
-    gap: 1.2rem;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 0.9rem;
+    margin-bottom: 1rem;
   }
   .dashboard-card {
     background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-    padding: 1.1rem 1rem;
-    min-width: 180px;
+    border-radius: 12px;
+    box-shadow: 0 1px 10px rgba(0,0,0,0.05);
+    padding: 0.9rem 0.85rem;
+    min-width: 0;
     flex: 1 1 0;
     text-align: center;
     display: flex;
@@ -36,13 +36,13 @@
     box-shadow: 0 4px 24px rgba(0,0,0,0.12);
   }
   .dashboard-card h5 {
-    font-size: 1.15rem;
+    font-size: 1.05rem;
     font-weight: 600;
     margin-bottom: 0.3rem;
     color: #4a5568;
   }
   .dashboard-card h3 {
-    font-size: 1.6rem;
+    font-size: 1.45rem;
     font-weight: 700;
     margin: 0;
     color: #2b6cb0;
@@ -58,15 +58,15 @@
   }
   .dashboard-product-card {
     background: #f7fafc;
-    border-radius: 12px;
+    border-radius: 10px;
     box-shadow: 0 1px 6px rgba(0,0,0,0.05);
-    padding: 1.2rem 1.6rem;
-    margin: 0.5rem;
-    min-width: 160px;
-    max-width: 200px;
-    flex: 0 1 180px;
+    padding: 0.9rem 1.1rem;
+    margin: 0.35rem;
+    min-width: 150px;
+    max-width: 190px;
+    flex: 0 1 170px;
     text-align: center;
-    font-size: 1.08rem;
+    font-size: 1rem;
   }
   .dashboard-product-card h6 {
     font-size: 0.98rem;
@@ -98,10 +98,10 @@
   }
   .modern-card {
     background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
-    padding: 1.25rem 1rem;
-    margin-bottom: 1rem;
+    border-radius: 14px;
+    box-shadow: 0 1px 12px rgba(0,0,0,0.06);
+    padding: 1rem 0.9rem;
+    margin-bottom: 0.9rem;
     transition: box-shadow 0.2s;
   }
   .modern-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
@@ -168,6 +168,12 @@
   .dashboard-card, .modern-card, .product-card {
     border: 1px solid rgba(236, 201, 75, 0.18);
   }
+  .stat-list { display:flex; flex-direction:column; gap:0.35rem; width:100%; }
+  .stat-item { display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0.55rem; background:#f8fafc; border:1px solid #edf2f7; border-radius:10px; font-size:0.95rem; color:#4a5568; }
+  .stat-item strong { color:#2d3748; font-weight:700; }
+  .card-subtitle { font-weight:700; color:#2d3748; margin:0.2rem 0 0.4rem 0; text-align:left; }
+  .stat-link { text-decoration:none; color:inherit; display:block; }
+  .stat-link:hover .stat-item { background:#fffde7; border-color:#f6e05e; }
   @media (max-width: 900px) {
     .dashboard-cards-row, .dashboard-products-row { flex-direction: column; gap: 0.7rem; }
     .dashboard-card, .dashboard-product-card { min-width: 0; }
@@ -193,26 +199,65 @@
   <div class="dashboard-card" style="flex:1 1 220px;min-width:160px;">
     <h5>My Sales (This Month)</h5>
     <h3>₹{{ admin_self_sales }}</h3>
+    <div class="card-subtitle">By product</div>
+    <div class="stat-list">
+      {% for item in admin_self_sales_breakup %}
+        <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+          <div class="stat-item"><span>{{ item.label }}</span><strong>₹{{ item.value|floatformat:0 }}</strong></div>
+        </a>
+      {% empty %}
+        <div class="text-muted">No sales yet.</div>
+      {% endfor %}
+    </div>
   </div>
   <div class="dashboard-card" style="flex:1 1 220px;min-width:160px;">
     <h5>My Points (This Month)</h5>
     <h3>{{ admin_self_points }}</h3>
     <div class="text-muted" style="font-size:0.95rem;">Pending: {{ admin_self_pending_points }}</div>
+    <div class="card-subtitle">Points by product</div>
+    <div class="stat-list">
+      {% for item in admin_self_points_breakup %}
+        <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+          <div class="stat-item"><span>{{ item.label }}</span><strong>{{ item.value|floatformat:0 }}</strong></div>
+        </a>
+      {% empty %}
+        <div class="text-muted">No points yet.</div>
+      {% endfor %}
+    </div>
   </div>
 </div>
 
 <div class="dashboard-cards-row" style="display:flex;flex-wrap:wrap;gap:1rem;">
   <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
-    <h5>Total Clients</h5>
-    <h3>{{ total_clients }}</h3>
-  </div>
-  <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
     <h5>Total Sales (This Month)</h5>
-    <h3>₹{{ total_sales }}</h3>
+    <h3 class="mb-1" style="width:100%; text-align:center;">₹{{ total_sales }}</h3>
+    <div class="w-100" style="text-align:center;">
+      <span class="badge bg-light text-muted" style="font-size:0.9rem;border:1px solid #e2e8f0;">Clients {{ total_clients }}</span>
+    </div>
+    <div class="card-subtitle">By product</div>
+    <div class="stat-list">
+      {% for item in admin_overall_sales_breakup %}
+        <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+          <div class="stat-item"><span>{{ item.label }}</span><strong>₹{{ item.value|floatformat:0 }}</strong></div>
+        </a>
+      {% empty %}
+        <div class="text-muted">No sales yet.</div>
+      {% endfor %}
+    </div>
   </div>
   <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
     <h5>Total Points (This Month)</h5>
     <h3 id="points-counter" data-points="{{ total_points }}">0</h3>
+    <div class="card-subtitle">Points by product</div>
+    <div class="stat-list">
+      {% for item in admin_overall_points_breakup %}
+        <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+          <div class="stat-item"><span>{{ item.label }}</span><strong>{{ item.value|floatformat:0 }}</strong></div>
+        </a>
+      {% empty %}
+        <div class="text-muted">No points yet.</div>
+      {% endfor %}
+    </div>
     {% if total_salary_all %}
     <div class="salary-meter" data-salary-meter data-salary="{{ total_salary_all }}" data-salary-ratio="{{ admin_salary_ratio|floatformat:0 }}" data-points-ratio="{{ admin_points_ratio|floatformat:0 }}">
       <div class="d-flex justify-content-between" style="font-size:0.9rem;color:#4a5568;">

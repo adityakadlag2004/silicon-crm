@@ -138,6 +138,12 @@
   .modern-card, .product-card {
     border: 1px solid rgba(236, 201, 75, 0.18);
   }
+  .stat-list { display:flex; flex-direction:column; gap:0.35rem; width:100%; }
+  .stat-item { display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0.55rem; background:#f8fafc; border:1px solid #edf2f7; border-radius:10px; font-size:0.95rem; color:#4a5568; }
+  .stat-item strong { color:#2d3748; font-weight:700; }
+  .stat-link { text-decoration:none; color:inherit; display:block; }
+  .stat-link:hover .stat-item { background:#fffde7; border-color:#f6e05e; }
+  .card-subtitle { font-weight:700; color:#2d3748; margin:0.1rem 0 0.5rem 0; }
   @media (max-width: 900px) {
     .dashboard-header h2 { font-size: 1.3rem; }
     .modern-card { padding: 1rem 0.5rem; }
@@ -165,38 +171,23 @@
   </div>
   <div class="col-md-6 mb-3" style="flex:1 1 300px;min-width:220px;">
     <div class="modern-card metric-card">
-      <div class="row align-items-start gx-3 gy-2">
-        <div class="col-md-7 text-center text-md-start">
-          <h5 style="color:#3182ce;font-weight:600;">Total Points (This Month)</h5>
-          <h2 style="color:#4299e1;font-weight:700;" id="points-counter" data-points="{{ total_points }}">0</h2>
-          <div class="text-muted" style="font-size:0.95rem;">Pending points awaiting approval: {{ pending_points }}</div>
-          {% if salary_points %}
-          <div class="salary-meter mt-2" data-salary-meter data-salary="{{ salary_points }}" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" data-points-ratio="{{ points_ratio|floatformat:0 }}">
-            <div class="d-flex justify-content-between" style="font-size:0.9rem;color:#4a5568;">
-              <span>Salary point: {{ salary_points|floatformat:0 }}</span>
-              <span>Extra: {{ extra_points|floatformat:0 }}</span>
-            </div>
-            <div class="salary-track mt-2">
-              <div class="salary-fill" data-progress="{{ points_ratio|floatformat:0 }}" style="width: {{ points_ratio|floatformat:0 }}%;"></div>
-              <div class="salary-line" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" style="left: {{ salary_ratio|floatformat:0 }}%;"></div>
-            </div>
-            <div class="text-muted" style="font-size:0.85rem;margin-top:0.35rem;">Beyond salary = incentive points</div>
+      <div class="text-center">
+        <h5 style="color:#3182ce;font-weight:600;">Total Points (This Month)</h5>
+        <h2 style="color:#4299e1;font-weight:700;" id="points-counter" data-points="{{ total_points }}">0</h2>
+        <div class="text-muted" style="font-size:0.95rem;">Pending points awaiting approval: {{ pending_points }}</div>
+        {% if salary_points %}
+        <div class="salary-meter mt-3" data-salary-meter data-salary="{{ salary_points }}" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" data-points-ratio="{{ points_ratio|floatformat:0 }}">
+          <div class="d-flex justify-content-between" style="font-size:0.9rem;color:#4a5568;">
+            <span>Salary point: {{ salary_points|floatformat:0 }}</span>
+            <span>Extra: {{ extra_points|floatformat:0 }}</span>
           </div>
-          {% endif %}
-        </div>
-        <div class="col-md-5">
-          <div class="text-start" style="font-size:0.92rem;">
-            <div style="font-weight:700;color:#2d3748;">Points by product</div>
-            {% for item in product_point_breakup %}
-            <div class="d-flex justify-content-between" style="color:#4a5568;">
-              <span>{{ item.label }}</span>
-              <span>{{ item.points|floatformat:0 }}</span>
-            </div>
-            {% empty %}
-            <div class="text-muted">No points yet.</div>
-            {% endfor %}
+          <div class="salary-track mt-2">
+            <div class="salary-fill" data-progress="{{ points_ratio|floatformat:0 }}" style="width: {{ points_ratio|floatformat:0 }}%;"></div>
+            <div class="salary-line" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" style="left: {{ salary_ratio|floatformat:0 }}%;"></div>
           </div>
+          <div class="text-muted" style="font-size:0.85rem;margin-top:0.35rem;">Beyond salary = incentive points</div>
         </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -222,6 +213,71 @@
       {% endif %}
     </div>
   </div>
+</div>
+
+<div class="dashboard-section-title">Product Breakup</div>
+<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:stretch;">
+  <div class="col-xl-3 col-lg-4 col-md-6" style="flex:1 1 260px;min-width:240px;">
+    <div class="modern-card" style="height:100%;">
+      <div class="card-subtitle">My Sales by product</div>
+      <div class="stat-list">
+        {% for item in product_sales_breakup %}
+          <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+            <div class="stat-item"><span>{{ item.label }}</span><strong>₹{{ item.amount|floatformat:0 }}</strong></div>
+          </a>
+        {% empty %}
+          <div class="text-muted">No sales yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-lg-4 col-md-6" style="flex:1 1 260px;min-width:240px;">
+    <div class="modern-card" style="height:100%;">
+      <div class="card-subtitle">My Points by product</div>
+      <div class="stat-list">
+        {% for item in product_point_breakup %}
+          <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+            <div class="stat-item"><span>{{ item.label }}</span><strong>{{ item.points|floatformat:0 }}</strong></div>
+          </a>
+        {% empty %}
+          <div class="text-muted">No points yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {% if show_company_sections %}
+  <div class="col-xl-3 col-lg-4 col-md-6" style="flex:1 1 260px;min-width:240px;">
+    <div class="modern-card" style="height:100%;">
+      <div class="card-subtitle">Overall Sales by product</div>
+      <div class="stat-list">
+        {% for item in overall_product_sales_breakup %}
+          <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+            <div class="stat-item"><span>{{ item.label }}</span><strong>₹{{ item.amount|floatformat:0 }}</strong></div>
+          </a>
+        {% empty %}
+          <div class="text-muted">No sales yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-lg-4 col-md-6" style="flex:1 1 260px;min-width:240px;">
+    <div class="modern-card" style="height:100%;">
+      <div class="card-subtitle">Overall Points by product</div>
+      <div class="stat-list">
+        {% for item in overall_product_point_breakup %}
+          <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+            <div class="stat-item"><span>{{ item.label }}</span><strong>{{ item.points|floatformat:0 }}</strong></div>
+          </a>
+        {% empty %}
+          <div class="text-muted">No points yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 <div class="dashboard-section-title">Product-wise Sales (This Month)</div>

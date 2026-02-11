@@ -1545,6 +1545,7 @@ from django.db.models.functions import Coalesce
 from decimal import Decimal
 from django.utils.timezone import now
 from datetime import datetime
+from calendar import monthrange
 
 from django.db.models import Sum
 from django.contrib.auth.decorators import login_required
@@ -1559,6 +1560,27 @@ def admin_dashboard(request):
     year = today.year
 
     admin_emp = getattr(request.user, "employee", None)
+
+    products = [p for p, _ in Sale.PRODUCT_CHOICES]
+    product_labels = {
+        "SIP": "SIP",
+        "Lumsum": "Lumpsum",
+        "Life Insurance": "Life Insurance",
+        "Health Insurance": "Health Insurance",
+        "Motor Insurance": "Motor Insurance",
+        "PMS": "PMS",
+        "COB": "COB",
+    }
+
+    def _build_breakup(data_map):
+        return [
+            {
+                "product": product,
+                "label": product_labels.get(product, product),
+                "value": data_map.get(product, Decimal("0")),
+            }
+            for product in products
+        ]
 
     now_ts = timezone.now()
     upcoming_followups = (
@@ -1584,16 +1606,25 @@ def admin_dashboard(request):
     admin_salary_ratio = (total_salary_all / admin_points_scale) * Decimal("100") if admin_points_scale else Decimal("0")
     admin_points_ratio = (total_points / admin_points_scale) * Decimal("100") if admin_points_scale else Decimal("0")
     admin_extra_points = max(total_points - total_salary_all, Decimal("0"))
+    month_start = date(year, month, 1)
+    month_end = date(year, month, monthrange(year, month)[1])
 
     # ---------------- Admin self business (this month) ----------------
     admin_self_sales = Decimal("0")
     admin_self_points = Decimal("0")
     admin_self_pending_points = Decimal("0")
+    admin_self_points_map = {p: Decimal("0") for p in products}
+    admin_self_sales_map = {p: Decimal("0") for p in products}
     if admin_emp:
         self_sales_qs = Sale.objects.filter(employee=admin_emp, status=Sale.STATUS_APPROVED, date__year=year, date__month=month)
         admin_self_sales = self_sales_qs.aggregate(total=Sum("amount"))['total'] or Decimal("0")
         admin_self_points = self_sales_qs.aggregate(total=Sum("points"))['total'] or Decimal("0")
         admin_self_pending_points = Sale.objects.filter(employee=admin_emp, status=Sale.STATUS_PENDING, date__year=year, date__month=month).aggregate(total=Sum("points"))['total'] or Decimal("0")
+
+        for entry in self_sales_qs.values("product").annotate(total=Sum("points")):
+            admin_self_points_map[entry["product"]] = entry["total"] or Decimal("0")
+        for entry in self_sales_qs.values("product").annotate(total=Sum("amount")):
+            admin_self_sales_map[entry["product"]] = entry["total"] or Decimal("0")
 
     # ---------------- Product-wise totals (THIS MONTH) ----------------
     sip_sales = monthly_sales_qs.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
@@ -1602,6 +1633,18 @@ def admin_dashboard(request):
     health_sales = monthly_sales_qs.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
     motor_sales = monthly_sales_qs.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
     pms_sales = monthly_sales_qs.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
+
+    overall_points_map = {p: Decimal("0") for p in products}
+    overall_sales_map = {p: Decimal("0") for p in products}
+    for entry in monthly_sales_qs.values("product").annotate(total=Sum("points")):
+        overall_points_map[entry["product"]] = entry["total"] or Decimal("0")
+    for entry in monthly_sales_qs.values("product").annotate(total=Sum("amount")):
+        overall_sales_map[entry["product"]] = entry["total"] or Decimal("0")
+
+    admin_self_points_breakup = _build_breakup(admin_self_points_map)
+    admin_overall_points_breakup = _build_breakup(overall_points_map)
+    admin_self_sales_breakup = _build_breakup(admin_self_sales_map)
+    admin_overall_sales_breakup = _build_breakup(overall_sales_map)
 
     # ---------------- Targets ----------------
     daily_targets = Target.objects.filter(target_type="daily")
@@ -1645,7 +1688,6 @@ def admin_dashboard(request):
 
     # ---------------- Section 1: Company (self) performance vs targets ----------------
     overall_daily_progress = []
-    products = [p for p, _ in Sale.PRODUCT_CHOICES]
     for product in products:
         target_value = daily_target_map.get(product, Decimal("0"))
         achieved = approved_sales_all.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
@@ -1737,6 +1779,10 @@ def admin_dashboard(request):
         "admin_self_sales": admin_self_sales,
         "admin_self_points": admin_self_points,
         "admin_self_pending_points": admin_self_pending_points,
+        "admin_self_points_breakup": admin_self_points_breakup,
+        "admin_overall_points_breakup": admin_overall_points_breakup,
+        "admin_self_sales_breakup": admin_self_sales_breakup,
+        "admin_overall_sales_breakup": admin_overall_sales_breakup,
         "admin_daily_targets": admin_daily_targets_display,
         "admin_monthly_targets": admin_monthly_targets_display,
         "sip_sales": sip_sales,
@@ -1753,6 +1799,8 @@ def admin_dashboard(request):
         "notifications": notifications,
         "unread_notifications": unread_notifications,
         "upcoming_followups": upcoming_followups,
+        "month_start": month_start,
+        "month_end": month_end,
     }
 
     return render(request, "dashboards/admin_dashboard.html", context)
@@ -1877,6 +1925,8 @@ def employee_dashboard(request):
     is_admin = role == "admin"
     manager_access = get_manager_access() if is_manager else None
     allow_company_sections = is_admin or (is_manager and manager_access and manager_access.allow_employee_performance)
+    month_start = date(today.year, today.month, 1)
+    month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
 
     now_ts = timezone.now()
     upcoming_followups = (
@@ -1958,6 +2008,14 @@ def employee_dashboard(request):
     # --- Monthly sales (resets monthly) ---
     month_sales = monthly_sales_approved.values("product").annotate(total=Sum("amount"))
     month_sales_dict = {s["product"]: s["total"] for s in month_sales}
+    product_sales_breakup = [
+        {
+            "product": product,
+            "label": product_labels.get(product, product),
+            "amount": month_sales_dict.get(product, Decimal("0")),
+        }
+        for product in products
+    ]
 
     # --- Global targets mapped for completeness ---
     daily_targets = Target.objects.filter(target_type="daily")
@@ -2004,6 +2062,8 @@ def employee_dashboard(request):
     overall_monthly_progress = []
     daily_employee_product = []
     monthly_employee_product = []
+    overall_product_point_breakup = []
+    overall_product_sales_breakup = []
 
     if allow_company_sections:
         approved_sales_all = Sale.objects.filter(status=Sale.STATUS_APPROVED)
@@ -2063,6 +2123,31 @@ def employee_dashboard(request):
                 })
             monthly_employee_product.append(emp_entry_monthly)
 
+        overall_points_map = {p: Decimal("0") for p in products}
+        overall_sales_map = {p: Decimal("0") for p in products}
+        for entry in monthly_sales_qs.values("product").annotate(total=Sum("points")):
+            overall_points_map[entry["product"]] = entry["total"] or Decimal("0")
+        for entry in monthly_sales_qs.values("product").annotate(total=Sum("amount")):
+            overall_sales_map[entry["product"]] = entry["total"] or Decimal("0")
+
+        overall_product_point_breakup = [
+            {
+                "product": product,
+                "label": product_labels.get(product, product),
+                "points": overall_points_map.get(product, Decimal("0")),
+            }
+            for product in products
+        ]
+
+        overall_product_sales_breakup = [
+            {
+                "product": product,
+                "label": product_labels.get(product, product),
+                "amount": overall_sales_map.get(product, Decimal("0")),
+            }
+            for product in products
+        ]
+
     context = {
         "total_sales": total_sales,
         "total_points": total_points,
@@ -2085,10 +2170,17 @@ def employee_dashboard(request):
         "upcoming_followups": upcoming_followups,
         "pending_points": pending_points,
         "product_point_breakup": product_point_breakup,
+        "product_sales_breakup": product_sales_breakup,
+        "overall_product_point_breakup": overall_product_point_breakup,
+        "overall_product_sales_breakup": overall_product_sales_breakup,
         "show_company_sections": allow_company_sections,
         "overall_daily_progress": overall_daily_progress,
         "overall_monthly_progress": overall_monthly_progress,
         "monthly_employee_product": monthly_employee_product,
+        "is_manager": is_manager,
+        "is_admin": is_admin,
+        "month_start": month_start,
+        "month_end": month_end,
     }
     return render(request, "dashboards/employee_dashboard.html", context)
 
