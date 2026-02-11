@@ -2643,8 +2643,12 @@ def admin_add_sale(request):
 @login_required
 def approve_sales(request):
     user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
-        return HttpResponseForbidden("Admins only.")
+    is_admin = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    is_manager = bool(user_emp and user_emp.role == "manager")
+    manager_access = get_manager_access() if is_manager else None
+
+    if not (is_admin or (manager_access and manager_access.allow_approve_sales)):
+        return HttpResponseForbidden("You do not have permission to approve sales.")
 
     # Handle approval/rejection
     if request.method == "POST":
@@ -2674,6 +2678,8 @@ def approve_sales(request):
     end_date = request.GET.get("end_date")
 
     sales_qs = Sale.objects.filter(status=Sale.STATUS_PENDING).select_related("client", "employee__user")
+    if manager_access and not manager_access.allow_view_all_sales:
+        sales_qs = sales_qs.filter(employee=user_emp)
     if employee:
         sales_qs = sales_qs.filter(
             Q(employee__user__username__icontains=employee) |
