@@ -1651,7 +1651,7 @@ def admin_dashboard(request):
     monthly_targets = Target.objects.filter(target_type="monthly")
     daily_target_map = {t.product: t.target_value for t in daily_targets}
     monthly_target_map = {t.product: t.target_value for t in monthly_targets}
-    employee_count = Employee.objects.filter(role="employee").count()
+    active_employee_count = Employee.objects.filter(role="employee", active=True).count()
 
     # Admin self targets vs progress (similar to employee dashboard)
     admin_daily_targets_display = []
@@ -1689,7 +1689,7 @@ def admin_dashboard(request):
     # ---------------- Section 1: Company (self) performance vs targets ----------------
     overall_daily_progress = []
     for product in products:
-        target_value = daily_target_map.get(product, Decimal("0"))
+        target_value = daily_target_map.get(product, Decimal("0")) * (active_employee_count or 0)
         achieved = approved_sales_all.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
         progress = (achieved / target_value * 100) if target_value else 0
         overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
@@ -1698,11 +1698,11 @@ def admin_dashboard(request):
     for product in products:
         achieved = monthly_sales_qs.filter(product=product).aggregate(total=Sum("amount"))['total'] or 0
         target_base = monthly_target_map.get(product, Decimal("0"))
-        target_value = (target_base or 0) * (employee_count or 0)
+        target_value = (target_base or 0) * (active_employee_count or 0)
         progress = (achieved / target_value * 100) if target_value else 0
         overall_monthly_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
-    employees = Employee.objects.select_related("user").all()
+    employees = Employee.objects.select_related("user").filter(active=True)
 
     # ---------------- Section 2: Daily employee performance (product-wise) ----------------
     daily_employee_product = []
@@ -2068,22 +2068,22 @@ def employee_dashboard(request):
     if allow_company_sections:
         approved_sales_all = Sale.objects.filter(status=Sale.STATUS_APPROVED)
         monthly_sales_qs = approved_sales_all.filter(date__year=today.year, date__month=today.month)
+        active_employee_count = Employee.objects.filter(role="employee", active=True).count()
 
         for product in products:
-            target_value = daily_target_map.get(product, Decimal("0"))
+            target_value = daily_target_map.get(product, Decimal("0")) * (active_employee_count or 0)
             achieved = approved_sales_all.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
             progress = (achieved / target_value * 100) if target_value else 0
             overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
-        employee_count = Employee.objects.filter(role="employee").count()
         for product in products:
             achieved = monthly_sales_qs.filter(product=product).aggregate(total=Sum("amount"))['total'] or 0
             target_base = monthly_target_map.get(product, Decimal("0"))
-            target_value = (target_base or 0) * (employee_count or 0)
+            target_value = (target_base or 0) * (active_employee_count or 0)
             progress = (achieved / target_value * 100) if target_value else 0
             overall_monthly_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
-        employees = Employee.objects.select_related("user").all()
+        employees = Employee.objects.select_related("user").filter(active=True)
         for e in employees:
             emp_entry_daily = {
                 "employee": e.user.username if hasattr(e, "user") else getattr(e, "name", ""),
