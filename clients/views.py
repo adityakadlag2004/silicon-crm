@@ -4812,3 +4812,59 @@ def bulk_reassign_view(request):
             return redirect('clients:bulk_reassign')
 
     return render(request, 'clients/bulk_reassign.html', context)
+
+
+# ── Monthly Business Report ──────────────────────────────────────────
+@login_required
+def monthly_business_report(request):
+    emp = request.user.employee
+    if emp.role not in ("admin", "manager"):
+        return HttpResponseForbidden("Access denied")
+
+    today = date.today()
+    sel_month = int(request.GET.get("month", today.month))
+    sel_year = int(request.GET.get("year", today.year))
+
+    products = ["SIP", "Lumsum", "Life Insurance", "Health Insurance",
+                 "Motor Insurance", "PMS", "COB"]
+
+    employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
+
+    approved = Sale.objects.filter(
+        status="approved",
+        date__year=sel_year,
+        date__month=sel_month,
+    )
+
+    rows = []
+    grand = {p: Decimal("0") for p in products}
+    grand["points"] = Decimal("0")
+
+    for e in employees:
+        emp_sales = approved.filter(employee=e)
+        product_vals = []
+        for p in products:
+            total = emp_sales.filter(product=p).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            product_vals.append(total)
+            grand[p] += total
+        pts = emp_sales.aggregate(t=Sum("points"))["t"] or Decimal("0")
+        grand["points"] += pts
+        rows.append({"employee": e, "product_vals": product_vals, "points": pts})
+
+    grand_vals = [grand[p] for p in products]
+
+    months = [(i, month_name[i]) for i in range(1, 13)]
+    years = list(range(today.year - 3, today.year + 1))
+
+    context = {
+        "rows": rows,
+        "products": products,
+        "grand_vals": grand_vals,
+        "grand_points": grand["points"],
+        "months": months,
+        "years": years,
+        "sel_month": sel_month,
+        "sel_year": sel_year,
+        "month_name": month_name[sel_month],
+    }
+    return render(request, "reports/monthly_business_report.html", context)
