@@ -159,26 +159,15 @@
     <li><a class="dropdown-item" href="{% url 'clients:net_business' %}">Net Business</a></li>
     <li><a class="dropdown-item" href="{% url 'clients:net_sip' %}">Net SIP</a></li>
     {% comment %} <li><a class="dropdown-item" href="{% url 'tracking:employee_progress' %}">👥 Track Employee Progress</a></li> {% endcomment %}
+    <li><a class="dropdown-item" href="{% url 'clients:employee_management' %}">Employee Management</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li class="dropdown-header">Reports</li>
+    <li><a class="dropdown-item" href="{% url 'clients:monthly_business_report' %}">Monthly Business Report</a></li>
   </ul>
 </li>
 
-                <!-- Employee Management (placed last) -->
-                <li class="nav-item">
-                  <a class="nav-link" href="{% url 'clients:employee_management' %}">Employee Management</a>
-                </li>
-
                 <li class="nav-item">
                   <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
-                </li>
-
-                <!-- Reports Dropdown (admin) -->
-                <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" id="adminReportsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    Reports
-                  </a>
-                  <ul class="dropdown-menu" aria-labelledby="adminReportsDropdown">
-                    <li><a class="dropdown-item" href="{% url 'clients:monthly_business_report' %}">Monthly Business Report</a></li>
-                  </ul>
                 </li>
 
               {% elif request.user.employee.role == "manager" %}
@@ -239,6 +228,9 @@
                     <li><a href="{% url 'clients:admin_past_performance' %}" class="dropdown-item">Business Tracking</a></li>
                     <li><a class="dropdown-item" href="{% url 'clients:net_business' %}">Net Business</a></li>
                     <li><a class="dropdown-item" href="{% url 'clients:net_sip' %}">Net SIP</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li class="dropdown-header">Reports</li>
+                    <li><a class="dropdown-item" href="{% url 'clients:monthly_business_report' %}">Monthly Business Report</a></li>
                   </ul>
                 </li>
                 {% endif %}
@@ -248,16 +240,6 @@
                   <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
                 </li>
                 {% endif %}
-
-                <!-- Reports Dropdown (manager) -->
-                <li class="nav-item dropdown">
-                  <a class="nav-link dropdown-toggle" href="#" id="mgrReportsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    Reports
-                  </a>
-                  <ul class="dropdown-menu" aria-labelledby="mgrReportsDropdown">
-                    <li><a class="dropdown-item" href="{% url 'clients:monthly_business_report' %}">Monthly Business Report</a></li>
-                  </ul>
-                </li>
 
               {% elif request.user.employee.role == "employee" %}
                 <!-- Employee -->
