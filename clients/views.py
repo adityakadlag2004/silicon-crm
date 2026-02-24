@@ -126,7 +126,16 @@ def lead_list_by_stage(request, stage):
 def lead_detail(request, lead_id):
     lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
     lead.progress_map = {p.product: p for p in lead.progress_entries.all()}
-    return render(request, "clients/leads/lead_detail.html", {"lead": lead})
+    followups = lead.followups.select_related("assigned_to__user").order_by("-scheduled_time")
+    remarks = lead.remarks.select_related("created_by").order_by("-created_at")
+    now_ts = timezone.now()
+    for f in followups:
+        f.is_overdue = f.status == "pending" and f.scheduled_time < now_ts
+    return render(request, "clients/leads/lead_detail.html", {
+        "lead": lead,
+        "followups": followups,
+        "remarks": remarks,
+    })
 
 
 @login_required
@@ -284,6 +293,8 @@ def lead_management(request):
     emp = getattr(request.user, "employee", None)
     role = getattr(emp, "role", "")
     show_my_tab = role in ["admin", "manager"]
+    can_see_stats = role in ["admin", "manager"] or request.user.is_superuser
+
     # view filter: current (default), completed, discarded
     view_mode = request.GET.get("view", "current")
     if view_mode == "my" and show_my_tab:
@@ -295,12 +306,63 @@ def lead_management(request):
     else:
         view_mode = "current"
         base_qs = base_qs.filter(is_discarded=False).exclude(stage=Lead.STAGE_PROCESSED)
+
+    # --- Filters ---
     search_term = request.GET.get("q", "").strip()
     if search_term:
         base_qs = base_qs.filter(customer_name__icontains=search_term)
 
-    leads = base_qs.order_by("-updated_at")
-    for lead in leads:
+    assigned_to_filter = request.GET.get("assigned_to", "")
+    if assigned_to_filter and can_see_stats:
+        base_qs = base_qs.filter(assigned_to_id=assigned_to_filter)
+
+    stage_filter = request.GET.get("stage", "")
+    if stage_filter and stage_filter in dict(Lead.STAGE_CHOICES):
+        base_qs = base_qs.filter(stage=stage_filter)
+
+    data_received_filter = request.GET.get("data_received", "")
+    if data_received_filter == "yes":
+        base_qs = base_qs.filter(data_received=True)
+    elif data_received_filter == "no":
+        base_qs = base_qs.filter(data_received=False)
+
+    date_from = request.GET.get("date_from", "")
+    date_to = request.GET.get("date_to", "")
+    if date_from:
+        try:
+            base_qs = base_qs.filter(created_at__date__gte=datetime.strptime(date_from, "%Y-%m-%d").date())
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            base_qs = base_qs.filter(created_at__date__lte=datetime.strptime(date_to, "%Y-%m-%d").date())
+        except ValueError:
+            pass
+
+    leads_qs = base_qs.order_by("-updated_at")
+
+    # --- Pagination ---
+    PER_PAGE = 25
+    paginator = Paginator(leads_qs, PER_PAGE)
+    page_num = request.GET.get("page", 1)
+    try:
+        page_obj = paginator.get_page(page_num)
+    except Exception:
+        page_obj = paginator.get_page(1)
+
+    current = page_obj.number
+    total_pages = paginator.num_pages
+    start_page = max(current - 3, 1)
+    end_page = min(current + 3, total_pages)
+    page_range = range(start_page, end_page + 1)
+
+    # Build query string without 'page' for pagination links
+    get_params = request.GET.copy()
+    if "page" in get_params:
+        del get_params["page"]
+    base_qs_params = get_params.urlencode()
+
+    for lead in page_obj:
         lead.progress_map = {p.product: p for p in lead.progress_entries.all()}
 
     # Stats for admin only
@@ -310,7 +372,7 @@ def lead_management(request):
         Lead.STAGE_PROCESSED: base_qs.filter(stage=Lead.STAGE_PROCESSED).count(),
     }
 
-    # counts for tabs (not affected by search)
+    # counts for tabs (not affected by search/filters)
     tab_base = _lead_queryset_for_request(request)
     tab_counts = {
         "current": tab_base.filter(is_discarded=False).exclude(stage=Lead.STAGE_PROCESSED).count(),
@@ -321,7 +383,6 @@ def lead_management(request):
         tab_counts["my"] = tab_base.filter(assigned_to=emp, is_discarded=False).exclude(stage=Lead.STAGE_PROCESSED).count()
 
     progress_counts = {}
-    can_see_stats = getattr(getattr(request.user, "employee", None), "role", "") in ["admin", "manager"] or request.user.is_superuser
     if can_see_stats:
         agg = (
             LeadProductProgress.objects.filter(lead__in=base_qs.values_list("id", flat=True))
@@ -334,17 +395,30 @@ def lead_management(request):
             status = row["status"]
             progress_counts.setdefault(product, {})[status] = row["total"]
 
+    # Employee list for filter dropdown (admin/manager only)
+    employees = Employee.objects.filter(active=True).select_related("user").order_by("user__username") if can_see_stats else []
+
     context = {
-        "leads": leads,
+        "leads": page_obj,
+        "page_obj": page_obj,
+        "page_range": page_range,
+        "base_qs_params": base_qs_params,
         "search_term": search_term,
         "stage_counts": stage_counts,
         "progress_counts": progress_counts if can_see_stats else {},
         "can_see_stats": can_see_stats,
-        "can_bulk_import": True,  # employees/managers can import leads
+        "can_bulk_import": True,
         "view_mode": view_mode,
         "tab_counts": tab_counts,
         "show_my_tab": show_my_tab,
         "show_my_progress": bool(emp) and role in ["employee", "manager"],
+        # Filter values for template
+        "employees": employees,
+        "assigned_to_filter": assigned_to_filter,
+        "stage_filter": stage_filter,
+        "data_received_filter": data_received_filter,
+        "date_from": date_from,
+        "date_to": date_to,
     }
     return render(request, "clients/leads/lead_management.html", context)
 
@@ -368,6 +442,142 @@ def lead_discard(request, lead_id):
     lead.save(update_fields=["is_discarded", "updated_at"])
     messages.info(request, "Lead discarded.")
     return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+
+@login_required
+@require_POST
+def lead_undiscard(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    lead.is_discarded = False
+    lead.save(update_fields=["is_discarded", "updated_at"])
+    messages.success(request, "Lead reopened.")
+    return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+
+@login_required
+@require_POST
+def lead_followup_done(request, followup_id):
+    emp = getattr(request.user, "employee", None)
+    qs = LeadFollowUp.objects.select_related("lead")
+    if emp and getattr(emp, "role", "") == "employee":
+        qs = qs.filter(assigned_to=emp)
+    followup = get_object_or_404(qs, pk=followup_id)
+    followup.status = "done"
+    followup.save(update_fields=["status"])
+    # If request is htmx, return empty element
+    if request.headers.get("HX-Request"):
+        return HttpResponse('<div class="text-success small">Done ✓</div>')
+    messages.success(request, "Follow-up marked as done.")
+    return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+
+@login_required
+@require_POST
+def lead_convert_to_client(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    if lead.converted_client:
+        messages.info(request, "This lead has already been converted.")
+        return redirect("clients:lead_detail", lead_id=lead.id)
+    if lead.stage != Lead.STAGE_PROCESSED:
+        messages.error(request, "Only processed leads can be converted to clients.")
+        return redirect("clients:lead_detail", lead_id=lead.id)
+
+    progress_map = {p.product: p for p in lead.progress_entries.all()}
+    health_p = progress_map.get("health")
+    life_p = progress_map.get("life")
+    wealth_p = progress_map.get("wealth")
+
+    with transaction.atomic():
+        client = Client(
+            name=lead.customer_name,
+            phone=lead.phone or None,
+            email=lead.email or None,
+            mapped_to=lead.assigned_to,
+            status="Mapped" if lead.assigned_to else "Unmapped",
+        )
+        if health_p and health_p.status == LeadProductProgress.STATUS_PROCESSED:
+            client.health_status = True
+            client.health_cover = health_p.achieved_amount
+        if life_p and life_p.status == LeadProductProgress.STATUS_PROCESSED:
+            client.life_status = True
+            client.life_cover = life_p.achieved_amount
+        if wealth_p and wealth_p.status == LeadProductProgress.STATUS_PROCESSED:
+            client.sip_status = True
+            client.sip_amount = wealth_p.achieved_amount
+        client.save()
+        lead.converted_client = client
+        lead.save(update_fields=["converted_client", "updated_at"])
+
+    messages.success(request, f"Lead converted to Client #{client.id} ({client.name}).")
+    return redirect("clients:lead_detail", lead_id=lead.id)
+
+
+@login_required
+def lead_followups_api(request):
+    """JSON endpoint for dashboard calendar – returns follow-ups grouped by date."""
+    emp = getattr(request.user, "employee", None)
+    role = getattr(emp, "role", "") if emp else ""
+    is_admin = request.user.is_superuser or role in ["admin", "manager"]
+
+    now_ts = timezone.now()
+    qs = LeadFollowUp.objects.filter(status="pending").select_related("lead", "assigned_to__user")
+
+    filter_mode = request.GET.get("filter", "this_week")
+    employee_id = request.GET.get("employee_id")
+
+    if not is_admin and emp:
+        qs = qs.filter(assigned_to=emp)
+    elif is_admin and employee_id:
+        qs = qs.filter(assigned_to_id=employee_id)
+
+    if filter_mode == "today":
+        day_start = now_ts.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        qs = qs.filter(scheduled_time__gte=day_start, scheduled_time__lt=day_end)
+    elif filter_mode == "tomorrow":
+        day_start = (now_ts + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        qs = qs.filter(scheduled_time__gte=day_start, scheduled_time__lt=day_end)
+    elif filter_mode == "overdue":
+        qs = qs.filter(scheduled_time__lt=now_ts)
+    elif filter_mode == "all":
+        pass  # no date filter
+    else:  # this_week
+        today = now_ts.date()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=7)
+        qs = qs.filter(
+            scheduled_time__gte=timezone.make_aware(datetime.combine(week_start, datetime.min.time())),
+            scheduled_time__lt=timezone.make_aware(datetime.combine(week_end, datetime.min.time())),
+        )
+        # Also include overdue from before this week
+        overdue = LeadFollowUp.objects.filter(
+            status="pending",
+            scheduled_time__lt=timezone.make_aware(datetime.combine(week_start, datetime.min.time())),
+        ).select_related("lead", "assigned_to__user")
+        if not is_admin and emp:
+            overdue = overdue.filter(assigned_to=emp)
+        elif is_admin and employee_id:
+            overdue = overdue.filter(assigned_to_id=employee_id)
+        qs = qs | overdue
+
+    qs = qs.order_by("scheduled_time")
+
+    followups = []
+    for f in qs:
+        followups.append({
+            "id": f.id,
+            "lead_id": f.lead_id,
+            "lead_name": f.lead.customer_name,
+            "scheduled_time": f.scheduled_time.isoformat(),
+            "date": f.scheduled_time.strftime("%Y-%m-%d"),
+            "time": f.scheduled_time.strftime("%H:%M"),
+            "note": f.note,
+            "assigned_to": f.assigned_to.user.username if f.assigned_to else "",
+            "is_overdue": f.scheduled_time < now_ts,
+        })
+
+    return JsonResponse({"followups": followups})
 
 
 @login_required
@@ -1583,11 +1793,29 @@ def admin_dashboard(request):
         ]
 
     now_ts = timezone.now()
-    upcoming_followups = (
-        LeadFollowUp.objects.filter(status="pending", scheduled_time__gte=now_ts, scheduled_time__lte=now_ts + timedelta(days=7))
+    today_date = now_ts.date()
+    week_start = today_date - timedelta(days=today_date.weekday())  # Monday
+    week_dates = [week_start + timedelta(days=i) for i in range(7)]
+
+    # Fetch follow-ups: overdue + this week
+    followup_qs = (
+        LeadFollowUp.objects.filter(status="pending")
+        .filter(
+            Q(scheduled_time__lt=now_ts) |  # overdue
+            Q(scheduled_time__date__gte=week_start, scheduled_time__date__lte=week_start + timedelta(days=6))
+        )
         .select_related("lead", "assigned_to__user")
-        .order_by("scheduled_time")[:8]
+        .order_by("scheduled_time")
     )
+    followups_by_date = {}
+    overdue_followups = []
+    for f in followup_qs:
+        f.is_overdue = f.scheduled_time < now_ts
+        if f.is_overdue:
+            overdue_followups.append(f)
+        fdate = f.scheduled_time.date()
+        followups_by_date.setdefault(fdate, []).append(f)
+    upcoming_followups = list(followup_qs)  # keep backward compat
 
     # All-time sales (if you use it elsewhere)
     all_sales_qs = Sale.objects.all()
@@ -1799,6 +2027,11 @@ def admin_dashboard(request):
         "notifications": notifications,
         "unread_notifications": unread_notifications,
         "upcoming_followups": upcoming_followups,
+        "followups_by_date": followups_by_date,
+        "overdue_followups": overdue_followups,
+        "week_dates": week_dates,
+        "today_date": today_date,
+        "is_admin_dashboard": True,
         "month_start": month_start,
         "month_end": month_end,
     }
@@ -1929,11 +2162,28 @@ def employee_dashboard(request):
     month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
 
     now_ts = timezone.now()
-    upcoming_followups = (
-        LeadFollowUp.objects.filter(status="pending", assigned_to=emp, scheduled_time__gte=now_ts, scheduled_time__lte=now_ts + timedelta(days=7))
-        .select_related("lead")
-        .order_by("scheduled_time")[:8]
+    today_date = now_ts.date()
+    week_start = today_date - timedelta(days=today_date.weekday())  # Monday
+    week_dates = [week_start + timedelta(days=i) for i in range(7)]
+
+    followup_qs = (
+        LeadFollowUp.objects.filter(status="pending", assigned_to=emp)
+        .filter(
+            Q(scheduled_time__lt=now_ts) |  # overdue
+            Q(scheduled_time__date__gte=week_start, scheduled_time__date__lte=week_start + timedelta(days=6))
+        )
+        .select_related("lead", "assigned_to__user")
+        .order_by("scheduled_time")
     )
+    followups_by_date = {}
+    overdue_followups = []
+    for f in followup_qs:
+        f.is_overdue = f.scheduled_time < now_ts
+        if f.is_overdue:
+            overdue_followups.append(f)
+        fdate = f.scheduled_time.date()
+        followups_by_date.setdefault(fdate, []).append(f)
+    upcoming_followups = list(followup_qs)
 
     products = [p for p, _ in Sale.PRODUCT_CHOICES]
 
@@ -2168,6 +2418,11 @@ def employee_dashboard(request):
         "monthly_targets": monthly_targets_display,
         "history": history,   # 👈 important for template
         "upcoming_followups": upcoming_followups,
+        "followups_by_date": followups_by_date,
+        "overdue_followups": overdue_followups,
+        "week_dates": week_dates,
+        "today_date": today_date,
+        "is_admin_dashboard": False,
         "pending_points": pending_points,
         "product_point_breakup": product_point_breakup,
         "product_sales_breakup": product_sales_breakup,
