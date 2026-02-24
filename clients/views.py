@@ -569,8 +569,37 @@ def lead_followups_api(request):
             "note": f.note,
             "assigned_to": f.assigned_to.user.username if f.assigned_to else "",
             "is_overdue": f.scheduled_time < now_ts,
+            "lead_url": reverse("clients:lead_detail", args=[f.lead_id]),
         })
-    return JsonResponse({"followups": followups})
+    today = now_ts.date()
+    week_start = today - timedelta(days=today.weekday())
+    week_dates_list = [(week_start + timedelta(days=i)).isoformat() for i in range(7)]
+    return JsonResponse({"followups": followups, "week_dates": week_dates_list, "today": today.isoformat()})
+
+
+@login_required
+@require_POST
+def lead_followup_reschedule(request, followup_id):
+    """Move a follow-up to a different date (drag-and-drop)."""
+    emp = getattr(request.user, "employee", None)
+    qs = LeadFollowUp.objects.select_related("lead")
+    if emp and getattr(emp, "role", "") == "employee":
+        qs = qs.filter(assigned_to=emp)
+    followup = get_object_or_404(qs, pk=followup_id)
+
+    try:
+        data = json.loads(request.body)
+        new_date_str = data.get("date")  # expects YYYY-MM-DD
+        new_date = datetime.strptime(new_date_str, "%Y-%m-%d").date()
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return JsonResponse({"error": "Invalid date."}, status=400)
+
+    # Keep the original time, just change the date
+    old_time = followup.scheduled_time.time()
+    new_dt = timezone.make_aware(datetime.combine(new_date, old_time))
+    followup.scheduled_time = new_dt
+    followup.save(update_fields=["scheduled_time"])
+    return JsonResponse({"ok": True, "new_date": new_date.isoformat(), "new_time": old_time.strftime("%H:%M")})
 
 
 @login_required
