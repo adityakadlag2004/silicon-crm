@@ -20,12 +20,54 @@
   </div>
 </div>
 
-<form method="get" class="row g-2 align-items-center mb-3">
-  <div class="col-sm-4">
-    <input type="search" name="q" value="{{ search_term }}" class="form-control" placeholder="Search customer name" />
+<!-- Search + Filters -->
+<form method="get" class="mb-3">
+  <input type="hidden" name="view" value="{{ view_mode }}" />
+  <div class="row g-2 align-items-end">
+    <div class="col-sm-3">
+      <label class="form-label small text-muted mb-0">Search</label>
+      <input type="search" name="q" value="{{ search_term }}" class="form-control form-control-sm" placeholder="Customer name" />
+    </div>
+    {% if employees %}
+    <div class="col-sm-2">
+      <label class="form-label small text-muted mb-0">Assigned To</label>
+      <select name="assigned_to" class="form-select form-select-sm">
+        <option value="">All employees</option>
+        {% for e in employees %}
+          <option value="{{ e.id }}" {% if assigned_to_filter == e.id|stringformat:"d" %}selected{% endif %}>{{ e.user.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+    <div class="col-sm-2">
+      <label class="form-label small text-muted mb-0">Stage</label>
+      <select name="stage" class="form-select form-select-sm">
+        <option value="">All stages</option>
+        <option value="pending" {% if stage_filter == 'pending' %}selected{% endif %}>Pending</option>
+        <option value="half_sold" {% if stage_filter == 'half_sold' %}selected{% endif %}>Half Sold</option>
+        <option value="processed" {% if stage_filter == 'processed' %}selected{% endif %}>Processed</option>
+      </select>
+    </div>
+    <div class="col-sm-1">
+      <label class="form-label small text-muted mb-0">Data Rcvd</label>
+      <select name="data_received" class="form-select form-select-sm">
+        <option value="">All</option>
+        <option value="yes" {% if data_received_filter == 'yes' %}selected{% endif %}>Yes</option>
+        <option value="no" {% if data_received_filter == 'no' %}selected{% endif %}>No</option>
+      </select>
+    </div>
+    <div class="col-sm-2">
+      <label class="form-label small text-muted mb-0">From</label>
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" />
+    </div>
+    <div class="col-sm-2">
+      <label class="form-label small text-muted mb-0">To</label>
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" />
+    </div>
   </div>
-  <div class="col-auto">
-    <button class="btn btn-outline-dark btn-sm" type="submit">Search</button>
+  <div class="mt-2 d-flex gap-2">
+    <button class="btn btn-outline-dark btn-sm" type="submit">Apply Filters</button>
+    <a class="btn btn-outline-secondary btn-sm" href="?view={{ view_mode }}">Clear</a>
   </div>
 </form>
 
@@ -136,24 +178,46 @@
           <td class="small text-muted">{{ lead.updated_at|date:"Y-m-d H:i" }}</td>
           <td class="text-end">
             <div class="dropdown">
-              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">⋯</button>
+              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#x22EF;</button>
               <ul class="dropdown-menu dropdown-menu-end">
                 <li><a class="dropdown-item" href="{% url 'clients:lead_detail' lead.id %}">Open lead</a></li>
                 <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#followupModal" data-lead-id="{{ lead.id }}" data-lead-name="{{ lead.customer_name }}">Add next follow-up</button></li>
                 <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#remarkModal" data-lead-id="{{ lead.id }}" data-lead-name="{{ lead.customer_name }}">Add remark</button></li>
+                {% if view_mode != 'completed' %}
                 <li>
                   <form method="post" action="{% url 'clients:lead_mark_complete' lead.id %}">
                     {% csrf_token %}
                     <button type="submit" class="dropdown-item">Mark completed</button>
                   </form>
                 </li>
+                {% endif %}
+                {% if lead.stage == 'processed' and not lead.converted_client %}
+                <li>
+                  <form method="post" action="{% url 'clients:lead_convert_to_client' lead.id %}" onsubmit="return confirm('Convert this lead to a client?');">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item text-success">Convert to Client</button>
+                  </form>
+                </li>
+                {% endif %}
+                {% if lead.converted_client %}
+                <li><a class="dropdown-item text-success" href="{% url 'clients:edit_client' lead.converted_client.id %}">View Client #{{ lead.converted_client.id }}</a></li>
+                {% endif %}
                 <li><hr class="dropdown-divider" /></li>
+                {% if view_mode == 'discarded' %}
+                <li>
+                  <form method="post" action="{% url 'clients:lead_undiscard' lead.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="dropdown-item text-primary">Reopen lead</button>
+                  </form>
+                </li>
+                {% else %}
                 <li>
                   <form method="post" action="{% url 'clients:lead_discard' lead.id %}" onsubmit="return confirm('Discard this lead?');">
                     {% csrf_token %}
                     <button type="submit" class="dropdown-item text-danger">Discard lead</button>
                   </form>
                 </li>
+                {% endif %}
               </ul>
             </div>
           </td>
@@ -164,6 +228,25 @@
     </tbody>
   </table>
 </div>
+
+<!-- Pagination -->
+{% if page_obj.paginator.num_pages > 1 %}
+<nav aria-label="Lead pagination" class="mb-4">
+  <ul class="pagination justify-content-center">
+    {% if page_obj.has_previous %}
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if base_qs_params %}&{{ base_qs_params }}{% endif %}">&laquo;</a></li>
+    {% endif %}
+    {% for p in page_range %}
+      <li class="page-item {% if p == page_obj.number %}active{% endif %}">
+        <a class="page-link" href="?page={{ p }}{% if base_qs_params %}&{{ base_qs_params }}{% endif %}">{{ p }}</a>
+      </li>
+    {% endfor %}
+    {% if page_obj.has_next %}
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if base_qs_params %}&{{ base_qs_params }}{% endif %}">&raquo;</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
 
 <!-- Follow-up Modal -->
 <div class="modal fade" id="followupModal" tabindex="-1" aria-hidden="true">

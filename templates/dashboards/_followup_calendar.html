@@ -1,0 +1,295 @@
+{% load tz %}
+<div class="followup-calendar-widget" id="followupCalendarWidget">
+  <!-- Filter Bar -->
+  <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-outline-dark followup-filter active" data-filter="this_week">This Week</button>
+      <button type="button" class="btn btn-outline-dark followup-filter" data-filter="today">Today</button>
+      <button type="button" class="btn btn-outline-dark followup-filter" data-filter="tomorrow">Tomorrow</button>
+      <button type="button" class="btn btn-outline-danger followup-filter" data-filter="overdue">Overdue{% if overdue_followups %} <span class="badge bg-danger">{{ overdue_followups|length }}</span>{% endif %}</button>
+      <button type="button" class="btn btn-outline-dark followup-filter" data-filter="all">All</button>
+    </div>
+    {% if is_admin_dashboard %}
+    <select class="form-select form-select-sm" style="max-width:180px;" id="followupEmployeeFilter">
+      <option value="">All Employees</option>
+      {% for e in all_employees %}
+        <option value="{{ e.id }}">{{ e.user.username }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+  </div>
+
+  <!-- Weekly Calendar Grid (server-rendered initial state) -->
+  <div class="followup-week-grid" id="followupWeekGrid">
+    <div class="row g-2">
+      {% for wd in week_dates %}
+      <div class="col followup-day-col {% if wd == today_date %}followup-today{% endif %}" data-date="{{ wd|date:'Y-m-d' }}">
+        <div class="followup-day-header">
+          <div class="fw-bold small">{{ wd|date:"D" }}</div>
+          <div class="{% if wd == today_date %}badge bg-primary{% else %}small text-muted{% endif %}">{{ wd|date:"d" }}</div>
+        </div>
+        <div class="followup-day-items">
+          {% with day_items=followups_by_date %}
+            {% for f in day_items %}
+              {% if f.scheduled_time|date:"Y-m-d" == wd|date:"Y-m-d" %}
+              <div class="followup-item {% if f.is_overdue %}followup-overdue{% endif %}" data-followup-id="{{ f.id }}">
+                <a href="{% url 'clients:lead_detail' f.lead.id %}" class="followup-item-link">
+                  <div class="fw-semibold small text-truncate">{{ f.lead.customer_name }}</div>
+                  <div class="text-muted" style="font-size:0.75rem;">{{ f.scheduled_time|date:"H:i" }}{% if f.assigned_to %} &bull; {{ f.assigned_to.user.username }}{% endif %}</div>
+                  {% if f.note %}<div class="text-muted text-truncate" style="font-size:0.7rem;">{{ f.note }}</div>{% endif %}
+                </a>
+                {% if f.is_overdue %}<span class="badge bg-danger" style="font-size:0.6rem;">Overdue</span>{% endif %}
+                <form method="post" action="{% url 'clients:lead_followup_done' f.id %}" class="followup-done-form" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-success followup-done-btn" title="Mark done" hx-post="{% url 'clients:lead_followup_done' f.id %}" hx-swap="outerHTML" hx-target="closest .followup-item">&#10003;</button>
+                </form>
+              </div>
+              {% endif %}
+            {% endfor %}
+          {% endwith %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<style>
+.followup-week-grid .row { min-height: 200px; }
+.followup-day-col {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: #fafafa;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.followup-day-col.followup-today {
+  background: #ebf5fb;
+  border-color: #3182ce;
+  box-shadow: 0 0 0 1px #3182ce inset;
+}
+.followup-day-header {
+  text-align: center;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0.35rem;
+}
+.followup-day-items {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 280px;
+}
+.followup-item {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.35rem 0.4rem;
+  margin-bottom: 0.3rem;
+  position: relative;
+  transition: all 0.15s;
+}
+.followup-item:hover {
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  border-color: #cbd5e0;
+}
+.followup-item.followup-overdue {
+  background: #fff5f5;
+  border-color: #fc8181;
+}
+.followup-item-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+.followup-item-link:hover { color: #2b6cb0; }
+.followup-done-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 0 4px;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  opacity: 0.5;
+}
+.followup-item:hover .followup-done-btn { opacity: 1; }
+.followup-filter.active {
+  background: #2d3748 !important;
+  color: #fff !important;
+  border-color: #2d3748 !important;
+}
+
+@media (max-width: 768px) {
+  .followup-week-grid .row {
+    flex-direction: column;
+  }
+  .followup-day-col {
+    margin-bottom: 0.5rem;
+  }
+  .followup-day-items { max-height: 180px; }
+}
+</style>
+
+<script>
+(function() {
+  const widget = document.getElementById('followupCalendarWidget');
+  if (!widget) return;
+
+  const apiUrl = '{% url "clients:lead_followups_api" %}';
+  const leadDetailBaseUrl = '{% url "clients:lead_detail" 0 %}'.replace('/0/', '/LEAD_ID/');
+  const followupDoneBaseUrl = '{% url "clients:lead_followup_done" 0 %}'.replace('/0/', '/FID/');
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+    document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+
+  const filterBtns = widget.querySelectorAll('.followup-filter');
+  const empFilter = widget.querySelector('#followupEmployeeFilter');
+  const gridEl = document.getElementById('followupWeekGrid');
+
+  // Week dates from server
+  const weekDates = [{% for wd in week_dates %}'{{ wd|date:"Y-m-d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+  const todayStr = '{{ today_date|date:"Y-m-d" }}';
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  let currentFilter = 'this_week';
+
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', function() {
+      filterBtns.forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      currentFilter = this.dataset.filter;
+      loadFollowups();
+    });
+  });
+
+  if (empFilter) {
+    empFilter.addEventListener('change', loadFollowups);
+  }
+
+  function loadFollowups() {
+    let url = `${apiUrl}?filter=${currentFilter}`;
+    if (empFilter && empFilter.value) {
+      url += `&employee_id=${empFilter.value}`;
+    }
+    fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(r => r.json())
+      .then(data => renderGrid(data.followups))
+      .catch(err => console.error('Follow-up fetch error:', err));
+  }
+
+  function renderGrid(followups) {
+    // Group by date
+    const byDate = {};
+    followups.forEach(f => {
+      byDate[f.date] = byDate[f.date] || [];
+      byDate[f.date].push(f);
+    });
+
+    // For filters that aren't week-based, show a flat list grouped by date
+    if (['today', 'tomorrow', 'overdue', 'all'].includes(currentFilter)) {
+      renderFlatList(followups, byDate);
+      return;
+    }
+
+    // Week grid
+    let html = '<div class="row g-2">';
+    weekDates.forEach((dateStr, idx) => {
+      const isToday = dateStr === todayStr;
+      const dayItems = byDate[dateStr] || [];
+      const dayNum = dateStr.split('-')[2];
+
+      html += `<div class="col followup-day-col ${isToday ? 'followup-today' : ''}" data-date="${dateStr}">`;
+      html += `<div class="followup-day-header"><div class="fw-bold small">${dayNames[idx]}</div>`;
+      html += `<div class="${isToday ? 'badge bg-primary' : 'small text-muted'}">${parseInt(dayNum)}</div></div>`;
+      html += '<div class="followup-day-items">';
+
+      dayItems.forEach(f => {
+        html += renderFollowupItem(f);
+      });
+
+      // Overdue items for dates before this week
+      if (idx === 0) {
+        Object.keys(byDate).sort().forEach(d => {
+          if (d < weekDates[0]) {
+            byDate[d].forEach(f => { html += renderFollowupItem(f); });
+          }
+        });
+      }
+
+      html += '</div></div>';
+    });
+    html += '</div>';
+    gridEl.innerHTML = html;
+    bindDoneBtns();
+  }
+
+  function renderFlatList(followups, byDate) {
+    if (followups.length === 0) {
+      gridEl.innerHTML = '<div class="text-muted text-center py-3">No follow-ups found.</div>';
+      return;
+    }
+    const dates = Object.keys(byDate).sort();
+    let html = '';
+    dates.forEach(dateStr => {
+      const d = new Date(dateStr + 'T00:00:00');
+      const label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+      html += `<div class="mb-2"><div class="fw-bold small text-muted mb-1">${label}</div>`;
+      html += '<div class="d-flex flex-wrap gap-2">';
+      byDate[dateStr].forEach(f => { html += renderFollowupItem(f); });
+      html += '</div></div>';
+    });
+    gridEl.innerHTML = html;
+    bindDoneBtns();
+  }
+
+  function renderFollowupItem(f) {
+    const detailUrl = leadDetailBaseUrl.replace('LEAD_ID', f.lead_id);
+    const doneUrl = followupDoneBaseUrl.replace('FID', f.id);
+    const overdueClass = f.is_overdue ? 'followup-overdue' : '';
+    let html = `<div class="followup-item ${overdueClass}" data-followup-id="${f.id}">`;
+    html += `<a href="${detailUrl}" class="followup-item-link">`;
+    html += `<div class="fw-semibold small text-truncate">${escHtml(f.lead_name)}</div>`;
+    html += `<div class="text-muted" style="font-size:0.75rem;">${f.time}`;
+    if (f.assigned_to) html += ` &bull; ${escHtml(f.assigned_to)}`;
+    html += '</div>';
+    if (f.note) html += `<div class="text-muted text-truncate" style="font-size:0.7rem;">${escHtml(f.note)}</div>`;
+    html += '</a>';
+    if (f.is_overdue) html += '<span class="badge bg-danger" style="font-size:0.6rem;">Overdue</span>';
+    html += `<button class="btn btn-sm btn-outline-success followup-done-btn js-done-btn" data-url="${doneUrl}" title="Mark done">&#10003;</button>`;
+    html += '</div>';
+    return html;
+  }
+
+  function bindDoneBtns() {
+    gridEl.querySelectorAll('.js-done-btn').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const url = this.dataset.url;
+        const item = this.closest('.followup-item');
+        fetch(url, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': csrfToken, 'HX-Request': 'true' },
+        }).then(r => {
+          if (r.ok) {
+            item.style.transition = 'opacity 0.3s';
+            item.style.opacity = '0';
+            setTimeout(() => item.remove(), 300);
+          }
+        });
+      });
+    });
+  }
+
+  function escHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+  }
+
+  // Initial done-btn binding for server-rendered items
+  bindDoneBtns();
+
+  // Initial API load for full interactivity
+  loadFollowups();
+})();
+</script>

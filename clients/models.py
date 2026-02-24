@@ -537,6 +537,14 @@ class Lead(models.Model):
     )
 
     stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default=STAGE_PENDING)
+    converted_client = models.ForeignKey(
+        'Client',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="source_lead",
+        help_text="Client created from this lead via conversion",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
