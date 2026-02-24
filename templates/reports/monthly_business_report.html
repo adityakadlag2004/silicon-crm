@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Monthly Business Report – {{ month_name }} {{ sel_year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .report-table th, .report-table td { text-align: right; vertical-align: middle; white-space: nowrap; font-size: .85rem; }
+  .report-table th:first-child, .report-table td:first-child { text-align: left; }
+  .report-table tfoot td { font-weight: 700; background: #fff8e1; }
+  .zero { color: #bbb; }
+  .print-btn { cursor: pointer; }
+
+  @media print {
+    @page { size: landscape; margin: 1cm; }
+    nav, .no-print, footer { display: none !important; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .report-table { font-size: 10pt; }
+    .card { border: none !important; box-shadow: none !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h4 class="mb-0">Monthly Business Report</h4>
+    <button class="btn btn-outline-secondary btn-sm print-btn" onclick="window.print()">
+      <i class="bi bi-printer"></i> Print / PDF
+    </button>
+  </div>
+
+  <!-- Month / Year selector -->
+  <form method="get" class="row g-2 align-items-end mb-4 no-print">
+    <div class="col-auto">
+      <label class="form-label mb-0 small">Month</label>
+      <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for num, name in months %}
+          <option value="{{ num }}" {% if num == sel_month %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-0 small">Year</label>
+      <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for y in years %}
+          <option value="{{ y }}" {% if y == sel_year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="card-header text-center fw-bold">
+      {{ month_name }} {{ sel_year }} – Business Summary
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover report-table mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>#</th>
+              <th>Employee</th>
+              {% for p in products %}<th>{{ p }}</th>{% endfor %}
+              <th>Points</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ r.employee.user.get_full_name|default:r.employee.user.username }}</td>
+              {% for val in r.product_vals %}
+                {% if val == 0 %}
+                  <td class="zero">–</td>
+                {% else %}
+                  <td>{{ val|floatformat:0 }}</td>
+                {% endif %}
+              {% endfor %}
+              {% if r.points == 0 %}
+                <td class="zero">–</td>
+              {% else %}
+                <td>{{ r.points|floatformat:0 }}</td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr><td colspan="{{ products|length|add:3 }}" class="text-center text-muted py-3">No approved sales for this month.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if rows %}
+          <tfoot>
+            <tr>
+              <td></td>
+              <td>Grand Total</td>
+              {% for val in grand_vals %}
+                {% if val == 0 %}
+                  <td class="zero">–</td>
+                {% else %}
+                  <td>{{ val|floatformat:0 }}</td>
+                {% endif %}
+              {% endfor %}
+              {% if grand_points == 0 %}
+                <td class="zero">–</td>
+              {% else %}
+                <td>{{ grand_points|floatformat:0 }}</td>
+              {% endif %}
+            </tr>
+          </tfoot>
+          {% endif %}
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

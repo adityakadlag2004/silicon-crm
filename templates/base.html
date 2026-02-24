@@ -171,6 +171,15 @@
                   <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
                 </li>
 
+                <!-- Reports Dropdown (admin) -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="adminReportsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Reports
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="adminReportsDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:monthly_business_report' %}">Monthly Business Report</a></li>
+                  </ul>
+                </li>
 
               {% elif request.user.employee.role == "manager" %}
                 <!-- Manager (inherits employee links; gated by manager_access) -->
@@ -240,6 +249,15 @@
                 </li>
                 {% endif %}
 
+                <!-- Reports Dropdown (manager) -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrReportsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Reports
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrReportsDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:monthly_business_report' %}">Monthly Business Report</a></li>
+                  </ul>
+                </li>
 
               {% elif request.user.employee.role == "employee" %}
                 <!-- Employee -->

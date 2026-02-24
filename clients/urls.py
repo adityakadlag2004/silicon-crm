@@ -104,10 +104,7 @@ urlpatterns = [
     # bulk shifting
     path('<int:client_id>/reassign/', views.client_reassign_view, name='reassign'),
     path("reassign-bulk/", views.bulk_reassign_view, name="bulk_reassign"),
-    
-    
 
-
-
-
+    # reports
+    path("reports/monthly-business/", views.monthly_business_report, name="monthly_business_report"),
 ]
