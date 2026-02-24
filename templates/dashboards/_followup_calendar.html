@@ -89,6 +89,12 @@
   margin-bottom: 0.3rem;
   position: relative;
   transition: all 0.15s;
+  cursor: grab;
+}
+.followup-item:active { cursor: grabbing; }
+.followup-item.dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
 }
 .followup-item:hover {
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
@@ -97,6 +103,11 @@
 .followup-item.followup-overdue {
   background: #fff5f5;
   border-color: #fc8181;
+}
+.followup-day-col.drag-over {
+  background: #e8f4fd;
+  border-color: #3182ce;
+  box-shadow: 0 0 0 2px rgba(49,130,206,0.3);
 }
 .followup-item-link {
   text-decoration: none;
@@ -139,6 +150,7 @@
   const apiUrl = '{% url "clients:lead_followups_api" %}';
   const leadDetailBaseUrl = '{% url "clients:lead_detail" 0 %}'.replace('/0/', '/LEAD_ID/');
   const followupDoneBaseUrl = '{% url "clients:lead_followup_done" 0 %}'.replace('/0/', '/FID/');
+  const followupRescheduleBaseUrl = '{% url "clients:lead_followup_reschedule" 0 %}'.replace('/0/', '/FID/');
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
     document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
 
@@ -246,7 +258,7 @@
     const detailUrl = leadDetailBaseUrl.replace('LEAD_ID', f.lead_id);
     const doneUrl = followupDoneBaseUrl.replace('FID', f.id);
     const overdueClass = f.is_overdue ? 'followup-overdue' : '';
-    let html = `<div class="followup-item ${overdueClass}" data-followup-id="${f.id}">`;
+    let html = `<div class="followup-item ${overdueClass}" data-followup-id="${f.id}" draggable="true">`;
     html += `<a href="${detailUrl}" class="followup-item-link">`;
     html += `<div class="fw-semibold small text-truncate">${escHtml(f.lead_name)}</div>`;
     html += `<div class="text-muted" style="font-size:0.75rem;">${f.time}`;
@@ -277,6 +289,114 @@
           }
         });
       });
+    });
+    bindDragAndDrop();
+  }
+
+  /* ---- Drag & Drop ---- */
+  let draggedEl = null;
+  let draggedId = null;
+
+  function bindDragAndDrop() {
+    // Make items draggable
+    gridEl.querySelectorAll('.followup-item[draggable]').forEach(item => {
+      item.addEventListener('dragstart', onDragStart);
+      item.addEventListener('dragend', onDragEnd);
+    });
+    // Make day columns droppable
+    gridEl.querySelectorAll('.followup-day-col').forEach(col => {
+      col.addEventListener('dragover', onDragOver);
+      col.addEventListener('dragenter', onDragEnter);
+      col.addEventListener('dragleave', onDragLeave);
+      col.addEventListener('drop', onDrop);
+    });
+  }
+
+  function onDragStart(e) {
+    draggedEl = this;
+    draggedId = this.dataset.followupId;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', draggedId);
+    // Prevent link navigation during drag
+    this.querySelectorAll('a').forEach(a => a.style.pointerEvents = 'none');
+  }
+
+  function onDragEnd(e) {
+    if (draggedEl) {
+      draggedEl.classList.remove('dragging');
+      draggedEl.querySelectorAll('a').forEach(a => a.style.pointerEvents = '');
+    }
+    gridEl.querySelectorAll('.followup-day-col').forEach(c => c.classList.remove('drag-over'));
+    draggedEl = null;
+    draggedId = null;
+  }
+
+  function onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  }
+
+  function onDragEnter(e) {
+    e.preventDefault();
+    const col = e.currentTarget;
+    col.classList.add('drag-over');
+  }
+
+  function onDragLeave(e) {
+    const col = e.currentTarget;
+    // Only remove if we truly left the column (not entered a child)
+    if (!col.contains(e.relatedTarget)) {
+      col.classList.remove('drag-over');
+    }
+  }
+
+  function onDrop(e) {
+    e.preventDefault();
+    const col = e.currentTarget;
+    col.classList.remove('drag-over');
+    const targetDate = col.dataset.date;
+    if (!targetDate || !draggedId) return;
+
+    // Optimistic move: append the dragged element to the new column's items container
+    const itemsContainer = col.querySelector('.followup-day-items');
+    if (itemsContainer && draggedEl) {
+      draggedEl.classList.remove('dragging');
+      itemsContainer.appendChild(draggedEl);
+    }
+
+    // Send reschedule request
+    const url = followupRescheduleBaseUrl.replace('FID', draggedId);
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+      },
+      body: JSON.stringify({ date: targetDate }),
+    }).then(r => {
+      if (!r.ok) throw new Error('Reschedule failed');
+      return r.json();
+    }).then(data => {
+      // Update the time display in the moved item
+      if (draggedEl) {
+        const timeEl = draggedEl.querySelector('.text-muted[style]');
+        if (timeEl && data.new_time) {
+          timeEl.innerHTML = timeEl.innerHTML.replace(/^\d{2}:\d{2}/, data.new_time);
+        }
+        // Remove overdue styling if moved to today or future
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const target = new Date(targetDate + 'T00:00:00');
+        if (target >= today) {
+          draggedEl.classList.remove('followup-overdue');
+          const badge = draggedEl.querySelector('.badge.bg-danger');
+          if (badge) badge.remove();
+        }
+      }
+    }).catch(() => {
+      // Revert on error — reload the grid
+      loadFollowups();
     });
   }
 

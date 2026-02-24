@@ -43,6 +43,7 @@ urlpatterns = [
     path("leads/<int:lead_id>/undiscard/", views.lead_undiscard, name="lead_undiscard"),
     path("leads/<int:lead_id>/convert/", views.lead_convert_to_client, name="lead_convert_to_client"),
     path("leads/followup/<int:followup_id>/done/", views.lead_followup_done, name="lead_followup_done"),
+    path("leads/followup/<int:followup_id>/reschedule/", views.lead_followup_reschedule, name="lead_followup_reschedule"),
     path("leads/followups-api/", views.lead_followups_api, name="lead_followups_api"),
     path("leads/<int:lead_id>/add-followup/", views.lead_add_followup, name="lead_add_followup"),
     path("leads/<int:lead_id>/add-remark/", views.lead_add_remark, name="lead_add_remark"),
