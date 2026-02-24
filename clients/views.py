@@ -7,6 +7,7 @@ import near the top.
 """
 import json
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from calendar import month_name
 import csv
 import io
@@ -186,105 +187,130 @@ def lead_add_remark(request, lead_id):
 @login_required
 def lead_bulk_import(request):
     emp = getattr(request.user, "employee", None)
-    # Allow all signed-in employees/managers (and superusers) to import leads
     if not (request.user.is_superuser or emp):
         return HttpResponseForbidden()
 
-    sample_headers = [
-        "customer_name",
-        "assigned_to_number" ,
-        "phone",
-        "email",
-        "stage",  # pending | half_sold | processed
-        "data_received",  # true/false
-        "data_received_on",  # YYYY-MM-DD
-        "notes",
-    ]
+    role = getattr(emp, "role", "") if emp else ""
+    is_admin_or_manager = request.user.is_superuser or role in ("admin", "manager")
+    active_employees = list(
+        Employee.objects.filter(active=True)
+        .select_related("user")
+        .order_by("user__username")
+    )
 
     if request.method == "POST":
-        upload = request.FILES.get("file")
-        if not upload:
-            messages.error(request, "Please upload a CSV file.")
-            return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
-
+        # Accept JSON body from the inline spreadsheet
         try:
-            content = upload.read().decode("utf-8-sig")
-        except UnicodeDecodeError:
-            messages.error(request, "File must be UTF-8 encoded CSV.")
-            return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
+            body = json.loads(request.body)
+            rows = body.get("rows", [])
+        except (json.JSONDecodeError, TypeError):
+            return JsonResponse({"created": 0, "errors": ["Invalid request body."]}, status=400)
 
-        reader = csv.DictReader(io.StringIO(content))
-        if not reader.fieldnames:
-            messages.error(request, "No headers found in CSV.")
-            return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
+        if not rows:
+            return JsonResponse({"created": 0, "errors": ["No rows submitted."]})
 
-        required = ["customer_name", "assigned_to_number"]
-        missing = [c for c in required if c not in reader.fieldnames]
-        if missing:
-            messages.error(request, f"Missing required columns: {', '.join(missing)}")
-            return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
-
+        employee_map = {e.id: e for e in active_employees}
+        valid_stages = {c[0] for c in Lead.STAGE_CHOICES}
         created = 0
         errors = []
 
-        # cache employees by employee_number
-        employee_map = {e.employee_number: e for e in Employee.objects.exclude(employee_number__isnull=True)}
-        valid_stages = {c[0] for c in Lead.STAGE_CHOICES}
-
-        for idx, row in enumerate(reader, start=2):  # start=2 to account for header line 1
+        for idx, row in enumerate(rows, start=1):
             try:
                 customer_name = (row.get("customer_name") or "").strip()
                 if not customer_name:
-                    raise ValueError("customer_name is required")
+                    raise ValueError("Customer name is required")
 
-                assigned_number = (row.get("assigned_to_number") or "").strip()
-                emp_obj = employee_map.get(assigned_number)
+                # Resolve assigned employee
+                if is_admin_or_manager:
+                    assigned_id = row.get("assigned_to")
+                    if assigned_id:
+                        try:
+                            assigned_id = int(assigned_id)
+                        except (ValueError, TypeError):
+                            raise ValueError("Invalid Assign To value")
+                        emp_obj = employee_map.get(assigned_id)
+                        if not emp_obj:
+                            raise ValueError(f"Employee id {assigned_id} not found")
+                    else:
+                        emp_obj = emp  # fall back to self
+                else:
+                    emp_obj = emp
+
                 if not emp_obj:
-                    raise ValueError(f"assigned_to_number '{assigned_number}' not found")
+                    raise ValueError("Cannot determine assigned employee")
 
-                phone = (row.get("phone") or "").strip() or None
-                email = (row.get("email") or "").strip() or None
+                phone = (row.get("phone") or "").strip() or ""
+                email = (row.get("email") or "").strip() or ""
                 notes = (row.get("notes") or "").strip()
 
                 stage_val = (row.get("stage") or Lead.STAGE_PENDING).strip()
                 if stage_val not in valid_stages:
                     stage_val = Lead.STAGE_PENDING
 
-                dr_val = (row.get("data_received") or "").strip().lower()
-                data_received = dr_val in ["1", "true", "yes", "y"]
+                data_received = bool(row.get("data_received"))
 
-                data_received_on = None
-                date_raw = (row.get("data_received_on") or "").strip()
-                if date_raw:
-                    try:
-                        data_received_on = datetime.strptime(date_raw, "%Y-%m-%d").date()
-                    except ValueError:
-                        raise ValueError("data_received_on must be YYYY-MM-DD")
+                with transaction.atomic():
+                    lead = Lead(
+                        customer_name=customer_name,
+                        phone=phone,
+                        email=email,
+                        data_received=data_received,
+                        notes=notes,
+                        assigned_to=emp_obj,
+                        created_by=request.user,
+                        stage=stage_val,
+                    )
+                    lead.save()
 
-                lead = Lead(
-                    customer_name=customer_name,
-                    phone=phone,
-                    email=email,
-                    data_received=data_received,
-                    data_received_on=data_received_on,
-                    notes=notes,
-                    assigned_to=emp_obj,
-                    created_by=request.user,
-                    stage=stage_val,
-                )
-                lead.save()
+                    # Create product progress entries when target or achieved is provided
+                    for product in ("health", "life", "wealth"):
+                        target_raw = row.get(f"{product}_target")
+                        achieved_raw = row.get(f"{product}_achieved")
+                        target = _parse_decimal(target_raw)
+                        achieved = _parse_decimal(achieved_raw)
+
+                        if target is not None or achieved is not None:
+                            t = target or Decimal("0")
+                            a = achieved or Decimal("0")
+                            if t > 0 and a >= t:
+                                status = LeadProductProgress.STATUS_PROCESSED
+                            elif a > 0:
+                                status = LeadProductProgress.STATUS_HALF
+                            else:
+                                status = LeadProductProgress.STATUS_PENDING
+
+                            LeadProductProgress.objects.create(
+                                lead=lead,
+                                product=product,
+                                target_amount=target,
+                                achieved_amount=achieved,
+                                status=status,
+                            )
+
+                    lead.recompute_stage()
+
                 created += 1
-            except Exception as exc:  # pragma: no cover - basic logging
+            except Exception as exc:
                 errors.append(f"Row {idx}: {exc}")
 
-        if created:
-            messages.success(request, f"Imported {created} leads.")
-        if errors:
-            truncated = errors[:5]
-            more = "" if len(errors) <= 5 else f" (and {len(errors)-5} more)"
-            messages.warning(request, "Errors: " + " | ".join(truncated) + more)
+        return JsonResponse({"created": created, "errors": errors})
 
-    return render(request, "clients/leads/lead_bulk_import.html", {"sample_headers": sample_headers})
+    ctx = {
+        "is_admin_or_manager": is_admin_or_manager,
+        "employees": active_employees,
+    }
+    return render(request, "clients/leads/lead_bulk_import.html", ctx)
+
+
+def _parse_decimal(val):
+    """Return Decimal or None for empty / non-numeric values."""
+    if val is None or val == "":
+        return None
+    try:
+        d = Decimal(str(val))
+        return d if d >= 0 else None
+    except Exception:
+        return None
 
 
 @login_required
