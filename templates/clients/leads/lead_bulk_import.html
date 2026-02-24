@@ -4,38 +4,374 @@
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <div>
     <h3 class="mb-1">Bulk Import Leads</h3>
-    <div class="text-muted small">Upload a CSV with simple headers to create leads in one go.</div>
+    <div class="text-muted small">Fill in the rows below and import all leads at once. <strong>Tip:</strong> Copy columns from Excel and paste directly — values fill row by row.</div>
   </div>
   <div class="d-flex gap-2">
     <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_management' %}">Back to Leads</a>
   </div>
 </div>
 
+<!-- Result alert (hidden until submit) -->
+<div id="bulkResult" class="d-none"></div>
+
 <div class="card shadow-sm">
-  <div class="card-body">
-    <form method="post" enctype="multipart/form-data" class="row g-3">
-      {% csrf_token %}
-      <div class="col-12">
-        <label for="file" class="form-label">CSV file</label>
-        <input type="file" name="file" id="file" accept=".csv" class="form-control" required />
-        <div class="form-text">Use UTF-8 CSV. Save Excel sheets as CSV before uploading.</div>
-      </div>
-      <div class="col-12">
-        <button type="submit" class="btn btn-primary">Import</button>
-      </div>
-    </form>
-
-    <hr />
-
-    <h6>Columns</h6>
-    <p class="small text-muted">Required: <strong>customer_name</strong>, <strong>assigned_to_number</strong> (employee number). Optional: phone, email, stage (pending|half_sold|processed), data_received (true/false), data_received_on (YYYY-MM-DD), notes.</p>
-    <div class="bg-light border rounded p-3 small">
-      {{ sample_headers|join:", " }}
+  <div class="card-body p-2">
+    <div class="table-responsive" style="max-height:70vh;overflow:auto;">
+      <table class="table table-bordered table-sm align-middle mb-0" id="bulkTable">
+        <thead class="table-light" style="position:sticky;top:0;z-index:2;">
+          <tr>
+            <th style="width:36px;" class="text-center">#</th>
+            <th style="min-width:160px;">Customer Name <span class="text-danger">*</span></th>
+            <th style="min-width:120px;">Phone</th>
+            <th style="min-width:140px;">Email</th>
+            <th style="min-width:110px;">Stage</th>
+            <th style="width:50px;" class="text-center" title="Data Received">DR</th>
+            <th style="min-width:120px;">Notes</th>
+            <th style="min-width:100px;">Health Target</th>
+            <th style="min-width:100px;">Health Achieved</th>
+            <th style="min-width:100px;">Life Target</th>
+            <th style="min-width:100px;">Life Achieved</th>
+            <th style="min-width:100px;">Wealth Target</th>
+            <th style="min-width:100px;">Wealth Achieved</th>
+            {% if is_admin_or_manager %}
+            <th style="min-width:140px;">Assign To</th>
+            {% endif %}
+            <th style="width:36px;"></th>
+          </tr>
+        </thead>
+        <tbody id="bulkBody"></tbody>
+      </table>
     </div>
-
-    <h6 class="mt-3">Example</h6>
-    <pre class="bg-light border rounded p-3 small">customer_name,assigned_to_number,phone,email,stage,data_received,data_received_on,notes
-Jane Doe,EMP-101,9876543210,jane@example.com,pending,true,2025-12-01,Priority lead</pre>
+    <div class="d-flex gap-2 mt-2">
+      <button class="btn btn-outline-dark btn-sm" onclick="addRow()">+ Add Row</button>
+      <button class="btn btn-outline-dark btn-sm" onclick="addRows(5)">+ Add 5 Rows</button>
+      <div class="ms-auto d-flex gap-2 align-items-center">
+        <span class="text-muted small" id="rowCount">0 rows</span>
+        <button class="btn btn-primary btn-sm px-4" onclick="submitAll()" id="importBtn">Import All</button>
+      </div>
+    </div>
   </div>
 </div>
+
+<style>
+#bulkTable input, #bulkTable select {
+  font-size: 0.82rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+#bulkTable input:focus, #bulkTable select:focus {
+  border-color: #86b7fe;
+  outline: 0;
+  box-shadow: 0 0 0 0.15rem rgba(13,110,253,.15);
+}
+#bulkTable td { padding: 0.2rem 0.25rem; vertical-align: middle; }
+#bulkTable th { font-size: 0.78rem; padding: 0.35rem 0.25rem; white-space: nowrap; }
+#bulkTable .row-num { font-size: 0.75rem; color: #718096; text-align: center; }
+#bulkTable .remove-btn {
+  background: none; border: none; color: #e53e3e; cursor: pointer; font-size: 1rem; padding: 0 4px; line-height: 1;
+}
+#bulkTable .remove-btn:hover { color: #c53030; }
+#bulkTable tr.row-error td:first-child { border-left: 3px solid #e53e3e; }
+#bulkTable input[type=checkbox] { width: auto; }
+</style>
+
+<script>
+(function(){
+  const isAdmin = {{ is_admin_or_manager|yesno:"true,false" }};
+  const employees = [
+    {% for e in employees %}
+    { id: {{ e.id }}, name: "{{ e.user.username|escapejs }}" }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  const body = document.getElementById('bulkBody');
+  const resultDiv = document.getElementById('bulkResult');
+  const importBtn = document.getElementById('importBtn');
+  const rowCountEl = document.getElementById('rowCount');
+  let rowSeq = 0;
+
+  function getCookie(name) {
+    const v = document.cookie.match('(^|;)\\s*' + name + '=([^;]*)');
+    return v ? decodeURIComponent(v[2]) : '';
+  }
+
+  window.addRow = function() {
+    rowSeq++;
+    const tr = document.createElement('tr');
+    tr.dataset.row = rowSeq;
+    let html = `<td class="row-num">${rowSeq}</td>`;
+    html += `<td><input type="text" name="customer_name" placeholder="Name" /></td>`;
+    html += `<td><input type="text" name="phone" placeholder="Phone" /></td>`;
+    html += `<td><input type="email" name="email" placeholder="Email" /></td>`;
+    html += `<td><select name="stage"><option value="pending">Pending</option><option value="half_sold">Half Sold</option><option value="processed">Processed</option></select></td>`;
+    html += `<td class="text-center"><input type="checkbox" name="data_received" /></td>`;
+    html += `<td><input type="text" name="notes" placeholder="Notes" /></td>`;
+    html += `<td><input type="number" name="health_target" min="0" step="0.01" placeholder="0" /></td>`;
+    html += `<td><input type="number" name="health_achieved" min="0" step="0.01" placeholder="0" /></td>`;
+    html += `<td><input type="number" name="life_target" min="0" step="0.01" placeholder="0" /></td>`;
+    html += `<td><input type="number" name="life_achieved" min="0" step="0.01" placeholder="0" /></td>`;
+    html += `<td><input type="number" name="wealth_target" min="0" step="0.01" placeholder="0" /></td>`;
+    html += `<td><input type="number" name="wealth_achieved" min="0" step="0.01" placeholder="0" /></td>`;
+    if (isAdmin) {
+      html += '<td><select name="assigned_to"><option value="">— Self —</option>';
+      employees.forEach(e => { html += `<option value="${e.id}">${e.name}</option>`; });
+      html += '</select></td>';
+    }
+    html += `<td><button class="remove-btn" onclick="removeRow(this)" title="Remove">&times;</button></td>`;
+    tr.innerHTML = html;
+    body.appendChild(tr);
+    updateRowCount();
+  };
+
+  window.addRows = function(n) {
+    for (let i = 0; i < n; i++) addRow();
+  };
+
+  window.removeRow = function(btn) {
+    btn.closest('tr').remove();
+    renumber();
+    updateRowCount();
+  };
+
+  function renumber() {
+    body.querySelectorAll('tr').forEach((tr, i) => {
+      tr.querySelector('.row-num').textContent = i + 1;
+    });
+  }
+
+  function updateRowCount() {
+    const n = body.querySelectorAll('tr').length;
+    rowCountEl.textContent = n + ' row' + (n !== 1 ? 's' : '');
+  }
+
+  window.submitAll = function() {
+    // Clear previous errors
+    body.querySelectorAll('tr.row-error').forEach(tr => tr.classList.remove('row-error'));
+    resultDiv.className = 'd-none';
+
+    const rows = [];
+    body.querySelectorAll('tr').forEach(tr => {
+      const get = (name) => {
+        const el = tr.querySelector(`[name="${name}"]`);
+        if (!el) return '';
+        if (el.type === 'checkbox') return el.checked;
+        return el.value.trim();
+      };
+      const cname = get('customer_name');
+      if (!cname) return; // skip empty rows
+      const row = {
+        customer_name: cname,
+        phone: get('phone'),
+        email: get('email'),
+        stage: get('stage'),
+        data_received: get('data_received'),
+        notes: get('notes'),
+        health_target: get('health_target') || null,
+        health_achieved: get('health_achieved') || null,
+        life_target: get('life_target') || null,
+        life_achieved: get('life_achieved') || null,
+        wealth_target: get('wealth_target') || null,
+        wealth_achieved: get('wealth_achieved') || null,
+      };
+      if (isAdmin) row.assigned_to = get('assigned_to') || '';
+      row._rowIdx = Array.from(body.children).indexOf(tr); // track DOM index for error highlighting
+      rows.push(row);
+    });
+
+    if (rows.length === 0) {
+      showResult('warning', 'No rows with a customer name to import.');
+      return;
+    }
+
+    importBtn.disabled = true;
+    importBtn.textContent = 'Importing…';
+
+    // Strip _rowIdx before sending
+    const payload = rows.map(r => { const copy = {...r}; delete copy._rowIdx; return copy; });
+
+    fetch(window.location.pathname, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: JSON.stringify({ rows: payload }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      importBtn.disabled = false;
+      importBtn.textContent = 'Import All';
+
+      let msg = '';
+      if (data.created) msg += `<strong>${data.created}</strong> lead${data.created > 1 ? 's' : ''} imported successfully. `;
+      if (data.errors && data.errors.length) {
+        msg += `<br/><strong>${data.errors.length}</strong> error${data.errors.length > 1 ? 's' : ''}:<ul class="mb-0 mt-1">`;
+        data.errors.forEach(err => {
+          msg += `<li>${err}</li>`;
+          // Highlight errored row — parse "Row N:" prefix
+          const match = err.match(/^Row (\d+):/);
+          if (match) {
+            const rowIdx = parseInt(match[1]) - 1; // 0 based among submitted rows
+            const origIdx = rows[rowIdx]?._rowIdx;
+            if (origIdx !== undefined) {
+              const tr = body.children[origIdx];
+              if (tr) tr.classList.add('row-error');
+            }
+          }
+        });
+        msg += '</ul>';
+        showResult(data.created ? 'warning' : 'danger', msg);
+      } else {
+        showResult('success', msg);
+        // Remove successfully imported rows (those without errors)
+        const errorRowNums = new Set();
+        (data.errors || []).forEach(err => {
+          const m = err.match(/^Row (\d+):/);
+          if (m) errorRowNums.add(parseInt(m[1]));
+        });
+        // Remove non-error submitted rows
+        const trsToRemove = [];
+        rows.forEach((r, i) => {
+          if (!errorRowNums.has(i + 1)) {
+            const tr = body.children[r._rowIdx];
+            if (tr) trsToRemove.push(tr);
+          }
+        });
+        trsToRemove.forEach(tr => tr.remove());
+        renumber();
+        updateRowCount();
+      }
+    })
+    .catch(() => {
+      importBtn.disabled = false;
+      importBtn.textContent = 'Import All';
+      showResult('danger', 'Network error. Please try again.');
+    });
+  };
+
+  function showResult(type, html) {
+    resultDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    resultDiv.innerHTML = html + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+  }
+
+  // Start with 10 rows
+  addRows(10);
+
+  /* ---- Excel-like paste support ---- */
+  // Ordered list of input/select field names per row (matching column order).
+  const fieldNames = [
+    'customer_name', 'phone', 'email', 'stage', 'data_received',
+    'notes', 'health_target', 'health_achieved',
+    'life_target', 'life_achieved', 'wealth_target', 'wealth_achieved',
+  ];
+  if (isAdmin) fieldNames.push('assigned_to');
+
+  // Get the column index (0-based within fieldNames) for an input/select element
+  function getFieldIndex(el) {
+    const name = el.getAttribute('name');
+    return fieldNames.indexOf(name);
+  }
+
+  // Get all input/select elements in a row, keyed by fieldNames index
+  function getRowFields(tr) {
+    const fields = {};
+    fieldNames.forEach((name, idx) => {
+      const el = tr.querySelector(`[name="${name}"]`);
+      if (el) fields[idx] = el;
+    });
+    return fields;
+  }
+
+  // Set value on a field element, handling different input types
+  function setFieldValue(el, val) {
+    if (!el) return;
+    if (el.type === 'checkbox') {
+      el.checked = ['true', 'yes', 'y', '1'].includes(val.toLowerCase());
+    } else if (el.tagName === 'SELECT') {
+      // Try to match option value or text
+      const lower = val.toLowerCase().trim();
+      let matched = false;
+      for (const opt of el.options) {
+        if (opt.value.toLowerCase() === lower || opt.textContent.toLowerCase().trim() === lower) {
+          el.value = opt.value;
+          matched = true;
+          break;
+        }
+      }
+      // If no match, keep the current value
+    } else {
+      el.value = val;
+    }
+  }
+
+  body.addEventListener('paste', function(e) {
+    const target = e.target;
+    if (!target.matches('input, select')) return;
+
+    const clipText = (e.clipboardData || window.clipboardData).getData('text');
+    if (!clipText) return;
+
+    // Split into rows and columns (Excel uses \r\n for rows and \t for columns)
+    const pasteRows = clipText.replace(/\r\n$/, '').replace(/\n$/, '').split(/\r\n|\n/);
+
+    // If only one cell of data, let default paste handle it
+    const pasteCols = pasteRows[0].split('\t');
+    if (pasteRows.length === 1 && pasteCols.length === 1) return;
+
+    // Multi-cell paste — prevent default single-cell paste
+    e.preventDefault();
+    e.stopPropagation();
+
+    const startTr = target.closest('tr');
+    const startColIdx = getFieldIndex(target);
+    if (startColIdx < 0) return;
+
+    const allRows = Array.from(body.querySelectorAll('tr'));
+    let startRowIdx = allRows.indexOf(startTr);
+
+    for (let r = 0; r < pasteRows.length; r++) {
+      const rowIdx = startRowIdx + r;
+
+      // Auto-add rows if we've run out
+      while (body.querySelectorAll('tr').length <= rowIdx) {
+        addRow();
+      }
+
+      const tr = body.querySelectorAll('tr')[rowIdx];
+      const fields = getRowFields(tr);
+      const cells = pasteRows[r].split('\t');
+
+      for (let c = 0; c < cells.length; c++) {
+        const colIdx = startColIdx + c;
+        if (colIdx < fieldNames.length) {
+          setFieldValue(fields[colIdx], cells[c].trim());
+        }
+      }
+    }
+
+    updateRowCount();
+  });
+
+  /* ---- Keyboard navigation (Tab / Enter to move between cells) ---- */
+  body.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && e.target.matches('input')) {
+      e.preventDefault();
+      const tr = e.target.closest('tr');
+      const colIdx = getFieldIndex(e.target);
+      const nextTr = tr.nextElementSibling;
+      if (nextTr) {
+        const fields = getRowFields(nextTr);
+        if (fields[colIdx]) fields[colIdx].focus();
+      } else {
+        addRow();
+        const newTr = body.lastElementChild;
+        const fields = getRowFields(newTr);
+        if (fields[colIdx]) fields[colIdx].focus();
+      }
+    }
+  });
+})();
+</script>
 {% endblock %}
