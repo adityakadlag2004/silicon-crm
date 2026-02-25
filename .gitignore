@@ -12,6 +12,14 @@ venv_new/
 # Django
 db.sqlite3
 *.log
+data.json
+Pipfile
+logs/*.log
+
+# Build / temp
+*.bak
+*.orig
+install_log.txt
 
 # Environment secrets — NEVER commit
 .env
@@ -22,3 +30,4 @@ db.sqlite3
 
 # OS
 .DS_Store
+Thumbs.db
