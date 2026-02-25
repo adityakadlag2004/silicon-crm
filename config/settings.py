@@ -60,7 +60,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -101,6 +103,7 @@ DATABASES = {
         'PASSWORD': os.environ.get('DB_PASSWORD', ''),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
+        'CONN_MAX_AGE': 600,  # Reuse DB connections for 10 min (saves reconnect overhead)
     }
 }
 
@@ -114,6 +117,8 @@ CACHES = {
 CRONJOBS = [
     # Run close_month at 12:05 AM on 1st of every month
     ('5 0 1 * *', 'django.core.management.call_command', ['close_month']),
+    # Clean old notifications, message logs, expired sessions every Sunday at 3 AM
+    ('0 3 * * 0', 'django.core.management.call_command', ['cleanup_data']),
 ]
 
 
@@ -155,6 +160,7 @@ USE_TZ = True
 #STATIC_URL = 'static/'
 STATIC_URL = '/static/'
 STATIC_ROOT = '/home/ubuntu/silicon-crm/static/'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = '/home/ubuntu/silicon-crm/media/'
@@ -163,6 +169,44 @@ MEDIA_ROOT = '/home/ubuntu/silicon-crm/media/'
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ── Logging (minimal, rotated) ────────────────────────────────────────
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '{asctime} {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'file': {
+            'level': 'WARNING',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'django.log',
+            'maxBytes': 2 * 1024 * 1024,  # 2 MB max per log file
+            'backupCount': 3,              # Keep 3 rotated files (8 MB total max)
+            'formatter': 'simple',
+        },
+        'console': {
+            'level': 'DEBUG' if DEBUG else 'WARNING',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {
+        'handlers': ['file', 'console'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file', 'console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
 
 # ── Production Security Settings ──────────────────────────────────────
 # These only take effect when DEBUG=False (production).
