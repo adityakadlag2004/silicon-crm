@@ -23,9 +23,9 @@ class Client(models.Model):
     # Override default id with our own serial number
     id = models.IntegerField(primary_key=True, unique=True, editable=False)
 
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=200, db_index=True)
     email = models.EmailField(blank=True, null=True)
-    phone = models.CharField(max_length=15, blank=True, null=True)
+    phone = models.CharField(max_length=15, blank=True, null=True, db_index=True)
     pan = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
 
@@ -216,12 +216,18 @@ class Sale(models.Model):
     approved_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField(blank=True)
 
-    date = models.DateField(default=timezone.now)   # not auto_now_add
+    date = models.DateField(default=timezone.now, db_index=True)   # not auto_now_add
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     incentive_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["employee", "date"], name="sale_emp_date_idx"),
+            models.Index(fields=["employee", "product", "date"], name="sale_emp_prod_date_idx"),
+        ]
 
     def compute_points(self):
         """Compute points based on IncentiveRule in DB"""
@@ -520,7 +526,7 @@ class Lead(models.Model):
     income = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     expenses = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True)
-    is_discarded = models.BooleanField(default=False)
+    is_discarded = models.BooleanField(default=False, db_index=True)
 
     assigned_to = models.ForeignKey(
         Employee,
@@ -536,7 +542,7 @@ class Lead(models.Model):
         related_name="created_leads",
     )
 
-    stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default=STAGE_PENDING)
+    stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default=STAGE_PENDING, db_index=True)
     converted_client = models.ForeignKey(
         'Client',
         null=True,
@@ -695,7 +701,7 @@ class CalendarEvent(models.Model):
     title = models.CharField(max_length=255)
     type = models.CharField(max_length=20, choices=EVENT_TYPES, default="task")
     related_prospect = models.ForeignKey("Prospect", on_delete=models.SET_NULL, null=True, blank=True)
-    scheduled_time = models.DateTimeField()
+    scheduled_time = models.DateTimeField(db_index=True)
     end_time = models.DateTimeField(null=True, blank=True)
     reminder_time = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
@@ -706,7 +712,8 @@ class CalendarEvent(models.Model):
             ("rescheduled", "Rescheduled"),
             ("skipped", "Skipped")
         ],
-        default="pending"
+        default="pending",
+        db_index=True,
     )
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -804,11 +811,14 @@ class Notification(models.Model):
     related_sale = models.ForeignKey(
         "Sale", null=True, blank=True, on_delete=models.CASCADE
     )
-    is_read = models.BooleanField(default=False)
+    is_read = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["recipient", "is_read"], name="notif_recip_read_idx"),
+        ]
 
     def __str__(self):
         return f"{self.title} -> {self.recipient}"
