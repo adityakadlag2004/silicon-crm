@@ -1811,8 +1811,11 @@ from django.shortcuts import render
 from .models import Sale, Client
 
 @login_required
-@login_required
 def admin_dashboard(request):
+    # Only admins and superusers should access this dashboard
+    emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (emp and emp.role in ("admin", "manager"))):
+        return redirect("clients:employee_dashboard")
     today = timezone.now().date()
     month = today.month
     year = today.year
@@ -3088,6 +3091,13 @@ from decimal import Decimal
 @login_required
 def edit_sale(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
+    # Only admin/superuser or the sale's own employee can edit
+    user_emp = getattr(request.user, "employee", None)
+    is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    is_manager = bool(user_emp and user_emp.role == "manager")
+    mgr_access = get_manager_access() if is_manager else None
+    if not is_admin_user and not (is_manager and mgr_access and mgr_access.allow_edit_sales) and (not user_emp or sale.employee != user_emp):
+        return HttpResponseForbidden("You do not have permission to edit this sale.")
 
     if request.method == "POST":
         form = EditSaleForm(request.POST, instance=sale)
@@ -3105,6 +3115,11 @@ def edit_sale(request, sale_id):
 @login_required
 def delete_sale(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
+    # Only admin/superuser or the sale's own employee can delete
+    user_emp = getattr(request.user, "employee", None)
+    is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    if not is_admin_user and (not user_emp or sale.employee != user_emp):
+        return HttpResponseForbidden("You do not have permission to delete this sale.")
     if request.method == "POST":
         sale.delete()
         messages.success(request, "Sale deleted successfully!")
@@ -3118,28 +3133,7 @@ It has been removed to avoid confusion. If you need admin-specific save hooks, i
 them inside a ModelAdmin in admin.py.
 """
 
-from django.db.models.signals import post_delete, post_save
-from django.dispatch import receiver
-
-@receiver([post_save, post_delete], sender=Sale)
-def update_client_status(sender, instance, **kwargs):
-    client = instance.client
-    # Recalculate totals from all sales
-    sales = Sale.objects.filter(client=client)
-
-    client.sip_amount = sales.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
-    client.life_cover = sales.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    client.health_cover = sales.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    client.motor_insured_value = sales.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    client.pms_amount = sales.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
-
-    client.sip_status = client.sip_amount > 0
-    client.life_status = client.life_cover > 0
-    client.health_status = client.health_cover > 0
-    client.motor_status = client.motor_insured_value > 0
-    client.pms_status = client.pms_amount > 0
-
-    client.save()
+# NOTE: update_client_status signal handler lives in signals.py (removed duplicate from here)
 
 
 @login_required
@@ -3240,6 +3234,7 @@ def _last_n_months(today, n=12):
     return months
 
 # Monthly target helpers
+@login_required
 def employee_past_performance(request):
     """
     Page: shows a Chart.js line chart of monthly points (last 12 months)
@@ -3494,10 +3489,12 @@ def admin_past_performance(request, n_months=12):
 
 @login_required
 def admin_past_month_performance(request, year, month):
-    # allow staff OR superuser
-    # if not (request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser)):
-    #     from django.http import HttpResponseForbidden
-    #     return HttpResponseForbidden("Forbidden: staff or superuser required")
+    emp = getattr(request.user, "employee", None)
+    is_admin_user = request.user.is_superuser or (emp and emp.role == "admin")
+    is_manager = bool(emp and emp.role == "manager")
+    mgr_access = get_manager_access() if is_manager else None
+    if not (is_admin_user or (is_manager and mgr_access and mgr_access.allow_employee_performance)):
+        return HttpResponseForbidden("Access denied.")
 
     # Product-wise summary
     product_sales = (
@@ -4306,6 +4303,7 @@ def update_calendar_event_details(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 @login_required
+@require_POST
 def delete_calling_list(request, list_id):
     calling_list = get_object_or_404(CallingList, id=list_id)
 

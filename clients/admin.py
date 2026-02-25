@@ -1,30 +1,25 @@
-from django.contrib import admin
-from import_export.admin import ImportExportModelAdmin
-from .models import Client, Employee, Sale  # add Sale here
-from .models import IncentiveRule, Sale, MonthlyIncentive
-from django.urls import path
-from django.shortcuts import render
+import csv
+from datetime import date
+from decimal import Decimal
+
+from django.contrib import admin, messages
 from django.db.models import Sum
 from django.http import HttpResponse
-import csv
-from .models import Sale, MonthlyIncentive, Employee
-from datetime import date
-from .models import IncentiveRule
-from .models import Target
-@admin.register(Employee)
-class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ("user", "role", "salary")  # show linked User + role + salary
-    search_fields = ("user__username", "user__email")  # search by Django user fields
-
-# app/admin.py
-from django.contrib import admin, messages
+from django.shortcuts import redirect, render, get_object_or_404
 from django.template.response import TemplateResponse
 from django.urls import path
-from django.shortcuts import redirect, get_object_or_404
+from django.utils import timezone
 
 from import_export.admin import ImportExportModelAdmin
 
-from .models import Client, Employee
+from .models import (
+    Client, Employee, Sale, IncentiveRule, MonthlyIncentive, Target,
+    MessageTemplate,
+)
+@admin.register(Employee)
+class EmployeeAdmin(admin.ModelAdmin):
+    list_display = ("user", "role", "salary")
+    search_fields = ("user__username", "user__email")
 
 @admin.register(Client)
 class ClientAdmin(ImportExportModelAdmin):
@@ -91,9 +86,6 @@ class ClientAdmin(ImportExportModelAdmin):
             actions.pop('bulk_reassign_action', None)
         return actions
 
-from django.contrib import admin
-from .models import Employee, Target, Sale
-
 @admin.register(Target)
 class TargetAdmin(admin.ModelAdmin):
     list_display = ("product", "target_type", "target_value", "created_at")
@@ -109,15 +101,6 @@ class TargetAdmin(admin.ModelAdmin):
             return False
         return True
 
-
-
-# Add these imports at top of clients/admin.py
-import csv
-from django.http import HttpResponse
-from django.db.models import Sum
-from decimal import Decimal
-
-# ... your existing imports: admin, ImportExportModelAdmin, Client, Employee, Sale, IncentiveRule, MonthlyIncentive etc.
 
 
 @admin.register(Sale)
@@ -226,9 +209,6 @@ class IncentiveRuleAdmin(admin.ModelAdmin):
     list_display = ('product', 'unit_amount', 'points_per_unit', 'active')
     list_editable = ('unit_amount', 'points_per_unit', 'active')
     search_fields = ('product',)
-
-from django.contrib import admin
-from .models import MessageTemplate
 
 @admin.register(MessageTemplate)
 class MessageTemplateAdmin(admin.ModelAdmin):

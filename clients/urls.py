@@ -53,8 +53,6 @@ urlpatterns = [
   path("sales/performance/", views.employee_performance, name="employee_performance"),
   path("dashboard/net-business/", views.net_business, name="net_business"),
   path("dashboard/net-sip/", views.net_sip, name="net_sip"),
-    path("sales/admin_add/", views.admin_add_sale, name="admin_add_sale"),
-
     path("analysis/", views.client_analysis, name="client_analysis"),
 
     # Admin
@@ -86,7 +84,7 @@ urlpatterns = [
 
     # calendar
     path("calendar/my-calendar/", views.employee_calendar, name="employee_calendar"),
-    path("calendar/view/", views.employee_calendar_page, name="employee_calendar"),
+    path("calendar/view/", views.employee_calendar_page, name="employee_calendar_page"),
     path("calendar/events-json/", views.calendar_events_json, name="calendar_events_json"),
     path("calendar/update-event/", views.update_calendar_event, name="update_calendar_event"),
   path("calendar/create-event/", views.create_calendar_event, name="create_calendar_event"),

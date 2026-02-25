@@ -67,8 +67,6 @@ def notify_admins_on_sale(sender, instance, created, **kwargs):
 from django.db.models import Sum
 from django.utils.timezone import now
 from django.core.cache import cache
-from django.core.signals import request_started
-from django.dispatch import receiver
 import logging
 
 from .models import Employee, Sale, Target, MonthlyTargetHistory
@@ -78,6 +76,7 @@ logger = logging.getLogger(__name__)
 def close_month_targets(year: int, month: int, *, dry_run=False):
     """
     Close the month for year/month by storing employee performance vs target.
+    Called by the 'close_month' management command via cron (see CRONJOBS in settings).
     """
     monthly_targets = Target.objects.filter(target_type="monthly")
     employees = Employee.objects.all()
@@ -105,33 +104,6 @@ def close_month_targets(year: int, month: int, *, dry_run=False):
     if dry_run:
         logger.info("Dry run complete for %s/%s", month, year)
 
-@receiver(request_started)
-def run_monthly_close(sender, **kwargs):
-    today = now().date()
-    if today.day != 1:
-        return
-
-    # figure out which month to close (previous month)
-    if today.month == 1:
-        prev_month = 12
-        prev_year = today.year - 1
-    else:
-        prev_month = today.month - 1
-        prev_year = today.year
-
-    cache_key = f"monthly_close_done_{prev_year}_{prev_month}"
-
-    if cache.get(cache_key):
-        return
-
-    exists = MonthlyTargetHistory.objects.filter(year=prev_year, month=prev_month).exists()
-    if exists:
-        cache.set(cache_key, True, 60 * 60 * 36)
-        return
-
-    try:
-        close_month_targets(prev_year, prev_month, dry_run=False)
-        cache.set(cache_key, True, 60 * 60 * 36)
-        logger.info("Closed monthly targets for %s/%s", prev_month, prev_year)
-    except Exception as e:
-        logger.exception("Error running monthly close: %s", e)
+# NOTE: The request_started signal handler (run_monthly_close) has been removed.
+# Monthly close is handled by the 'close_month' management command via CRONJOBS in settings.py.
+# This avoids adding overhead to every HTTP request on the 1st of each month.
