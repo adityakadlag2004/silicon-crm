@@ -1,0 +1,400 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{% block title %}Dashboard{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f6e05e" />
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    <link rel="apple-touch-icon" href="{% static 'icons/icon-192.png' %}">
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <!-- Bootstrap CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+
+    <!-- Select2 CSS -->
+    <link href="{% static 'django_select2/django_select2.css' %}" rel="stylesheet"/>
+
+    <style>
+      body {
+        background-color: #f8f9fa;
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .navbar {
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+        background: linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%) !important;
+      }
+      .navbar-toggler {
+        border-color: rgba(45, 55, 72, 0.35);
+      }
+      .navbar-toggler-icon {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(45,55,72,0.85)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='3' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+      }
+      .navbar .navbar-brand, .navbar .nav-link, .navbar .navbar-text {
+        color: #2d3748 !important;
+      }
+      .navbar .nav-link.active, .navbar .nav-link:focus, .navbar .nav-link:hover {
+        color: #1a202c !important;
+        background: rgba(255,255,255,0.12);
+        border-radius: 8px;
+      }
+      .dropdown-menu {
+        background: #fffbe5;
+        color: #2d3748;
+      }
+      .navbar-brand {
+        font-weight: bold;
+        letter-spacing: 1px;
+      }
+      .dropdown-menu {
+        border-radius: 8px;
+      }
+      .navbar-nav .nav-link {
+        font-size: 1.08rem;
+        font-weight: 500;
+        padding: 0.6rem 1rem;
+      }
+      .navbar-text {
+        font-size: 1.05rem;
+      }
+      @media (max-width: 900px) {
+        .navbar-nav .nav-link {
+          font-size: 1rem;
+          padding: 0.5rem 0.7rem;
+        }
+        .navbar-brand { font-size: 1.1rem; }
+        .container, .container-fluid { padding-left: 0.75rem; padding-right: 0.75rem; }
+      }
+      @media (max-width: 600px) {
+        .navbar-brand, .navbar-text, .nav-link, .dropdown-item {
+          text-align: center !important;
+          width: 100%;
+        }
+        .navbar-nav { align-items: center; }
+        .container, .container-fluid, .mt-4 {
+          text-align: center;
+        }
+        .dropdown-menu { min-width: 100px; }
+        .dashboard-card, .dashboard-product-card, .card, .table-responsive { width: 100%; }
+        .navbar { padding: 0.65rem 0.75rem; }
+        .navbar-text { margin-top: 0.4rem; display: block; }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navbar with dropdowns -->
+  <nav class="navbar navbar-expand-lg" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="#">KI BackOffice</a>
+        <button
+          class="navbar-toggler"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarNav"
+          aria-controls="navbarNav"
+          aria-expanded="false"
+          aria-label="Toggle navigation"
+        >
+          <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            {% if request.user.is_authenticated %}
+              {% if request.user.employee.role == "admin" %}
+                <!-- Admin -->
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:admin_dashboard' %}">Dashboard</a>
+                </li>
+                <!-- Clients Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="clientsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Clients
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="clientsDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:all_clients' %}">All Clients</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:add_client' %}">Add Client</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:bulk_reassign' %}">Bulk Reassignment</a></li>
+                  </ul>
+                </li>
+                <!-- Sales Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="salesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Sales
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="salesDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:all_sales' %}">All Sales</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:admin_add_sale' %}">Add Sale</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:approve_sales' %}">Approve Sales</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:manage_incentive_rules' %}">Incentive Rules</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:recalc_points' %}">Recalculate Points</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:client_analysis' %}">Client Analysis</a></li>
+          <li><a class="dropdown-item" href="{% url 'clients:employee_performance' %}">Employee Performance</a></li>
+          <li><hr class="dropdown-divider"></li>
+                  </ul>
+                </li>
+                <!-- 🔹 Calling Dropdown (Admin) -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="callingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Calling
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="callingDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:upload_list' %}">Upload Calling List</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:admin_lists' %}">Manage Calling Lists</a></li>
+                        <li><a class="dropdown-item" href="{% url 'clients:calling_list_generator' %}">List Generator</a></li>
+                  </ul>
+                </li>
+                <!-- 🔹 Business Tracking Dropdown (Admin) -->
+<li class="nav-item dropdown">
+  <a class="nav-link dropdown-toggle" href="#" id="businessDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+    Business Tracking
+  </a>
+  <ul class="dropdown-menu" aria-labelledby="businessDropdown">
+    <li><a href="{% url 'clients:admin_past_performance' %}" class="dropdown-item">Business Tracking</a></li>
+    <li><a class="dropdown-item" href="{% url 'clients:net_business' %}">Net Business</a></li>
+    <li><a class="dropdown-item" href="{% url 'clients:net_sip' %}">Net SIP</a></li>
+    {% comment %} <li><a class="dropdown-item" href="{% url 'tracking:employee_progress' %}">👥 Track Employee Progress</a></li> {% endcomment %}
+    <li><a class="dropdown-item" href="{% url 'clients:employee_management' %}">Employee Management</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li class="dropdown-header">Reports</li>
+    <li><a class="dropdown-item" href="{% url 'clients:monthly_business_report' %}">Monthly Business Report</a></li>
+  </ul>
+</li>
+
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
+                </li>
+
+              {% elif request.user.employee.role == "manager" %}
+                <!-- Manager (inherits employee links; gated by manager_access) -->
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:employee_dashboard' %}">Dashboard</a>
+                </li>
+                <!-- Clients Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrClientsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Clients
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrClientsDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:my_clients' %}">My Clients</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:add_client' %}">Add Client</a></li>
+                  </ul>
+                </li>
+                <!-- Sales Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrSalesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Sales
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrSalesDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:add_sale' %}">Add Sale</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:all_sales' %}">All Sales</a></li>
+                    {% if manager_access.allow_approve_sales %}<li><a class="dropdown-item" href="{% url 'clients:approve_sales' %}">Approve Sales</a></li>{% endif %}
+                    {% if manager_access.allow_manage_incentives %}<li><a class="dropdown-item" href="{% url 'clients:manage_incentive_rules' %}">Incentive Rules</a></li>{% endif %}
+                    {% if manager_access.allow_recalc_points %}<li><a class="dropdown-item" href="{% url 'clients:recalc_points' %}">Recalculate Points</a></li>{% endif %}
+                    {% if manager_access.allow_client_analysis %}<li><a class="dropdown-item" href="{% url 'clients:client_analysis' %}">Client Analysis</a></li>{% endif %}
+                    {% if manager_access.allow_employee_performance %}<li><a class="dropdown-item" href="{% url 'clients:employee_performance' %}">Employee Performance</a></li>{% endif %}
+                    {% if manager_access.allow_employee_performance %}<li><a class="dropdown-item" href="{% url 'clients:admin_past_performance' %}">Past Performance</a></li>{% endif %}
+                  </ul>
+                </li>
+                <!-- Calling Dropdown (manager) -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrCallingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Calling
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrCallingDropdown">
+                    {% if manager_access.allow_calling_admin %}
+                      <li><a class="dropdown-item" href="{% url 'clients:upload_list' %}">Upload Calling List</a></li>
+                      <li><a class="dropdown-item" href="{% url 'clients:admin_lists' %}">Manage Calling Lists</a></li>
+                    {% else %}
+                      <li><a class="dropdown-item" href="{% url 'clients:employee_lists' %}">My Calling Lists</a></li>
+                      <li><a class="dropdown-item" href="{% url 'clients:employee_calendar' %}">My Calendar</a></li>
+                    {% endif %}
+                    <li><a class="dropdown-item" href="{% url 'clients:calling_list_generator' %}">List Generator</a></li>
+                  </ul>
+                </li>
+
+                {% if manager_access.allow_business_tracking %}
+                <!-- Business Tracking (manager if allowed) -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="mgrBusinessDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Business Tracking
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="mgrBusinessDropdown">
+                    <li><a href="{% url 'clients:admin_past_performance' %}" class="dropdown-item">Business Tracking</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:net_business' %}">Net Business</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:net_sip' %}">Net SIP</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li class="dropdown-header">Reports</li>
+                    <li><a class="dropdown-item" href="{% url 'clients:monthly_business_report' %}">Monthly Business Report</a></li>
+                  </ul>
+                </li>
+                {% endif %}
+
+                {% if manager_access.allow_lead_management %}
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
+                </li>
+                {% endif %}
+
+              {% elif request.user.employee.role == "employee" %}
+                <!-- Employee -->
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:employee_dashboard' %}">Dashboard</a>
+                </li>
+                <!-- Clients Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="empClientsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Clients
+                  </a>
+               
+               
+                  <ul class="dropdown-menu" aria-labelledby="empClientsDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:my_clients' %}">My Clients</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:add_client' %}">Add Client</a></li>
+                  </ul>
+                </li>
+                <!-- Sales Dropdown -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="empSalesDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Sales
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="empSalesDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:add_sale' %}">Add Sale</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:recalc_points' %}">Recalculate Points</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:client_analysis' %}">Client Analysis</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:all_sales' %}">All Sales</a></li>
+          <li><a class="dropdown-item" href="{% url 'clients:employee_performance' %}">My Performance</a></li>
+                  </ul>
+                </li>
+                <!-- 🔹 Calling Dropdown (Employee) -->
+                <li class="nav-item dropdown">
+                  <a class="nav-link dropdown-toggle" href="#" id="empCallingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    Calling
+                  </a>
+                  <ul class="dropdown-menu" aria-labelledby="empCallingDropdown">
+                    <li><a class="dropdown-item" href="{% url 'clients:employee_lists' %}">My Calling Lists</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:employee_calendar' %}">My Calendar</a></li>
+                    <li><a class="dropdown-item" href="{% url 'clients:calling_list_generator' %}">List Generator</a></li>
+                  </ul>
+                </li>
+
+                <li class="nav-item">
+                  <a class="nav-link" href="{% url 'clients:lead_management' %}">Lead Management</a>
+                </li>
+              {% endif %}
+            {% endif %}
+          </ul>
+          <!-- Right side -->
+          {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
+          <button class="btn btn-outline-dark btn-sm me-2" type="button" data-bs-toggle="modal" data-bs-target="#notificationsModal" title="Notifications">
+            🔔 <span class="badge bg-danger" id="nav-unread" style="display:none;">0</span>
+          </button>
+          {% endif %}
+          <span class="navbar-text" style="color:#2d3748;font-weight:600;">Hi, {{ request.user.username }}</span>
+          <a href="{% url 'clients:logout' %}" class="btn btn-outline-dark btn-sm ms-2">Logout</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container mt-4">
+      {% block content %}{% endblock %}
+    </div>
+
+    {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
+    <!-- Notifications Modal -->
+    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="modal-header" style="background:linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);">
+            <h5 class="modal-title" style="color:#2d3748;">Notifications</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="modal-notes-body" style="max-height:60vh; overflow-y:auto;">
+            <p class="text-muted mb-0">Loading…</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline-secondary btn-sm" id="btn-mark-read">Mark all read</button>
+            <button class="btn btn-danger btn-sm" id="btn-clear-notes">Clear all</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('{% static 'js/sw.js' %}');
+        });
+      }
+    </script>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Select2 JS -->
+    <script src="{% static 'django_select2/django_select2.js' %}"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script>
+      function renderNotifications(data) {
+        const body = document.getElementById('modal-notes-body');
+        const badge = document.getElementById('nav-unread');
+        if (!body || !badge) return;
+
+        badge.style.display = data.unread > 0 ? 'inline-block' : 'none';
+        badge.textContent = data.unread;
+
+        if (!data.notifications.length) {
+          body.innerHTML = '<p class="text-muted mb-0">No notifications.</p>';
+          return;
+        }
+
+        body.innerHTML = data.notifications.map(n => {
+          const targetLink = '{% url "clients:approve_sales" %}';
+          return `
+          <div class="mb-3" style="border:1px solid #edf2f7;border-radius:10px;padding:0.6rem;box-shadow:0 1px 6px rgba(0,0,0,0.04);background:${n.is_read ? '#fff' : '#fefcbf'};">
+            <div style="font-weight:700;color:#2d3748;">${n.title}</div>
+            <div style="color:#4a5568;font-size:0.95rem;">${n.body}</div>
+            <div style="color:#718096;font-size:0.85rem;">${n.created_at}</div>
+            <a class="btn btn-sm btn-outline-primary mt-1" href="${targetLink}">Open</a>
+          </div>
+        `;}).join('');
+      }
+
+      async function loadNotifications() {
+        try {
+          const res = await fetch('{% url "clients:notifications_json" %}', {credentials: 'same-origin'});
+          if (!res.ok) return;
+          const data = await res.json();
+          renderNotifications(data);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
+        loadNotifications();
+        const modal = document.getElementById('notificationsModal');
+        modal && modal.addEventListener('show.bs.modal', loadNotifications);
+
+        const btnRead = document.getElementById('btn-mark-read');
+        btnRead && btnRead.addEventListener('click', async () => {
+          await fetch('{% url "clients:notifications_mark_all_read" %}', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}});
+          loadNotifications();
+        });
+
+        const btnClear = document.getElementById('btn-clear-notes');
+        btnClear && btnClear.addEventListener('click', async () => {
+          await fetch('{% url "clients:notifications_clear" %}', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}});
+          loadNotifications();
+        });
+        {% endif %}
+      });
+    </script>
+  </body>
+</html>
