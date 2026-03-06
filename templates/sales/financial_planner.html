@@ -24,15 +24,42 @@
   }
   .fp-field input:focus, .fp-field select:focus { border-color: var(--ki-primary, #2563eb); outline: none; }
 
-  .fp-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+  .fp-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; }
   .fp-result-card {
-    background: var(--ki-primary-bg, #eff6ff);
-    border: 1.5px solid var(--ki-primary-light, #bfdbfe);
-    border-radius: 10px; padding: 1rem 1.2rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1.1rem 1.3rem 1rem;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    transition: box-shadow 0.15s;
   }
-  .fp-result-card .fp-result-label { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; color: var(--ki-text-secondary, #64748b); }
-  .fp-result-card .fp-result-value { font-size: 1.4rem; font-weight: 800; color: var(--ki-primary, #2563eb); margin: 0.2rem 0; }
-  .fp-result-card .fp-result-note { font-size: 0.78rem; color: var(--ki-text-muted, #94a3b8); }
+  .fp-result-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.10); }
+  .fp-result-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #2563eb, #60a5fa);
+    border-radius: 14px 14px 0 0;
+  }
+  .fp-result-card.fp-card-green::before  { background: linear-gradient(90deg, #16a34a, #4ade80); }
+  .fp-result-card.fp-card-orange::before { background: linear-gradient(90deg, #ea580c, #fb923c); }
+  .fp-result-card.fp-card-purple::before { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
+  .fp-result-card.fp-card-yellow::before { background: linear-gradient(90deg, #d97706, #fbbf24); }
+  .fp-result-card .fp-result-icon {
+    font-size: 1.4rem; margin-bottom: 0.5rem; display: block; line-height: 1;
+  }
+  .fp-result-card .fp-result-label {
+    font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #64748b; margin-bottom: 0.3rem;
+  }
+  .fp-result-card .fp-result-value {
+    font-size: 1.55rem; font-weight: 800; color: #1e293b;
+    letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 0.35rem;
+  }
+  .fp-result-card .fp-result-note {
+    font-size: 0.75rem; color: #94a3b8; line-height: 1.4;
+  }
 
   .fp-formula-box {
     background: var(--ki-sidebar-bg, #f8fafc); border: 1px solid var(--ki-border, #e2e8f0);
@@ -187,7 +214,8 @@
           STEP 1 &nbsp;·&nbsp; Expense at Retirement (1st Year)
         </div>
         <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
-          <div class="fp-result-card" style="flex:1;min-width:220px;">
+          <div class="fp-result-card fp-card-yellow" style="flex:1;min-width:220px;">
+            <span class="fp-result-icon">💸</span>
             <div class="fp-result-label">1st Year Yearly Expense at Retirement</div>
             <div class="fp-result-value" id="out-fv-expense">—</div>
             <div class="fp-result-note" id="out-fv-expense-note">current_expense × (1+inflation)^years_to_retirement</div>
@@ -208,7 +236,8 @@
           STEP 2 &nbsp;·&nbsp; Corpus Required at Retirement
         </div>
         <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
-          <div class="fp-result-card" style="flex:1;min-width:220px;background:#fefce8;border-color:#fde68a;">
+          <div class="fp-result-card fp-card-orange" style="flex:1;min-width:220px;">
+            <span class="fp-result-icon">🏦</span>
             <div class="fp-result-label" style="color:#92400e;">Corpus Needed</div>
             <div class="fp-result-value" id="out-corpus" style="color:#d97706;">—</div>
             <div class="fp-result-note">Growing annuity — expenses inflate every year in retirement</div>
@@ -229,7 +258,8 @@
           STEP 3 &nbsp;·&nbsp; Monthly SIP to Achieve Corpus (PMT Formula)
         </div>
         <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
-          <div class="fp-result-card" style="flex:1;min-width:220px;background:#dcfce7;border-color:#86efac;">
+          <div class="fp-result-card fp-card-green" style="flex:1;min-width:220px;">
+            <span class="fp-result-icon">📈</span>
             <div class="fp-result-label" style="color:#166534;">Monthly SIP Required</div>
             <div class="fp-result-value" id="out-sip" style="color:#16a34a;">—</div>
             <div class="fp-result-note" id="out-sip-note">Invest monthly at expected return for years to retirement</div>
@@ -314,39 +344,52 @@
 
   <!-- ═══════════════ SUMMARY TAB ═══════════════ -->
   <div id="tab-summary" class="fp-tab-content">
-    <div class="ki-card fp-section">
-      <div class="fp-section-title"><i class="bi bi-clipboard-data-fill"></i> Complete Financial Plan — <span id="summary-name">Client</span></div>
-      <div class="fp-result-grid">
-        <div class="fp-result-card">
-          <div class="fp-result-label">Retirement Corpus Required</div>
-          <div class="fp-result-value" id="sum-corpus">—</div>
-          <div class="fp-result-note">At retirement age</div>
-        </div>
-        <div class="fp-result-card">
-          <div class="fp-result-label">SIP for Retirement</div>
-          <div class="fp-result-value" id="sum-sip">—</div>
-          <div class="fp-result-note">Monthly investment needed</div>
-        </div>
-        <div class="fp-result-card">
-          <div class="fp-result-label">Total Goal SIP</div>
-          <div class="fp-result-value" id="sum-goal-sip">—</div>
-          <div class="fp-result-note">Sum of all goal SIPs</div>
-        </div>
-        <div class="fp-result-card">
-          <div class="fp-result-label">Total Monthly SIP Required</div>
-          <div class="fp-result-value" id="sum-total-sip">—</div>
-          <div class="fp-result-note">Retirement + All Goals</div>
-        </div>
-        <div class="fp-result-card">
-          <div class="fp-result-label">Total Current Assets</div>
-          <div class="fp-result-value" id="sum-assets">—</div>
-          <div class="fp-result-note">Sum of all assets</div>
-        </div>
-        <div class="fp-result-card">
-          <div class="fp-result-label">Projected Assets at Retirement</div>
-          <div class="fp-result-value" id="sum-proj-assets">—</div>
-          <div class="fp-result-note">At expected return rates</div>
-        </div>
+
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 60%,#3b82f6 100%);border-radius:16px;padding:1.5rem 2rem;margin-bottom:1.5rem;color:#fff;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;opacity:0.75;margin-bottom:0.3rem;">Complete Financial Plan</div>
+        <div style="font-size:1.6rem;font-weight:800;letter-spacing:-0.02em;" id="summary-name">Client</div>
+        <div style="font-size:0.82rem;opacity:0.75;margin-top:0.3rem;" id="summary-subline">—</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:0.72rem;opacity:0.7;text-transform:uppercase;letter-spacing:0.06em;">Total Monthly SIP</div>
+        <div style="font-size:2.2rem;font-weight:900;letter-spacing:-0.03em;" id="sum-total-sip">—</div>
+        <div style="font-size:0.75rem;opacity:0.7;">Retirement + All Goals</div>
+      </div>
+    </div>
+
+    <!-- KPI cards row -->
+    <div class="fp-result-grid" style="margin-bottom:1.5rem;">
+      <div class="fp-result-card fp-card-orange">
+        <span class="fp-result-icon">🏦</span>
+        <div class="fp-result-label">Retirement Corpus Required</div>
+        <div class="fp-result-value" id="sum-corpus">—</div>
+        <div class="fp-result-note">Total needed at retirement age</div>
+      </div>
+      <div class="fp-result-card fp-card-green">
+        <span class="fp-result-icon">📈</span>
+        <div class="fp-result-label">SIP for Retirement</div>
+        <div class="fp-result-value" id="sum-sip">—</div>
+        <div class="fp-result-note">Monthly, only for corpus gap</div>
+      </div>
+      <div class="fp-result-card fp-card-purple">
+        <span class="fp-result-icon">🎯</span>
+        <div class="fp-result-label">Goals SIP</div>
+        <div class="fp-result-value" id="sum-goal-sip">—</div>
+        <div class="fp-result-note">Sum of all financial goal SIPs</div>
+      </div>
+      <div class="fp-result-card">
+        <span class="fp-result-icon">💼</span>
+        <div class="fp-result-label">Current Assets</div>
+        <div class="fp-result-value" id="sum-assets">—</div>
+        <div class="fp-result-note">Total investable assets today</div>
+      </div>
+      <div class="fp-result-card fp-card-green">
+        <span class="fp-result-icon">🚀</span>
+        <div class="fp-result-label">Projected Assets at Retirement</div>
+        <div class="fp-result-value" id="sum-proj-assets">—</div>
+        <div class="fp-result-note">Assets grown at their return rates</div>
       </div>
     </div>
 
@@ -823,6 +866,8 @@ function recalc() {
   const fundingGap = corpus - projectedAssets;
 
   el('summary-name').textContent = document.getElementById('inp-name').value || 'Client';
+  if(el('summary-subline')) el('summary-subline').textContent =
+    `Age ${age} → Retire ${retireAge} → Life ${lifeExp}  ·  ${ytr} yrs to retirement  ·  ${yir} yrs in retirement`;
   el('sum-corpus').textContent    = fmt(corpus);
   el('sum-sip').textContent       = corpusGap > 0 ? fmt(sipRetire) + '/mo' : '₹0 ✅';
   el('sum-goal-sip').textContent  = fmt(totalGoalSip) + '/mo';
