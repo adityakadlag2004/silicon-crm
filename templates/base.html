@@ -76,10 +76,6 @@
               <a class="ki-sidebar-item" href="{% url 'clients:client_analysis' %}">
                 <i class="bi bi-pie-chart-fill"></i> <span>Client Analysis</span>
               </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_performance' %}">
-                <i class="bi bi-bar-chart-fill"></i> <span>Employee Performance</span>
-              </a>
-
               <div class="ki-sidebar-section">Calling</div>
               <a class="ki-sidebar-item" href="{% url 'clients:upload_list' %}">
                 <i class="bi bi-cloud-upload-fill"></i> <span>Upload List</span>
@@ -164,9 +160,6 @@
               </a>
               {% endif %}
               {% if manager_access.allow_employee_performance %}
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_performance' %}">
-                <i class="bi bi-bar-chart-fill"></i> <span>Employee Performance</span>
-              </a>
               <a class="ki-sidebar-item" href="{% url 'clients:admin_past_performance' %}">
                 <i class="bi bi-graph-up-arrow"></i> <span>Past Performance</span>
               </a>
@@ -243,10 +236,6 @@
               <a class="ki-sidebar-item" href="{% url 'clients:client_analysis' %}">
                 <i class="bi bi-pie-chart-fill"></i> <span>Client Analysis</span>
               </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_performance' %}">
-                <i class="bi bi-bar-chart-fill"></i> <span>My Performance</span>
-              </a>
-
               <div class="ki-sidebar-section">Calling</div>
               <a class="ki-sidebar-item" href="{% url 'clients:employee_lists' %}">
                 <i class="bi bi-telephone-fill"></i> <span>My Calling Lists</span>

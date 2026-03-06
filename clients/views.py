@@ -1248,7 +1248,7 @@ def employee_performance(request):
     # Calls aggregates
     calls_qs = CallRecord.objects.filter(employee=employee, call_time__date__range=(start, end))
     calls_made = calls_qs.count()
-    connects = calls_qs.filter(status__in=['connected', 'success']).count() if calls_made else 0
+    connects = calls_qs.filter(outcome__in=['connected', 'success', 'Interested']).count() if calls_made else 0
     connect_rate = (connects / calls_made * 100) if calls_made else 0
 
     conversion_rate = (total_sales / calls_made * 100) if calls_made else 0
