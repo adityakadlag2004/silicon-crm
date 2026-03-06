@@ -121,4 +121,7 @@ urlpatterns = [
 
     # reports
     path("reports/monthly-business/", views.monthly_business_report, name="monthly_business_report"),
+
+    # financial planner
+    path("sales/financial-planner/", views.financial_planner, name="financial_planner"),
 ]
