@@ -166,6 +166,30 @@ class IncentiveRule(models.Model):
         return f"{self.product}: {self.points_per_unit} pts per {self.unit_amount}"
 
 
+class IncentiveSlab(models.Model):
+    """Slab-based incentive tiers for products like Life Insurance.
+    When cumulative monthly amount reaches `threshold`, the `payout` is awarded."""
+    rule = models.ForeignKey(IncentiveRule, on_delete=models.CASCADE, related_name="slabs")
+    threshold = models.DecimalField(
+        max_digits=14, decimal_places=2,
+        help_text="Cumulative monthly amount threshold"
+    )
+    payout = models.DecimalField(
+        max_digits=14, decimal_places=2,
+        help_text="Points/payout awarded when threshold is reached"
+    )
+    label = models.CharField(max_length=100, blank=True,
+                             help_text="Optional label, e.g. 'Gold Slab'")
+
+    class Meta:
+        verbose_name = "Incentive Slab"
+        verbose_name_plural = "Incentive Slabs"
+        ordering = ["-threshold"]  # highest first for slab matching
+        unique_together = [("rule", "threshold")]
+
+    def __str__(self):
+        return f"{self.rule.product} – ₹{self.threshold} → {self.payout} pts"
+
 
 from django.db import models
 from decimal import Decimal
@@ -230,26 +254,29 @@ class Sale(models.Model):
         ]
 
     def compute_points(self):
-        """Compute points based on IncentiveRule in DB"""
-        from .models import IncentiveRule  # avoid circular import
+        """Compute points based on IncentiveRule + IncentiveSlab in DB"""
+        from .models import IncentiveRule, IncentiveSlab  # avoid circular import
 
         try:
             rule = IncentiveRule.objects.get(product=self.product, active=True)
-            # Apply product-specific gating before point math
-            if self.product == "Life Insurance":
+
+            # Check if this rule has slabs → slab-based calculation
+            slab_qs = IncentiveSlab.objects.filter(rule=rule).order_by("-threshold")
+
+            if slab_qs.exists():
+                # Slab-based incentive (e.g. Life Insurance)
                 premium = self.amount or Decimal("0")
-                # If rule toggled off, issue no points regardless of amount
+
                 if not rule.active:
                     self.points = Decimal("0.000")
                     self.incentive_amount = Decimal("0.00")
                     return
 
-                # Cumulative premium for this employee in the sale month (including this sale)
                 sale_month = self.date.month if self.date else timezone.now().month
                 sale_year = self.date.year if self.date else timezone.now().year
                 qs = Sale.objects.filter(
                     employee=self.employee,
-                    product="Life Insurance",
+                    product=self.product,
                     date__year=sale_year,
                     date__month=sale_month,
                 )
@@ -257,21 +284,13 @@ class Sale(models.Model):
                     qs = qs.exclude(pk=self.pk)
                 cumulative_amount = (qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")) + premium
 
-                # WNPS slab payouts (points == payout rupees) based on cumulative amount
-                slabs = [
-                    (Decimal("1500000"), Decimal("40000")),
-                    (Decimal("1200000"), Decimal("32000")),
-                    (Decimal("900000"), Decimal("24000")),
-                    (Decimal("600000"), Decimal("16000")),
-                    (Decimal("300000"), Decimal("8000")),
-                ]
+                # Match highest slab threshold <= cumulative amount
                 payout = Decimal("0.00")
-                for threshold, amount in slabs:
-                    if cumulative_amount >= threshold:
-                        payout = amount
+                for slab in slab_qs:
+                    if cumulative_amount >= slab.threshold:
+                        payout = slab.payout
                         break
 
-                # Already awarded life points this month (exclude this row to avoid double)
                 already_awarded = qs.aggregate(total=Sum("points"))["total"] or Decimal("0.00")
                 delta = payout - already_awarded
                 if delta < 0:
@@ -281,6 +300,7 @@ class Sale(models.Model):
                 self.incentive_amount = delta
                 return
 
+            # Unit-based incentive (e.g. SIP, PMS, etc.)
             if rule.unit_amount > 0:
                 self.points = (self.amount / rule.unit_amount) * rule.points_per_unit
                 self.incentive_amount = self.points  # You can later define ₹ conversion

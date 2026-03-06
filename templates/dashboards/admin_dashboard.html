@@ -1,224 +1,35 @@
 {% extends "base.html" %}
 
 {% block title %}Admin Dashboard{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
 
 {% block content %}
-<style>
-  .dashboard-section-title {
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: #2d3748;
-    margin-bottom: 1rem;
-    margin-top: 1.5rem;
-    letter-spacing: 0.5px;
-  }
-  .dashboard-cards-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 0.9rem;
-    margin-bottom: 1rem;
-  }
-  .dashboard-card {
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 1px 10px rgba(0,0,0,0.05);
-    padding: 0.9rem 0.85rem;
-    min-width: 0;
-    flex: 1 1 0;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    transition: box-shadow 0.2s;
-  }
-  .dashboard-card:hover {
-    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
-  }
-  .dashboard-card h5 {
-    font-size: 1.05rem;
-    font-weight: 600;
-    margin-bottom: 0.3rem;
-    color: #4a5568;
-  }
-  .dashboard-card h3 {
-    font-size: 1.45rem;
-    font-weight: 700;
-    margin: 0;
-    color: #2b6cb0;
-  }
-  .dashboard-products-row {
-    display: flex;
-    gap: 1.2rem;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: stretch;
-    width: 100%;
-  }
-  .dashboard-product-card {
-    background: #f7fafc;
-    border-radius: 10px;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
-    padding: 0.9rem 1.1rem;
-    margin: 0.35rem;
-    min-width: 150px;
-    max-width: 190px;
-    flex: 0 1 170px;
-    text-align: center;
-    font-size: 1rem;
-  }
-  .dashboard-product-card h6 {
-    font-size: 0.98rem;
-    font-weight: 600;
-    color: #4a5568;
-    margin-bottom: 0.2rem;
-  }
-  .dashboard-product-card h5 {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: #2b6cb0;
-    margin: 0;
-  }
-  .dashboard-link {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.7rem 1.5rem;
-    border-radius: 12px;
-    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
-    color: #2d3748;
-    font-weight: 600;
-    text-decoration: none;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
-    transition: background 0.2s;
-  }
-  .dashboard-link:hover {
-    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
-    color: #1a202c;
-  }
-  .modern-card {
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 1px 12px rgba(0,0,0,0.06);
-    padding: 1rem 0.9rem;
-    margin-bottom: 0.9rem;
-    transition: box-shadow 0.2s;
-  }
-  .modern-card:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.12); }
-  .modern-progress { height: 16px; border-radius: 10px; background: #edf2f7; overflow: visible; position: relative; }
-  .modern-progress-bar { height: 100%; border-radius: 10px; transition: width 0.5s ease; color: #fff; font-weight: 600; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; }
-  .bar-green { background: linear-gradient(90deg, #48bb78 0%, #38a169 100%); }
-  .bar-blue { background: linear-gradient(90deg, #4299e1 0%, #3182ce 100%); }
-  .bar-amber { background: linear-gradient(90deg, #f6ad55 0%, #ed8936 100%); }
-  
-  .modern-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    font-size: 1.08rem;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 1px 8px rgba(0,0,0,0.05);
-    overflow: hidden;
-  }
-  .modern-table th {
-    background: linear-gradient(90deg,#f6e05e 0%,#ecc94b 100%);
-    color: #2d3748;
-    font-weight: 700;
-    padding: 0.85rem 0.5rem;
-    border-bottom: 2px solid #e2e8f0;
-    font-size: 1.08rem;
-  }
-  .modern-table td {
-    padding: 0.7rem 0.5rem;
-    border-bottom: 1px solid #e2e8f0;
-    font-size: 1.05rem;
-    color: #2d3748;
-  }
-  .modern-table tr:last-child td {
-    border-bottom: none;
-  }
-  .modern-table tbody tr:hover {
-    background: #f7fafc;
-    transition: background 0.2s;
-  }
-  .salary-meter { margin-top: 0.5rem; }
-  .salary-track { position: relative; height: 12px; border-radius: 8px; background: #e2e8f0; overflow: hidden; }
-  .salary-fill { height: 100%; background: linear-gradient(90deg, #2b6cb0 0%, #4299e1 100%); border-radius: 8px; }
-  .salary-line { position: absolute; top: -4px; width: 3px; height: 20px; background: #ed8936; border-radius: 3px; box-shadow: 0 0 0 2px rgba(237,137,54,0.15); }
-  @keyframes pulseGlow {
-    0% { box-shadow: 0 0 0 0 rgba(66,153,225,0.45); }
-    100% { box-shadow: 0 0 0 16px rgba(66,153,225,0); }
-  }
-  @keyframes riseFade {
-    0% { opacity: 1; transform: translateY(0) scale(0.9); }
-    100% { opacity: 0; transform: translateY(-12px) scale(1.35); }
-  }
-  .pulse-glow { animation: pulseGlow 1s ease-out; }
-  .spark-pop {
-    position: absolute;
-    top: 0;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #f6e05e 0%, #ed8936 100%);
-    animation: riseFade 0.9s ease-out forwards;
-    pointer-events: none;
-  }
-  .dashboard-card, .modern-card, .product-card {
-    border: 1px solid rgba(236, 201, 75, 0.18);
-  }
-  .stat-list { display:flex; flex-direction:column; gap:0.35rem; width:100%; }
-  .stat-item { display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0.55rem; background:#f8fafc; border:1px solid #edf2f7; border-radius:10px; font-size:0.95rem; color:#4a5568; }
-  .stat-item strong { color:#2d3748; font-weight:700; }
-  .card-subtitle { font-weight:700; color:#2d3748; margin:0.2rem 0 0.4rem 0; text-align:left; }
-  .stat-link { text-decoration:none; color:inherit; display:block; }
-  .stat-link:hover .stat-item { background:#fffde7; border-color:#f6e05e; }
-  @media (max-width: 900px) {
-    .dashboard-cards-row, .dashboard-products-row { flex-direction: column; gap: 0.7rem; }
-    .dashboard-card, .dashboard-product-card { min-width: 0; }
-    .modern-table th, .modern-table td { font-size: 0.98rem; }
-    .table-bordered th, .table-bordered td { font-size: 0.98rem; }
-  }
-  @media (max-width: 600px) {
-    .dashboard-section-title { font-size: 1.05rem; text-align: center; }
-    .dashboard-card, .dashboard-product-card { padding: 0.7rem 0.2rem; font-size: 0.92rem; text-align: center; }
-    .modern-table th, .modern-table td { font-size: 0.93rem; padding: 0.5rem 0.2rem; text-align: center; }
-    .table-bordered th, .table-bordered td { font-size: 0.93rem; padding: 0.5rem 0.2rem; text-align: center; }
-    h4 { font-size: 1rem; text-align: center; }
-    .dashboard-cards-row, .dashboard-products-row, .table-responsive { justify-content: center; }
-    body, .container, .row { text-align: center; }
-    .dashboard-products-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; }
-    .dashboard-product-card { margin-left: auto; margin-right: auto; }
-  }
-</style>
 
-<div class="dashboard-section-title">Admin Dashboard</div>
-
-<div class="dashboard-cards-row" style="display:flex;flex-wrap:wrap;gap:1rem;">
-  <div class="dashboard-card" style="flex:1 1 220px;min-width:160px;">
-    <h5>My Sales (This Month)</h5>
-    <h3>₹{{ admin_self_sales }}</h3>
-    <div class="card-subtitle">By product</div>
-    <div class="stat-list">
+<!-- My Performance Cards -->
+<div class="ki-grid-2 mb-3">
+  <div class="ki-card">
+    <h5 class="ki-card-label">My Sales (This Month)</h5>
+    <div class="ki-card-value">₹{{ admin_self_sales }}</div>
+    <div class="ki-card-subtitle">By product</div>
+    <div class="ki-stat-list">
       {% for item in admin_self_sales_breakup %}
-        <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
-          <div class="stat-item"><span>{{ item.label }}</span><strong>₹{{ item.value|floatformat:0 }}</strong></div>
+        <a class="ki-stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+          <div class="ki-stat-item"><span>{{ item.label }}</span><strong>₹{{ item.value|floatformat:0 }}</strong></div>
         </a>
       {% empty %}
         <div class="text-muted">No sales yet.</div>
       {% endfor %}
     </div>
   </div>
-  <div class="dashboard-card" style="flex:1 1 220px;min-width:160px;">
-    <h5>My Points (This Month)</h5>
-    <h3>{{ admin_self_points }}</h3>
-    <div class="text-muted" style="font-size:0.95rem;">Pending: {{ admin_self_pending_points }}</div>
-    <div class="card-subtitle">Points by product</div>
-    <div class="stat-list">
+  <div class="ki-card">
+    <h5 class="ki-card-label">My Points (This Month)</h5>
+    <div class="ki-card-value">{{ admin_self_points }}</div>
+    <div class="text-muted" style="font-size:0.92rem;">Pending: {{ admin_self_pending_points }}</div>
+    <div class="ki-card-subtitle">Points by product</div>
+    <div class="ki-stat-list">
       {% for item in admin_self_points_breakup %}
-        <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
-          <div class="stat-item"><span>{{ item.label }}</span><strong>{{ item.value|floatformat:0 }}</strong></div>
+        <a class="ki-stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+          <div class="ki-stat-item"><span>{{ item.label }}</span><strong>{{ item.value|floatformat:0 }}</strong></div>
         </a>
       {% empty %}
         <div class="text-muted">No points yet.</div>
@@ -227,190 +38,163 @@
   </div>
 </div>
 
-<div class="dashboard-cards-row" style="display:flex;flex-wrap:wrap;gap:1rem;">
-  <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
-    <h5>Total Sales (This Month)</h5>
-    <h3 class="mb-1" style="width:100%; text-align:center;">₹{{ total_sales }}</h3>
-    <div class="w-100" style="text-align:center;">
-      <span class="badge bg-light text-muted" style="font-size:0.9rem;border:1px solid #e2e8f0;">Clients {{ total_clients }}</span>
-    </div>
-    <div class="card-subtitle">By product</div>
-    <div class="stat-list">
+<!-- Company Overview Cards -->
+<div class="ki-grid-2 mb-3">
+  <div class="ki-card">
+    <h5 class="ki-card-label">Total Sales (This Month)</h5>
+    <div class="ki-card-value">₹{{ total_sales }}</div>
+    <div class="mb-2"><span class="ki-badge">Clients {{ total_clients }}</span></div>
+    <div class="ki-card-subtitle">By product</div>
+    <div class="ki-stat-list">
       {% for item in admin_overall_sales_breakup %}
-        <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
-          <div class="stat-item"><span>{{ item.label }}</span><strong>₹{{ item.value|floatformat:0 }}</strong></div>
+        <a class="ki-stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+          <div class="ki-stat-item"><span>{{ item.label }}</span><strong>₹{{ item.value|floatformat:0 }}</strong></div>
         </a>
       {% empty %}
         <div class="text-muted">No sales yet.</div>
       {% endfor %}
     </div>
   </div>
-  <div class="dashboard-card" style="flex:1 1 180px;min-width:120px;">
-    <h5>Total Points (This Month)</h5>
-    <h3 id="points-counter" data-points="{{ total_points }}">0</h3>
-    <div class="card-subtitle">Points by product</div>
-    <div class="stat-list">
+  <div class="ki-card">
+    <h5 class="ki-card-label">Total Points (This Month)</h5>
+    <div class="ki-card-value" id="points-counter" data-points="{{ total_points }}">0</div>
+    <div class="ki-card-subtitle">Points by product</div>
+    <div class="ki-stat-list">
       {% for item in admin_overall_points_breakup %}
-        <a class="stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
-          <div class="stat-item"><span>{{ item.label }}</span><strong>{{ item.value|floatformat:0 }}</strong></div>
+        <a class="ki-stat-link" href="{% url 'clients:all_sales' %}?product={{ item.product|urlencode }}&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}">
+          <div class="ki-stat-item"><span>{{ item.label }}</span><strong>{{ item.value|floatformat:0 }}</strong></div>
         </a>
       {% empty %}
         <div class="text-muted">No points yet.</div>
       {% endfor %}
     </div>
     {% if total_salary_all %}
-    <div class="salary-meter" data-salary-meter data-salary="{{ total_salary_all }}" data-salary-ratio="{{ admin_salary_ratio|floatformat:0 }}" data-points-ratio="{{ admin_points_ratio|floatformat:0 }}">
-      <div class="d-flex justify-content-between" style="font-size:0.9rem;color:#4a5568;">
+    <div class="ki-salary-meter" data-salary-meter data-salary="{{ total_salary_all }}" data-salary-ratio="{{ admin_salary_ratio|floatformat:0 }}" data-points-ratio="{{ admin_points_ratio|floatformat:0 }}">
+      <div class="d-flex justify-content-between" style="font-size:0.88rem;color:var(--ki-text-secondary);">
         <span>Salary pool: {{ total_salary_all|floatformat:0 }}</span>
         <span>Extra: {{ admin_extra_points|floatformat:0 }}</span>
       </div>
-      <div class="salary-track mt-2">
-        <div class="salary-fill" data-progress="{{ admin_points_ratio|floatformat:0 }}" style="width: {{ admin_points_ratio|floatformat:0 }}%;"></div>
-        <div class="salary-line" data-salary-ratio="{{ admin_salary_ratio|floatformat:0 }}" style="left: {{ admin_salary_ratio|floatformat:0 }}%;"></div>
+      <div class="ki-salary-track mt-2">
+        <div class="ki-salary-fill" data-progress="{{ admin_points_ratio|floatformat:0 }}" style="width:{{ admin_points_ratio|floatformat:0 }}%;"></div>
+        <div class="ki-salary-line" data-salary-ratio="{{ admin_salary_ratio|floatformat:0 }}" style="left:{{ admin_salary_ratio|floatformat:0 }}%;"></div>
       </div>
-      <div class="text-muted" style="font-size:0.85rem;margin-top:0.35rem;">Salary barline shows baseline vs points</div>
+      <div class="text-muted" style="font-size:0.82rem;margin-top:0.35rem;">Salary barline shows baseline vs points</div>
     </div>
     {% endif %}
   </div>
-  <div class="dashboard-card" style="flex:1 1 100%;min-width:280px;text-align:left;">
-    {% include "dashboards/_followup_calendar.html" %}
+</div>
+
+<!-- Follow-up Calendar (full width) -->
+<div class="ki-card mb-3">
+  {% include "dashboards/_followup_calendar.html" %}
+</div>
+
+<!-- My Progress vs Targets -->
+<h3 class="ki-section-title">My Progress vs Targets</h3>
+<div class="ki-grid-2 mb-3">
+  <div class="ki-card">
+    <h6 class="ki-card-subtitle" style="color:var(--ki-green);">Daily Progress</h6>
+    {% for target in admin_daily_targets %}
+      <div class="mb-3">
+        <div class="ki-flex-row">
+          <span>{{ target.product }}</span>
+          <span>₹{{ target.achieved|floatformat:0 }} / ₹{{ target.target_value|floatformat:0 }}</span>
+        </div>
+        <div class="ki-progress mt-1">
+          <div class="ki-bar-green" data-progress="{{ target.progress|floatformat:0 }}">{{ target.progress|floatformat:0 }}%</div>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-muted mb-0">No daily targets set.</p>
+    {% endfor %}
+  </div>
+  <div class="ki-card">
+    <h6 class="ki-card-subtitle" style="color:var(--ki-primary);">Monthly Progress</h6>
+    {% for target in admin_monthly_targets %}
+      <div class="mb-3">
+        <div class="ki-flex-row">
+          <span>{{ target.product }}</span>
+          <span>₹{{ target.achieved|floatformat:0 }} / ₹{{ target.target_value|floatformat:0 }}</span>
+        </div>
+        <div class="ki-progress mt-1">
+          <div class="ki-bar-blue" data-progress="{{ target.progress|floatformat:0 }}">{{ target.progress|floatformat:0 }}%</div>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-muted mb-0">No monthly targets set.</p>
+    {% endfor %}
   </div>
 </div>
 
-<div class="dashboard-section-title" style="margin-top:0.5rem;">My Progress vs Targets</div>
-<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
-  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
-    <div class="modern-card">
-      <h6 style="font-weight:700;color:#38a169;">Daily Progress</h6>
-      {% for target in admin_daily_targets %}
-        <div class="mb-3">
-          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
-            <span>{{ target.product }}</span>
-            <span>₹{{ target.achieved|floatformat:0 }} / ₹{{ target.target_value|floatformat:0 }}</span>
-          </div>
-          <div class="modern-progress mt-1">
-            <div class="modern-progress-bar bar-green" data-progress="{{ target.progress|floatformat:0 }}">{{ target.progress|floatformat:0 }}%</div>
-          </div>
+<!-- Product-wise Sales -->
+<h3 class="ki-section-title">Product-wise Sales (This Month)</h3>
+<div class="ki-grid-3 mb-3">
+  <div class="ki-metric-card"><div class="ki-metric-label">SIP</div><div class="ki-metric-value">₹{{ sip_sales }}</div></div>
+  <div class="ki-metric-card"><div class="ki-metric-label">Lumpsum</div><div class="ki-metric-value">₹{{ lumsum_sales }}</div></div>
+  <div class="ki-metric-card"><div class="ki-metric-label">Life Insurance</div><div class="ki-metric-value">₹{{ life_sales }}</div></div>
+  <div class="ki-metric-card"><div class="ki-metric-label">Health Insurance</div><div class="ki-metric-value">₹{{ health_sales }}</div></div>
+  <div class="ki-metric-card"><div class="ki-metric-label">Motor Insurance</div><div class="ki-metric-value">₹{{ motor_sales }}</div></div>
+  <div class="ki-metric-card"><div class="ki-metric-label">PMS</div><div class="ki-metric-value">₹{{ pms_sales }}</div></div>
+</div>
+
+<!-- Company Progress vs Targets -->
+<h3 class="ki-section-title">Company Progress vs Targets</h3>
+<div class="ki-grid-2 mb-3">
+  <div class="ki-card">
+    <h6 class="ki-card-subtitle" style="color:var(--ki-green);">Daily Progress</h6>
+    {% for row in overall_daily_progress %}
+      <div class="mb-3">
+        <div class="ki-flex-row">
+          <span>{{ row.product }}</span>
+          <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
         </div>
-      {% empty %}
-        <p class="text-muted mb-0">No daily targets set.</p>
-      {% endfor %}
-    </div>
+        <div class="ki-progress mt-1">
+          <div class="ki-bar-green" data-progress="{{ row.progress|floatformat:0 }}">{{ row.progress|floatformat:0 }}%</div>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-muted mb-0">No daily targets set.</p>
+    {% endfor %}
   </div>
-  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
-    <div class="modern-card">
-      <h6 style="font-weight:700;color:#3182ce;">Monthly Progress</h6>
-      {% for target in admin_monthly_targets %}
-        <div class="mb-3">
-          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
-            <span>{{ target.product }}</span>
-            <span>₹{{ target.achieved|floatformat:0 }} / ₹{{ target.target_value|floatformat:0 }}</span>
-          </div>
-          <div class="modern-progress mt-1">
-            <div class="modern-progress-bar bar-blue" data-progress="{{ target.progress|floatformat:0 }}">{{ target.progress|floatformat:0 }}%</div>
-          </div>
+  <div class="ki-card">
+    <h6 class="ki-card-subtitle" style="color:var(--ki-primary);">Monthly Progress</h6>
+    {% for row in overall_monthly_progress %}
+      <div class="mb-3">
+        <div class="ki-flex-row">
+          <span>{{ row.product }}</span>
+          <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
         </div>
-      {% empty %}
-        <p class="text-muted mb-0">No monthly targets set.</p>
-      {% endfor %}
-    </div>
+        <div class="ki-progress mt-1">
+          <div class="ki-bar-blue" data-progress="{{ row.progress|floatformat:0 }}">{{ row.progress|floatformat:0 }}%</div>
+        </div>
+      </div>
+    {% empty %}
+      <p class="text-muted mb-0">No monthly targets set.</p>
+    {% endfor %}
   </div>
 </div>
 
-<div class="dashboard-section-title">Product-wise Sales (This Month)</div>
-<div class="dashboard-products-row" style="display:flex;flex-wrap:wrap;gap:1.2rem;width:100%;justify-content:center;">
-  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
-    <h6>SIP</h6>
-    <h5>₹{{ sip_sales }}</h5>
-  </div>
-  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
-    <h6>Lumpsum</h6>
-    <h5>₹{{ lumsum_sales }}</h5>
-  </div>
-  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
-    <h6>Life Insurance</h6>
-    <h5>₹{{ life_sales }}</h5>
-  </div>
-  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
-    <h6>Health Insurance</h6>
-    <h5>₹{{ health_sales }}</h5>
-  </div>
-  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
-    <h6>Motor Insurance</h6>
-    <h5>₹{{ motor_sales }}</h5>
-  </div>
-  <div class="dashboard-product-card" style="flex:0 1 180px;min-width:150px;max-width:200px;">
-    <h6>PMS</h6>
-    <h5>₹{{ pms_sales }}</h5>
-  </div>
-</div>
-
-<hr class="my-4" />
-
-<!-- Section 1: Self performance vs targets -->
-<h4 style="font-weight:700;color:#2d3748;">Company Progress vs Targets</h4>
-<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
-  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
-    <div class="modern-card">
-      <h6 style="font-weight:700;color:#38a169;">Daily Progress</h6>
-      {% for row in overall_daily_progress %}
-        <div class="mb-3">
-          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
-            <span>{{ row.product }}</span>
-            <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
-          </div>
-          <div class="modern-progress mt-1">
-            <div class="modern-progress-bar bar-green" data-progress="{{ row.progress|floatformat:0 }}">{{ row.progress|floatformat:0 }}%</div>
-          </div>
-        </div>
-      {% empty %}
-        <p class="text-muted mb-0">No daily targets set.</p>
-      {% endfor %}
-    </div>
-  </div>
-  <div class="col-md-6" style="flex:1 1 320px;min-width:260px;">
-    <div class="modern-card">
-      <h6 style="font-weight:700;color:#3182ce;">Monthly Progress</h6>
-      {% for row in overall_monthly_progress %}
-        <div class="mb-3">
-          <div style="display:flex;justify-content:space-between;font-weight:600;color:#2d3748;">
-            <span>{{ row.product }}</span>
-            <span>₹{{ row.achieved|floatformat:0 }} / ₹{{ row.target|floatformat:0 }}</span>
-          </div>
-          <div class="modern-progress mt-1">
-            <div class="modern-progress-bar bar-blue" data-progress="{{ row.progress|floatformat:0 }}">{{ row.progress|floatformat:0 }}%</div>
-          </div>
-        </div>
-      {% empty %}
-        <p class="text-muted mb-0">No monthly targets set.</p>
-      {% endfor %}
-    </div>
-  </div>
-</div>
-
-<!-- Section 2: Daily employee performance (product-wise, collapsible) -->
-<div class="d-flex align-items-center mt-4" style="gap:0.5rem;">
-  <h4 style="font-weight:700;color:#2d3748; margin:0;">Daily Employee Performance (Product-wise)</h4>
-  <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#dailyPerf" aria-expanded="false" aria-controls="dailyPerf">Toggle</button>
+<!-- Daily Employee Performance -->
+<div class="d-flex align-items-center gap-2 mb-2">
+  <h3 class="ki-section-title mb-0">Daily Employee Performance (Product-wise)</h3>
+  <button class="ki-btn ki-btn-secondary ki-btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#dailyPerf" aria-expanded="false">Toggle</button>
 </div>
 <div class="collapse" id="dailyPerf">
-  <div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+  <div class="ki-grid-3 mb-3">
     {% for row in daily_employee_product %}
-      <div class="col-md-4" style="flex:1 1 260px;min-width:240px;">
-        <div class="modern-card" style="padding:1rem 0.8rem;">
-          <div style="font-weight:700;color:#2b6cb0; margin-bottom:0.4rem;">{{ row.employee }}</div>
-          {% for p in row.products %}
-            <div class="mb-2">
-              <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:#4a5568;">
-                <span>{{ p.product }}</span>
-                <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
-              </div>
-              <div class="modern-progress mt-1">
-                <div class="modern-progress-bar bar-amber" data-progress="{{ p.progress|floatformat:0 }}">{{ p.progress|floatformat:0 }}%</div>
-              </div>
+      <div class="ki-card">
+        <div class="ki-card-subtitle" style="color:var(--ki-primary);">{{ row.employee }}</div>
+        {% for p in row.products %}
+          <div class="mb-2">
+            <div class="ki-flex-row" style="font-size:0.9rem;">
+              <span>{{ p.product }}</span>
+              <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
             </div>
-          {% endfor %}
-        </div>
+            <div class="ki-progress mt-1">
+              <div class="ki-bar-amber" data-progress="{{ p.progress|floatformat:0 }}">{{ p.progress|floatformat:0 }}%</div>
+            </div>
+          </div>
+        {% endfor %}
       </div>
     {% empty %}
       <p class="text-muted">No employees found.</p>
@@ -418,48 +202,46 @@
   </div>
 </div>
 
-<!-- Section 3: Monthly employee performance (product-wise) -->
-<h4 style="font-weight:700;color:#2d3748;" class="mt-4">Monthly Employee Performance (Product-wise)</h4>
-<div class="row" style="display:flex;flex-wrap:wrap;gap:1rem;">
+<!-- Monthly Employee Performance -->
+<h3 class="ki-section-title">Monthly Employee Performance (Product-wise)</h3>
+<div class="ki-grid-3 mb-3">
   {% for row in monthly_employee_product %}
-    <div class="col-md-4" style="flex:1 1 260px;min-width:240px;">
-      <div class="modern-card" style="padding:1rem 0.8rem;">
-        <div style="font-weight:700;color:#2b6cb0; margin-bottom:0.4rem;">{{ row.employee }}</div>
-        {% for p in row.products %}
-          <div class="mb-2">
-            <div style="display:flex;justify-content:space-between;font-size:0.9rem;color:#4a5568;">
-              <span>{{ p.product }}</span>
-              <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
-            </div>
-            <div class="modern-progress mt-1">
-                <div class="modern-progress-bar bar-blue" data-progress="{{ p.progress|floatformat:0 }}">{{ p.progress|floatformat:0 }}%</div>
-            </div>
+    <div class="ki-card">
+      <div class="ki-card-subtitle" style="color:var(--ki-primary);">{{ row.employee }}</div>
+      {% for p in row.products %}
+        <div class="mb-2">
+          <div class="ki-flex-row" style="font-size:0.9rem;">
+            <span>{{ p.product }}</span>
+            <span>₹{{ p.achieved|floatformat:0 }} / ₹{{ p.target|floatformat:0 }}</span>
           </div>
-        {% endfor %}
-      </div>
+          <div class="ki-progress mt-1">
+            <div class="ki-bar-blue" data-progress="{{ p.progress|floatformat:0 }}">{{ p.progress|floatformat:0 }}%</div>
+          </div>
+        </div>
+      {% endfor %}
     </div>
   {% empty %}
     <p class="text-muted">No employees found.</p>
   {% endfor %}
 </div>
 
-<div style="border-top:1px solid #e6eef2; padding-top:2rem;">
-  <h2 style="font-size:2rem; font-weight:700; color:#2d3748; margin:0 0 1rem 0;">Admin Past Performance (Cumulative)</h2>
-  <div class="mt-3">
-    <a href="{% url 'clients:admin_past_performance' %}" class="dashboard-link">View Detailed Past Performance</a>
-  </div>
+<!-- Past Performance Link -->
+<div class="ki-card">
+  <h3 class="ki-section-title mb-2">Admin Past Performance (Cumulative)</h3>
+  <a href="{% url 'clients:admin_past_performance' %}" class="ki-btn ki-btn-primary">
+    <i class="bi bi-graph-up-arrow me-1"></i> View Detailed Past Performance
+  </a>
 </div>
-<hr class="my-4" />
 
 
-<!-- 🔹 Points Counter Animation -->
+<!-- Points Counter & Progress Animation -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     const counter = document.getElementById("points-counter");
     if (counter) {
       const target = parseFloat(counter.getAttribute("data-points")) || 0;
       let current = 0;
-      const step = target / 50; // speed: 50 frames
+      const step = target / 50;
       function animate() {
         current += step;
         if (current >= target) {
@@ -473,7 +255,7 @@
     }
 
     const thresholds = [25, 50, 75, 100];
-    const progressBars = document.querySelectorAll('.modern-progress [data-progress]');
+    const progressBars = document.querySelectorAll('.ki-progress [data-progress]');
     progressBars.forEach((bar) => {
       const progress = parseFloat(bar.dataset.progress || '0');
       const clamped = Math.min(progress, 100);
@@ -500,7 +282,7 @@
       const salary = parseFloat(salaryMeter.dataset.salary || '0');
       const salaryRatio = parseFloat(salaryMeter.dataset.salaryRatio || '0');
       const pointsRatio = parseFloat(salaryMeter.dataset.pointsRatio || '0');
-      const salaryFill = salaryMeter.querySelector('.salary-fill');
+      const salaryFill = salaryMeter.querySelector('.ki-salary-fill');
       if (salary > 0 && salaryFill && pointsRatio >= salaryRatio) {
         salaryFill.classList.add('pulse-glow');
         setTimeout(() => salaryFill.classList.remove('pulse-glow'), 1200);

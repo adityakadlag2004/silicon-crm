@@ -16,3 +16,4 @@ from .reports import *  # noqa: F401,F403
 from .calendar_views import *  # noqa: F401,F403
 from .messaging import *  # noqa: F401,F403
 from .notifications import *  # noqa: F401,F403
+from .team import *  # noqa: F401,F403

@@ -1,21 +1,19 @@
 {% extends "base.html" %}
 {% block title %}WhatsApp Preview Links{% endblock %}
+{% block page_title %}WhatsApp Preview{% endblock %}
 {% block content %}
-<div class="container py-3">
-  <h3>WhatsApp Draft Previews — {{ template.name }}</h3>
-  <div class="row">
-    {% for p in previews %}
-    <div class="col-md-4 mb-3">
-      <div class="card p-2">
-        <div class="d-flex align-items-center justify-content-between">
-          <div><strong>{{ p.client }}</strong><div class="small text-muted">{{ p.phone }}</div></div>
-          <div><a class="btn btn-sm btn-primary" href="{{ p.link }}" target="_blank">Open Draft</a></div>
-        </div>
-        <div class="mt-2"> <small>{{ p.message }}</small></div>
-        <div class="mt-2 text-center"><img src="{{ p.qr }}" alt="QR" style="max-width:150px;"/></div>
-      </div>
+
+<h2 class="ki-section-title">WhatsApp Draft Previews — {{ template.name }}</h2>
+<div class="ki-grid-3">
+  {% for p in previews %}
+  <div class="ki-card">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div><strong>{{ p.client }}</strong><div class="text-muted small">{{ p.phone }}</div></div>
+      <a class="ki-btn ki-btn-primary ki-btn-sm" href="{{ p.link }}" target="_blank"><i class="bi bi-whatsapp"></i> Open</a>
     </div>
-    {% endfor %}
+    <div class="text-muted small">{{ p.message }}</div>
+    <div class="mt-2 text-center"><img src="{{ p.qr }}" alt="QR" style="max-width:150px;border-radius:8px;"/></div>
   </div>
+  {% endfor %}
 </div>
 {% endblock %}

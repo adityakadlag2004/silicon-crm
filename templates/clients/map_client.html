@@ -1,51 +1,12 @@
 
 {% extends "base.html" %}
 {% block title %}Map Client{% endblock %}
+{% block page_title %}Map Client{% endblock %}
 {% block content %}
-<style>
-  .dashboard-section-title {
-    font-size: 1.25rem;
-    font-weight: 600;
-    color: #2d3748;
-    margin-bottom: 1rem;
-    margin-top: 2rem;
-  }
-  .modern-card {
-    background: #fff;
-    border-radius: 18px;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.07);
-    padding: 2rem 1.5rem;
-    margin-bottom: 1.5rem;
-    transition: box-shadow 0.2s;
-  }
-  .modern-card:hover {
-    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
-  }
-  .dashboard-link {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.7rem 1.5rem;
-    border-radius: 12px;
-    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
-    color: #2d3748;
-    font-weight: 600;
-    text-decoration: none;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
-    transition: background 0.2s;
-  }
-  .dashboard-link:hover {
-    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
-    color: #1a202c;
-  }
-  @media (max-width: 768px) {
-    .dashboard-section-title { font-size: 1rem; }
-    .modern-card { padding: 1rem 0.5rem; }
-  }
-</style>
 
-<div class="dashboard-section-title">Map Client: {{ client.name }}</div>
+<h2 class="ki-section-title">Map Client: {{ client.name }}</h2>
 
-<div class="modern-card">
+<div class="ki-card">
   <form method="post">
     {% csrf_token %}
     <div class="mb-3">
@@ -60,8 +21,8 @@
       </select>
     </div>
     <div class="d-flex justify-content-between">
-      <a href="{% url 'clients:all_clients' %}" class="dashboard-link" style="background:linear-gradient(90deg,#e2e8f0 0%,#f7fafc 100%);color:#2d3748;">Cancel</a>
-      <button type="submit" class="dashboard-link" style="background:linear-gradient(90deg,#38b2ac 0%,#319795 100%);color:#fff;">Save Mapping</button>
+      <a href="{% url 'clients:all_clients' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-arrow-left"></i> Cancel</a>
+      <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save Mapping</button>
     </div>
   </form>
 </div>

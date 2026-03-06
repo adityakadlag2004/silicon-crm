@@ -3,8 +3,8 @@
   "short_name": "KI CRM",
   "start_url": "/clients/login/",
   "display": "standalone",
-  "background_color": "#f8f9fa",
-  "theme_color": "#f6e05e",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
   "icons": [
     {
       "src": "/static/icons/icon-192.png",

@@ -21,7 +21,27 @@ PER_PAGE = getattr(settings, "PER_PAGE", 50)
 
 @login_required
 def all_clients(request):
-    clients_qs = Client.objects.select_related("mapped_to").order_by("id")
+    # ── Sorting ──
+    ALLOWED_SORT = {
+        "name": "name",
+        "-name": "-name",
+        "id": "id",
+        "-id": "-id",
+        "sip_amount": "sip_amount",
+        "-sip_amount": "-sip_amount",
+        "pms_amount": "pms_amount",
+        "-pms_amount": "-pms_amount",
+        "lumsum_investment": "lumsum_investment",
+        "-lumsum_investment": "-lumsum_investment",
+        "mapped_to": "mapped_to__user__first_name",
+        "-mapped_to": "-mapped_to__user__first_name",
+        "created_at": "created_at",
+        "-created_at": "-created_at",
+    }
+    sort_param = request.GET.get("sort", "name")
+    order_by = ALLOWED_SORT.get(sort_param, "name")
+
+    clients_qs = Client.objects.select_related("mapped_to", "mapped_to__user").order_by(order_by)
 
     q = (request.GET.get("q") or "").strip()
     if q:
@@ -32,6 +52,7 @@ def all_clients(request):
             | Q(pan__icontains=q)
         )
 
+    # ── Product status filters ──
     sip_status = request.GET.get("sip_status")
     pms_status = request.GET.get("pms_status")
     life_status = request.GET.get("life_status")
@@ -71,6 +92,18 @@ def all_clients(request):
             except ValueError:
                 pass
 
+    # ── Mapped-to filter ──
+    mapped_to_id = request.GET.get("mapped_to")
+    if mapped_to_id == "unmapped":
+        clients_qs = clients_qs.filter(mapped_to__isnull=True)
+    elif mapped_to_id:
+        try:
+            clients_qs = clients_qs.filter(mapped_to_id=int(mapped_to_id))
+        except (ValueError, TypeError):
+            pass
+
+    total_count = clients_qs.count()
+
     paginator = Paginator(clients_qs, PER_PAGE)
     page_num = request.GET.get("page", 1)
     try:
@@ -89,11 +122,13 @@ def all_clients(request):
         del get_params["page"]
     base_qs = get_params.urlencode()
 
-    templates = MessageTemplate.objects.all()
+    employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
+
     context = {
         "clients_page": page_obj,
         "page_range": page_range,
         "total_pages": total_pages,
+        "total_count": total_count,
         "sip_status": sip_status,
         "pms_status": pms_status,
         "life_status": life_status,
@@ -108,7 +143,9 @@ def all_clients(request):
         "health_max": health_max,
         "q": q,
         "base_qs": base_qs,
-        "templates": templates,
+        "sort": sort_param,
+        "mapped_to_id": mapped_to_id or "",
+        "employees": employees,
     }
     return render(request, "clients/all_clients.html", context)
 

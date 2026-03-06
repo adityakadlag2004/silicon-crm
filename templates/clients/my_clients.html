@@ -1,37 +1,12 @@
 {% extends "base.html" %}
 {% block title %}My Clients{% endblock %}
+{% block page_title %}My Clients{% endblock %}
 {% block content %}
-<style>
-  .dashboard-section-title { font-size: 1.2rem; font-weight: 700; color: #2d3748; margin: 1.5rem 0 1rem; }
-  .modern-card { background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 1rem; margin-bottom: 1rem; }
-  .filter-bar { display:flex; flex-wrap:wrap; gap: 0.75rem; align-items:flex-end; }
-  .filter-bar .form-label { font-size: 0.95rem; color:#4a5568; margin-bottom: 0.2rem; }
-  .filter-bar .form-select, .filter-bar .form-control { border-radius: 10px; border:1px solid #e2e8f0; background:#f8fafc; font-size:0.95rem; padding:0.45rem 0.75rem; }
-  .filter-toggle { font-size:0.95rem; font-weight:700; color:#e53935; cursor:pointer; display:inline-flex; align-items:center; gap:0.35rem; }
-  .filter-accordion { display:none; margin-top:0.75rem; padding-top:0.75rem; border-top:1px dashed #e2e8f0; }
-  .btn-primary-soft { background: linear-gradient(90deg, #f6e05e 0%, #fbd38d 100%); color:#1a202c; border:none; border-radius:10px; padding:0.55rem 1.1rem; font-weight:700; box-shadow:0 4px 12px rgba(0,0,0,0.08); text-decoration:none; }
-  .btn-ghost { background:#f8fafc; color:#2d3748; border:1px solid #e2e8f0; border-radius:10px; padding:0.55rem 1.1rem; font-weight:700; text-decoration:none; }
-  .table-wrap { overflow-x:auto; }
-  table.clients-table { width:100%; border-collapse:collapse; font-size:0.97rem; background:#fff; border-radius:14px; overflow:hidden; }
-  table.clients-table thead th { position:sticky; top:0; background:linear-gradient(90deg,#f6e05e 0%, #fbd38d 100%); color:#1a202c; padding:0.65rem 0.55rem; font-weight:800; border-bottom:2px solid #e2e8f0; z-index:1; text-align:left; }
-  table.clients-table tbody tr:nth-child(odd) { background:#f9fbfd; }
-  table.clients-table td { padding:0.65rem 0.55rem; border-bottom:1px solid #eef2f7; color:#2d3748; }
-  .chip-btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.35rem 0.75rem; border-radius:999px; font-weight:700; border:1px solid #e2e8f0; background:#fff; color:#1a202c; text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
-  .chip-btn:hover { background:#fff8e1; }
-  .pager-wrap { display:flex; justify-content:flex-end; padding: 0.8rem 0; }
-  .pagination { display:flex; gap:0.25rem; list-style:none; padding:0; margin:0; }
-  .pagination .page-link { display:inline-block; padding:0.45rem 0.75rem; border-radius:8px; text-decoration:none; background:#fff; border:1px solid #e6e6e6; color:#2d3748; font-weight:600; }
-  .pagination .page-item.active .page-link { background:#f6e05e; border-color:#ecc94b; }
-  .pagination .page-item.disabled .page-link { opacity:0.5; pointer-events:none; }
-  @media (max-width: 800px) {
-    .filter-bar { flex-direction:column; align-items:stretch; }
-  }
-</style>
 
-<div class="dashboard-section-title">My Clients</div>
+<h2 class="ki-section-title">My Clients</h2>
 
-<div class="modern-card mb-4">
-  <form method="get" class="filter-bar">
+<div class="ki-card mb-4">
+  <form method="get" class="ki-filter-bar">
     <div style="min-width:220px;">
       <label class="form-label">Search</label>
       <input type="text" name="q" class="form-control" placeholder="Name, email, phone, PAN" value="{{ request.GET.q|default:'' }}">
@@ -61,15 +36,15 @@
       </select>
     </div>
     <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
-      <button type="submit" class="btn-primary-soft">Filter</button>
-      <a href="{% url 'clients:my_clients' %}" class="btn-ghost">Reset</a>
-      <span class="filter-toggle" id="moreFiltersToggle">More filters ▾</span>
-      <a href="?{% if edited_filter_active %}{{ edited_toggle_qs }}{% else %}{% if base_qs %}{{ base_qs }}&{% endif %}edited=1{% endif %}" class="chip-btn" style="text-decoration:none;{% if edited_filter_active %}background:#fff8e1;{% endif %}">
+      <button type="submit" class="ki-btn ki-btn-primary">Filter</button>
+      <a href="{% url 'clients:my_clients' %}" class="ki-btn ki-btn-secondary">Reset</a>
+      <span class="ki-filter-toggle" id="moreFiltersToggle"><i class="bi bi-funnel"></i> More filters ▾</span>
+      <a href="?{% if edited_filter_active %}{{ edited_toggle_qs }}{% else %}{% if base_qs %}{{ base_qs }}&{% endif %}edited=1{% endif %}" class="ki-btn ki-btn-sm ki-btn-secondary" style="text-decoration:none;{% if edited_filter_active %}background:var(--ki-primary-lighter);color:#fff;{% endif %}">
         {% if edited_filter_active %}Hide Edited Filter{% else %}Show Edited Only{% endif %}
       </a>
     </div>
 
-    <div class="filter-accordion" id="moreFiltersSection">
+    <div class="ki-filter-accordion" id="moreFiltersSection">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;">
         <div>
           <label class="form-label">SIP Min</label>
@@ -117,7 +92,7 @@
 </div>
 
 <!-- Bulk Messaging Controls -->
-<div class="modern-card mb-3" style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;justify-content:space-between;">
+<div class="ki-card mb-3" style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;justify-content:space-between;">
   <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
     <label style="display:flex;align-items:center;gap:0.4rem;">
       <input id="selectAllClients" type="checkbox" />
@@ -129,14 +104,14 @@
         <option value="{{ tpl.id }}">{{ tpl.name }}</option>
       {% endfor %}
     </select>
-    <button id="previewTemplateBtn" class="dashboard-link" type="button" style="padding:0.4rem 0.9rem;">Preview</button>
-    <button id="sendWhatsAppBtn" class="dashboard-link" type="button" style="padding:0.4rem 0.9rem;">Send WhatsApp</button>
+    <button id="previewTemplateBtn" class="ki-btn ki-btn-primary ki-btn-sm" type="button">Preview</button>
+    <button id="sendWhatsAppBtn" class="ki-btn ki-btn-primary ki-btn-sm" type="button"><i class="bi bi-whatsapp"></i> Send WhatsApp</button>
   </div>
   <div id="bulkStatus" style="font-size:0.95rem;color:#374151;display:none;"></div>
 </div>
 
-<div class="modern-card table-wrap">
-  <table class="clients-table">
+<div class="ki-card ki-table-wrap">
+  <table class="ki-table">
     <thead>
       <tr>
         <th style="width:38px;"><input id="colSelectAll" type="checkbox" /></th>
@@ -162,7 +137,7 @@
         <td>₹{{ client.pms_amount|default:0 }}</td>
         <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
         <td style="display:flex;gap:0.35rem;flex-wrap:wrap;">
-          <a href="{% url 'clients:edit_client' client.id %}" class="chip-btn">Edit</a>
+          <a href="{% url 'clients:edit_client' client.id %}" class="ki-btn ki-btn-sm ki-btn-secondary"><i class="bi bi-pencil"></i> Edit</a>
         </td>
       </tr>
       {% empty %}
@@ -171,7 +146,7 @@
     </tbody>
   </table>
 
-  <div class="pager-wrap">
+  <div class="ki-pagination">
     <nav aria-label="Page navigation">
       <ul class="pagination">
         {% if clients_page.has_previous %}
@@ -221,14 +196,14 @@
   <div style="width:94%;max-width:800px;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 8px 40px rgba(0,0,0,0.25);margin:auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
       <strong id="bulkModalTitle">Preview messages</strong>
-      <button id="bulkModalClose" class="dashboard-link" style="padding:0.25rem 0.6rem;font-size:0.9rem;">Close</button>
+      <button id="bulkModalClose" class="ki-btn ki-btn-secondary ki-btn-sm">Close</button>
     </div>
 
     <div id="bulkModalBody" style="max-height:420px;overflow:auto;padding:0.4rem;border-radius:8px;background:#f8fafc;"></div>
 
     <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.6rem;">
-      <button id="bulkModalSend" class="dashboard-link" style="padding:0.45rem 0.9rem;">Send now</button>
-      <button id="bulkModalCancel" class="dashboard-link" style="background:#e2e8f0;color:#2d3748;padding:0.45rem 0.9rem;">Cancel</button>
+      <button id="bulkModalSend" class="ki-btn ki-btn-primary">Send now</button>
+      <button id="bulkModalCancel" class="ki-btn ki-btn-secondary">Cancel</button>
     </div>
   </div>
 </div>

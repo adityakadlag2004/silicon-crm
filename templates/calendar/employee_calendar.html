@@ -1,66 +1,36 @@
 {% extends "base.html" %}
 {% block title %}My Calendar{% endblock %}
+{% block page_title %}Calendar{% endblock %}
 
 {% block content %}
 <!-- FullCalendar CSS -->
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
 <style>
-  .calendar-card {
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-    padding: 2.2rem 1.5rem 2rem 1.5rem;
-    margin-bottom: 1.2rem;
-    max-width: 1100px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  .calendar-card h2 {
-    text-align: center;
-    font-weight: 700;
-    color: #1a202c;
-    margin-bottom: 1.2rem;
-    letter-spacing: 0.5px;
-    text-shadow: 0 1px 4px rgba(236,201,75,0.12);
-  }
   #calendar {
     max-width: 100%;
     margin: 0 auto;
-    background: linear-gradient(120deg, #fffde7 0%, #f6e05e 100%);
+    background: var(--ki-card-bg);
     padding: 12px;
-    border-radius: 12px;
-    box-shadow: 0 1px 8px rgba(236,201,75,0.10);
-    color: #1a202c;
+    border-radius: var(--ki-radius);
+    border: 1px solid var(--ki-border);
+    color: var(--ki-text);
   }
-  .fc .fc-toolbar-title, .fc .fc-col-header-cell-cushion, .fc .fc-daygrid-day-number, .fc .fc-event-title {
-    color: #1a202c !important;
-    font-weight: 600;
-    text-shadow: 0 1px 4px rgba(236,201,75,0.10);
-  }
+  .fc .fc-toolbar-title { color: var(--ki-text) !important; font-weight: 700; }
+  .fc .fc-col-header-cell-cushion, .fc .fc-daygrid-day-number { color: var(--ki-text) !important; font-weight: 600; }
+  .fc .fc-event-title { font-weight: 600; }
   .fc .fc-timegrid-slot-label {
-    color: #ecc94b !important;
-    font-weight: 700;
-    background: #2d3748 !important;
-    border-radius: 6px;
-    padding: 2px 8px;
+    color: #fff !important; font-weight: 700;
+    background: var(--ki-primary) !important;
+    border-radius: 4px; padding: 2px 8px;
   }
-  .fc .fc-daygrid-day {
-    color: #2d3748 !important;
-  }
+  .fc .fc-daygrid-day { color: var(--ki-text) !important; }
   .fc-daygrid-day:hover { cursor: pointer; background-color: #f3f7fb; }
-  .fc-customButton-backButton { background-color: #6c757d; color: #fff; border: none; }
-  .modal-content {
-    border-radius: 14px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-  }
-  @media (max-width: 1100px) {
-    .calendar-card { padding: 1rem 0.2rem; max-width: 99vw; }
-    #calendar { padding: 6px; }
-  }
+  .fc-customButton-backButton { background-color: var(--ki-muted); color: #fff; border: none; }
+  .fc .fc-button-primary { background: var(--ki-primary); border-color: var(--ki-primary); }
+  .fc .fc-button-primary:hover { background: var(--ki-primary-hover); border-color: var(--ki-primary-hover); }
+  .fc .fc-button-primary:not(:disabled).fc-button-active { background: var(--ki-primary-dark); border-color: var(--ki-primary-dark); }
   @media (max-width: 600px) {
-    .calendar-card { padding: 0.5rem 0.1rem; }
     #calendar { padding: 2px; }
-    h2 { font-size: 1.1rem; }
     .fc .fc-toolbar.fc-header-toolbar { flex-direction: column; gap: 0.35rem; }
     .fc .fc-toolbar-chunk { width: 100%; justify-content: center; }
     .fc .fc-button-group { width: 100%; justify-content: center; flex-wrap: wrap; gap: 4px; }
@@ -73,16 +43,12 @@
     .badge { font-size: 0.78rem; }
   }
   /* Ensure modals appear above FullCalendar overlays */
-  .modal {
-    z-index: 20500 !important;
-  }
-  .modal-backdrop {
-    z-index: 20400 !important;
-  }
+  .modal { z-index: 20500 !important; }
+  .modal-backdrop { z-index: 20400 !important; }
 </style>
 
-<div class="calendar-card">
-  <h2>📅 My Calendar</h2>
+<div class="ki-card">
+  <h2 class="ki-section-title" style="text-align:center;"><i class="bi bi-calendar3"></i> My Calendar</h2>
     <!-- Status chips -->
     <div class="d-flex flex-wrap justify-content-center gap-2 mb-3">
       <span class="badge rounded-pill bg-primary">Pending: {{ pending_count|default:0 }}</span>
@@ -98,7 +64,7 @@
     </div>
     <div class="form-check form-check-inline">
       <input class="form-check-input evt-filter" type="checkbox" id="f_meeting" value="meeting" checked>
-      <label class="form-check-label badge" style="background:#ecc94b; color:#2d3748;" for="f_meeting">Meeting</label>
+      <label class="form-check-label badge" style="background:var(--ki-primary); color:#fff;" for="f_meeting">Meeting</label>
     </div>
     <div class="form-check form-check-inline">
       <input class="form-check-input evt-filter" type="checkbox" id="f_reminder" value="reminder" checked>
@@ -155,9 +121,9 @@
 <div class="modal fade" id="eventDetailModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header">
+      <div class="ki-modal-header">
         <h5 class="modal-title" id="modalTitle">Event</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <p id="modalWhen"></p>
@@ -169,9 +135,9 @@
         </p>
       </div>
       <div class="modal-footer">
-        <button id="modalBirthdayFollowup" type="button" class="btn btn-sm btn-warning" style="display:none;">Create Follow-up</button>
-        <button id="eventDetailEdit" type="button" class="btn btn-sm btn-primary">Edit</button>
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button id="modalBirthdayFollowup" type="button" class="ki-btn ki-btn-sm" style="background:var(--ki-warning);color:#000;display:none;">Create Follow-up</button>
+        <button id="eventDetailEdit" type="button" class="ki-btn ki-btn-sm ki-btn-primary">Edit</button>
+        <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
   </div>
@@ -180,9 +146,9 @@
       <div class="modal fade" id="createEventModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
           <div class="modal-content">
-            <div class="modal-header">
+            <div class="ki-modal-header">
               <h5 class="modal-title">Create Event</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
               <form id="createEventForm">
@@ -215,8 +181,8 @@
               </form>
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-              <button id="createEventSubmit" type="button" class="btn btn-primary btn-sm">Create</button>
+              <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button id="createEventSubmit" type="button" class="ki-btn ki-btn-sm ki-btn-primary">Create</button>
             </div>
           </div>
         </div>
@@ -275,7 +241,7 @@ document.addEventListener('DOMContentLoaded', function() {
     eventDidMount: function(info) {
       const colorMap = {
         call_followup: {bg: '#28a745', fg: '#fff'},
-        meeting: {bg: '#ecc94b', fg: '#2d3748'},
+        meeting: {bg: '#2563eb', fg: '#fff'},
         reminder: {bg: '#fd7e14', fg: '#fff'},
         task: {bg: '#6c757d', fg: '#fff'},
         birthday: {bg: '#ff9ccf', fg: '#641e16'}
@@ -521,15 +487,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Mobile floating add button (visible on small screens)
   const addBtn = document.createElement('button');
-  addBtn.className = 'btn btn-primary shadow-lg d-md-none';
+  addBtn.className = 'ki-btn ki-btn-primary shadow-lg d-md-none';
   addBtn.style.position = 'fixed';
   addBtn.style.right = '16px';
   addBtn.style.bottom = '16px';
   addBtn.style.borderRadius = '50%';
-  addBtn.style.width = '60px';
-  addBtn.style.height = '60px';
-  addBtn.style.fontSize = '30px';
-  addBtn.innerHTML = '+';
+  addBtn.style.width = '56px';
+  addBtn.style.height = '56px';
+  addBtn.style.fontSize = '24px';
+  addBtn.innerHTML = '<i class="bi bi-plus-lg"></i>';
   addBtn.title = 'Add Event';
   addBtn.addEventListener('click', function(){
     document.getElementById('evt_title').value = '';

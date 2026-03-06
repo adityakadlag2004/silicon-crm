@@ -1,22 +1,25 @@
 {% extends "base.html" %}
 {% load static %}
+{% block title %}Bulk Client Reassignment{% endblock %}
+{% block page_title %}Bulk Reassign{% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <h3>Bulk Client Reassignment</h3>
+
+<h2 class="ki-section-title">Bulk Client Reassignment</h2>
 
   {% if messages %}
     {% for m in messages %}
-      <div class="alert {% if m.tags %}alert-{{ m.tags }}{% endif %}">{{ m }}</div>
+      <div class="ki-alert {% if m.tags %}alert-{{ m.tags }}{% endif %}">{{ m }}</div>
     {% endfor %}
   {% endif %}
 
   <!-- Step: choose source/target or load unmapped with search -->
+  <div class="ki-card">
   <form method="post" id="load-form">
     {% csrf_token %}
-    <div class="row mb-3">
+    <div class="row mb-3 g-3">
       <div class="col-md-4">
-        <label for="source_employee">Source employee (move FROM)</label>
-        <select name="source_employee" id="source_employee" class="form-control">
+        <label for="source_employee" class="form-label">Source employee (move FROM)</label>
+        <select name="source_employee" id="source_employee" class="form-select">
           <option value="">-- Select source employee --</option>
           {% for emp in employees %}
             <option value="{{ emp.id }}"
@@ -28,8 +31,8 @@
       </div>
 
       <div class="col-md-4">
-        <label for="target_employee">Target employee (move TO)</label>
-        <select name="target_employee" id="target_employee" class="form-control">
+        <label for="target_employee" class="form-label">Target employee (move TO)</label>
+        <select name="target_employee" id="target_employee" class="form-select">
           <option value="">-- Select target employee --</option>
           {% for emp in employees %}
             <option value="{{ emp.id }}"
@@ -41,25 +44,26 @@
       </div>
 
       <div class="col-md-4">
-        <label for="search_clients">Search clients</label>
+        <label for="search_clients" class="form-label">Search clients</label>
         <input type="text" name="q" id="search_clients" class="form-control" placeholder="Name, email, phone, PAN" value="{{ q }}">
       </div>
 
       <div class="col-md-12 d-flex gap-2 align-items-end mt-2 flex-wrap">
-        <button class="btn btn-outline-primary" type="submit" name="action" value="load">Load from source</button>
-        <button class="btn btn-outline-secondary" type="submit" name="action" value="load_unmapped">Load unmapped clients</button>
+        <button class="ki-btn ki-btn-primary" type="submit" name="action" value="load"><i class="bi bi-download"></i> Load from source</button>
+        <button class="ki-btn ki-btn-secondary" type="submit" name="action" value="load_unmapped">Load unmapped clients</button>
         <small class="text-muted">Use search to narrow the list before loading.</small>
       </div>
     </div>
   </form>
+  </div>
 
   {% if clients_preview %}
-    <hr>
     {% if mode == 'unmapped' %}
-      <h5>Unmapped clients</h5>
+      <h3 class="ki-section-title">Unmapped clients</h3>
     {% else %}
-      <h5>Clients currently mapped to {{ source_emp.user.username }}</h5>
+      <h3 class="ki-section-title">Clients currently mapped to {{ source_emp.user.username }}</h3>
     {% endif %}
+    <div class="ki-card">
     <form method="post" id="apply-form">
       {% csrf_token %}
       <input type="hidden" name="action" value="apply">
@@ -70,8 +74,8 @@
 
       <div class="row mb-3">
         <div class="col-md-6">
-          <label for="target_employee_apply">Assign to employee</label>
-          <select name="target_employee" id="target_employee_apply" class="form-control" required>
+          <label for="target_employee_apply" class="form-label">Assign to employee</label>
+          <select name="target_employee" id="target_employee_apply" class="form-select" required>
             <option value="">-- Select target employee --</option>
             {% for emp in employees %}
               <option value="{{ emp.id }}"
@@ -84,12 +88,13 @@
       </div>
 
 
-      <div class="mb-2">
-        <button type="button" id="select-all" class="btn btn-sm btn-outline-secondary">Select all</button>
-        <button type="button" id="clear-all" class="btn btn-sm btn-outline-secondary">Clear</button>
+      <div class="mb-2 d-flex gap-2">
+        <button type="button" id="select-all" class="ki-btn ki-btn-sm ki-btn-secondary">Select all</button>
+        <button type="button" id="clear-all" class="ki-btn ki-btn-sm ki-btn-secondary">Clear</button>
       </div>
 
-      <table class="table table-sm table-striped">
+      <div class="ki-table-wrap">
+      <table class="ki-table">
         <thead>
           <tr>
             <th></th>
@@ -119,12 +124,15 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
 
-      <div class="form-group mt-2">
-        <button class="btn btn-primary" type="submit">Reassign selected clients</button>
-        <a href="{% url 'clients:bulk_reassign' %}" class="btn btn-secondary">Cancel</a>
+      </div>
+      <div class="mt-3 d-flex gap-2">
+        <button class="ki-btn ki-btn-primary" type="submit"><i class="bi bi-arrow-repeat"></i> Reassign selected</button>
+        <a href="{% url 'clients:bulk_reassign' %}" class="ki-btn ki-btn-secondary">Cancel</a>
       </div>
     </form>
+    </div>
 
     <script>
       // simple select all / clear all
@@ -136,5 +144,4 @@
       });
     </script>
   {% endif %}
-</div>
 {% endblock %}

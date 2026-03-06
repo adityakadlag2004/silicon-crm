@@ -1,438 +1,487 @@
 {% extends "base.html" %}
 {% block title %}All Clients{% endblock %}
-{% block content %}
+{% block page_title %}All Clients{% endblock %}
+{% block extra_css %}
 <style>
-  .dashboard-section-title { font-size: 1.2rem; font-weight: 700; color: #2d3748; margin: 1.5rem 0 1rem; }
-  .modern-card { background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 1rem; margin-bottom: 1rem; }
-  .filter-bar { display:flex; flex-wrap:wrap; gap: 0.75rem; align-items:flex-end; }
-  .filter-bar .form-label { font-size: 0.95rem; color:#4a5568; margin-bottom: 0.2rem; }
-  .filter-bar .form-select, .filter-bar .form-control { border-radius: 10px; border:1px solid #e2e8f0; background:#f8fafc; font-size:0.95rem; padding:0.45rem 0.75rem; }
-  .filter-toggle { font-size:0.95rem; font-weight:700; color:#e53935; cursor:pointer; display:inline-flex; align-items:center; gap:0.35rem; }
-  .filter-accordion { display:none; margin-top:0.75rem; padding-top:0.75rem; border-top:1px dashed #e2e8f0; }
-  .btn-primary-soft { background: linear-gradient(90deg, #f6e05e 0%, #fbd38d 100%); color:#1a202c; border:none; border-radius:10px; padding:0.55rem 1.1rem; font-weight:700; box-shadow:0 4px 12px rgba(0,0,0,0.08); text-decoration:none; }
-  .btn-ghost { background:#f8fafc; color:#2d3748; border:1px solid #e2e8f0; border-radius:10px; padding:0.55rem 1.1rem; font-weight:700; text-decoration:none; }
-  .table-wrap { overflow-x:auto; }
-  table.clients-table { width:100%; border-collapse:collapse; font-size:0.97rem; background:#fff; border-radius:14px; overflow:hidden; }
-  table.clients-table thead th { position:sticky; top:0; background:linear-gradient(90deg,#f6e05e 0%, #fbd38d 100%); color:#1a202c; padding:0.65rem 0.55rem; font-weight:800; border-bottom:2px solid #e2e8f0; z-index:1; text-align:left; }
-  table.clients-table tbody tr:nth-child(odd) { background:#f9fbfd; }
-  table.clients-table td { padding:0.65rem 0.55rem; border-bottom:1px solid #eef2f7; color:#2d3748; }
-  .chip-btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.35rem 0.75rem; border-radius:999px; font-weight:700; border:1px solid #e2e8f0; background:#fff; color:#1a202c; text-decoration:none; box-shadow:0 1px 4px rgba(0,0,0,0.05); }
-  .chip-btn:hover { background:#fff8e1; }
-  .pager-wrap { display:flex; justify-content:flex-end; padding: 0.8rem 0; }
-  .pagination { display:flex; gap:0.25rem; list-style:none; padding:0; margin:0; }
-  .pagination .page-link { display:inline-block; padding:0.45rem 0.75rem; border-radius:8px; text-decoration:none; background:#fff; border:1px solid #e6e6e6; color:#2d3748; font-weight:600; }
-  .pagination .page-item.active .page-link { background:#f6e05e; border-color:#ecc94b; }
-  .pagination .page-item.disabled .page-link { opacity:0.5; pointer-events:none; }
-  @media (max-width: 800px) {
-    table.clients-table thead { position:sticky; top:0; }
-    .filter-bar { flex-direction:column; align-items:stretch; }
-    .filter-accordion { grid-template-columns:1fr; }
+  .clients-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+  }
+  .clients-header h2 { margin: 0; }
+  .clients-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 20px;
+    background: var(--ki-primary-pale);
+    color: var(--ki-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .clients-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  /* Search bar */
+  .clients-search-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .clients-search-row .search-input-wrap {
+    flex: 1;
+    min-width: 240px;
+    position: relative;
+  }
+  .clients-search-row .search-input-wrap i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ki-text-muted);
+    font-size: 1rem;
+  }
+  .clients-search-row .search-input-wrap input {
+    padding-left: 2.2rem;
+  }
+  .filter-select {
+    min-width: 130px;
+  }
+
+  /* Sort header links */
+  .sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    text-decoration: none;
+    color: inherit;
+  }
+  .sortable:hover {
+    color: var(--ki-primary);
+  }
+  .sortable .sort-icon {
+    font-size: 0.7rem;
+    margin-left: 3px;
+    opacity: 0.3;
+  }
+  .sortable.active .sort-icon {
+    opacity: 1;
+    color: var(--ki-primary);
+  }
+
+  /* Advanced filters */
+  .adv-filters {
+    display: none;
+    padding-top: 0.75rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--ki-card-border);
+  }
+  .adv-filters.open { display: block; }
+  .adv-filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.6rem;
+  }
+
+  /* Product mini-badge */
+  .product-badges {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+  }
+  .product-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .pb-sip { background: #e0e7ff; color: #3730a3; }
+  .pb-pms { background: #fef3c7; color: #92400e; }
+  .pb-life { background: #dcfce7; color: #166534; }
+  .pb-health { background: #fce7f3; color: #9d174d; }
+
+  /* Table improvements */
+  .client-name-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+  .client-name-cell .name {
+    font-weight: 600;
+    color: var(--ki-text-primary);
+  }
+  .client-name-cell .sub {
+    font-size: 0.78rem;
+    color: var(--ki-text-muted);
+  }
+
+  .mapped-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    background: var(--ki-body-bg);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ki-text-secondary);
+  }
+
+  /* Responsive table scroll */
+  @media (max-width: 1024px) {
+    .ki-table-wrap { overflow-x: auto; }
+    .ki-table { min-width: 900px; }
   }
 </style>
+{% endblock %}
 
-<div class="dashboard-section-title">All Clients</div>
+{% block content %}
 
-<div class="modern-card mb-4">
-<div class="modern-card mb-4">
-  <form method="get" class="filter-bar">
-    <div style="min-width:220px;">
-      <label class="form-label">Search</label>
-      <input type="text" name="q" class="form-control" placeholder="Name, email, phone, PAN" value="{{ request.GET.q|default:'' }}">
-    </div>
-    <div>
-      <label class="form-label">SIP</label>
-      <select name="sip_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.sip_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.sip_status == "no" %}selected{% endif %}>No</option>
+<!-- Header -->
+<div class="clients-header">
+  <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+    <h2 class="ki-page-title" style="margin:0;">All Clients</h2>
+    <span class="clients-count"><i class="bi bi-people-fill"></i> {{ total_count }} client{{ total_count|pluralize }}</span>
+  </div>
+  <div class="clients-actions">
+    <a href="{% url 'clients:add_client' %}" class="ki-btn ki-btn-primary ki-btn-sm">
+      <i class="bi bi-plus-lg"></i> Add Client
+    </a>
+    <a href="{% url 'clients:bulk_reassign' %}" class="ki-btn ki-btn-secondary ki-btn-sm">
+      <i class="bi bi-arrow-left-right"></i> Bulk Reassign
+    </a>
+  </div>
+</div>
+
+<!-- Search & Filters Card -->
+<div class="ki-card mb-3">
+  <form method="get" id="filterForm">
+    <!-- Keep sort param -->
+    <input type="hidden" name="sort" id="sortInput" value="{{ sort }}">
+
+    <div class="clients-search-row">
+      <div class="search-input-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" class="form-control" placeholder="Search by name, email, phone, or PAN..." value="{{ q }}" autocomplete="off">
+      </div>
+
+      <select name="sip_status" class="form-select filter-select">
+        <option value="">SIP: All</option>
+        <option value="yes" {% if sip_status == "yes" %}selected{% endif %}>SIP: Yes</option>
+        <option value="no" {% if sip_status == "no" %}selected{% endif %}>SIP: No</option>
       </select>
-    </div>
-    <div>
-      <label class="form-label">PMS</label>
-      <select name="pms_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.pms_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.pms_status == "no" %}selected{% endif %}>No</option>
+
+      <select name="pms_status" class="form-select filter-select">
+        <option value="">PMS: All</option>
+        <option value="yes" {% if pms_status == "yes" %}selected{% endif %}>PMS: Yes</option>
+        <option value="no" {% if pms_status == "no" %}selected{% endif %}>PMS: No</option>
       </select>
-    </div>
-    <div>
-      <label class="form-label">Life</label>
-      <select name="life_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.life_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.life_status == "no" %}selected{% endif %}>No</option>
+
+      <select name="life_status" class="form-select filter-select">
+        <option value="">Life: All</option>
+        <option value="yes" {% if life_status == "yes" %}selected{% endif %}>Life: Yes</option>
+        <option value="no" {% if life_status == "no" %}selected{% endif %}>Life: No</option>
       </select>
-    </div>
-    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
-      <button type="submit" class="btn-primary-soft">Filter</button>
-      <a href="{% url 'clients:all_clients' %}" class="btn-ghost">Reset</a>
-      <span class="filter-toggle" id="moreFiltersToggle">More filters ▾</span>
+
+      <select name="mapped_to" class="form-select filter-select" style="min-width:160px;">
+        <option value="">Mapped To: All</option>
+        <option value="unmapped" {% if mapped_to_id == "unmapped" %}selected{% endif %}>Unmapped</option>
+        {% for emp in employees %}
+          <option value="{{ emp.id }}" {% if mapped_to_id == emp.id|stringformat:"d" %}selected{% endif %}>
+            {{ emp.user.get_full_name|default:emp.user.username }}
+          </option>
+        {% endfor %}
+      </select>
+
+      <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel-fill"></i> Filter</button>
+      <a href="{% url 'clients:all_clients' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-x-circle"></i> Reset</a>
+      <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" id="advToggle"><i class="bi bi-sliders"></i> More</button>
     </div>
 
-    <div class="filter-accordion" id="moreFiltersSection">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;">
+    <!-- Advanced Filters -->
+    <div class="adv-filters" id="advFilters">
+      <div class="adv-filters-grid">
         <div>
           <label class="form-label">SIP Min</label>
-          <input type="number" name="sip_min" class="form-control" value="{{ request.GET.sip_min }}">
+          <input type="number" name="sip_min" class="form-control form-control-sm" value="{{ sip_min|default:'' }}">
         </div>
         <div>
           <label class="form-label">SIP Max</label>
-          <input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}">
+          <input type="number" name="sip_max" class="form-control form-control-sm" value="{{ sip_max|default:'' }}">
         </div>
         <div>
           <label class="form-label">PMS Min</label>
-          <input type="number" name="pms_min" class="form-control" value="{{ request.GET.pms_min }}">
+          <input type="number" name="pms_min" class="form-control form-control-sm" value="{{ pms_min|default:'' }}">
         </div>
         <div>
           <label class="form-label">PMS Max</label>
-          <input type="number" name="pms_max" class="form-control" value="{{ request.GET.pms_max }}">
+          <input type="number" name="pms_max" class="form-control form-control-sm" value="{{ pms_max|default:'' }}">
         </div>
         <div>
           <label class="form-label">Life Min</label>
-          <input type="number" name="life_min" class="form-control" value="{{ request.GET.life_min }}">
+          <input type="number" name="life_min" class="form-control form-control-sm" value="{{ life_min|default:'' }}">
         </div>
         <div>
           <label class="form-label">Life Max</label>
-          <input type="number" name="life_max" class="form-control" value="{{ request.GET.life_max }}">
+          <input type="number" name="life_max" class="form-control form-control-sm" value="{{ life_max|default:'' }}">
         </div>
         <div>
           <label class="form-label">Health</label>
-          <select name="health_status" class="form-select">
+          <select name="health_status" class="form-select form-select-sm">
             <option value="">All</option>
-            <option value="yes" {% if request.GET.health_status == "yes" %}selected{% endif %}>Yes</option>
-            <option value="no" {% if request.GET.health_status == "no" %}selected{% endif %}>No</option>
+            <option value="yes" {% if health_status == "yes" %}selected{% endif %}>Yes</option>
+            <option value="no" {% if health_status == "no" %}selected{% endif %}>No</option>
           </select>
         </div>
         <div>
           <label class="form-label">Health Min</label>
-          <input type="number" name="health_min" class="form-control" value="{{ request.GET.health_min }}">
+          <input type="number" name="health_min" class="form-control form-control-sm" value="{{ health_min|default:'' }}">
         </div>
         <div>
           <label class="form-label">Health Max</label>
-          <input type="number" name="health_max" class="form-control" value="{{ request.GET.health_max }}">
+          <input type="number" name="health_max" class="form-control form-control-sm" value="{{ health_max|default:'' }}">
         </div>
       </div>
     </div>
   </form>
 </div>
 
-<!-- Bulk Messaging Controls -->
-<div class="modern-card mb-3" style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;justify-content:space-between;">
-  <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
-    <label style="display:flex;align-items:center;gap:0.4rem;">
-      <input id="selectAllClients" type="checkbox" />
-      <small>Select all</small>
-    </label>
-    <select id="messageTemplateSelect" class="form-select" style="min-width:260px;">
-      <option value="">Select message template...</option>
-      {% for tpl in templates %}
-        <option value="{{ tpl.id }}">{{ tpl.name }}</option>
-      {% endfor %}
-    </select>
-    <button id="previewTemplateBtn" class="dashboard-link" type="button" style="padding:0.4rem 0.9rem;">Preview</button>
-    <button id="sendWhatsAppBtn" class="dashboard-link" type="button" style="padding:0.4rem 0.9rem;">Send WhatsApp</button>
-  </div>
-  <div id="bulkStatus" style="font-size:0.95rem;color:#374151;display:none;"></div>
+<!-- Results info -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;padding:0 0.25rem;">
+  <small class="text-muted">
+    Showing {{ clients_page.start_index }}-{{ clients_page.end_index }} of {{ total_count }} client{{ total_count|pluralize }}
+    {% if q %} matching "<strong>{{ q }}</strong>"{% endif %}
+  </small>
+  <small class="text-muted">Page {{ clients_page.number }} of {{ total_pages }}</small>
 </div>
 
-<div class="modern-card table-wrap">
-  <table class="clients-table">
+<!-- Data Table -->
+<div class="ki-card ki-card-flush ki-table-wrap">
+  <table class="ki-table" id="clientsTable">
     <thead>
       <tr>
-        <th style="width:38px;"><input id="colSelectAll" type="checkbox" /></th>
-        <th>Name</th>
-        <th>Phone</th>
-        <th>Email</th>
-        <th>SIP</th>
-        <th>Lumsum Inv.</th>
-        <th>PMS</th>
-        <th>Mapped To</th>
-        <th style="width:160px;">Actions</th>
+        <th style="width:60px;">
+          <a class="sortable {% if sort == 'id' or sort == '-id' %}active{% endif %}" data-sort="id">
+            # <i class="bi bi-chevron-expand sort-icon"></i>
+          </a>
+        </th>
+        <th>
+          <a class="sortable {% if sort == 'name' or sort == '-name' %}active{% endif %}" data-sort="name">
+            Client <i class="bi bi-chevron-expand sort-icon"></i>
+          </a>
+        </th>
+        <th>Products</th>
+        <th>
+          <a class="sortable {% if sort == 'sip_amount' or sort == '-sip_amount' %}active{% endif %}" data-sort="sip_amount">
+            SIP <i class="bi bi-chevron-expand sort-icon"></i>
+          </a>
+        </th>
+        <th>
+          <a class="sortable {% if sort == 'lumsum_investment' or sort == '-lumsum_investment' %}active{% endif %}" data-sort="lumsum_investment">
+            Lumpsum <i class="bi bi-chevron-expand sort-icon"></i>
+          </a>
+        </th>
+        <th>
+          <a class="sortable {% if sort == 'pms_amount' or sort == '-pms_amount' %}active{% endif %}" data-sort="pms_amount">
+            PMS <i class="bi bi-chevron-expand sort-icon"></i>
+          </a>
+        </th>
+        <th>
+          <a class="sortable {% if sort == 'mapped_to' or sort == '-mapped_to' %}active{% endif %}" data-sort="mapped_to">
+            Mapped To <i class="bi bi-chevron-expand sort-icon"></i>
+          </a>
+        </th>
+        <th style="width:130px;">Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for client in clients_page %}
       <tr>
-        <td><input class="client-select" type="checkbox" value="{{ client.id }}" data-phone="{{ client.phone|default:''|floatformat:0 }}" data-name="{{ client.name|escape }}" /></td>
-        <td>{{ client.name }}</td>
-        <td>{{ client.phone|default:''|floatformat:0 }}</td>
-        <td>{{ client.email }}</td>
-        <td>₹{{ client.sip_amount|default:0 }}</td>
-        <td>₹{{ client.lumsum_investment|default:0 }}</td>
-        <td>₹{{ client.pms_amount|default:0 }}</td>
-        <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
-        <td style="display:flex;gap:0.35rem;flex-wrap:wrap;">
-          <a href="{% url 'clients:map_client' client.id %}" class="chip-btn">Map</a>
-          <a href="{% url 'clients:edit_client' client.id %}" class="chip-btn">Edit</a>
+        <td><span style="font-weight:600;color:var(--ki-text-muted);">{{ client.id }}</span></td>
+        <td>
+          <div class="client-name-cell">
+            <span class="name">{{ client.name }}</span>
+            <span class="sub">
+              {% if client.phone %}{{ client.phone|floatformat:0 }}{% endif %}
+              {% if client.email %}· {{ client.email }}{% endif %}
+            </span>
+          </div>
+        </td>
+        <td>
+          <div class="product-badges">
+            {% if client.sip_status %}<span class="product-badge pb-sip">SIP</span>{% endif %}
+            {% if client.pms_status %}<span class="product-badge pb-pms">PMS</span>{% endif %}
+            {% if client.life_status %}<span class="product-badge pb-life">Life</span>{% endif %}
+            {% if client.health_status %}<span class="product-badge pb-health">Health</span>{% endif %}
+            {% if not client.sip_status and not client.pms_status and not client.life_status and not client.health_status %}
+              <span style="color:var(--ki-text-muted);font-size:0.8rem;">—</span>
+            {% endif %}
+          </div>
+        </td>
+        <td>{% if client.sip_amount %}₹{{ client.sip_amount|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td>{% if client.lumsum_investment %}₹{{ client.lumsum_investment|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td>{% if client.pms_amount %}₹{{ client.pms_amount|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td>
+          {% if client.mapped_to %}
+            <span class="mapped-badge"><i class="bi bi-person-fill" style="font-size:0.75rem;"></i> {{ client.mapped_to.user.get_full_name|default:client.mapped_to.user.username }}</span>
+          {% else %}
+            <span class="mapped-badge" style="color:var(--ki-warning);background:#fef3c7;"><i class="bi bi-exclamation-triangle-fill" style="font-size:0.75rem;"></i> Unmapped</span>
+          {% endif %}
+        </td>
+        <td>
+          <div style="display:flex;gap:0.3rem;">
+            <a href="{% url 'clients:edit_client' client.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="Edit">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <a href="{% url 'clients:map_client' client.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="Map">
+              <i class="bi bi-diagram-3"></i>
+            </a>
+          </div>
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="8" class="text-center">No clients found</td></tr>
+      <tr>
+        <td colspan="8" class="text-center" style="padding:3rem 1rem;">
+          <div style="color:var(--ki-text-muted);">
+            <i class="bi bi-inbox" style="font-size:2rem;display:block;margin-bottom:0.5rem;"></i>
+            No clients found{% if q %} matching "<strong>{{ q }}</strong>"{% endif %}
+          </div>
+        </td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
-
-  {# Numeric pager #}
-  <div class="pager-wrap">
-    <nav aria-label="Page navigation">
-      <ul class="pagination">
-
-        {# Prev button #}
-        {% if clients_page.has_previous %}
-          <li class="page-item">
-            <a class="page-link" href="?page={{ clients_page.previous_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">Prev</a>
-          </li>
-        {% else %}
-          <li class="page-item disabled"><span class="page-link">Prev</span></li>
-        {% endif %}
-
-        {# First page + ellipsis if needed #}
-        {% if 1 not in page_range %}
-          <li class="page-item"><a class="page-link" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}">1</a></li>
-          {% if 2 not in page_range %}
-            <li class="page-item disabled"><span class="page-link">…</span></li>
-          {% endif %}
-        {% endif %}
-
-        {# Page numbers around current #}
-        {% for p in page_range %}
-          {% if p == clients_page.number %}
-            <li class="page-item active"><span class="page-link">{{ p }}</span></li>
-          {% else %}
-            <li class="page-item"><a class="page-link" href="?page={{ p }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ p }}</a></li>
-          {% endif %}
-        {% endfor %}
-
-        {# Last page + ellipsis if needed #}
-        {% if total_pages not in page_range %}
-          {% if total_pages|add:-1 not in page_range %}
-            <li class="page-item disabled"><span class="page-link">…</span></li>
-          {% endif %}
-          <li class="page-item"><a class="page-link" href="?page={{ total_pages }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ total_pages }}</a></li>
-        {% endif %}
-
-        {# Next button #}
-        {% if clients_page.has_next %}
-          <li class="page-item">
-            <a class="page-link" href="?page={{ clients_page.next_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">Next</a>
-          </li>
-        {% else %}
-          <li class="page-item disabled"><span class="page-link">Next</span></li>
-        {% endif %}
-      </ul>
-    </nav>
-  </div>
-
 </div>
 
-<!-- Preview / Send Modal (hidden by default) -->
-<div id="bulkModal" style="display:none;position:fixed;inset:0;z-index:1200;align-items:center;justify-content:center;">
-  <div style="width:94%;max-width:800px;background:#fff;border-radius:12px;padding:1rem;box-shadow:0 8px 40px rgba(0,0,0,0.25);margin:auto;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
-      <strong id="bulkModalTitle">Preview messages</strong>
-      <button id="bulkModalClose" class="dashboard-link" style="padding:0.25rem 0.6rem;font-size:0.9rem;">Close</button>
-    </div>
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="ki-pagination" style="margin-top:1rem;">
+  <nav aria-label="Page navigation">
+    <ul class="pagination">
+      {% if clients_page.has_previous %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ clients_page.previous_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">
+            <i class="bi bi-chevron-left"></i> Prev
+          </a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i> Prev</span></li>
+      {% endif %}
 
-    <div id="bulkModalBody" style="max-height:420px;overflow:auto;padding:0.4rem;border-radius:8px;background:#f8fafc;"></div>
+      {% if 1 not in page_range %}
+        <li class="page-item"><a class="page-link" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}">1</a></li>
+        {% if 2 not in page_range %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+        {% endif %}
+      {% endif %}
 
-    <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.6rem;">
-      <button id="bulkModalSend" class="dashboard-link" style="padding:0.45rem 0.9rem;">Send now</button>
-      <button id="bulkModalCancel" class="dashboard-link" style="background:#e2e8f0;color:#2d3748;padding:0.45rem 0.9rem;">Cancel</button>
-    </div>
-  </div>
+      {% for p in page_range %}
+        {% if p == clients_page.number %}
+          <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+        {% else %}
+          <li class="page-item"><a class="page-link" href="?page={{ p }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ p }}</a></li>
+        {% endif %}
+      {% endfor %}
+
+      {% if total_pages not in page_range %}
+        {% if total_pages|add:"-1" not in page_range %}
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+        {% endif %}
+        <li class="page-item"><a class="page-link" href="?page={{ total_pages }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ total_pages }}</a></li>
+      {% endif %}
+
+      {% if clients_page.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="?page={{ clients_page.next_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">
+            Next <i class="bi bi-chevron-right"></i>
+          </a>
+        </li>
+      {% else %}
+        <li class="page-item disabled"><span class="page-link">Next <i class="bi bi-chevron-right"></i></span></li>
+      {% endif %}
+    </ul>
+  </nav>
 </div>
+{% endif %}
 
 <script>
-// Toggle more filters accordion
-const toggle = document.getElementById('moreFiltersToggle');
-const moreFilters = document.getElementById('moreFiltersSection');
-if (toggle && moreFilters) {
-  toggle.addEventListener('click', function(){
-    const isOpen = moreFilters.style.display === 'block';
-    moreFilters.style.display = isOpen ? 'none' : 'block';
-    toggle.textContent = isOpen ? 'More filters ▾' : 'Hide filters ▴';
-  });
-}
-
 (function(){
-  // CSRF cookie helper
-  function getCookie(name) {
-    const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return v ? v.pop() : '';
-  }
-  const csrftoken = getCookie('csrftoken');
+  // ── Advanced filters toggle ──
+  const advToggle = document.getElementById('advToggle');
+  const advFilters = document.getElementById('advFilters');
+  if (advToggle && advFilters) {
+    // Auto-open if any adv filter has a value
+    const hasAdv = advFilters.querySelectorAll('input, select');
+    let anyFilled = false;
+    hasAdv.forEach(el => {
+      if (el.value && el.value.trim()) anyFilled = true;
+    });
+    if (anyFilled) advFilters.classList.add('open');
 
-  const colSelectAll = document.getElementById('colSelectAll');
-  const selectAll = document.getElementById('selectAllClients');
-  const templateSelect = document.getElementById('messageTemplateSelect');
-  const previewBtn = document.getElementById('previewTemplateBtn');
-  const sendBtn = document.getElementById('sendWhatsAppBtn');
-  const bulkStatus = document.getElementById('bulkStatus');
-  const modal = document.getElementById('bulkModal');
-  const modalBody = document.getElementById('bulkModalBody');
-  const modalTitle = document.getElementById('bulkModalTitle');
-  const modalClose = document.getElementById('bulkModalClose');
-  const modalCancel = document.getElementById('bulkModalCancel');
-  const modalSend = document.getElementById('bulkModalSend');
-
-  function clientCheckboxes() {
-    return Array.from(document.querySelectorAll('.client-select'));
-  }
-
-  if (colSelectAll) {
-    colSelectAll.addEventListener('change', function(){ clientCheckboxes().forEach(cb=>cb.checked = this.checked); });
-  }
-  if (selectAll) {
-    selectAll.addEventListener('change', function(){ clientCheckboxes().forEach(cb=>cb.checked = this.checked); });
-  }
-
-  function getSelectedClients() {
-    return clientCheckboxes().filter(cb=>cb.checked).map(cb=>{
-      // sanitize phone: strip trailing .0 (from float storage) and whitespace
-      let raw = (cb.dataset.phone || '').toString().trim();
-      raw = raw.replace(/\.0+$/,'');
-      // also guard against scientific notation (e.g., 1.23e+9)
-      if (/e\+/i.test(raw)) {
-        // attempt to convert to number then to fixed integer string
-        try { raw = (Number(raw)).toString().replace(/\.0+$/,''); } catch(e) {}
-      }
-      return { id: cb.value, name: cb.dataset.name || '', phone: raw };
+    advToggle.addEventListener('click', function(){
+      advFilters.classList.toggle('open');
+      const isOpen = advFilters.classList.contains('open');
+      this.innerHTML = isOpen
+        ? '<i class="bi bi-sliders"></i> Less'
+        : '<i class="bi bi-sliders"></i> More';
     });
   }
 
-  async function postBulk(data){
-    const res = await fetch("{% url 'clients:bulk_whatsapp' %}", {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': csrftoken,
-        'X-Requested-With': 'XMLHttpRequest'
-      },
-      body: JSON.stringify(data)
-    });
-    return res;
-  }
-
-  previewBtn && previewBtn.addEventListener('click', async function(){
-    const tpl = templateSelect.value;
-    const clients = getSelectedClients();
-    if (!tpl) return alert('Select a message template.');
-    if (!clients.length) return alert('Select at least one client.');
-    modalTitle.innerText = `Preview (${clients.length} clients)`;
-    modalBody.innerHTML = `<div style="padding:0.6rem">Generating previews...</div>`;
-    modal.style.display = 'flex';
-    try {
-      const res = await postBulk({ template_id: parseInt(tpl), client_ids: clients.map(c=>parseInt(c.id)), preview: true });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Server error');
-      modalBody.innerHTML = '';
-      const previews = data.messages_preview || [];
-      if (!previews.length) {
-        let msgHtml = `<div style="padding:0.6rem;color:#374151;">No preview messages were generated.`;
-        if (data.skipped && data.skipped.length) {
-          msgHtml += `<div class="small text-muted">Skipped (invalid/no phone): ` + data.skipped.map(s=>s.name).join(', ') + `</div>`;
-        }
-        msgHtml += `</div>`;
-        modalBody.innerHTML = msgHtml;
+  // ── Sortable column headers ──
+  const sortInput = document.getElementById('sortInput');
+  const filterForm = document.getElementById('filterForm');
+  document.querySelectorAll('.sortable').forEach(function(el){
+    el.addEventListener('click', function(e){
+      e.preventDefault();
+      const field = this.dataset.sort;
+      const current = sortInput.value;
+      // Toggle direction
+      if (current === field) {
+        sortInput.value = '-' + field;
+      } else if (current === '-' + field) {
+        sortInput.value = field;
       } else {
-        previews.forEach(m=>{
-          const el = document.createElement('div');
-          el.style.padding = '0.6rem';
-          el.style.borderBottom = '1px solid #e6eef6';
-          el.innerHTML = `<strong>${m.client}</strong> — <small>${m.phone}</small>
-                          <pre style="white-space:pre-wrap;margin:0.45rem 0 0 0;font-family:inherit;">${m.message}</pre>`;
-          modalBody.appendChild(el);
-        });
+        sortInput.value = field;
       }
-      // add Open Drafts button
-      const openBtn = document.createElement('button');
-      openBtn.className = 'dashboard-link';
-      openBtn.style.marginTop = '0.6rem';
-      openBtn.innerText = 'Open Drafts (WhatsApp)';
-      openBtn.addEventListener('click', function(){
-        if (!data.messages_preview || !data.messages_preview.length) return alert('No messages to open');
-        // open a wa.me link per message. Browsers may block many popups; user must allow.
-        data.messages_preview.forEach((msg, idx)=>{
-          const text = encodeURIComponent(msg.message);
-          const wa = msg.wa_number || msg.phone.replace(/\D+/g, '');
-          const url = `https://wa.me/${wa}?text=${text}`;
-          window.open(url, '_blank');
-        });
-      });
-      modalBody.appendChild(openBtn);
-      // Open Next Draft (one-by-one)
-      const openNext = document.createElement('button');
-      openNext.className = 'btn btn-sm btn-outline-primary';
-      openNext.style.marginLeft = '0.6rem';
-      openNext.innerText = 'Open Next Draft';
-      let openIdx = 0;
-      openNext.addEventListener('click', function(){
-        if (!data.messages_preview || !data.messages_preview.length) return alert('No messages to open');
-        if (openIdx >= data.messages_preview.length) { alert('All drafts opened'); openIdx = 0; return; }
-        const msg = data.messages_preview[openIdx++];
-        const text = encodeURIComponent(msg.message);
-        const wa = msg.wa_number || msg.phone.replace(/\D+/g, '');
-        const url = `https://wa.me/${wa}?text=${text}`;
-        window.open(url, '_blank');
-      });
-      modalBody.appendChild(openNext);
-      // Link to preview page and CSV
-      const actionsRow = document.createElement('div');
-      actionsRow.style.marginTop = '0.8rem';
-  const ids = (data.messages_preview || []).map(m=>m.id).join(',');
-      const previewUrl = `{% url 'clients:wa_preview_page' %}?template_id=${tpl}&client_ids=${ids}`;
-      const csvUrl = `{% url 'clients:wa_preview_csv' %}?template_id=${tpl}&client_ids=${ids}`;
-      const a1 = document.createElement('a'); a1.href = previewUrl; a1.target = '_blank'; a1.className='btn btn-sm btn-secondary ms-2'; a1.innerText='Open Preview Page';
-      const a2 = document.createElement('a'); a2.href = csvUrl; a2.target = '_blank'; a2.className='btn btn-sm btn-secondary ms-2'; a2.innerText='Download CSV';
-      actionsRow.appendChild(a1); actionsRow.appendChild(a2);
-      modalBody.appendChild(actionsRow);
-    } catch(err){
-      modalBody.innerHTML = `<div style="color:#9b2c2c;padding:0.6rem">Preview failed: ${err.message}</div>`;
+      filterForm.submit();
+    });
+
+    // Update sort icons to show direction
+    const field = el.dataset.sort;
+    const current = sortInput.value;
+    const icon = el.querySelector('.sort-icon');
+    if (current === field) {
+      icon.className = 'bi bi-chevron-up sort-icon';
+      icon.style.opacity = '1';
+    } else if (current === '-' + field) {
+      icon.className = 'bi bi-chevron-down sort-icon';
+      icon.style.opacity = '1';
     }
   });
 
-  [modalClose, modalCancel].forEach(el=> el && el.addEventListener('click', ()=> modal.style.display='none'));
-
-  modalSend && modalSend.addEventListener('click', async function(){
-    const tpl = templateSelect.value;
-    const clients = getSelectedClients();
-    if (!tpl) return alert('Select a template.');
-    if (!clients.length) return alert('Select clients.');
-    modalBody.innerHTML = `<div style="padding:0.6rem">Sending messages... please wait.</div>`;
-    modalSend.disabled = true;
-    modalSend.innerText = 'Sending...';
-    try {
-      const res = await postBulk({ template_id: parseInt(tpl), client_ids: clients.map(c=>parseInt(c.id)) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Server error');
-      modalBody.innerHTML = `<div style="padding:0.6rem;color:green">Sent ${data.sent_count} messages.</div>`;
-      (data.messages_preview || []).forEach(m=>{
-        const el = document.createElement('div');
-        el.style.padding = '0.5rem';
-        el.style.borderTop = '1px solid #eef4fb';
-        el.innerHTML = `<strong>${m.client}</strong> — <small>${m.phone}</small>
-                        <pre style="white-space:pre-wrap;margin:0.3rem 0 0 0;font-family:inherit;">${m.message}</pre>`;
-        modalBody.appendChild(el);
-      });
-      bulkStatus.style.display = 'block';
-      bulkStatus.innerText = `Last sent: ${data.sent_count} messages`;
-      setTimeout(()=> bulkStatus.style.opacity = 1, 10);
-    } catch(err){
-      modalBody.innerHTML = `<div style="color:#9b2c2c;padding:0.6rem">Send failed: ${err.message}</div>`;
-    } finally {
-      modalSend.disabled = false;
-      modalSend.innerText = 'Send now';
-    }
-  });
-
-  sendBtn && sendBtn.addEventListener('click', function(){ // open preview modal first
-    const clients = getSelectedClients();
-    if (!templateSelect.value) return alert('Select a template first');
-    if (!clients.length) return alert('Select clients first');
-    previewBtn.click();
-  });
-
+  // ── Debounced search ──
+  let debounceTimer;
+  const searchInput = document.querySelector('input[name="q"]');
+  if (searchInput) {
+    searchInput.addEventListener('input', function(){
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function(){
+        filterForm.submit();
+      }, 600);
+    });
+  }
 })();
 </script>
-
 {% endblock %}

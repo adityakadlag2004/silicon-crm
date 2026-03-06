@@ -3,11 +3,11 @@
   <!-- Filter Bar -->
   <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
     <div class="btn-group btn-group-sm" role="group">
-      <button type="button" class="btn btn-outline-dark followup-filter active" data-filter="this_week">This Week</button>
-      <button type="button" class="btn btn-outline-dark followup-filter" data-filter="today">Today</button>
-      <button type="button" class="btn btn-outline-dark followup-filter" data-filter="tomorrow">Tomorrow</button>
-      <button type="button" class="btn btn-outline-danger followup-filter" data-filter="overdue">Overdue{% if overdue_followups %} <span class="badge bg-danger">{{ overdue_followups|length }}</span>{% endif %}</button>
-      <button type="button" class="btn btn-outline-dark followup-filter" data-filter="all">All</button>
+      <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary followup-filter active" data-filter="this_week">This Week</button>
+      <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary followup-filter" data-filter="today">Today</button>
+      <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary followup-filter" data-filter="tomorrow">Tomorrow</button>
+      <button type="button" class="ki-btn ki-btn-sm followup-filter" style="border-color:var(--ki-danger);color:var(--ki-danger);" data-filter="overdue">Overdue{% if overdue_followups %} <span class="badge bg-danger">{{ overdue_followups|length }}</span>{% endif %}</button>
+      <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary followup-filter" data-filter="all">All</button>
     </div>
     {% if is_admin_dashboard %}
     <select class="form-select form-select-sm" style="max-width:180px;" id="followupEmployeeFilter">

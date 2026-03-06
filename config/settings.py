@@ -157,10 +157,14 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
-#STATIC_URL = 'static/'
 STATIC_URL = '/static/'
-STATIC_ROOT = '/home/ubuntu/silicon-crm/static/'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = '/home/ubuntu/silicon-crm/staticfiles/'
+
+if DEBUG:
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+else:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = '/home/ubuntu/silicon-crm/media/'

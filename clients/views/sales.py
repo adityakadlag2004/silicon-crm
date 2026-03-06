@@ -1,16 +1,18 @@
 """Sales views: add, list, approve, edit, delete, incentives, recalculate."""
 from datetime import date
 from decimal import Decimal
+import json
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse
 from django.utils import timezone
 from django.db.models import Q, Sum
 from django.core.paginator import Paginator
+from django.views.decorators.http import require_POST
 
-from ..models import Client, Sale, Employee, IncentiveRule
+from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab
 from ..forms import AdminSaleForm, EditSaleForm, SaleForm
 from .helpers import get_manager_access
 
@@ -253,28 +255,165 @@ def approve_sales(request):
 
 @login_required
 def manage_incentive_rules(request):
+    """Full incentive rules builder/modifier page."""
     user_emp = getattr(request.user, "employee", None)
     if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
         messages.error(request, "You do not have permission to access incentive rules.")
         return redirect("clients:admin_dashboard")
 
-    rules = IncentiveRule.objects.all()
-
-    if request.method == "POST":
-        for rule in rules:
-            unit_field = f"unit_{rule.id}"
-            points_field = f"points_{rule.id}"
-            active_field = f"active_{rule.id}"
-            if unit_field in request.POST and points_field in request.POST:
-                rule.unit_amount = request.POST[unit_field]
-                rule.points_per_unit = request.POST[points_field]
-                if rule.product == "Life Insurance":
-                    rule.active = bool(request.POST.get(active_field))
-                rule.save()
-        messages.success(request, "Incentive rules updated successfully!")
-        return redirect("clients:manage_incentive_rules")
+    rules = IncentiveRule.objects.prefetch_related("slabs").all()
 
     return render(request, "incentives/manage_rules.html", {"rules": rules})
+
+
+@login_required
+@require_POST
+def update_incentive_rule(request, rule_id):
+    """AJAX: Update unit_amount, points_per_unit, active for a rule."""
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    rule = get_object_or_404(IncentiveRule, id=rule_id)
+    try:
+        data = json.loads(request.body)
+        if "unit_amount" in data:
+            rule.unit_amount = Decimal(str(data["unit_amount"]))
+        if "points_per_unit" in data:
+            rule.points_per_unit = Decimal(str(data["points_per_unit"]))
+        if "active" in data:
+            rule.active = bool(data["active"])
+        rule.save()
+        return JsonResponse({"success": True, "message": f"{rule.product} updated."})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def add_incentive_rule(request):
+    """AJAX: Add a new incentive rule."""
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        product = data.get("product", "").strip()
+        unit_amount = Decimal(str(data.get("unit_amount", 0)))
+        points_per_unit = Decimal(str(data.get("points_per_unit", 0)))
+
+        if not product:
+            return JsonResponse({"error": "Product name is required."}, status=400)
+
+        if IncentiveRule.objects.filter(product=product).exists():
+            return JsonResponse({"error": f"Rule for '{product}' already exists."}, status=400)
+
+        rule = IncentiveRule.objects.create(
+            product=product,
+            unit_amount=unit_amount,
+            points_per_unit=points_per_unit,
+            active=True,
+        )
+        return JsonResponse({
+            "success": True,
+            "rule": {
+                "id": rule.id,
+                "product": rule.product,
+                "unit_amount": str(rule.unit_amount),
+                "points_per_unit": str(rule.points_per_unit),
+                "active": rule.active,
+            },
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def delete_incentive_rule(request, rule_id):
+    """AJAX: Delete an incentive rule and all its slabs."""
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    rule = get_object_or_404(IncentiveRule, id=rule_id)
+    product_name = rule.product
+    rule.delete()
+    return JsonResponse({"success": True, "message": f"Rule for '{product_name}' deleted."})
+
+
+@login_required
+@require_POST
+def add_incentive_slab(request, rule_id):
+    """AJAX: Add a slab to a rule."""
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    rule = get_object_or_404(IncentiveRule, id=rule_id)
+    try:
+        data = json.loads(request.body)
+        threshold = Decimal(str(data.get("threshold", 0)))
+        payout = Decimal(str(data.get("payout", 0)))
+        label = data.get("label", "").strip()
+
+        if threshold <= 0 or payout <= 0:
+            return JsonResponse({"error": "Threshold and payout must be positive."}, status=400)
+
+        if IncentiveSlab.objects.filter(rule=rule, threshold=threshold).exists():
+            return JsonResponse({"error": f"Slab at ₹{threshold} already exists."}, status=400)
+
+        slab = IncentiveSlab.objects.create(
+            rule=rule, threshold=threshold, payout=payout, label=label
+        )
+        return JsonResponse({
+            "success": True,
+            "slab": {
+                "id": slab.id,
+                "threshold": str(slab.threshold),
+                "payout": str(slab.payout),
+                "label": slab.label,
+            },
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def update_incentive_slab(request, slab_id):
+    """AJAX: Update an existing slab."""
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    slab = get_object_or_404(IncentiveSlab, id=slab_id)
+    try:
+        data = json.loads(request.body)
+        if "threshold" in data:
+            slab.threshold = Decimal(str(data["threshold"]))
+        if "payout" in data:
+            slab.payout = Decimal(str(data["payout"]))
+        if "label" in data:
+            slab.label = data["label"].strip()
+        slab.save()
+        return JsonResponse({"success": True, "message": "Slab updated."})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@login_required
+@require_POST
+def delete_incentive_slab(request, slab_id):
+    """AJAX: Delete a slab."""
+    user_emp = getattr(request.user, "employee", None)
+    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    slab = get_object_or_404(IncentiveSlab, id=slab_id)
+    slab.delete()
+    return JsonResponse({"success": True, "message": "Slab deleted."})
 
 
 @login_required

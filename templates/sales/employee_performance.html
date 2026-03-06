@@ -1,17 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Employee Performance{% endblock %}
+{% block page_title %}Performance{% endblock %}
 {% block content %}
-<style>
-.performance-card { background: #fff; border-radius: 12px; padding: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
-.kpi { display:inline-block; width:23%; margin-right:1%; vertical-align:top; padding: 0.8rem; border-radius:8px; background: linear-gradient(90deg,#fef3c7,#fff7ed); }
-.kpi h3 { margin:0; font-size:1.1rem; color:#1a202c }
-.kpi p { margin:0.25rem 0 0; color:#4a5568; font-weight:600 }
-@media (max-width:900px) { .kpi { width:48%; margin-bottom:0.6rem } }
-@media (max-width:600px) { .kpi { width:100%; display:block } }
-</style>
 
-<div class="performance-card">
-  <h2>Employee Performance — {{ employee.user.get_full_name|default:employee.user.username }}</h2>
+<div class="ki-card">
+  <h2 class="ki-section-title"><i class="bi bi-speedometer2"></i> Employee Performance — {{ employee.user.get_full_name|default:employee.user.username }}</h2>
 
   <form id="perfForm" method="get" class="row gy-2 gx-2 align-items-center" style="margin-top:0.5rem;">
     {% if is_manager %}
@@ -36,40 +29,41 @@
     <div class="col-auto">
       <label class="form-label small">&nbsp;</label>
       <div>
-        <button type="submit" class="btn btn-sm btn-outline-secondary">Apply</button>
-        <button type="button" class="btn btn-sm btn-primary" onclick="exportCSV()">Export CSV</button>
+        <button type="submit" class="ki-btn ki-btn-sm ki-btn-secondary"><i class="bi bi-funnel"></i> Apply</button>
+        <button type="button" class="ki-btn ki-btn-sm ki-btn-primary" onclick="exportCSV()"><i class="bi bi-download"></i> Export CSV</button>
       </div>
     </div>
   </form>
 
   <p class="text-muted">Period: {{ start }} → {{ end }}</p>
 
-  <div style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
-    <div class="kpi">
-      <h3>Total Sales</h3>
-      <p>{{ total_sales }}</p>
+  <div class="ki-grid-4" style="margin-top:1rem;">
+    <div class="ki-metric-card">
+      <span class="ki-metric-label">Total Sales</span>
+      <span class="ki-metric-value">{{ total_sales }}</span>
     </div>
-    <div class="kpi">
-      <h3>Sales Amount</h3>
-      <p>₹{{ total_amount|floatformat:2 }}</p>
+    <div class="ki-metric-card">
+      <span class="ki-metric-label">Sales Amount</span>
+      <span class="ki-metric-value">₹{{ total_amount|floatformat:2 }}</span>
     </div>
-    <div class="kpi">
-      <h3>Calls Made</h3>
-      <p>{{ calls_made }}</p>
+    <div class="ki-metric-card">
+      <span class="ki-metric-label">Calls Made</span>
+      <span class="ki-metric-value">{{ calls_made }}</span>
     </div>
-    <div class="kpi">
-      <h3>Conversion Rate</h3>
-      <p>{{ conversion_rate }}%</p>
+    <div class="ki-metric-card">
+      <span class="ki-metric-label">Conversion Rate</span>
+      <span class="ki-metric-value">{{ conversion_rate }}%</span>
     </div>
   </div>
 
   <div style="margin-top:1.2rem; display:flex; gap:1rem; flex-wrap:wrap">
-    <div style="flex:1 1 60%" class="performance-card">
+    <div style="flex:1 1 60%" class="ki-card">
       <canvas id="trendChart" height="160"></canvas>
     </div>
-    <div style="flex:1 1 35%" class="performance-card">
-      <h4>Recent Sales</h4>
-      <table class="table table-sm">
+    <div style="flex:1 1 35%" class="ki-card">
+      <h4 class="ki-card-label"><i class="bi bi-clock-history"></i> Recent Sales</h4>
+      <div class="ki-table-wrap">
+      <table class="ki-table">
         <thead><tr><th>Date</th><th>Client</th><th>Amount</th></tr></thead>
         <tbody>
           {% for s in recent_sales %}
@@ -83,6 +77,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -102,8 +97,8 @@
       datasets: [{
         label: 'Sales',
         data: sales,
-        borderColor: '#ecc94b',
-        backgroundColor: 'rgba(236,201,75,0.12)',
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,0.12)',
         tension: 0.2,
       },{
         label: 'Calls',
