@@ -2224,7 +2224,7 @@ def employee_dashboard(request):
             Q(scheduled_time__lt=now_ts) |
             Q(scheduled_time__date__gte=week_start, scheduled_time__date__lte=week_start + timedelta(days=6))
         )
-        .select_related("lead")
+        .select_related("lead", "assigned_to__user")
         .order_by("scheduled_time")
     )
     followups_by_date = {}
