@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}{{ emp.user.get_full_name|default:emp.user.username }} — Team{% endblock %}
+{% block page_title %}Team Member{% endblock %}
+{% block extra_css %}
+<style>
+  .profile-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+  .profile-avatar {
+    width: 72px; height: 72px; border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.75rem; font-weight: 800; color: #fff; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--ki-primary), #3b82f6);
+  }
+  .profile-avatar.inactive { background: linear-gradient(135deg, #94a3b8, #cbd5e1); }
+  .profile-meta { flex: 1; min-width: 200px; }
+  .profile-name { font-size: 1.35rem; font-weight: 700; color: var(--ki-text-primary); margin: 0; }
+  .profile-sub { font-size: 0.88rem; color: var(--ki-text-muted); margin-top: 0.15rem; }
+  .profile-badges { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
+  .profile-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+  .detail-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+  }
+  .detail-stat {
+    background: var(--ki-body-bg);
+    border: 1px solid var(--ki-card-border);
+    border-radius: var(--ki-radius);
+    padding: 0.85rem 1rem;
+    text-align: center;
+  }
+  .detail-stat-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+  .detail-stat-label {
+    font-size: 0.75rem;
+    color: var(--ki-text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-top: 0.15rem;
+  }
+
+  .section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ki-text-primary);
+    margin: 0 0 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .section-title i { color: var(--ki-primary); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Back link -->
+<a href="{% url 'clients:team_list' %}" class="ki-btn ki-btn-secondary ki-btn-sm mb-3">
+  <i class="bi bi-arrow-left"></i> Back to Team
+</a>
+
+<!-- Profile Header -->
+<div class="ki-card mb-3">
+  <div class="profile-header">
+    <div class="profile-avatar {% if not emp.active %}inactive{% endif %}">
+      {{ emp.user.first_name|default:emp.user.username|make_list|first|upper }}
+    </div>
+    <div class="profile-meta">
+      <h2 class="profile-name">{{ emp.user.get_full_name|default:emp.user.username }}</h2>
+      <div class="profile-sub">
+        @{{ emp.user.username }}
+        {% if emp.employee_number %} · #{{ emp.employee_number }}{% endif %}
+        {% if emp.user.email %} · {{ emp.user.email }}{% endif %}
+      </div>
+      <div class="profile-badges">
+        <span class="badge text-capitalize" style="background:var(--ki-primary-pale);color:var(--ki-primary);font-size:.78rem;">{{ emp.role }}</span>
+        {% if emp.active %}
+          <span class="badge bg-success" style="font-size:.78rem;">Active</span>
+        {% else %}
+          <span class="badge bg-secondary" style="font-size:.78rem;">Inactive</span>
+        {% endif %}
+        {% if emp.salary %}
+          <span class="badge" style="background:#fef3c7;color:#92400e;font-size:.78rem;">₹{{ emp.salary|floatformat:0 }}/mo</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="profile-actions">
+      <a href="{% url 'clients:team_edit' emp.id %}" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+      <form method="post" action="{% url 'clients:team_toggle_status' emp.id %}" style="display:inline;">
+        {% csrf_token %}
+        {% if emp.active %}
+          <button class="ki-btn ki-btn-sm" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;" onclick="return confirm('Deactivate this member?')">
+            <i class="bi bi-person-x"></i> Deactivate
+          </button>
+        {% else %}
+          <button class="ki-btn ki-btn-sm" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;" onclick="return confirm('Reactivate this member?')">
+            <i class="bi bi-person-check"></i> Activate
+          </button>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+  <!-- Stats Grid -->
+  <div class="detail-stats">
+    <div class="detail-stat">
+      <div class="detail-stat-value" style="color:var(--ki-primary);">{{ total_sales }}</div>
+      <div class="detail-stat-label">Total Sales</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-value" style="color:#059669;">{{ approved_sales }}</div>
+      <div class="detail-stat-label">Approved</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-value" style="color:#d97706;">{{ pending_sales }}</div>
+      <div class="detail-stat-label">Pending</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-value" style="color:#7c3aed;">{{ total_points|floatformat:0 }}</div>
+      <div class="detail-stat-label">Total Points</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-value" style="color:var(--ki-primary);">₹{{ total_amount|floatformat:0 }}</div>
+      <div class="detail-stat-label">Total Amount</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-value" style="color:#059669;">{{ client_count }}</div>
+      <div class="detail-stat-label">Clients</div>
+    </div>
+  </div>
+</div>
+
+<!-- This Month -->
+<div class="ki-card mb-3">
+  <h5 class="section-title"><i class="bi bi-calendar-month"></i> This Month</h5>
+  <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+    <div>
+      <span class="text-muted" style="font-size:.82rem;">Sales</span>
+      <div style="font-size:1.3rem;font-weight:700;color:var(--ki-primary);">{{ month_sales }}</div>
+    </div>
+    <div>
+      <span class="text-muted" style="font-size:.82rem;">Amount</span>
+      <div style="font-size:1.3rem;font-weight:700;color:#059669;">₹{{ month_amount|floatformat:0 }}</div>
+    </div>
+    <div>
+      <span class="text-muted" style="font-size:.82rem;">Points</span>
+      <div style="font-size:1.3rem;font-weight:700;color:#d97706;">{{ month_points|floatformat:0 }}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Sales -->
+<div class="ki-card">
+  <h5 class="section-title"><i class="bi bi-receipt"></i> Recent Sales</h5>
+  {% if recent_sales %}
+  <div class="ki-table-wrap">
+    <table class="ki-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Client</th>
+          <th>Product</th>
+          <th>Amount</th>
+          <th>Points</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sale in recent_sales %}
+        <tr>
+          <td>{{ sale.date|date:"d M Y" }}</td>
+          <td>{{ sale.client.name }}</td>
+          <td>{{ sale.product }}</td>
+          <td>₹{{ sale.amount|floatformat:0 }}</td>
+          <td>{{ sale.points|floatformat:0 }}</td>
+          <td>
+            {% if sale.status == "approved" %}
+              <span class="badge bg-success">Approved</span>
+            {% elif sale.status == "pending" %}
+              <span class="badge" style="background:#fef3c7;color:#92400e;">Pending</span>
+            {% else %}
+              <span class="badge bg-danger">Rejected</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">No sales recorded yet.</p>
+  {% endif %}
+</div>
+
+<!-- Password Reset -->
+<div class="ki-card mt-3">
+  <h5 class="section-title"><i class="bi bi-key"></i> Reset Password</h5>
+  <form method="post" action="{% url 'clients:team_reset_password' emp.id %}" style="display:flex;gap:0.5rem;align-items:flex-end;flex-wrap:wrap;">
+    {% csrf_token %}
+    <div>
+      <label class="form-label">New Password</label>
+      <input type="password" name="new_password" class="form-control" minlength="6" required placeholder="Min 6 characters">
+    </div>
+    <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm" onclick="return confirm('Reset password for {{ emp.user.username }}?')">
+      <i class="bi bi-key"></i> Reset
+    </button>
+  </form>
+</div>
+{% endblock %}

@@ -12,6 +12,16 @@ urlpatterns = [
     path("dashboard/admin/", views.admin_dashboard, name="admin_dashboard"),
     path("admin/employees/", views.employee_management, name="employee_management"),
     path("dashboard/employee/", views.employee_dashboard, name="employee_dashboard"),
+
+    # Team management
+    path("team/", views.team_list, name="team_list"),
+    path("team/add/", views.team_add, name="team_add"),
+    path("team/<int:employee_id>/", views.team_detail, name="team_detail"),
+    path("team/<int:employee_id>/edit/", views.team_edit, name="team_edit"),
+    path("team/<int:employee_id>/toggle-status/", views.team_toggle_status, name="team_toggle_status"),
+    path("team/<int:employee_id>/delete/", views.team_delete, name="team_delete"),
+    path("team/<int:employee_id>/reset-password/", views.team_reset_password, name="team_reset_password"),
+
   # ----- Admin past performance -----
     path("admin/past-performance/", views.admin_past_performance, name="admin_past_performance"),
     path("admin/past-performance/<int:year>/<int:month>/", views.admin_past_month_performance, name="admin_past_month_performance"),
@@ -64,6 +74,12 @@ urlpatterns = [
     
 
     path("incentives/manage/", views.manage_incentive_rules, name="manage_incentive_rules"),
+    path("incentives/rule/add/", views.add_incentive_rule, name="add_incentive_rule"),
+    path("incentives/rule/<int:rule_id>/update/", views.update_incentive_rule, name="update_incentive_rule"),
+    path("incentives/rule/<int:rule_id>/delete/", views.delete_incentive_rule, name="delete_incentive_rule"),
+    path("incentives/rule/<int:rule_id>/slab/add/", views.add_incentive_slab, name="add_incentive_slab"),
+    path("incentives/slab/<int:slab_id>/update/", views.update_incentive_slab, name="update_incentive_slab"),
+    path("incentives/slab/<int:slab_id>/delete/", views.delete_incentive_slab, name="delete_incentive_slab"),
     
     
     path("past-performance/", views.employee_past_performance, name="employee_past_performance"),

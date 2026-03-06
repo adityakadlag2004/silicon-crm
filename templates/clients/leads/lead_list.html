@@ -1,16 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Leads - {{ stage_label }}{% endblock %}
+{% block page_title %}Leads{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <div>
-    <h3 class="mb-1">{{ stage_label }}</h3>
+    <h2 class="ki-section-title" style="margin-bottom:0.25rem;">{{ stage_label }}</h2>
     <div class="text-muted small">See only the leads you are allowed to access.</div>
   </div>
-  <div class="d-flex gap-2">
-    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_stage_list' 'pending' %}">Pending ({{ counts.pending }})</a>
-    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_stage_list' 'half_sold' %}">Half Sold ({{ counts.half_sold }})</a>
-    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_stage_list' 'processed' %}">Processed ({{ counts.processed }})</a>
-    <a class="btn btn-warning btn-sm" href="{% url 'clients:lead_create' %}">+ Add Lead</a>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_stage_list' 'pending' %}">Pending ({{ counts.pending }})</a>
+    <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_stage_list' 'half_sold' %}">Half Sold ({{ counts.half_sold }})</a>
+    <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_stage_list' 'processed' %}">Processed ({{ counts.processed }})</a>
+    <a class="ki-btn ki-btn-sm ki-btn-primary" href="{% url 'clients:lead_create' %}"><i class="bi bi-plus-lg"></i> Add Lead</a>
   </div>
 </div>
 
@@ -19,13 +20,13 @@
     <input type="search" name="q" value="{{ search_term }}" class="form-control" placeholder="Search customer name" />
   </div>
   <div class="col-auto">
-    <button class="btn btn-outline-dark btn-sm" type="submit">Search</button>
+    <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit">Search</button>
   </div>
 </form>
 
-<div class="table-responsive">
-  <table class="table table-hover align-middle">
-    <thead class="table-light">
+<div class="ki-card ki-table-wrap">
+  <table class="ki-table">
+    <thead>
       <tr>
         <th>Customer</th>
         <th>Assigned To</th>
@@ -121,7 +122,7 @@
           <td class="small text-muted">{{ lead.updated_at|date:"Y-m-d H:i" }}</td>
           <td class="text-end">
             <div class="dropdown">
-              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">⋯</button>
+              <button class="ki-btn ki-btn-sm ki-btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end">
                 <li><a class="dropdown-item" href="{% url 'clients:lead_detail' lead.id %}">Open lead</a></li>
                 <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#followupModal" data-lead-id="{{ lead.id }}" data-lead-name="{{ lead.customer_name }}">Add next follow-up</button></li>
@@ -154,9 +155,9 @@
 <div class="modal fade" id="followupModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header">
+      <div class="ki-modal-header">
         <h5 class="modal-title">Add next follow-up</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form method="post" id="followupForm">
         {% csrf_token %}
@@ -172,8 +173,8 @@
           <div class="text-muted small" id="followupLeadLabel"></div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save</button>
         </div>
       </form>
     </div>
@@ -184,9 +185,9 @@
 <div class="modal fade" id="remarkModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header">
+      <div class="ki-modal-header">
         <h5 class="modal-title">Add remark</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form method="post" id="remarkForm">
         {% csrf_token %}
@@ -198,8 +199,8 @@
           <div class="text-muted small" id="remarkLeadLabel"></div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Add remark</button>
+          <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-chat-text"></i> Add remark</button>
         </div>
       </form>
     </div>

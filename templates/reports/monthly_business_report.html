@@ -1,29 +1,29 @@
 {% extends "base.html" %}
 {% block title %}Monthly Business Report – {{ month_name }} {{ sel_year }}{% endblock %}
+{% block page_title %}Business Report{% endblock %}
 
 {% block extra_css %}
 <style>
   .report-table th, .report-table td { text-align: right; vertical-align: middle; white-space: nowrap; font-size: .85rem; }
   .report-table th:first-child, .report-table td:first-child { text-align: left; }
-  .report-table tfoot td { font-weight: 700; background: #fff8e1; }
+  .report-table tfoot td { font-weight: 700; background: var(--ki-body); }
   .zero { color: #bbb; }
-  .print-btn { cursor: pointer; }
 
   @media print {
     @page { size: landscape; margin: 1cm; }
-    nav, .no-print, footer { display: none !important; }
+    nav, .no-print, footer, .ki-sidebar, .ki-topbar { display: none !important; }
+    .ki-main { margin-left: 0 !important; padding: 0 !important; }
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .report-table { font-size: 10pt; }
-    .card { border: none !important; box-shadow: none !important; }
+    .ki-card { border: none !important; box-shadow: none !important; }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
   <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-    <h4 class="mb-0">Monthly Business Report</h4>
-    <button class="btn btn-outline-secondary btn-sm print-btn" onclick="window.print()">
+    <h4 class="ki-section-title mb-0"><i class="bi bi-bar-chart-line"></i> Monthly Business Report</h4>
+    <button class="ki-btn ki-btn-sm ki-btn-secondary" onclick="window.print()">
       <i class="bi bi-printer"></i> Print / PDF
     </button>
   </div>
@@ -48,14 +48,13 @@
     </div>
   </form>
 
-  <div class="card shadow-sm">
-    <div class="card-header text-center fw-bold">
-      {{ month_name }} {{ sel_year }} – Business Summary
+  <div class="ki-card">
+    <div class="ki-card-label">
+      <i class="bi bi-calendar-month"></i> {{ month_name }} {{ sel_year }} – Business Summary
     </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover report-table mb-0">
-          <thead class="table-dark">
+    <div class="ki-table-wrap">
+        <table class="ki-table report-table">
+          <thead>
             <tr>
               <th>#</th>
               <th>Employee</th>
@@ -106,8 +105,6 @@
           </tfoot>
           {% endif %}
         </table>
-      </div>
     </div>
   </div>
-</div>
 {% endblock %}

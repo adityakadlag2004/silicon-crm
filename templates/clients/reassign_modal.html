@@ -1,12 +1,12 @@
-<!-- Reassign Modal (paste into clients/detail.html) -->
+<!-- Reassign Modal -->
 <div class="modal fade" id="reassignModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
-    <div class="modal-content">
+    <div class="modal-content" style="border-radius:var(--ki-radius-lg);overflow:hidden;">
       <form method="post" action="{% url 'clients:reassign' client.id %}">
         {% csrf_token %}
-        <div class="modal-header">
+        <div class="ki-modal-header">
           <h5 class="modal-title">Reassign client {{ client.name }}</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           {{ form.new_employee.label_tag }} {{ form.new_employee }}
@@ -15,8 +15,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Reassign</button>
+          <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="ki-btn ki-btn-primary">Reassign</button>
         </div>
       </form>
     </div>

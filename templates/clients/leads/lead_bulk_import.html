@@ -1,21 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Bulk Import Leads{% endblock %}
+{% block page_title %}Bulk Import{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <div>
-    <h3 class="mb-1">Bulk Import Leads</h3>
+    <h2 class="ki-section-title mb-1"><i class="bi bi-cloud-upload"></i> Bulk Import Leads</h2>
     <div class="text-muted small">Fill in the rows below and import all leads at once. <strong>Tip:</strong> Copy columns from Excel and paste directly — values fill row by row.</div>
   </div>
   <div class="d-flex gap-2">
-    <a class="btn btn-outline-secondary btn-sm" href="{% url 'clients:lead_management' %}">Back to Leads</a>
+    <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_management' %}"><i class="bi bi-arrow-left"></i> Back to Leads</a>
   </div>
 </div>
 
 <!-- Result alert (hidden until submit) -->
 <div id="bulkResult" class="d-none"></div>
 
-<div class="card shadow-sm">
-  <div class="card-body p-2">
+<div class="ki-card">
+  <div class="p-2">
     <div class="table-responsive" style="max-height:70vh;overflow:auto;">
       <table class="table table-bordered table-sm align-middle mb-0" id="bulkTable">
         <thead class="table-light" style="position:sticky;top:0;z-index:2;">
@@ -43,11 +44,11 @@
       </table>
     </div>
     <div class="d-flex gap-2 mt-2">
-      <button class="btn btn-outline-dark btn-sm" onclick="addRow()">+ Add Row</button>
-      <button class="btn btn-outline-dark btn-sm" onclick="addRows(5)">+ Add 5 Rows</button>
+      <button class="ki-btn ki-btn-sm ki-btn-secondary" onclick="addRow()"><i class="bi bi-plus"></i> Add Row</button>
+      <button class="ki-btn ki-btn-sm ki-btn-secondary" onclick="addRows(5)"><i class="bi bi-plus-circle"></i> Add 5 Rows</button>
       <div class="ms-auto d-flex gap-2 align-items-center">
         <span class="text-muted small" id="rowCount">0 rows</span>
-        <button class="btn btn-primary btn-sm px-4" onclick="submitAll()" id="importBtn">Import All</button>
+        <button class="ki-btn ki-btn-sm ki-btn-primary px-4" onclick="submitAll()" id="importBtn"><i class="bi bi-cloud-upload"></i> Import All</button>
       </div>
     </div>
   </div>

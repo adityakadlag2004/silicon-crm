@@ -1,133 +1,14 @@
 {% extends "base.html" %}
 {% block title %}All Sales{% endblock %}
+{% block page_title %}All Sales{% endblock %}
 
 {% block content %}
-<style>
-  .dashboard-section-title {
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: #2d3748;
-    margin-bottom: 1.2rem;
-    margin-top: 2rem;
-    letter-spacing: 0.5px;
-    text-align: center;
-  }
-  .modern-card {
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
-    padding: 1.5rem 1rem;
-    margin-bottom: 1.2rem;
-    transition: box-shadow 0.2s;
-  }
-  .modern-card:hover {
-    box-shadow: 0 4px 18px rgba(0,0,0,0.10);
-  }
-  .filter-form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    align-items: flex-end;
-    justify-content: center;
-  }
-  .filter-form .form-label {
-    font-size: 0.98rem;
-    font-weight: 500;
-    color: #4a5568;
-    margin-bottom: 0.3rem;
-  }
-  .filter-form .form-select, .filter-form .form-control {
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    font-size: 0.97rem;
-    padding: 0.45rem 0.7rem;
-    background: #f7fafc;
-    color: #2d3748;
-    box-shadow: none;
-    margin-bottom: 0.2rem;
-  }
-  .filter-form .form-select:focus, .filter-form .form-control:focus {
-    border-color: #ecc94b;
-    outline: none;
-    background: #fffde7;
-  }
-  .dashboard-link, .btn-primary {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.55rem 1.2rem;
-    border-radius: 10px;
-    background: linear-gradient(90deg, #f6e05e 0%, #ecc94b 100%);
-    color: #2d3748;
-    font-weight: 600;
-    text-decoration: none;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.07);
-    transition: background 0.2s;
-    border: none;
-    font-size: 1rem;
-  }
-  .dashboard-link:hover, .btn-primary:hover {
-    background: linear-gradient(90deg, #ecc94b 0%, #f6e05e 100%);
-    color: #1a202c;
-  }
-  .btn-secondary {
-    border-radius: 10px;
-    background: #e2e8f0;
-    color: #2d3748;
-    font-weight: 600;
-    border: none;
-    font-size: 1rem;
-    padding: 0.55rem 1.2rem;
-    margin-left: 0.5rem;
-  }
-  .table {
-    border-radius: 12px;
-    overflow: hidden;
-    background: #fff;
-    margin-bottom: 0;
-    font-size: 0.98rem;
-  }
-  .table thead th {
-    background: #f6e05e;
-    color: #2d3748;
-    font-weight: 600;
-    border-bottom: 2px solid #ecc94b;
-    padding: 0.7rem 0.5rem;
-    text-align: left;
-  }
-  .table tbody tr {
-    transition: background 0.2s;
-  }
-  .table tbody tr:hover {
-    background: #fffde7;
-  }
-  .table td {
-    padding: 0.6rem 0.5rem;
-    border-top: 1px solid #f7fafc;
-    color: #2d3748;
-  }
-  .table-striped tbody tr:nth-of-type(odd) {
-    background: #f7fafc;
-  }
-  @media (max-width: 900px) {
-    .filter-form { gap: 0.5rem; }
-    .modern-card { padding: 1rem 0.3rem; }
-    .dashboard-section-title { font-size: 1.05rem; }
-    .table thead th, .table td { font-size: 0.93rem; }
-  }
-  @media (max-width: 600px) {
-    .modern-card { padding: 0.7rem 0.1rem; }
-    .dashboard-section-title { font-size: 0.98rem; }
-    .table thead th, .table td { font-size: 0.89rem; padding: 0.5rem 0.2rem; }
-    .filter-form .form-label { font-size: 0.92rem; }
-    .dashboard-link, .btn-primary, .btn-secondary { font-size: 0.95rem; padding: 0.45rem 0.7rem; }
-  }
-</style>
 
-<div class="dashboard-section-title">All Sales</div>
+<h2 class="ki-section-title"><i class="bi bi-receipt-cutoff"></i> All Sales</h2>
 
-<!-- 🔹 Filters -->
-<div class="modern-card mb-4">
-  <form method="get" class="filter-form">
+<!-- Filters -->
+<div class="ki-card mb-4">
+  <form method="get" class="ki-filter-bar" style="flex-wrap:wrap;gap:1rem;align-items:flex-end;">
     <div style="min-width:220px;">
       <label class="form-label">Search</label>
       <input type="text" name="q" class="form-control" placeholder="Client, phone, employee, product" value="{{ request.GET.q|default:'' }}">
@@ -163,15 +44,15 @@
     <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date }}"></div>
     <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date }}"></div>
     <div style="display:flex;gap:0.7rem;margin-top:0.5rem;flex-wrap:wrap;">
-      <button type="submit" class="btn btn-primary">Search</button>
-      <a href="{% url 'clients:all_sales' %}" class="btn btn-secondary">Reset</a>
+      <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-search"></i> Search</button>
+      <a href="{% url 'clients:all_sales' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
     </div>
   </form>
 </div>
 
-<!-- 🔹 Sales Table -->
-<div class="modern-card" style="overflow-x:auto;">
-  <table class="table table-striped">
+<!-- Sales Table -->
+<div class="ki-card ki-table-wrap">
+  <table class="ki-table">
     <thead>
       <tr>
         <th>Date</th>
@@ -196,8 +77,8 @@
         <td>{{ sale.status|title }}</td>
         {% if not is_employee %}
         <td>
-          <a href="{% url 'clients:edit_sale' sale.id %}" class="btn btn-sm btn-warning">Edit</a>
-          <a href="{% url 'clients:delete_sale' sale.id %}" class="btn btn-sm btn-danger">Delete</a>
+          <a href="{% url 'clients:edit_sale' sale.id %}" class="ki-btn ki-btn-sm ki-btn-primary"><i class="bi bi-pencil"></i> Edit</a>
+          <a href="{% url 'clients:delete_sale' sale.id %}" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i> Delete</a>
         </td>
         {% endif %}
       </tr>
@@ -207,34 +88,34 @@
     </tbody>
   </table>
 
-  <!-- 🔹 Pagination (preserves filters via qstring) -->
+  <!-- Pagination -->
   <nav aria-label="Page navigation">
-    <ul class="pagination justify-content-center">
+    <ul class="ki-pagination">
       {% if sales.has_previous %}
-        <li class="page-item">
-          {% if qstring %}<a class="page-link" href="?{{ qstring }}&page=1">&laquo; First</a>{% else %}<a class="page-link" href="?page=1">&laquo; First</a>{% endif %}
+        <li>
+          {% if qstring %}<a href="?{{ qstring }}&page=1">&laquo; First</a>{% else %}<a href="?page=1">&laquo; First</a>{% endif %}
         </li>
-        <li class="page-item">
-          {% if qstring %}<a class="page-link" href="?{{ qstring }}&page={{ sales.previous_page_number }}">Previous</a>{% else %}<a class="page-link" href="?page={{ sales.previous_page_number }}">Previous</a>{% endif %}
+        <li>
+          {% if qstring %}<a href="?{{ qstring }}&page={{ sales.previous_page_number }}">Previous</a>{% else %}<a href="?page={{ sales.previous_page_number }}">Previous</a>{% endif %}
         </li>
       {% endif %}
 
       {% for num in sales.paginator.page_range %}
-        <li class="page-item {% if sales.number == num %}active{% endif %}">
+        <li {% if sales.number == num %}class="active"{% endif %}>
           {% if qstring %}
-            <a class="page-link" href="?{{ qstring }}&page={{ num }}">{{ num }}</a>
+            <a href="?{{ qstring }}&page={{ num }}">{{ num }}</a>
           {% else %}
-            <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+            <a href="?page={{ num }}">{{ num }}</a>
           {% endif %}
         </li>
       {% endfor %}
 
       {% if sales.has_next %}
-        <li class="page-item">
-          {% if qstring %}<a class="page-link" href="?{{ qstring }}&page={{ sales.next_page_number }}">Next</a>{% else %}<a class="page-link" href="?page={{ sales.next_page_number }}">Next</a>{% endif %}
+        <li>
+          {% if qstring %}<a href="?{{ qstring }}&page={{ sales.next_page_number }}">Next</a>{% else %}<a href="?page={{ sales.next_page_number }}">Next</a>{% endif %}
         </li>
-        <li class="page-item">
-          {% if qstring %}<a class="page-link" href="?{{ qstring }}&page={{ sales.paginator.num_pages }}">Last &raquo;</a>{% else %}<a class="page-link" href="?page={{ sales.paginator.num_pages }}">Last &raquo;</a>{% endif %}
+        <li>
+          {% if qstring %}<a href="?{{ qstring }}&page={{ sales.paginator.num_pages }}">Last &raquo;</a>{% else %}<a href="?page={{ sales.paginator.num_pages }}">Last &raquo;</a>{% endif %}
         </li>
       {% endif %}
     </ul>

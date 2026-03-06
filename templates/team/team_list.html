@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+{% block title %}Team{% endblock %}
+{% block page_title %}Team{% endblock %}
+{% block extra_css %}
+<style>
+  .stat-card {
+    display: flex; align-items: center; gap: 0.85rem;
+    background: #fff; border: 1px solid var(--ki-card-border, #e2e8f0);
+    border-radius: 14px; padding: 1rem 1.15rem;
+    transition: box-shadow .2s, transform .15s;
+  }
+  .stat-card:hover { box-shadow: 0 4px 18px rgba(30,64,175,.08); transform: translateY(-1px); }
+  .stat-icon {
+    width: 48px; height: 48px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem; color: #fff; flex-shrink: 0;
+  }
+  .stat-value { font-size: 1.5rem; font-weight: 800; line-height: 1.15; color: var(--ki-text-primary, #1e293b); }
+  .stat-label { font-size: 0.78rem; font-weight: 600; color: var(--ki-text-muted, #94a3b8); text-transform: uppercase; letter-spacing: .03em; }
+</style>
+{% endblock %}
+{% block content %}
+
+<!-- Summary Stats -->
+<div class="ki-grid-4 mb-4">
+  <div class="stat-card">
+    <div class="stat-icon" style="background:linear-gradient(135deg,var(--ki-primary),#3b82f6);">
+      <i class="bi bi-people-fill"></i>
+    </div>
+    <div>
+      <div class="stat-value">{{ total }}</div>
+      <div class="stat-label">Total Members</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:linear-gradient(135deg,#059669,#10b981);">
+      <i class="bi bi-person-check-fill"></i>
+    </div>
+    <div>
+      <div class="stat-value">{{ active_count }}</div>
+      <div class="stat-label">Active</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:linear-gradient(135deg,#7c3aed,#a78bfa);">
+      <i class="bi bi-shield-fill"></i>
+    </div>
+    <div>
+      <div class="stat-value">{{ admins }}</div>
+      <div class="stat-label">Admins</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon" style="background:linear-gradient(135deg,#d97706,#f59e0b);">
+      <i class="bi bi-person-badge-fill"></i>
+    </div>
+    <div>
+      <div class="stat-value">{{ managers }}</div>
+      <div class="stat-label">Managers</div>
+    </div>
+  </div>
+</div>
+
+<!-- Toolbar -->
+<div class="ki-card mb-3">
+  <div class="d-flex flex-wrap align-items-center gap-2 justify-content-between">
+    <form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-0" style="flex:1;">
+      <div class="input-group" style="max-width:320px;">
+        <span class="input-group-text" style="background:var(--ki-body);border-color:var(--ki-border);"><i class="bi bi-search" style="color:#94a3b8;"></i></span>
+        <input type="text" name="q" class="form-control" placeholder="Search name, email, ID…" value="{{ q }}">
+      </div>
+      <select name="role" class="form-select" style="max-width:160px;">
+        <option value="">All Roles</option>
+        <option value="admin" {% if role_filter == "admin" %}selected{% endif %}>Admin</option>
+        <option value="manager" {% if role_filter == "manager" %}selected{% endif %}>Manager</option>
+        <option value="employee" {% if role_filter == "employee" %}selected{% endif %}>Employee</option>
+      </select>
+      <select name="status" class="form-select" style="max-width:140px;">
+        <option value="">All Status</option>
+        <option value="active" {% if status_filter == "active" %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status_filter == "inactive" %}selected{% endif %}>Inactive</option>
+      </select>
+      <button class="ki-btn ki-btn-primary" type="submit"><i class="bi bi-funnel"></i> Filter</button>
+      {% if q or role_filter or status_filter %}
+        <a href="{% url 'clients:team_list' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Clear</a>
+      {% endif %}
+    </form>
+    <button class="ki-btn ki-btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+      <i class="bi bi-person-plus-fill"></i> Add Member
+    </button>
+  </div>
+</div>
+
+<!-- Team Grid -->
+<div class="ki-grid-3" id="teamGrid">
+  {% for emp in employees %}
+  <div class="ki-card team-member-card" id="member-{{ emp.id }}">
+    <div class="d-flex align-items-start gap-3">
+      <!-- Avatar -->
+      <div class="team-avatar {% if emp.active %}active{% else %}inactive{% endif %}">
+        {{ emp.user.first_name|default:emp.user.username|make_list|first|upper }}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <a href="{% url 'clients:team_detail' emp.id %}" class="fw-bold text-decoration-none" style="color:var(--ki-dark);font-size:.95rem;">
+            {{ emp.user.get_full_name|default:emp.user.username }}
+          </a>
+          {% if emp.active %}
+            <span class="badge bg-success" style="font-size:.7rem;">Active</span>
+          {% else %}
+            <span class="badge bg-secondary" style="font-size:.7rem;">Inactive</span>
+          {% endif %}
+        </div>
+        <div class="text-muted" style="font-size:.82rem;">
+          <span class="text-capitalize">{{ emp.role }}</span>
+          {% if emp.employee_number %} &middot; #{{ emp.employee_number }}{% endif %}
+        </div>
+        {% if emp.user.email %}
+          <div class="text-muted" style="font-size:.8rem;"><i class="bi bi-envelope me-1"></i>{{ emp.user.email }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="d-flex gap-3 mt-3 pt-3" style="border-top:1px solid var(--ki-border);">
+      <div class="text-center" style="flex:1;">
+        <div style="font-size:1.1rem;font-weight:700;color:var(--ki-primary);">{{ emp.client_count|default:"0" }}</div>
+        <div style="font-size:.72rem;color:#94a3b8;">Clients</div>
+      </div>
+      <div class="text-center" style="flex:1;">
+        <div style="font-size:1.1rem;font-weight:700;color:#059669;">{{ emp.total_sales|default:"0" }}</div>
+        <div style="font-size:.72rem;color:#94a3b8;">Sales</div>
+      </div>
+      <div class="text-center" style="flex:1;">
+        <div style="font-size:1.1rem;font-weight:700;color:#d97706;">{{ emp.total_points|floatformat:0|default:"0" }}</div>
+        <div style="font-size:.72rem;color:#94a3b8;">Points</div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="d-flex gap-1 mt-3">
+      <a href="{% url 'clients:team_detail' emp.id %}" class="ki-btn ki-btn-secondary flex-fill" style="font-size:.8rem;padding:5px 8px;">
+        <i class="bi bi-eye"></i> View
+      </a>
+      <a href="{% url 'clients:team_edit' emp.id %}" class="ki-btn ki-btn-secondary flex-fill" style="font-size:.8rem;padding:5px 8px;">
+        <i class="bi bi-pencil"></i> Edit
+      </a>
+      {% if emp.active %}
+        <button class="ki-btn flex-fill" style="font-size:.8rem;padding:5px 8px;background:#fef2f2;color:#dc2626;" onclick="toggleStatus({{ emp.id }}, '{{ emp.user.username }}', true)">
+          <i class="bi bi-person-x"></i>
+        </button>
+      {% else %}
+        <button class="ki-btn ki-btn-primary flex-fill" style="font-size:.8rem;padding:5px 8px;" onclick="toggleStatus({{ emp.id }}, '{{ emp.user.username }}', false)">
+          <i class="bi bi-person-check"></i>
+        </button>
+      {% endif %}
+    </div>
+  </div>
+  {% empty %}
+  <div class="ki-card text-center text-muted py-5" style="grid-column:1/-1;">
+    <i class="bi bi-people" style="font-size:2.5rem;"></i>
+    <p class="mt-2 mb-0">No team members found.</p>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Add Member Modal -->
+<div class="modal fade" id="addMemberModal" tabindex="-1" aria-labelledby="addMemberLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.15);">
+      <div class="modal-header" style="border-bottom:1px solid var(--ki-border);padding:1rem 1.25rem;">
+        <h5 class="modal-title fw-bold" id="addMemberLabel"><i class="bi bi-person-plus-fill" style="color:var(--ki-primary);"></i> Add Team Member</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{% url 'clients:team_add' %}">
+        {% csrf_token %}
+        <div class="modal-body" style="padding:1.25rem;">
+          {% if messages %}
+            {% for msg in messages %}
+              <div class="alert alert-{{ msg.tags }} alert-dismissible fade show py-2" role="alert">
+                {{ msg }}<button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+          <div class="row g-3">
+            <div class="col-6">
+              <label class="form-label">First Name</label>
+              <input type="text" name="first_name" class="form-control" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Last Name</label>
+              <input type="text" name="last_name" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Username <span class="text-danger">*</span></label>
+              <input type="text" name="username" class="form-control" required>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Email</label>
+              <input type="email" name="email" class="form-control">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Password <span class="text-danger">*</span></label>
+              <input type="password" name="password" class="form-control" required minlength="6">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Employee #</label>
+              <input type="text" name="employee_number" class="form-control" placeholder="Auto if blank">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Role</label>
+              <select name="role" class="form-select">
+                <option value="employee" selected>Employee</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label">Salary (₹/mo)</label>
+              <input type="number" name="salary" class="form-control" step="0.01" value="0">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid var(--ki-border);padding:0.75rem 1.25rem;">
+          <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Create Member</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content" style="border-radius:12px;border:none;box-shadow:0 20px 60px rgba(0,0,0,.15);">
+      <div class="modal-body text-center" style="padding:24px;">
+        <i class="bi bi-exclamation-triangle" style="font-size:2.5rem;color:#d97706;" id="confirmIcon"></i>
+        <p class="mt-3 mb-1 fw-bold" id="confirmText"></p>
+        <p class="text-muted" style="font-size:.85rem;" id="confirmSubtext"></p>
+      </div>
+      <div class="modal-footer justify-content-center" style="border-top:1px solid var(--ki-border);padding:12px;">
+        <button class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="ki-btn ki-btn-primary" id="confirmBtn">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999;">
+  <div id="teamToast" class="toast align-items-center border-0" role="alert" style="border-radius:10px;">
+    <div class="d-flex">
+      <div class="toast-body" id="teamToastBody" style="font-weight:600;"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showToast(msg, success) {
+  const t = document.getElementById('teamToast');
+  t.className = 'toast align-items-center border-0 text-white ' + (success ? 'bg-success' : 'bg-danger');
+  document.getElementById('teamToastBody').textContent = msg;
+  new bootstrap.Toast(t, {delay: 3000}).show();
+}
+
+function toggleStatus(empId, username, isActive) {
+  const action = isActive ? 'deactivate' : 'activate';
+  document.getElementById('confirmText').textContent = `${isActive ? 'Deactivate' : 'Activate'} "${username}"?`;
+  document.getElementById('confirmSubtext').textContent = isActive
+    ? 'Their login will be disabled and clients reassigned.'
+    : 'Their login will be re-enabled.';
+  document.getElementById('confirmIcon').className = 'bi ' + (isActive ? 'bi-person-x' : 'bi-person-check');
+  document.getElementById('confirmIcon').style.color = isActive ? '#dc2626' : '#059669';
+  const btn = document.getElementById('confirmBtn');
+  btn.className = 'ki-btn ' + (isActive ? '' : 'ki-btn-primary');
+  if (isActive) { btn.style.background = '#dc2626'; btn.style.color = '#fff'; }
+  else { btn.style.background = ''; btn.style.color = ''; }
+  btn.textContent = isActive ? 'Deactivate' : 'Activate';
+
+  btn.onclick = async () => {
+    try {
+      const res = await fetch(`/clients/team/${empId}/toggle-status/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}', 'X-Requested-With': 'XMLHttpRequest'},
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      showToast(data.message, true);
+      bootstrap.Modal.getInstance(document.getElementById('confirmModal')).hide();
+      setTimeout(() => location.reload(), 800);
+    } catch (e) { showToast(e.message, false); }
+  };
+  new bootstrap.Modal(document.getElementById('confirmModal')).show();
+}
+
+// Auto-open Add Member modal if ?add=1 in URL
+if (new URLSearchParams(window.location.search).has('add')) {
+  new bootstrap.Modal(document.getElementById('addMemberModal')).show();
+}
+</script>
+
+<style>
+.team-avatar {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.team-avatar.active { background: linear-gradient(135deg, var(--ki-primary), #3b82f6); }
+.team-avatar.inactive { background: linear-gradient(135deg, #94a3b8, #cbd5e1); }
+.team-member-card { transition: box-shadow .2s, transform .15s; }
+.team-member-card:hover { box-shadow: 0 4px 20px rgba(30,64,175,.10); transform: translateY(-2px); }
+</style>
+
+{% endblock %}

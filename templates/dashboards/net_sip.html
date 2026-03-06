@@ -1,48 +1,34 @@
 {% extends "base.html" %}
 {% load static custom_filters %}
 {% block title %}Net SIP{% endblock %}
+{% block page_title %}Net SIP{% endblock %}
 {% block content %}
-<style>
-	.page-title { font-weight: 800; font-size: 1.4rem; color: #1a202c; }
-	.surface { background: #fff; border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.06); padding: 1.2rem; }
-	.pill-tab { padding: 0.35rem 0.9rem; border: 1px solid #cbd5e0; border-radius: 999px; font-weight: 600; color: #2d3748; background: #fff; }
-	.pill-tab.active { background: #1a202c; color: #fff; border-color: #1a202c; }
-	.mini-label { font-size: 0.85rem; font-weight: 600; color: #4a5568; }
-	.stat { display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1rem; border: 1px solid #edf2f7; border-radius: 12px; }
-	.stat strong { color: #1a202c; }
-	.chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.7rem; background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 999px; font-weight: 600; color: #2d3748; }
-	.table thead { background: #f7fafc; }
-	.table thead th { border-bottom-width: 1px; }
-	@media (max-width: 900px) {
-		.filters-row { grid-template-columns: repeat(1,minmax(0,1fr)); }
-	}
-</style>
 
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
 	<div>
-		<div class="page-title">Net SIP</div>
+		<h2 class="ki-section-title" style="margin-bottom:0.25rem;">Net SIP</h2>
 		<div class="text-muted">SIP fresh minus SIP stopped, updated live as you add entries.</div>
 	</div>
-	<div class="chip">Granularity: <span id="granularityLabel">{{ granularity|capfirst }}</span></div>
+	<span class="ki-badge">Granularity: <span id="granularityLabel">{{ granularity|capfirst }}</span></span>
 </div>
 
-<div class="surface mb-3">
+<div class="ki-card">
 	<form method="post" class="row g-3 align-items-end">
 		{% csrf_token %}
 		<input type="hidden" name="action" value="add">
 		<div class="col-md-3">
-			<label class="mini-label" for="entryAmount">Amount</label>
+			<label class="form-label" for="entryAmount">Amount</label>
 			<input type="number" step="0.01" min="0" class="form-control" id="entryAmount" name="amount" required>
 		</div>
 		<div class="col-md-2">
-			<label class="mini-label" for="entryType">Category</label>
+			<label class="form-label" for="entryType">Category</label>
 			<select class="form-select" id="entryType" name="entry_type" required>
 				<option value="fresh">SIP Fresh</option>
 				<option value="stopped">SIP Stopped</option>
 			</select>
 		</div>
 		<div class="col-md-2">
-			<label class="mini-label" for="entryMonth">Month</label>
+			<label class="form-label" for="entryMonth">Month</label>
 			<select class="form-select" id="entryMonth" name="month" required>
 				<option value="1" {% if start.month == 1 %}selected{% endif %}>Jan</option>
 				<option value="2" {% if start.month == 2 %}selected{% endif %}>Feb</option>
@@ -59,7 +45,7 @@
 			</select>
 		</div>
 		<div class="col-md-2">
-			<label class="mini-label" for="entryYear">Year</label>
+			<label class="form-label" for="entryYear">Year</label>
 			<select class="form-select" id="entryYear" name="year" required>
 				{% for y in year_options %}
 					<option value="{{ y }}" {% if y == table_year %}selected{% endif %}>{{ y }}</option>
@@ -67,19 +53,19 @@
 			</select>
 		</div>
 		<div class="col-md-2">
-			<label class="mini-label" for="entryNote">Note (optional)</label>
+			<label class="form-label" for="entryNote">Note (optional)</label>
 			<input type="text" class="form-control" id="entryNote" name="note" placeholder="Reference" />
 		</div>
 		<div class="col-md-1 d-flex align-items-end">
-			<button class="btn btn-dark w-100">Add</button>
+			<button class="ki-btn ki-btn-primary w-100">Add</button>
 		</div>
 	</form>
 </div>
 
-<div class="surface mb-3">
-	<form id="netFilters" method="get" class="row g-3 align-items-end filters-row">
+<div class="ki-card">
+	<form id="netFilters" method="get" class="row g-3 align-items-end">
 		<div class="col-md-4">
-			<label for="yearPicker" class="mini-label">Year (for month view)</label>
+			<label for="yearPicker" class="form-label">Year (for month view)</label>
 			<select id="yearPicker" name="year_picker" class="form-select">
 				{% for y in year_options %}
 					<option value="{{ y }}" {% if y == start.year %}selected{% endif %}>{{ y }}</option>
@@ -87,7 +73,7 @@
 			</select>
 		</div>
 		<div class="col-md-4">
-			<label class="mini-label">Show series</label>
+			<label class="form-label">Show series</label>
 			<select id="seriesMode" name="series_mode" class="form-select">
 				<option value="net" {% if series_mode == 'net' %}selected{% endif %}>Net (Fresh - Stopped)</option>
 				<option value="fresh" {% if series_mode == 'fresh' %}selected{% endif %}>SIP Fresh only</option>
@@ -95,18 +81,18 @@
 			</select>
 		</div>
 		<div class="col-md-4 d-flex align-items-center gap-2 justify-content-end">
-			<button type="button" class="pill-tab {% if granularity == 'month' %}active{% endif %}" data-gran="month">Month view</button>
-			<button type="button" class="pill-tab {% if granularity == 'year' %}active{% endif %}" data-gran="year">Year view</button>
+			<button type="button" class="ki-btn ki-btn-sm {% if granularity == 'month' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" data-gran="month">Month view</button>
+			<button type="button" class="ki-btn ki-btn-sm {% if granularity == 'year' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" data-gran="year">Year view</button>
 			<input type="hidden" id="startInput" name="start" value="{{ start_str }}">
 			<input type="hidden" id="endInput" name="end" value="{{ end_str }}">
 			<input type="hidden" id="granInput" name="granularity" value="{{ granularity }}">
 			<input type="hidden" id="tableYearInput" name="table_year" value="{{ table_year }}">
-			<button type="submit" class="btn btn-dark px-4">Apply</button>
+			<button type="submit" class="ki-btn ki-btn-primary ki-btn-sm">Apply</button>
 		</div>
 	</form>
 </div>
 
-<div class="surface mb-3">
+<div class="ki-card">
 	<div class="d-flex justify-content-between align-items-center mb-2">
 		<div class="fw-bold text-uppercase" style="letter-spacing:0.5px;">Net SIP Graph</div>
 		<div class="text-muted">Live totals from SIP fresh and stoppage entries</div>
@@ -114,11 +100,11 @@
 	<canvas id="netSipChart" height="120"></canvas>
 </div>
 
-<div class="surface">
+<div class="ki-card">
 	<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
 		<div class="fw-bold text-uppercase" style="letter-spacing:0.5px;">Net SIP List ({{ granularity|capfirst }})</div>
 		<form method="get" class="d-flex align-items-center gap-2" id="tableYearForm">
-			<label class="mini-label mb-0" for="tableYearSelect">Year</label>
+			<label class="form-label mb-0" for="tableYearSelect">Year</label>
 			<select id="tableYearSelect" name="table_year" class="form-select" style="max-width:130px;">
 				{% for y in year_options %}
 					<option value="{{ y }}" {% if y == table_year %}selected{% endif %}>{{ y }}</option>
@@ -128,7 +114,7 @@
 			<input type="hidden" name="end" value="{{ end_str }}">
 			<input type="hidden" name="granularity" value="{{ granularity }}">
 			<input type="hidden" name="series_mode" value="{{ series_mode }}">
-			<button class="btn btn-outline-dark">Update</button>
+			<button class="ki-btn ki-btn-sm ki-btn-secondary">Update</button>
 		</form>
 	</div>
 
@@ -172,7 +158,7 @@
 	</div>
 </div>
 
-<div class="surface mt-3">
+<div class="ki-card">
 	<div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
 		<div class="fw-bold text-uppercase" style="letter-spacing:0.5px;">View / Edit Entries</div>
 		<div class="d-flex align-items-center gap-2 flex-wrap">
