@@ -1,0 +1,1065 @@
+{% extends "base.html" %}
+{% block title %}Financial Planner{% endblock %}
+{% block page_title %}Financial Planner{% endblock %}
+
+{% block extra_css %}
+<style>
+  .fp-section { margin-bottom: 2rem; }
+  .fp-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--ki-primary, #2563eb);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 1rem;
+    border-left: 4px solid var(--ki-primary, #2563eb);
+    padding-left: 0.75rem;
+  }
+  .fp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+  .fp-field label { font-size: 0.82rem; font-weight: 600; color: var(--ki-text-secondary, #64748b); margin-bottom: 0.25rem; display: block; }
+  .fp-field input, .fp-field select {
+    width: 100%; padding: 0.45rem 0.7rem; border: 1.5px solid var(--ki-border, #e2e8f0);
+    border-radius: 6px; background: var(--ki-card-bg, #fff); color: var(--ki-text-primary, #1e293b);
+    font-size: 0.92rem; transition: border 0.15s;
+  }
+  .fp-field input:focus, .fp-field select:focus { border-color: var(--ki-primary, #2563eb); outline: none; }
+
+  .fp-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+  .fp-result-card {
+    background: var(--ki-primary-bg, #eff6ff);
+    border: 1.5px solid var(--ki-primary-light, #bfdbfe);
+    border-radius: 10px; padding: 1rem 1.2rem;
+  }
+  .fp-result-card .fp-result-label { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; color: var(--ki-text-secondary, #64748b); }
+  .fp-result-card .fp-result-value { font-size: 1.4rem; font-weight: 800; color: var(--ki-primary, #2563eb); margin: 0.2rem 0; }
+  .fp-result-card .fp-result-note { font-size: 0.78rem; color: var(--ki-text-muted, #94a3b8); }
+
+  .fp-formula-box {
+    background: var(--ki-sidebar-bg, #f8fafc); border: 1px solid var(--ki-border, #e2e8f0);
+    border-radius: 8px; padding: 0.8rem 1rem; font-size: 0.8rem;
+    color: var(--ki-text-secondary, #64748b); margin-top: 0.5rem;
+    font-family: monospace; line-height: 1.7;
+  }
+  .fp-formula-box strong { color: var(--ki-text-primary, #1e293b); }
+
+  .fp-goal-row, .fp-asset-row {
+    background: var(--ki-card-bg, #fff);
+    border: 1.5px solid var(--ki-border, #e2e8f0);
+    border-radius: 8px; padding: 0.9rem 1rem; margin-bottom: 0.8rem;
+    display: grid; gap: 0.8rem;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    align-items: end;
+  }
+  .fp-goal-result, .fp-asset-result {
+    grid-column: 1 / -1;
+    display: flex; flex-wrap: wrap; gap: 1rem;
+    border-top: 1px solid var(--ki-border, #e2e8f0); padding-top: 0.7rem; margin-top: 0.2rem;
+  }
+  .fp-badge { background: var(--ki-primary-bg, #eff6ff); color: var(--ki-primary, #2563eb); border-radius: 6px; padding: 0.3rem 0.7rem; font-size: 0.82rem; font-weight: 700; }
+  .fp-badge-green { background: #dcfce7; color: #16a34a; }
+  .fp-badge-orange { background: #fff7ed; color: #ea580c; }
+  .fp-badge-red { background: #fee2e2; color: #dc2626; }
+
+  .fp-total-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--ki-border, #e2e8f0); font-size: 0.9rem; }
+  .fp-total-row:last-child { border-bottom: none; font-weight: 800; font-size: 1rem; }
+
+  .fp-tab-nav { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .fp-tab-btn {
+    padding: 0.45rem 1.1rem; border-radius: 20px; border: 1.5px solid var(--ki-border, #e2e8f0);
+    background: var(--ki-card-bg, #fff); color: var(--ki-text-secondary, #64748b);
+    font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: all 0.15s;
+  }
+  .fp-tab-btn.active { background: var(--ki-primary, #2563eb); color: #fff; border-color: var(--ki-primary, #2563eb); }
+  .fp-tab-content { display: none; }
+  .fp-tab-content.active { display: block; }
+
+  @media (max-width: 600px) { .fp-grid { grid-template-columns: 1fr 1fr; } .fp-result-grid { grid-template-columns: 1fr 1fr; } }
+
+  /* Stress test grid */
+  .st-grid { border-collapse: collapse; width: 100%; min-width: 600px; font-size: 0.82rem; }
+  .st-grid th, .st-grid td { border: 1px solid #cbd5e1; padding: 0.45rem 0.7rem; text-align: center; }
+  .st-grid thead th { background: #1e3a5f; color: #f1f5f9; font-weight: 700; }
+  .st-grid .st-row-hdr { background: #1e3a5f; color: #f1f5f9; font-weight: 700; text-align: left; white-space: nowrap; }
+  .st-cell-ok   { background: #dcfce7; color: #15803d; font-weight: 700; }
+  .st-cell-warn { background: #fef9c3; color: #92400e; font-weight: 700; }
+  .st-cell-bad  { background: #fee2e2; color: #dc2626; font-weight: 700; }
+  .st-cell-base { outline: 3px solid #2563eb; outline-offset: -2px; border-radius: 2px; }
+  .st-legend { display:flex; gap:1rem; flex-wrap:wrap; margin-top:0.7rem; font-size:0.78rem; color: var(--ki-text-secondary, #64748b); }
+  .st-legend span { display:flex; align-items:center; gap:4px; }
+  .st-legend i { width:12px; height:12px; display:inline-block; border-radius:2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width:1200px;">
+
+  <div class="fp-tab-nav">
+    <button class="fp-tab-btn active" data-tab="inputs">📋 Inputs</button>
+    <button class="fp-tab-btn" data-tab="retirement">🏦 Retirement</button>
+    <button class="fp-tab-btn" data-tab="goals">🎯 Goals</button>
+    <button class="fp-tab-btn" data-tab="assets">💼 Assets</button>
+    <button class="fp-tab-btn" data-tab="summary">📊 Summary</button>
+  </div>
+
+  <!-- ═══════════════ INPUTS TAB ═══════════════ -->
+  <div id="tab-inputs" class="fp-tab-content active">
+
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-person-fill"></i> Personal Information</div>
+      <div class="fp-grid">
+        <div class="fp-field"><label>Name</label><input type="text" id="inp-name" placeholder="Your Name" value="Client"></div>
+        <div class="fp-field"><label>Current Age</label><input type="number" id="inp-age" value="30" min="18" max="80"></div>
+        <div class="fp-field"><label>Retirement Age</label><input type="number" id="inp-retire" value="60" min="40" max="85"></div>
+        <div class="fp-field"><label>Life Expectancy</label><input type="number" id="inp-life" value="85" min="60" max="100"></div>
+      </div>
+    </div>
+
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-cash-coin"></i> Income &amp; Expense Inputs</div>
+      <div class="fp-grid">
+        <div class="fp-field"><label>Current Yearly Income (Post-Tax) ₹</label><input type="number" id="inp-income" value="1200000"></div>
+        <div class="fp-field"><label>Income Growth Rate (%)</label><input type="number" id="inp-income-growth" value="8" step="0.1"></div>
+        <div class="fp-field"><label>Current Yearly Expenses ₹</label><input type="number" id="inp-expense" value="1000000"></div>
+        <div class="fp-field"><label>Expense Inflation Rate (%)</label><input type="number" id="inp-expense-inflation" value="6" step="0.1"></div>
+      </div>
+    </div>
+
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-sliders"></i> Investment Assumptions</div>
+      <div class="fp-grid">
+        <div class="fp-field"><label>Expected Return Rate (%)</label><input type="number" id="inp-return" value="12" step="0.1"></div>
+        <div class="fp-field"><label>General Inflation Rate (%)</label><input type="number" id="inp-inflation" value="6" step="0.1"></div>
+      </div>
+    </div>
+
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-gear-fill"></i> Derived Values</div>
+      <div class="fp-result-grid">
+        <div class="fp-result-card">
+          <div class="fp-result-label">Years to Retirement</div>
+          <div class="fp-result-value" id="out-ytr">30</div>
+          <div class="fp-result-note">retirement_age − current_age</div>
+        </div>
+        <div class="fp-result-card">
+          <div class="fp-result-label">Years in Retirement</div>
+          <div class="fp-result-value" id="out-yir">25</div>
+          <div class="fp-result-note">life_expectancy − retirement_age</div>
+        </div>
+        <div class="fp-result-card">
+          <div class="fp-result-label">Real Rate of Return</div>
+          <div class="fp-result-value" id="out-real">5.66%</div>
+          <div class="fp-result-note">(1+r)/(1+inf) − 1</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ki-card fp-section" style="background:var(--ki-primary-bg,#eff6ff);border:2px solid var(--ki-primary-light,#bfdbfe);">
+      <div class="fp-section-title">⚡ Quick Scenario</div>
+      <p style="font-size:0.85rem;color:var(--ki-text-secondary);">Click to load the example scenario from the prompt.</p>
+      <button class="ki-btn ki-btn-primary" onclick="loadExample()"><i class="bi bi-lightning-fill"></i> Load Example (Age 30, Retire 60)</button>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════ RETIREMENT TAB ═══════════════ -->
+  <div id="tab-retirement" class="fp-tab-content">
+
+    <!-- Phase callout strip -->
+    <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:0;margin-bottom:1.5rem;border-radius:10px;overflow:hidden;border:1.5px solid var(--ki-border,#e2e8f0);">
+      <div style="background:#eff6ff;padding:1rem 1.2rem;text-align:center;">
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;color:#2563eb;margin-bottom:0.3rem;">Phase 1 — Pre-Retirement</div>
+        <div style="font-size:0.82rem;color:#475569;">Use <strong>Expected Return (<span id="lbl-ret-rate">12%</span>)</strong> to grow SIP corpus</div>
+      </div>
+      <div style="background:#e2e8f0;display:flex;align-items:center;justify-content:center;padding:0 0.8rem;font-size:1.2rem;">→</div>
+      <div style="background:#fefce8;padding:1rem 1.2rem;text-align:center;">
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;color:#d97706;margin-bottom:0.3rem;">Phase 2 — Post-Retirement</div>
+        <div style="font-size:0.82rem;color:#475569;">Use <strong>Real Return (<span id="lbl-real-rate">5.66%</span>)</strong> — expenses rise with inflation each year</div>
+      </div>
+    </div>
+
+    <!-- Key outputs -->
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-bank"></i> Retirement Planning — Step by Step</div>
+
+      <!-- Step 1 -->
+      <div style="margin-bottom:1.2rem;">
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:0.5rem;letter-spacing:0.06em;">
+          STEP 1 &nbsp;·&nbsp; Expense at Retirement (1st Year)
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+          <div class="fp-result-card" style="flex:1;min-width:220px;">
+            <div class="fp-result-label">1st Year Yearly Expense at Retirement</div>
+            <div class="fp-result-value" id="out-fv-expense">—</div>
+            <div class="fp-result-note" id="out-fv-expense-note">current_expense × (1+inflation)^years_to_retirement</div>
+          </div>
+          <div style="font-size:0.8rem;color:#64748b;max-width:300px;line-height:1.6;">
+            Your current yearly expenses grown at <strong id="lbl-exp-inf2">6%</strong> inflation for <strong id="lbl-ytr2">30</strong> years.<br>
+            This is what you'll need in the <em>first year</em> of retirement.
+            Each subsequent year it grows further with inflation.
+          </div>
+        </div>
+      </div>
+
+      <hr style="border-color:var(--ki-border,#e2e8f0);margin:1rem 0;">
+
+      <!-- Step 2 -->
+      <div style="margin-bottom:1.2rem;">
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:0.5rem;letter-spacing:0.06em;">
+          STEP 2 &nbsp;·&nbsp; Corpus Required at Retirement
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+          <div class="fp-result-card" style="flex:1;min-width:220px;background:#fefce8;border-color:#fde68a;">
+            <div class="fp-result-label" style="color:#92400e;">Corpus Needed</div>
+            <div class="fp-result-value" id="out-corpus" style="color:#d97706;">—</div>
+            <div class="fp-result-note">Growing annuity — expenses inflate every year in retirement</div>
+          </div>
+          <div style="font-size:0.8rem;color:#64748b;max-width:340px;line-height:1.6;">
+            Corpus funds <strong id="lbl-yir2">25</strong> years of inflation-growing withdrawals.<br>
+            Formula: <code style="font-size:0.78rem;background:#f1f5f9;padding:2px 4px;border-radius:3px;">PMT × [1 − ((1+g)/(1+r))ⁿ] / (r−g)</code><br>
+            where <em>PMT</em> = 1st yr expense, <em>g</em> = inflation, <em>r</em> = return, <em>n</em> = retirement years.
+          </div>
+        </div>
+      </div>
+
+      <hr style="border-color:var(--ki-border,#e2e8f0);margin:1rem 0;">
+
+      <!-- Step 3 -->
+      <div>
+        <div style="font-size:0.72rem;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:0.5rem;letter-spacing:0.06em;">
+          STEP 3 &nbsp;·&nbsp; Monthly SIP to Achieve Corpus (PMT Formula)
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+          <div class="fp-result-card" style="flex:1;min-width:220px;background:#dcfce7;border-color:#86efac;">
+            <div class="fp-result-label" style="color:#166534;">Monthly SIP Required</div>
+            <div class="fp-result-value" id="out-sip" style="color:#16a34a;">—</div>
+            <div class="fp-result-note" id="out-sip-note">Invest monthly at expected return for years to retirement</div>
+          </div>
+          <div style="font-size:0.8rem;color:#64748b;max-width:340px;line-height:1.6;">
+            Uses <strong>expected return (<span id="lbl-ret-rate2">12%</span>)</strong> — the pre-retirement accumulation rate.<br>
+            Formula: <code style="font-size:0.78rem;background:#f1f5f9;padding:2px 4px;border-radius:3px;">PMT = Corpus / [((1+r/12)^n − 1) / (r/12)]</code><br>
+            where <em>n</em> = months to retirement.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Retirement year-wise withdrawal preview -->
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-table"></i> Post-Retirement Withdrawal Preview (First 10 Years)</div>
+      <div style="overflow-x:auto;">
+        <table class="ki-table" id="withdrawal-table">
+          <thead><tr><th>Year</th><th>Age</th><th>Annual Expense</th><th>Portfolio (Start)</th><th>Portfolio (End)</th></tr></thead>
+          <tbody id="withdrawal-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-journal-code"></i> Full Calculation Transparency</div>
+      <div class="fp-formula-box" id="out-transparency">
+        Fill in inputs to see step-by-step calculation details.
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ GOALS TAB ═══════════════ -->
+  <div id="tab-goals" class="fp-tab-content">
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-bullseye"></i> Financial Goals</div>
+      <p style="font-size:0.85rem;color:var(--ki-text-secondary);">Add life goals (child education, marriage, home purchase, vacation, etc.)</p>
+      <button class="ki-btn ki-btn-primary" onclick="addGoal()"><i class="bi bi-plus-circle"></i> Add Goal</button>
+    </div>
+    <div id="goals-container"></div>
+    <div class="ki-card fp-section" id="goals-summary" style="display:none;">
+      <div class="fp-section-title"><i class="bi bi-list-check"></i> Goals Summary</div>
+      <div id="goals-summary-body"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ ASSETS TAB ═══════════════ -->
+  <div id="tab-assets" class="fp-tab-content">
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-briefcase-fill"></i> Current Assets</div>
+      <p style="font-size:0.85rem;color:var(--ki-text-secondary);">Add all investable assets (excluding primary residence). Return rates are auto-filled based on India long-term planning assumptions — you can override them.</p>
+      <button class="ki-btn ki-btn-primary" onclick="addAsset()"><i class="bi bi-plus-circle"></i> Add Asset</button>
+    </div>
+
+    <!-- Reference rate table -->
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-info-circle"></i> Default Return Assumptions (India, Long-Term)</div>
+      <div style="overflow-x:auto;">
+        <table class="ki-table" style="font-size:0.85rem;">
+          <thead><tr><th>Asset Class</th><th>Default Rate</th><th>Typical Range</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Equity (Direct Stocks)</td><td><strong>11%</strong></td><td>10–12%</td><td>Long-term Sensex/Nifty average</td></tr>
+            <tr><td>Equity Mutual Funds</td><td><strong>11%</strong></td><td>10–12%</td><td>Diversified; post expense ratio</td></tr>
+            <tr><td>PMS</td><td><strong>12%</strong></td><td>11–13%</td><td>Concentrated equity, higher risk</td></tr>
+            <tr><td>Real Estate</td><td><strong>7%</strong></td><td>6–8%</td><td>Appreciation only; +2–3% rental yield separately</td></tr>
+            <tr><td>Land</td><td><strong>8%</strong></td><td>7–10%</td><td>Location-dependent; higher speculation</td></tr>
+            <tr><td>Gold</td><td><strong>7%</strong></td><td>6–8%</td><td>Inflation hedge; no yield</td></tr>
+            <tr><td>Fixed Income (FD/Bonds)</td><td><strong>6%</strong></td><td>5–6%</td><td>Post-tax FD returns</td></tr>
+            <tr><td>Debt Funds</td><td><strong>6%</strong></td><td>6–7%</td><td>Bond yields; rate cycle dependent</td></tr>
+            <tr><td style="color:#64748b;">Inflation Assumption</td><td><strong>6%</strong></td><td>5–6%</td><td>Conservative base for planning</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="assets-container"></div>
+    <div class="ki-card fp-section" id="assets-summary" style="display:none;">
+      <div class="fp-section-title"><i class="bi bi-pie-chart-fill"></i> Asset Summary</div>
+      <div class="fp-result-grid" id="assets-result-grid"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ SUMMARY TAB ═══════════════ -->
+  <div id="tab-summary" class="fp-tab-content">
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-clipboard-data-fill"></i> Complete Financial Plan — <span id="summary-name">Client</span></div>
+      <div class="fp-result-grid">
+        <div class="fp-result-card">
+          <div class="fp-result-label">Retirement Corpus Required</div>
+          <div class="fp-result-value" id="sum-corpus">—</div>
+          <div class="fp-result-note">At retirement age</div>
+        </div>
+        <div class="fp-result-card">
+          <div class="fp-result-label">SIP for Retirement</div>
+          <div class="fp-result-value" id="sum-sip">—</div>
+          <div class="fp-result-note">Monthly investment needed</div>
+        </div>
+        <div class="fp-result-card">
+          <div class="fp-result-label">Total Goal SIP</div>
+          <div class="fp-result-value" id="sum-goal-sip">—</div>
+          <div class="fp-result-note">Sum of all goal SIPs</div>
+        </div>
+        <div class="fp-result-card">
+          <div class="fp-result-label">Total Monthly SIP Required</div>
+          <div class="fp-result-value" id="sum-total-sip">—</div>
+          <div class="fp-result-note">Retirement + All Goals</div>
+        </div>
+        <div class="fp-result-card">
+          <div class="fp-result-label">Total Current Assets</div>
+          <div class="fp-result-value" id="sum-assets">—</div>
+          <div class="fp-result-note">Sum of all assets</div>
+        </div>
+        <div class="fp-result-card">
+          <div class="fp-result-label">Projected Assets at Retirement</div>
+          <div class="fp-result-value" id="sum-proj-assets">—</div>
+          <div class="fp-result-note">At expected return rates</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-arrow-left-right"></i> Funding Gap Analysis</div>
+      <div id="funding-gap-box"></div>
+    </div>
+
+    <div class="ki-card fp-section">
+      <div class="fp-section-title"><i class="bi bi-list-ul"></i> Full Summary Breakdown</div>
+      <div id="full-summary-body"></div>
+    </div>
+
+    <!-- ── STRESS TESTER ── -->
+    <div class="ki-card fp-section" style="border:2px solid #f59e0b;">
+      <div class="fp-section-title" style="color:#d97706;border-color:#f59e0b;"><i class="bi bi-lightning-charge-fill"></i> Stress Test</div>
+      <p style="font-size:0.85rem;color:var(--ki-text-secondary);">Test how the plan holds up under different inflation and return assumptions. The grid shows <strong>Corpus Required</strong> and <strong>Monthly SIP Needed</strong> for each scenario. Your base plan values are highlighted.</p>
+
+      <!-- Custom scenario inputs -->
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1.2rem;padding:1rem;background:var(--ki-sidebar-bg,#f8fafc);border-radius:8px;border:1px solid var(--ki-border,#e2e8f0);">
+        <div class="fp-field" style="min-width:160px;">
+          <label>Custom Return Rate (%)</label>
+          <input type="number" id="st-custom-ret" value="10" step="0.5" oninput="buildStressGrid()">
+        </div>
+        <div class="fp-field" style="min-width:160px;">
+          <label>Custom Inflation Rate (%)</label>
+          <input type="number" id="st-custom-inf" value="7" step="0.5" oninput="buildStressGrid()">
+        </div>
+        <div style="padding-bottom:0.1rem;">
+          <button class="ki-btn ki-btn-primary" onclick="buildStressGrid()"><i class="bi bi-play-fill"></i> Run Stress Test</button>
+        </div>
+        <div style="padding-bottom:0.1rem;">
+          <button class="ki-btn ki-btn-secondary" onclick="resetStress()"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+        </div>
+      </div>
+
+      <!-- Scenario grid -->
+      <div id="stress-grid-wrap" style="overflow-x:auto;"></div>
+
+      <!-- Custom result card -->
+      <div id="stress-custom-result" style="margin-top:1rem;display:none;">
+        <div class="fp-section-title" style="font-size:0.85rem;margin-top:0.5rem;">🔬 Custom Scenario Result</div>
+        <div class="fp-result-grid" id="stress-custom-cards"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── Utility ───────────────────────────────────────────────────────────────
+const fmt = v => '₹' + Math.round(v).toLocaleString('en-IN');
+const fmtPct = v => (v * 100).toFixed(2) + '%';
+const pct = id => (parseFloat(document.getElementById(id).value) || 0) / 100;
+const num = id => parseFloat(document.getElementById(id).value) || 0;
+const el = id => document.getElementById(id);
+
+// ─── Tab switching ──────────────────────────────────────────────────────────
+document.querySelectorAll('.fp-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.fp-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.fp-tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    el('tab-' + btn.dataset.tab).classList.add('active');
+    recalc();
+    if (btn.dataset.tab === 'summary') buildStressGrid();
+  });
+});
+
+// ─── Goal management ────────────────────────────────────────────────────────
+let goalCounter = 0;
+function addGoal() {
+  const id = ++goalCounter;
+  const div = document.createElement('div');
+  div.className = 'ki-card fp-section';
+  div.id = 'goal-' + id;
+  const currentYear = new Date().getFullYear();
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+      <strong style="color:var(--ki-primary);">Goal #${id}</strong>
+      <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger,#dc2626);border-color:var(--ki-danger,#dc2626);" onclick="removeGoal(${id})"><i class="bi bi-trash"></i> Remove</button>
+    </div>
+    <div class="fp-goal-row">
+      <div class="fp-field"><label>Goal Name</label><input type="text" id="g${id}-name" placeholder="e.g. Child Education" oninput="recalc()"></div>
+      <div class="fp-field"><label>Cost Today ₹</label><input type="number" id="g${id}-cost" value="2000000" oninput="recalc()"></div>
+      <div class="fp-field"><label>Target Year</label><input type="number" id="g${id}-year" value="${currentYear + 15}" oninput="recalc()"></div>
+      <div class="fp-field"><label>Inflation Rate (%)</label><input type="number" id="g${id}-inf" value="6" step="0.1" oninput="recalc()"></div>
+      <div class="fp-field"><label>Expected Return (%)</label><input type="number" id="g${id}-ret" value="12" step="0.1" oninput="recalc()"></div>
+      <div class="fp-goal-result" id="g${id}-result"></div>
+    </div>
+  `;
+  el('goals-container').appendChild(div);
+  recalc();
+}
+
+function removeGoal(id) {
+  const g = el('goal-' + id);
+  if (g) g.remove();
+  recalc();
+}
+
+// ─── Asset management ────────────────────────────────────────────────────────
+// Asset categories with default return rates (India long-term planning assumptions)
+const ASSET_CATEGORIES = [
+  { name: 'Equity',         rate: 11 },   // Direct stocks: 10–12%
+  { name: 'Mutual Funds',   rate: 11 },   // Equity MFs: 10–12%
+  { name: 'PMS',            rate: 12 },   // PMS: 11–13%
+  { name: 'Real Estate',    rate: 7  },   // Property: 6–8% (excl. rental yield)
+  { name: 'Land',           rate: 8  },   // Land: 7–10%
+  { name: 'Gold',           rate: 7  },   // Gold: 6–8%
+  { name: 'Fixed Income',   rate: 6  },   // FD/Bonds: 5–6%
+  { name: 'Debt Funds',     rate: 6  },   // Debt MFs: 6–7%
+  { name: 'Other Assets',   rate: 8  },   // Generic
+];
+const ASSET_DEFAULT_RATE = Object.fromEntries(ASSET_CATEGORIES.map(a => [a.name, a.rate]));
+
+let assetCounter = 0;
+function addAsset() {
+  const id = ++assetCounter;
+  const div = document.createElement('div');
+  div.className = 'ki-card fp-section';
+  div.id = 'asset-' + id;
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.8rem;">
+      <strong style="color:var(--ki-primary);">Asset #${id}</strong>
+      <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger,#dc2626);border-color:var(--ki-danger,#dc2626);" onclick="removeAsset(${id})"><i class="bi bi-trash"></i> Remove</button>
+    </div>
+    <div class="fp-asset-row">
+      <div class="fp-field"><label>Asset Name</label><input type="text" id="a${id}-name" placeholder="e.g. SBI Bluechip Fund" oninput="recalc()"></div>
+      <div class="fp-field">
+        <label>Category</label>
+        <select id="a${id}-cat" onchange="autoFillReturn(${id})" >
+          ${ASSET_CATEGORIES.map(c => `<option value="${c.name}">${c.name} (${c.rate}%)</option>`).join('')}
+        </select>
+      </div>
+      <div class="fp-field"><label>Current Value ₹</label><input type="number" id="a${id}-val" value="0" placeholder="Enter amount" oninput="recalc()"></div>
+      <div class="fp-field">
+        <label>Expected Return (%) <span style="font-weight:400;color:var(--ki-text-muted,#94a3b8);font-size:0.75rem;">— auto-filled</span></label>
+        <input type="number" id="a${id}-ret" value="${ASSET_CATEGORIES[0].rate}" step="0.1" oninput="recalc()">
+      </div>
+      <div class="fp-asset-result" id="a${id}-result"></div>
+    </div>
+  `;
+  el('assets-container').appendChild(div);
+  recalc();
+}
+
+function autoFillReturn(id) {
+  const cat = document.getElementById('a'+id+'-cat')?.value;
+  const retEl = document.getElementById('a'+id+'-ret');
+  if (retEl && ASSET_DEFAULT_RATE[cat] !== undefined) {
+    retEl.value = ASSET_DEFAULT_RATE[cat];
+  }
+  recalc();
+}
+
+function removeAsset(id) {
+  const a = el('asset-' + id);
+  if (a) a.remove();
+  recalc();
+}
+
+// Sync summary table input → asset card input → recalc
+function syncAsset(aid, field, value) {
+  const cardInput = document.getElementById('a' + aid + '-' + field);
+  if (cardInput) cardInput.value = value;
+  recalc();
+}
+
+// ─── Core calculation engine ─────────────────────────────────────────────────
+function recalc() {
+  const age       = num('inp-age');
+  const retireAge = num('inp-retire');
+  const lifeExp   = num('inp-life');
+  const expense   = num('inp-expense');
+  const retRate   = pct('inp-return');
+  const infRate   = pct('inp-inflation');
+  const expInf    = pct('inp-expense-inflation');
+
+  const ytr = retireAge - age;
+  const yir = lifeExp - retireAge;
+
+  // Real rate (used for display/transparency only)
+  const realRate = (1 + retRate) / (1 + infRate) - 1;
+
+  // ── STEP 1: Future value of expenses at retirement (1st year) ──
+  const fvExpense = expense * Math.pow(1 + expInf, ytr);
+
+  // ── STEP 2: Corpus — GROWING ANNUITY (expenses rise with inflation each year in retirement) ──
+  // Post-retirement: corpus must fund withdrawals that GROW at infRate each year
+  // Correct formula: PMT × [1 − ((1+g)/(1+r))^n] / (r − g)
+  // where PMT = fvExpense, g = infRate, r = retRate, n = yir
+  let corpus = 0;
+  if (yir > 0) {
+    if (Math.abs(retRate - infRate) > 0.0001) {
+      corpus = fvExpense * (1 - Math.pow((1 + infRate) / (1 + retRate), yir)) / (retRate - infRate);
+    } else {
+      // edge case: r ≈ g → corpus = PMT × n / (1+r)
+      corpus = fvExpense * yir / (1 + retRate);
+    }
+  }
+
+  // ── Compute projected assets FIRST so they offset the SIP ──
+  let totalAssets = 0;
+  let projectedAssets = 0;
+  const assetRows = [];
+  const catTotals = {};
+
+  document.querySelectorAll('[id^="asset-"]').forEach(assetDiv => {
+    const aid = assetDiv.id.replace('asset-', '');
+    const aName = document.getElementById('a'+aid+'-name')?.value || 'Asset';
+    const aCat  = document.getElementById('a'+aid+'-cat')?.value || 'Other Assets';
+    const aVal  = parseFloat(document.getElementById('a'+aid+'-val')?.value) || 0;
+    const aRet  = (parseFloat(document.getElementById('a'+aid+'-ret')?.value) || 12) / 100;
+    const fvAsset = aVal * Math.pow(1 + aRet, ytr);
+    totalAssets += aVal;
+    projectedAssets += fvAsset;
+    catTotals[aCat] = (catTotals[aCat] || 0) + aVal;
+    assetRows.push({ aid, name: aName, cat: aCat, aVal, fvAsset, aRet });
+  });
+
+  // ── STEP 3: SIP only for the remaining corpus gap after existing assets ──
+  const corpusGap = Math.max(corpus - projectedAssets, 0);
+  const monthlyReturn = retRate / 12;
+  const months = ytr * 12;
+  let sipRetire = 0;
+  if (months > 0 && monthlyReturn > 0 && corpusGap > 0) {
+    sipRetire = corpusGap / ((Math.pow(1 + monthlyReturn, months) - 1) / monthlyReturn);
+  }
+
+  // ── Update labels ──
+  const retRateLabel = fmtPct(retRate);
+  const realRateLabel = fmtPct(realRate);
+  ['lbl-ret-rate','lbl-ret-rate2'].forEach(id => { if(el(id)) el(id).textContent = retRateLabel; });
+  ['lbl-real-rate'].forEach(id => { if(el(id)) el(id).textContent = realRateLabel; });
+  if(el('lbl-exp-inf2')) el('lbl-exp-inf2').textContent = fmtPct(expInf);
+  if(el('lbl-ytr2')) el('lbl-ytr2').textContent = ytr;
+  if(el('lbl-yir2')) el('lbl-yir2').textContent = yir;
+
+  // ── Update derived values display ──
+  el('out-ytr').textContent = ytr;
+  el('out-yir').textContent = yir;
+  el('out-real').textContent = fmtPct(realRate);
+
+  // ── Retirement outputs ──
+  el('out-fv-expense').textContent = fmt(fvExpense);
+  el('out-corpus').textContent = fmt(corpus);
+  el('out-sip').textContent = corpusGap > 0 ? fmt(sipRetire) + '/mo' : '₹0 — Assets cover corpus ✅';
+  if(el('out-sip-note')) el('out-sip-note').textContent = corpusGap > 0
+    ? `Corpus gap after existing assets: ${fmt(corpusGap)} → SIP at ${retRateLabel} for ${ytr} yrs`
+    : `Projected assets (${fmt(projectedAssets)}) already cover the required corpus (${fmt(corpus)})`;
+
+  // ── Post-retirement withdrawal preview table ──
+  const tbody = el('withdrawal-tbody');
+  if (tbody) {
+    let portfolio = corpus;
+    let rows = '';
+    const previewYears = Math.min(yir, 10);
+    for (let i = 1; i <= previewYears; i++) {
+      const withdrawal = fvExpense * Math.pow(1 + infRate, i - 1);
+      const portfolioStart = portfolio;
+      portfolio = (portfolio - withdrawal) * (1 + retRate);
+      const rowStyle = portfolio < 0 ? 'color:#dc2626;font-weight:700;' : '';
+      rows += `<tr>
+        <td>${i}</td>
+        <td>${retireAge + i - 1}</td>
+        <td>${fmt(withdrawal)}</td>
+        <td style="${rowStyle}">${fmt(portfolioStart)}</td>
+        <td style="${rowStyle}">${fmt(portfolio)}</td>
+      </tr>`;
+    }
+    tbody.innerHTML = rows;
+  }
+
+  // ── Transparency box ──
+  el('out-transparency').innerHTML = `<strong>─── PRE-RETIREMENT (use Expected Return = ${fmtPct(retRate)}) ───</strong>
+
+<strong>STEP 1 · Expense at Retirement (1st Year)</strong>
+  Current Yearly Expenses = ${fmt(expense)}
+  Expense Inflation Rate  = ${fmtPct(expInf)}
+  Years to Retirement     = ${retireAge} − ${age} = ${ytr}
+
+  FV_expense = ${fmt(expense)} × (1 + ${fmtPct(expInf)})^${ytr}
+             = <strong>${fmt(fvExpense)}</strong>
+
+  → You will need ${fmt(fvExpense)} in the 1st year of retirement.
+  → Each year after that, this grows by ${fmtPct(infRate)} (inflation).
+
+<strong>─── POST-RETIREMENT (expense grows with inflation each year) ───</strong>
+
+<strong>STEP 2 · Corpus Required (Growing Annuity Formula)</strong>
+  PMT (1st yr withdrawal) = ${fmt(fvExpense)}
+  Inflation in retirement  = ${fmtPct(infRate)}  ← expense grows each year
+  Return on corpus         = ${fmtPct(retRate)}
+  Years in Retirement (n)  = ${lifeExp} − ${retireAge} = ${yir}
+
+  Corpus = PMT × [1 − ((1+g)/(1+r))^n] / (r − g)
+         = ${fmt(fvExpense)} × [1 − (${(1+infRate).toFixed(4)}/${(1+retRate).toFixed(4)})^${yir}] / (${fmtPct(retRate)} − ${fmtPct(infRate)})
+         = <strong>${fmt(corpus)}</strong>
+
+  → This corpus funds ${yir} years of withdrawals that rise with inflation every year.
+
+<strong>STEP 3 · Existing Assets Projected to Retirement</strong>
+  ${assetRows.length > 0 ? assetRows.map(a => `  ${a.name}: ${fmt(a.aVal)} × (1+${fmtPct(a.aRet)})^${ytr} = ${fmt(a.fvAsset)}`).join('\n  ') : '  (no assets added)'}
+
+  Total Projected Assets at Retirement = <strong>${fmt(projectedAssets)}</strong>
+  Corpus Gap = ${fmt(corpus)} − ${fmt(projectedAssets)} = <strong>${fmt(corpusGap)}</strong>
+  ${projectedAssets >= corpus ? '✅ Existing assets fully cover the corpus — no SIP needed for retirement!' : `→ SIP needed only for the gap of ${fmt(corpusGap)}`}
+
+<strong>─── SIP ACCUMULATION (pre-retirement at Expected Return = ${fmtPct(retRate)}) ───</strong>
+
+<strong>STEP 4 · Monthly SIP Required (PMT Formula)</strong>
+  Target (Corpus Gap)  = ${fmt(corpusGap)}
+  Monthly Return       = ${fmtPct(retRate)} / 12 = ${fmtPct(monthlyReturn)}
+  Months               = ${ytr} × 12 = ${months}
+
+  SIP = Corpus Gap / [((1 + r/12)^n − 1) / (r/12)]
+      = ${fmt(corpusGap)} / [((1 + ${fmtPct(monthlyReturn)})^${months} − 1) / ${fmtPct(monthlyReturn)}]
+      = <strong>${fmt(sipRetire)} / month</strong>
+
+  → Invest ${fmt(sipRetire)}/month for ${ytr} years at ${fmtPct(retRate)} to bridge the gap.
+  `;
+
+  // ── Goals ──────────────────────────────────────────────────────────────────
+  const currentYear = new Date().getFullYear();
+  let totalGoalSip = 0;
+  const goalRows = [];
+
+  document.querySelectorAll('[id^="goal-"]').forEach(goalDiv => {
+    const gid = goalDiv.id.replace('goal-', '');
+    const gName  = (document.getElementById('g'+gid+'-name')?.value || 'Goal') ;
+    const gCost  = parseFloat(document.getElementById('g'+gid+'-cost')?.value) || 0;
+    const gYear  = parseInt(document.getElementById('g'+gid+'-year')?.value) || currentYear + 10;
+    const gInf   = (parseFloat(document.getElementById('g'+gid+'-inf')?.value) || 6) / 100;
+    const gRet   = (parseFloat(document.getElementById('g'+gid+'-ret')?.value) || 12) / 100;
+
+    const ytg    = Math.max(gYear - currentYear, 0);
+    const fvGoal = gCost * Math.pow(1 + gInf, ytg);
+    const mMonths = ytg * 12;
+    const mRet    = gRet / 12;
+    let sipGoal = 0;
+    if (mMonths > 0 && mRet > 0) {
+      sipGoal = fvGoal / ((Math.pow(1 + mRet, mMonths) - 1) / mRet);
+    } else if (mMonths > 0) {
+      sipGoal = fvGoal / mMonths;
+    }
+    totalGoalSip += sipGoal;
+
+    const resEl = document.getElementById('g'+gid+'-result');
+    if (resEl) {
+      resEl.innerHTML = `
+        <span class="fp-badge">Future Cost: ${fmt(fvGoal)}</span>
+        <span class="fp-badge">Years to Goal: ${ytg}</span>
+        <span class="fp-badge fp-badge-orange">Monthly SIP: ${fmt(sipGoal)}/mo</span>
+      `;
+    }
+    goalRows.push({ name: gName, ytg, fvGoal, sipGoal });
+  });
+
+  // Goals summary
+  const goalsSummaryEl = el('goals-summary');
+  const goalsSummaryBody = el('goals-summary-body');
+  if (goalRows.length > 0) {
+    goalsSummaryEl.style.display = '';
+    goalsSummaryBody.innerHTML = goalRows.map(g => `
+      <div class="fp-total-row">
+        <span>${g.name}</span>
+        <span style="display:flex;gap:1rem;">
+          <span class="fp-badge">${g.ytg} yrs → ${fmt(g.fvGoal)}</span>
+          <span class="fp-badge fp-badge-orange">SIP: ${fmt(g.sipGoal)}/mo</span>
+        </span>
+      </div>
+    `).join('') + `
+      <div class="fp-total-row">
+        <span>Total Goal SIP</span>
+        <span class="fp-badge fp-badge-orange" style="font-size:1rem;">${fmt(totalGoalSip)}/mo</span>
+      </div>
+    `;
+  } else {
+    goalsSummaryEl.style.display = 'none';
+  }
+
+  // ── Assets display — update badges on each card ──────────────────────────
+  assetRows.forEach(a => {
+    const resEl = document.getElementById('a'+a.aid+'-result');
+    if (resEl) {
+      resEl.innerHTML = `
+        <span class="fp-badge">Current: ${fmt(a.aVal)}</span>
+        <span class="fp-badge fp-badge-green">Projected in ${ytr} yrs: ${fmt(a.fvAsset)}</span>
+      `;
+    }
+  });
+
+  // ── Assets summary table — rebuild only when row count changes, else update cells ──
+  const assetsSummaryEl = el('assets-summary');
+  const assetsGrid = el('assets-result-grid');
+  if (assetRows.length > 0) {
+    assetsSummaryEl.style.display = '';
+    const existingRows = assetsGrid.querySelectorAll('tr[data-aid]');
+    if (existingRows.length !== assetRows.length) {
+      // Full rebuild (asset added or removed)
+      assetsGrid.innerHTML = `
+        <div style="overflow-x:auto;grid-column:1/-1;">
+          <table class="ki-table" style="font-size:0.88rem;" id="asset-sum-table">
+            <thead>
+              <tr>
+                <th>Asset Name</th>
+                <th>Category</th>
+                <th style="min-width:140px;">Current Value ₹</th>
+                <th style="min-width:110px;">Return %</th>
+                <th>Projected (${ytr} yrs)</th>
+                <th>% of Portfolio</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${assetRows.map(a => `
+                <tr data-aid="${a.aid}">
+                  <td><strong>${a.name || '—'}</strong></td>
+                  <td><span style="font-size:0.78rem;background:var(--ki-primary-bg,#eff6ff);color:var(--ki-primary,#2563eb);padding:2px 7px;border-radius:5px;font-weight:600;">${a.cat}</span></td>
+                  <td>
+                    <input type="number" id="sum-a${a.aid}-val" value="${Math.round(a.aVal)}" placeholder="0"
+                      style="width:120px;padding:0.3rem 0.5rem;border:1.5px solid var(--ki-border,#e2e8f0);border-radius:5px;background:var(--ki-card-bg,#fff);color:var(--ki-text-primary,#1e293b);font-size:0.85rem;"
+                      oninput="syncAsset('${a.aid}','val',this.value)">
+                  </td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:4px;">
+                      <input type="number" id="sum-a${a.aid}-ret" value="${(a.aRet*100).toFixed(1)}" step="0.1"
+                        style="width:65px;padding:0.3rem 0.5rem;border:1.5px solid var(--ki-border,#e2e8f0);border-radius:5px;background:var(--ki-card-bg,#fff);color:var(--ki-text-primary,#1e293b);font-size:0.85rem;"
+                        oninput="syncAsset('${a.aid}','ret',this.value)">
+                      <span style="font-size:0.8rem;color:#64748b;">%</span>
+                    </div>
+                  </td>
+                  <td class="sum-proj-${a.aid}" style="color:#16a34a;font-weight:700;">${fmt(a.fvAsset)}</td>
+                  <td class="sum-pct-${a.aid}" style="color:#64748b;">${totalAssets > 0 ? ((a.aVal/totalAssets)*100).toFixed(1)+'%' : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="font-weight:800;background:var(--ki-sidebar-bg,#f8fafc);">
+                <td colspan="2">Total</td>
+                <td id="sum-total-current" style="color:var(--ki-primary,#2563eb);">${fmt(totalAssets)}</td>
+                <td>—</td>
+                <td id="sum-total-proj" style="color:#16a34a;">${fmt(projectedAssets)}</td>
+                <td>100%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+    } else {
+      // Smart update — only refresh computed cells, leave inputs untouched
+      assetRows.forEach(a => {
+        const projCell = assetsGrid.querySelector(`.sum-proj-${a.aid}`);
+        const pctCell  = assetsGrid.querySelector(`.sum-pct-${a.aid}`);
+        if (projCell) projCell.textContent = fmt(a.fvAsset);
+        if (pctCell)  pctCell.textContent  = totalAssets > 0 ? ((a.aVal/totalAssets)*100).toFixed(1)+'%' : '—';
+        // Keep input values in sync with asset card (only if user isn't editing this cell)
+        const sumVal = document.getElementById('sum-a'+a.aid+'-val');
+        const sumRet = document.getElementById('sum-a'+a.aid+'-ret');
+        if (sumVal && document.activeElement !== sumVal) sumVal.value = Math.round(a.aVal);
+        if (sumRet && document.activeElement !== sumRet) sumRet.value = (a.aRet*100).toFixed(1);
+      });
+      const totCur = el('sum-total-current');
+      const totProj = el('sum-total-proj');
+      if (totCur) totCur.textContent = fmt(totalAssets);
+      if (totProj) totProj.textContent = fmt(projectedAssets);
+    }
+  } else {
+    assetsSummaryEl.style.display = 'none';
+  }
+
+  // ── Summary tab ────────────────────────────────────────────────────────────
+  const totalSip = sipRetire + totalGoalSip;
+  const fundingGap = corpus - projectedAssets;
+
+  el('summary-name').textContent = document.getElementById('inp-name').value || 'Client';
+  el('sum-corpus').textContent    = fmt(corpus);
+  el('sum-sip').textContent       = corpusGap > 0 ? fmt(sipRetire) + '/mo' : '₹0 ✅';
+  el('sum-goal-sip').textContent  = fmt(totalGoalSip) + '/mo';
+  el('sum-total-sip').textContent = fmt(totalSip) + '/mo';
+  el('sum-assets').textContent    = fmt(totalAssets);
+  el('sum-proj-assets').textContent = fmt(projectedAssets);
+
+  // ── FV of planned retirement SIP (what SIP will build by retirement) ──
+  // SIP builds exactly the corpusGap by design, so sipCorpusBuilt = corpusGap
+  const sipCorpusBuilt = corpusGap; // SIP is sized to build exactly this
+  const totalCoveredAtRetirement = projectedAssets + sipCorpusBuilt;
+  const netUncovered = Math.max(corpus - totalCoveredAtRetirement, 0);
+
+  // Funding gap box — 3 scenarios
+  let gapHTML = '';
+  if (projectedAssets >= corpus) {
+    // Assets alone cover corpus
+    gapHTML = `
+      <div class="fp-result-card" style="grid-column:1/-1;background:#dcfce7;border-color:#86efac;">
+        <div class="fp-result-label">✅ Fully Funded by Existing Assets</div>
+        <div class="fp-result-value" style="color:#16a34a;">Surplus ${fmt(-fundingGap)}</div>
+        <div class="fp-result-note">Projected assets (${fmt(projectedAssets)}) already exceed the required corpus (${fmt(corpus)}). No SIP needed for retirement.</div>
+      </div>`;
+  } else if (months > 0) {
+    // Assets + SIP together cover corpus — no real shortfall
+    gapHTML = `
+      <div class="fp-result-card" style="grid-column:1/-1;background:#dcfce7;border-color:#86efac;">
+        <div class="fp-result-label">✅ Corpus Fully Covered</div>
+        <div class="fp-result-value" style="color:#16a34a;">${fmt(corpus)}</div>
+        <div class="fp-result-note">Existing assets will grow to ${fmt(projectedAssets)} + planned SIP builds ${fmt(sipCorpusBuilt)} = ${fmt(totalCoveredAtRetirement)} at retirement. Net uncovered = ₹0.</div>
+      </div>`;
+  } else {
+    // 0 years to retirement — SIP not possible
+    gapHTML = `
+      <div class="fp-result-card" style="grid-column:1/-1;background:#fee2e2;border-color:#fca5a5;">
+        <div class="fp-result-label">⚠️ Uncovered Corpus</div>
+        <div class="fp-result-value" style="color:#dc2626;">${fmt(netUncovered)}</div>
+        <div class="fp-result-note">No time to accumulate via SIP. Lump sum investment needed.</div>
+      </div>`;
+  }
+
+  el('funding-gap-box').innerHTML = `
+    <div class="fp-result-grid">
+      ${gapHTML}
+      <div class="fp-result-card">
+        <div class="fp-result-label">Required Corpus</div>
+        <div class="fp-result-value">${fmt(corpus)}</div>
+        <div class="fp-result-note">Total needed at retirement</div>
+      </div>
+      <div class="fp-result-card" style="background:${projectedAssets>0?'#f0fdf4':'var(--ki-primary-bg,#eff6ff)'};border-color:${projectedAssets>0?'#86efac':'var(--ki-primary-light,#bfdbfe)'};">
+        <div class="fp-result-label">Covered by Existing Assets</div>
+        <div class="fp-result-value" style="color:#16a34a;">${fmt(projectedAssets)}</div>
+        <div class="fp-result-note">Assets projected to retirement</div>
+      </div>
+      <div class="fp-result-card" style="background:#fff7ed;border-color:#fed7aa;">
+        <div class="fp-result-label">Gap Covered by Planned SIP</div>
+        <div class="fp-result-value" style="color:#ea580c;">${fmt(sipCorpusBuilt)}</div>
+        <div class="fp-result-note">${corpusGap>0?fmt(sipRetire)+'/mo for '+ytr+' yrs @ '+fmtPct(retRate):'No SIP needed'}</div>
+      </div>
+    </div>
+  `;
+
+  // Full summary breakdown
+  el('full-summary-body').innerHTML = `
+    <div class="fp-total-row"><span>Future Expense at Retirement (Year 1)</span><span>${fmt(fvExpense)}</span></div>
+    <div class="fp-total-row"><span>Retirement Corpus Required</span><span>${fmt(corpus)}</span></div>
+    <div class="fp-total-row" style="color:#16a34a;"><span>  (−) Covered by Existing Assets</span><span>${fmt(projectedAssets)}</span></div>
+    <div class="fp-total-row" style="color:#ea580c;"><span>  (−) Covered by Planned SIP (${corpusGap>0?fmt(sipRetire)+'/mo':'₹0'})</span><span>${fmt(sipCorpusBuilt)}</span></div>
+    <div class="fp-total-row" style="font-weight:800;color:${netUncovered>0?'#dc2626':'#16a34a'};"><span>Net Uncovered Corpus</span><span>${netUncovered>0?fmt(netUncovered):'₹0 ✅ Fully Covered'}</span></div>
+    ${goalRows.length > 0 ? '<div class="fp-total-row" style="margin-top:0.5rem;font-weight:700;"><span>Financial Goals</span><span></span></div>' : ''}
+    ${goalRows.map(g => `<div class="fp-total-row"><span>  ${g.name}</span><span>${fmt(g.fvGoal)} → SIP ${fmt(g.sipGoal)}/mo</span></div>`).join('')}
+    <div class="fp-total-row" style="font-weight:800;border-top:2px solid var(--ki-border,#e2e8f0);margin-top:0.5rem;padding-top:0.5rem;"><span>Total Monthly SIP Required</span><span>${fmt(totalSip)}/mo</span></div>
+  `;
+}
+
+// ─── Stress Test Engine ───────────────────────────────────────────────────────
+
+// Return and inflation scenarios for the grid
+const ST_RETURNS   = [8, 10, 11, 12, 14];   // columns
+const ST_INFLATIONS = [5, 6, 7, 8, 9];       // rows
+
+function stressCalc(retRate, infRate) {
+  const age       = num('inp-age');
+  const retireAge = num('inp-retire');
+  const lifeExp   = num('inp-life');
+  const expense   = num('inp-expense');
+  const expInf    = pct('inp-expense-inflation');
+
+  const ytr = retireAge - age;
+  const yir = lifeExp - retireAge;
+
+  const fvExpense = expense * Math.pow(1 + expInf, ytr);
+
+  let corpus = 0;
+  if (yir > 0) {
+    if (Math.abs(retRate - infRate) > 0.0001) {
+      corpus = fvExpense * (1 - Math.pow((1 + infRate) / (1 + retRate), yir)) / (retRate - infRate);
+    } else {
+      corpus = fvExpense * yir / (1 + retRate);
+    }
+  }
+
+  // Assets projected at this return rate (use each asset's own rate for asset projection,
+  // but stress the corpus/SIP with the scenario rates)
+  let projAssets = 0;
+  document.querySelectorAll('[id^="asset-"]').forEach(assetDiv => {
+    const aid = assetDiv.id.replace('asset-', '');
+    const aVal = parseFloat(document.getElementById('a'+aid+'-val')?.value) || 0;
+    const aRet = (parseFloat(document.getElementById('a'+aid+'-ret')?.value) || 12) / 100;
+    projAssets += aVal * Math.pow(1 + aRet, ytr);
+  });
+
+  const gap = Math.max(corpus - projAssets, 0);
+  const monthlyReturn = retRate / 12;
+  const months = ytr * 12;
+  let sip = 0;
+  if (months > 0 && monthlyReturn > 0 && gap > 0) {
+    sip = gap / ((Math.pow(1 + monthlyReturn, months) - 1) / monthlyReturn);
+  }
+
+  return { corpus, sip, gap };
+}
+
+function buildStressGrid() {
+  const baseRet = pct('inp-return');
+  const baseInf = pct('inp-inflation');
+  const customRet = (parseFloat(el('st-custom-ret')?.value) || 10) / 100;
+  const customInf = (parseFloat(el('st-custom-inf')?.value) || 7) / 100;
+
+  // Determine base SIP for colouring reference
+  const baseResult = stressCalc(baseRet, baseInf);
+  const baseSip = baseResult.sip;
+
+  // Build grid — rows = inflation, cols = return
+  let html = `<table class="st-grid">
+    <thead>
+      <tr>
+        <th>Inflation ↓ / Return →</th>
+        ${ST_RETURNS.map(r => `<th>${r}%<br><span style="font-weight:400;font-size:0.72rem;">return</span></th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>`;
+
+  ST_INFLATIONS.forEach(inf => {
+    html += `<tr><td class="st-row-hdr">${inf}% inflation</td>`;
+    ST_RETURNS.forEach(ret => {
+      const r = ret / 100;
+      const g = inf / 100;
+      const { corpus, sip } = stressCalc(r, g);
+      const isBase = Math.abs(r - baseRet) < 0.001 && Math.abs(g - baseInf) < 0.001;
+
+      // Colour: green if sip <= base, yellow if up to 1.5x, red if > 1.5x
+      let cls = 'st-cell-ok';
+      if (baseSip > 0) {
+        const ratio = sip / baseSip;
+        if (ratio > 1.5) cls = 'st-cell-bad';
+        else if (ratio > 1.1) cls = 'st-cell-warn';
+      } else {
+        cls = sip > 0 ? 'st-cell-warn' : 'st-cell-ok';
+      }
+      if (isBase) cls += ' st-cell-base';
+
+      html += `<td class="${cls}" title="Corpus: ${fmt(corpus)}">
+        <div style="font-size:0.8rem;">${fmt(sip)}/mo</div>
+        <div style="font-size:0.7rem;opacity:0.75;">₹${(corpus/10000000).toFixed(2)}Cr</div>
+      </td>`;
+    });
+    html += `</tr>`;
+  });
+
+  html += `</tbody></table>
+    <div class="st-legend">
+      <span><i style="background:#dcfce7;border:1px solid #86efac;"></i> Better than base plan (≤ base SIP)</span>
+      <span><i style="background:#fef9c3;border:1px solid #fde68a;"></i> Moderate stress (up to 1.5× SIP)</span>
+      <span><i style="background:#fee2e2;border:1px solid #fca5a5;"></i> High stress (&gt;1.5× SIP)</span>
+      <span><i style="background:#eff6ff;border:3px solid #2563eb;"></i> Your base plan</span>
+    </div>`;
+
+  el('stress-grid-wrap').innerHTML = html;
+
+  // Custom scenario
+  const { corpus: cCorpus, sip: cSip, gap: cGap } = stressCalc(customRet, customInf);
+  const customEl = el('stress-custom-result');
+  const customCards = el('stress-custom-cards');
+  customEl.style.display = '';
+  const sipDelta = cSip - baseSip;
+  const corpusDelta = cCorpus - baseResult.corpus;
+  customCards.innerHTML = `
+    <div class="fp-result-card" style="background:#fefce8;border-color:#fde68a;">
+      <div class="fp-result-label">Custom Scenario</div>
+      <div class="fp-result-value" style="color:#d97706;font-size:1rem;">${(customRet*100).toFixed(1)}% return / ${(customInf*100).toFixed(1)}% inflation</div>
+    </div>
+    <div class="fp-result-card">
+      <div class="fp-result-label">Corpus Required</div>
+      <div class="fp-result-value">${fmt(cCorpus)}</div>
+      <div class="fp-result-note" style="color:${corpusDelta>0?'#dc2626':'#16a34a'};">${corpusDelta>=0?'+':''}${fmt(corpusDelta)} vs base plan</div>
+    </div>
+    <div class="fp-result-card">
+      <div class="fp-result-label">Monthly SIP Required</div>
+      <div class="fp-result-value" style="color:${cSip>baseSip?'#dc2626':'#16a34a'};">${fmt(cSip)}/mo</div>
+      <div class="fp-result-note" style="color:${sipDelta>0?'#dc2626':'#16a34a'};">${sipDelta>=0?'+':''}${fmt(sipDelta)}/mo vs base plan</div>
+    </div>
+    <div class="fp-result-card">
+      <div class="fp-result-label">Corpus Gap (after assets)</div>
+      <div class="fp-result-value" style="color:#ea580c;">${fmt(cGap)}</div>
+      <div class="fp-result-note">SIP bridges this gap</div>
+    </div>
+  `;
+}
+
+function resetStress() {
+  if(el('st-custom-ret')) el('st-custom-ret').value = num('inp-return') || 10;
+  if(el('st-custom-inf')) el('st-custom-inf').value = num('inp-inflation') || 6;
+  buildStressGrid();
+}
+
+// ─── Load example scenario ────────────────────────────────────────────────────
+function loadExample() {
+  el('inp-age').value     = 30;
+  el('inp-retire').value  = 60;
+  el('inp-life').value    = 85;
+  el('inp-expense').value = 1000000;
+  el('inp-income').value  = 1200000;
+  el('inp-return').value  = 12;
+  el('inp-inflation').value = 6;
+  el('inp-expense-inflation').value = 6;
+  el('inp-income-growth').value = 8;
+  el('inp-name').value = 'Example Client';
+  recalc();
+}
+
+// ─── Auto-recalc on any input change ─────────────────────────────────────────
+document.querySelectorAll('#tab-inputs input').forEach(inp => {
+  inp.addEventListener('input', recalc);
+});
+
+// Initial calculation
+recalc();
+</script>
+{% endblock %}

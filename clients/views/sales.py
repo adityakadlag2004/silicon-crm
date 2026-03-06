@@ -478,3 +478,9 @@ def delete_sale(request, sale_id):
         messages.success(request, "Sale deleted successfully!")
         return redirect("clients:admin_dashboard")
     return render(request, "sales/delete_sale.html", {"sale": sale})
+
+
+@login_required
+def financial_planner(request):
+    """Financial planning calculation engine page."""
+    return render(request, "sales/financial_planner.html")
