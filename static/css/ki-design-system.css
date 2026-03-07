@@ -1,36 +1,36 @@
 /* ============================================================
-   KI BackOffice — Design System
-   Professional Corporate Blue Theme
+   Kadlag Investment BO — Design System
+   Professional Corporate Golden Theme
    ============================================================ */
 
 /* ─── CSS Custom Properties ─── */
 :root {
-  /* Primary Blues — lighter, friendlier palette */
-  --ki-primary:        #2563eb;
-  --ki-primary-light:  #3b82f6;
-  --ki-primary-lighter:#60a5fa;
-  --ki-primary-pale:   #dbeafe;
-  --ki-primary-bg:     #eff6ff;
+  /* Primary Gold — bright, fresh golden palette */
+  --ki-primary:        #E5B740;
+  --ki-primary-light:  #F0C75E;
+  --ki-primary-lighter:#F5D67D;
+  --ki-primary-pale:   #FDF4D7;
+  --ki-primary-bg:     #FFFEF8;
 
-  /* Sidebar — softer dark blue, not pitch-black */
-  --ki-sidebar-bg:     #1e3a5f;
-  --ki-sidebar-hover:  #274b75;
-  --ki-sidebar-active: #3b82f6;
-  --ki-sidebar-text:   #b0c4de;
-  --ki-sidebar-text-active: #ffffff;
+  /* Sidebar — light golden beige, fresh and welcoming */
+  --ki-sidebar-bg:     #F5E6C3;
+  --ki-sidebar-hover:  #EFD9A8;
+  --ki-sidebar-active: #E5B740;
+  --ki-sidebar-text:   #6B5D3F;
+  --ki-sidebar-text-active: #3D3420;
   --ki-sidebar-width:  260px;
   --ki-sidebar-collapsed: 68px;
 
-  /* Backgrounds — warm light gray */
-  --ki-body-bg:        #f8fafc;
+  /* Backgrounds — warm creamy tones */
+  --ki-body-bg:        #FFFEF8;
   --ki-card-bg:        #ffffff;
-  --ki-card-border:    #e2e8f0;
+  --ki-card-border:    #F0E9D2;
 
   /* Text */
-  --ki-text-primary:   #1e293b;
-  --ki-text-secondary: #475569;
-  --ki-text-muted:     #94a3b8;
-  --ki-text-light:     #cbd5e1;
+  --ki-text-primary:   #3D3420;
+  --ki-text-secondary: #6B5D3F;
+  --ki-text-muted:     #9B8B6A;
+  --ki-text-light:     #D4C4A8;
 
   /* Accent Colors */
   --ki-success:        #059669;
@@ -96,6 +96,7 @@ body {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--ki-sidebar-hover) transparent;
+  border-right: 1px solid #E8D4A0;
 }
 
 .ki-sidebar::-webkit-scrollbar { width: 4px; }
@@ -106,7 +107,7 @@ body {
   align-items: center;
   gap: 0.75rem;
   padding: 1.25rem 1.25rem 1rem;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
   flex-shrink: 0;
 }
 
@@ -126,7 +127,7 @@ body {
 .ki-sidebar-brand-text {
   font-weight: 700;
   font-size: 1.1rem;
-  color: #fff;
+  color: #3D3420;
   letter-spacing: 0.03em;
   white-space: nowrap;
   overflow: hidden;
@@ -143,7 +144,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ki-text-muted);
+  color: #9B8B6A;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -173,13 +174,13 @@ body {
 
 .ki-sidebar-item:hover {
   background: var(--ki-sidebar-hover);
-  color: #fff;
+  color: var(--ki-text-primary);
   text-decoration: none;
 }
 
 .ki-sidebar-item.active {
   background: var(--ki-sidebar-active);
-  color: var(--ki-sidebar-text-active);
+  color: #ffffff;
 }
 
 .ki-sidebar-item.active::before {
@@ -231,7 +232,7 @@ body {
 }
 
 .ki-sidebar-sub .ki-sidebar-item:hover {
-  color: #fff;
+  color: var(--ki-text-primary);
 }
 
 /* ─── Top bar ─── */
@@ -458,8 +459,8 @@ body {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(0,0,0,0.12);
+  background: rgba(0,0,0,0.04);
   color: var(--ki-sidebar-text);
   cursor: pointer;
   transition: var(--ki-transition);
@@ -470,7 +471,7 @@ body {
 
 .ki-sidebar-collapse-btn:hover {
   background: var(--ki-sidebar-hover);
-  color: #fff;
+  color: var(--ki-text-primary);
 }
 
 .ki-sidebar.collapsed .ki-sidebar-collapse-btn {
@@ -814,12 +815,12 @@ body {
 .ki-btn-primary {
   background: linear-gradient(135deg, var(--ki-primary), var(--ki-primary-light));
   color: #fff;
-  box-shadow: 0 2px 8px rgba(30,64,175,0.25);
+  box-shadow: 0 2px 8px rgba(229,183,64,0.35);
 }
 
 .ki-btn-primary:hover {
   background: linear-gradient(135deg, var(--ki-primary-light), var(--ki-primary));
-  box-shadow: 0 4px 12px rgba(30,64,175,0.35);
+  box-shadow: 0 4px 12px rgba(229,183,64,0.45);
   color: #fff;
   text-decoration: none;
 }
@@ -940,7 +941,7 @@ body {
 .ki-filter-bar .form-control:focus {
   border-color: var(--ki-primary-pale);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  box-shadow: 0 0 0 3px rgba(229,183,64,0.2);
 }
 
 /* Toggle for more filters */
@@ -985,7 +986,7 @@ body {
 .ki-form .form-control:focus,
 .ki-form .form-select:focus {
   border-color: var(--ki-primary-pale);
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  box-shadow: 0 0 0 3px rgba(229,183,64,0.2);
   outline: none;
 }
 
@@ -1140,8 +1141,8 @@ body {
 
 /* ─── Animations ─── */
 @keyframes pulseGlow {
-  0%   { box-shadow: 0 0 0 0 rgba(37,99,235,0.45); }
-  100% { box-shadow: 0 0 0 16px rgba(37,99,235,0); }
+  0%   { box-shadow: 0 0 0 0 rgba(229,183,64,0.5); }
+  100% { box-shadow: 0 0 0 16px rgba(229,183,64,0); }
 }
 
 @keyframes riseFade {
@@ -1385,7 +1386,7 @@ body {
 
 .form-control:focus, .form-select:focus {
   border-color: var(--ki-primary-pale);
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  box-shadow: 0 0 0 3px rgba(229,183,64,0.2);
 }
 
 .card {
@@ -1431,7 +1432,7 @@ a:hover { color: var(--ki-primary-light); }
 .select2-container--default .select2-selection--single:focus,
 .select2-container--default.select2-container--open .select2-selection--single {
   border-color: var(--ki-primary-pale) !important;
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  box-shadow: 0 0 0 3px rgba(229,183,64,0.2);
 }
 
 .select2-dropdown {
