@@ -1,10 +1,10 @@
 {
-  "name": "KI BackOffice",
-  "short_name": "KI CRM",
+  "name": "Kadlag Investment BO",
+  "short_name": "Kadlag Inv BO",
   "start_url": "/clients/login/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#2563eb",
+  "background_color": "#FFFEF8",
+  "theme_color": "#E5B740",
   "icons": [
     {
       "src": "/static/icons/icon-192.png",
