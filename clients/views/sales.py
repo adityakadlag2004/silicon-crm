@@ -2,11 +2,13 @@
 from datetime import date
 from decimal import Decimal
 import json
+from io import BytesIO
+import re
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse, HttpResponse
 from django.utils import timezone
 from django.db.models import Q, Sum
 from django.core.paginator import Paginator
@@ -484,3 +486,591 @@ def delete_sale(request, sale_id):
 def financial_planner(request):
     """Financial planning calculation engine page."""
     return render(request, "sales/financial_planner.html")
+
+
+def _fmt_money(v):
+    try:
+        return f"Rs {float(v):,.0f}"
+    except (TypeError, ValueError):
+        return "Rs 0"
+
+
+def _fmt_pct(v):
+    try:
+        return f"{float(v):.2f}%"
+    except (TypeError, ValueError):
+        return "0.00%"
+
+
+def _safe_name(raw_name):
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "_", (raw_name or "Client").strip())
+    return cleaned[:40] or "Client"
+
+
+@login_required
+@require_POST
+def financial_planner_download_report(request):
+    """Generate professional PDF report for Financial Planner with firm branding."""
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"error": "Invalid report payload."}, status=400)
+
+    planner = payload.get("planner") or {}
+    if not planner:
+        return JsonResponse({"error": "Planner data is required."}, status=400)
+
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm, inch
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+            PageBreak, Image, Frame, PageTemplate, KeepTogether
+        )
+        from reportlab.pdfgen import canvas
+    except ImportError:
+        return JsonResponse(
+            {"error": "PDF dependency missing. Install reportlab first."},
+            status=500,
+        )
+
+    # Get firm settings
+    from ..models import FirmSettings
+    firm = FirmSettings.get_settings()
+    
+    client_name = planner.get("client_name") or "Client"
+    today_str = timezone.localdate().strftime("%Y%m%d")
+    filename = f"financial_plan_{_safe_name(client_name)}_{today_str}.pdf"
+
+    buffer = BytesIO()
+    
+    # Custom page template with header and footer
+    class NumberedCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            canvas.Canvas.__init__(self, *args, **kwargs)
+            self._saved_page_states = []
+
+        def showPage(self):
+            self._saved_page_states.append(dict(self.__dict__))
+            self._startPage()
+
+        def save(self):
+            num_pages = len(self._saved_page_states)
+            for state in self._saved_page_states:
+                self.__dict__.update(state)
+                self.draw_page_number(num_pages)
+                canvas.Canvas.showPage(self)
+            canvas.Canvas.save(self)
+
+        def draw_page_number(self, page_count):
+            self.setFont("Helvetica", 9)
+            self.setFillColor(colors.grey)
+            page_num = f"Page {self._pageNumber} of {page_count}"
+            self.drawRightString(A4[0] - 1.5*cm, 1*cm, page_num)
+            
+            # Footer with firm name
+            if firm.firm_name:
+                self.setFont("Helvetica-Oblique", 8)
+                self.setFillColor(colors.HexColor("#888888"))
+                footer_text = f"{firm.firm_name}"
+                if firm.email or firm.phone:
+                    footer_parts = []
+                    if firm.email:
+                        footer_parts.append(firm.email)
+                    if firm.phone:
+                        footer_parts.append(firm.phone)
+                    footer_text += f" | {' | '.join(footer_parts)}"
+                self.drawCentredString(A4[0]/2, 1*cm, footer_text)
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=2*cm,
+        rightMargin=2*cm,
+        topMargin=2.5*cm,
+        bottomMargin=2.5*cm,
+    )
+
+    # Custom styles
+    styles = getSampleStyleSheet()
+    
+    # Parse primary color from firm settings
+    try:
+        primary_color = colors.HexColor(firm.primary_color)
+    except:
+        primary_color = colors.HexColor("#E5B740")
+    
+    # Create custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=primary_color,
+        spaceAfter=6,
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold'
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Normal'],
+        fontSize=11,
+        textColor=colors.HexColor("#555555"),
+        spaceAfter=20,
+        alignment=TA_CENTER,
+        fontName='Helvetica'
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=primary_color,
+        spaceAfter=12,
+        spaceBefore=16,
+        fontName='Helvetica-Bold',
+        borderWidth=0,
+        borderColor=primary_color,
+        borderPadding=5,
+        leftIndent=0,
+    )
+    
+    subheading_style = ParagraphStyle(
+        'CustomSubheading',
+        parent=styles['Heading3'],
+        fontSize=11,
+        textColor=colors.HexColor("#444444"),
+        spaceAfter=8,
+        spaceBefore=10,
+        fontName='Helvetica-Bold'
+    )
+    
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor("#333333"),
+        spaceAfter=6,
+        fontName='Helvetica'
+    )
+    
+    highlight_style = ParagraphStyle(
+        'Highlight',
+        parent=styles['Normal'],
+        fontSize=11,
+        textColor=primary_color,
+        spaceAfter=8,
+        fontName='Helvetica-Bold'
+    )
+
+    elements = []
+    
+    # ===== HEADER SECTION =====
+    # Add logo if available
+    if firm.logo and hasattr(firm.logo, 'path'):
+        try:
+            import os
+            if os.path.exists(firm.logo.path):
+                logo_img = Image(firm.logo.path, width=4*cm, height=1.5*cm, kind='proportional')
+                logo_img.hAlign = 'CENTER'
+                elements.append(logo_img)
+                elements.append(Spacer(1, 0.3*cm))
+        except:
+            pass  # Skip logo if there's any issue
+    
+    # Always show firm name for clear branding, even when logo is present.
+    firm_name_para = Paragraph(f"<b>{firm.firm_name}</b>", title_style)
+    elements.append(firm_name_para)
+    
+    # Firm details
+    firm_details = []
+    if firm.address:
+        firm_details.append(firm.address.replace('\n', ', '))
+    contact_parts = []
+    if firm.phone:
+        contact_parts.append(f"Tel: {firm.phone}")
+    if firm.email:
+        contact_parts.append(f"Email: {firm.email}")
+    if firm.website:
+        contact_parts.append(f"Web: {firm.website}")
+    if contact_parts:
+        firm_details.append(" | ".join(contact_parts))
+    
+    if firm_details:
+        for detail in firm_details:
+            elements.append(Paragraph(detail, subtitle_style))
+    
+    elements.append(Spacer(1, 0.5*cm))
+    
+    # Horizontal line
+    line_data = [['', '']]
+    line_table = Table(line_data, colWidths=[17*cm])
+    line_table.setStyle(TableStyle([
+        ('LINEABOVE', (0, 0), (-1, 0), 2, primary_color),
+        ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.HexColor("#CCCCCC")),
+    ]))
+    elements.append(line_table)
+    elements.append(Spacer(1, 0.5*cm))
+    
+    # Report title
+    elements.append(Paragraph("Financial Planning Report", heading_style))
+    
+    # Client info box
+    today = timezone.localdate().strftime("%d %B %Y")
+    client_info_data = [
+        [Paragraph("<b>Client Name:</b>", normal_style), Paragraph(client_name, normal_style)],
+        [Paragraph("<b>Report Date:</b>", normal_style), Paragraph(today, normal_style)],
+    ]
+    client_info_table = Table(client_info_data, colWidths=[4*cm, 13*cm])
+    client_info_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F9F9F9")),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#DDDDDD")),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(client_info_table)
+    elements.append(Spacer(1, 0.7*cm))
+
+    # ===== INPUTS SECTION =====
+    inputs = planner.get("inputs") or {}
+    elements.append(Paragraph("1. Client Inputs & Assumptions", heading_style))
+    
+    input_rows = [
+        [Paragraph("<b>Parameter</b>", normal_style), Paragraph("<b>Value</b>", normal_style)],
+        ["Current Age", str(inputs.get("age", "-"))],
+        ["Retirement Age", str(inputs.get("retire_age", "-"))],
+        ["Life Expectancy", str(inputs.get("life_expectancy", "-"))],
+        ["Annual Income", _fmt_money(inputs.get("income", 0))],
+        ["Annual Expense", _fmt_money(inputs.get("expense", 0))],
+        ["Income Growth Rate", _fmt_pct(inputs.get("income_growth_pct", 0))],
+        ["Expected Return Rate", _fmt_pct(inputs.get("return_pct", 0))],
+        ["General Inflation", _fmt_pct(inputs.get("inflation_pct", 0))],
+        ["Expense Inflation", _fmt_pct(inputs.get("expense_inflation_pct", 0))],
+    ]
+    
+    input_table = Table(input_rows, colWidths=[9 * cm, 8 * cm])
+    input_table.setStyle(
+        TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), primary_color),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('ALIGN', (0, 0), (-1, 0), 'LEFT'),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#F5F5F5")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+        ])
+    )
+    elements.append(input_table)
+    elements.append(Spacer(1, 0.6*cm))
+
+    # ===== RETIREMENT SECTION =====
+    retirement = planner.get("retirement") or {}
+    elements.append(Paragraph("2. Retirement Analysis", heading_style))
+    
+    retirement_rows = [
+        [Paragraph("<b>Metric</b>", normal_style), Paragraph("<b>Value</b>", normal_style)],
+        ["Years to Retirement", str(retirement.get("years_to_retirement", "-"))],
+        ["Years in Retirement", str(retirement.get("years_in_retirement", "-"))],
+        ["Real Rate of Return", _fmt_pct(retirement.get("real_rate_pct", 0))],
+        ["Future Annual Expense (at retirement)", _fmt_money(retirement.get("future_expense", 0))],
+        [Paragraph("<b>Retirement Corpus Required</b>", highlight_style), 
+         Paragraph(f"<b>{_fmt_money(retirement.get('corpus', 0))}</b>", highlight_style)],
+        [Paragraph("<b>Monthly SIP for Retirement</b>", highlight_style), 
+         Paragraph(f"<b>{_fmt_money(retirement.get('retirement_sip', 0))}</b>", highlight_style)],
+    ]
+    
+    retirement_table = Table(retirement_rows, colWidths=[9 * cm, 8 * cm])
+    retirement_table.setStyle(
+        TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), primary_color),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#F5F5F5")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+        ])
+    )
+    elements.append(retirement_table)
+    elements.append(Spacer(1, 0.6*cm))
+
+    # ===== POST-RETIREMENT WITHDRAWAL PREVIEW =====
+    withdrawal_rows = planner.get("withdrawal_preview") or []
+    if withdrawal_rows:
+        elements.append(Paragraph("Post-Retirement Withdrawal Projection", subheading_style))
+        elements.append(Paragraph(
+            "This table shows how your retirement corpus will be drawn down during retirement years:",
+            normal_style
+        ))
+        elements.append(Spacer(1, 0.3*cm))
+        
+        w_data = [[Paragraph("<b>Year</b>", normal_style), 
+                   Paragraph("<b>Age</b>", normal_style), 
+                   Paragraph("<b>Withdrawal</b>", normal_style), 
+                   Paragraph("<b>Start Balance</b>", normal_style), 
+                   Paragraph("<b>End Balance</b>", normal_style)]]
+        
+        for r in withdrawal_rows[:10]:  # Limit to first 10 years for readability
+            w_data.append([
+                str(r.get("year", "-")),
+                str(r.get("age", "-")),
+                _fmt_money(r.get("withdrawal", 0)),
+                _fmt_money(r.get("portfolio_start", 0)),
+                _fmt_money(r.get("portfolio_end", 0)),
+            ])
+        
+        w_table = Table(w_data, repeatRows=1, colWidths=[2*cm, 2*cm, 4*cm, 4.5*cm, 4.5*cm])
+        w_table.setStyle(
+            TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), primary_color),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+            ])
+        )
+        elements.append(w_table)
+        if len(withdrawal_rows) > 10:
+            elements.append(Paragraph(
+                f"<i>Note: Showing first 10 years of {len(withdrawal_rows)} total years in retirement</i>",
+                normal_style
+            ))
+        elements.append(Spacer(1, 0.6*cm))
+
+    # ===== GOALS & FUTURE PLAN =====
+    goals = planner.get("goals") or []
+    summary = planner.get("summary") or {}
+    
+    elements.append(Paragraph("3. Financial Goals & Requirements", heading_style))
+    elements.append(Paragraph(
+        f"<b>Total Monthly SIP Required: {_fmt_money(summary.get('total_sip', 0))}</b>",
+        highlight_style
+    ))
+    elements.append(Paragraph(
+        f"Goal Component: {_fmt_money(summary.get('goal_sip', 0))}/month | "
+        f"Retirement Component: {_fmt_money(summary.get('retirement_sip', 0))}/month",
+        normal_style
+    ))
+    elements.append(Spacer(1, 0.3*cm))
+    
+    if goals:
+        g_data = [[Paragraph("<b>Goal</b>", normal_style), 
+                   Paragraph("<b>Years</b>", normal_style), 
+                   Paragraph("<b>Future Cost</b>", normal_style), 
+                   Paragraph("<b>Monthly SIP</b>", normal_style)]]
+        
+        for g in goals:
+            g_data.append([
+                g.get("name") or "Unnamed Goal",
+                str(g.get("years_to_goal", "-")),
+                _fmt_money(g.get("future_cost", 0)),
+                _fmt_money(g.get("sip", 0)),
+            ])
+        
+        g_table = Table(g_data, repeatRows=1, colWidths=[5*cm, 2.5*cm, 4.5*cm, 5*cm])
+        g_table.setStyle(
+            TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), primary_color),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 7),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+            ])
+        )
+        elements.append(g_table)
+    else:
+        elements.append(Paragraph("<i>No specific goals have been added to this plan.</i>", normal_style))
+    
+    elements.append(Spacer(1, 0.6*cm))
+
+    # ===== ASSETS SECTION =====
+    assets = planner.get("assets") or []
+    elements.append(Paragraph("4. Current Assets", heading_style))
+    elements.append(
+        Paragraph(
+            f"<b>Current Total:</b> {_fmt_money(summary.get('current_assets', 0))} | "
+            f"<b>Projected at Retirement:</b> {_fmt_money(summary.get('projected_assets', 0))}",
+            normal_style,
+        )
+    )
+    elements.append(Spacer(1, 0.3*cm))
+    
+    if assets:
+        a_data = [[Paragraph("<b>Asset</b>", normal_style), 
+                   Paragraph("<b>Category</b>", normal_style), 
+                   Paragraph("<b>Current Value</b>", normal_style), 
+                   Paragraph("<b>Return</b>", normal_style), 
+                   Paragraph("<b>Projected Value</b>", normal_style)]]
+        for a in assets:
+            a_data.append([
+                a.get("name") or "Unnamed Asset",
+                a.get("category") or "-",
+                _fmt_money(a.get("current_value", 0)),
+                _fmt_pct(a.get("return_pct", 0)),
+                _fmt_money(a.get("projected_value", 0)),
+            ])
+        a_table = Table(a_data, repeatRows=1, colWidths=[4*cm, 3*cm, 3.5*cm, 2.5*cm, 4*cm])
+        a_table.setStyle(
+            TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), primary_color),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('ALIGN', (2, 1), (-1, -1), 'CENTER'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 7),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+            ])
+        )
+        elements.append(a_table)
+    else:
+        elements.append(Paragraph("<i>No assets have been added to this plan.</i>", normal_style))
+    
+    elements.append(Spacer(1, 0.6*cm))
+
+    # ===== SUMMARY SECTION =====
+    elements.append(Paragraph("5. Financial Summary", heading_style))
+    summary_rows = [
+        [Paragraph("<b>Metric</b>", normal_style), Paragraph("<b>Amount</b>", normal_style)],
+        ["Retirement Corpus Required", _fmt_money(summary.get("corpus", 0))],
+        ["Monthly SIP for Retirement", _fmt_money(summary.get("retirement_sip", 0))],
+        ["Monthly SIP for Goals", _fmt_money(summary.get("goal_sip", 0))],
+        [Paragraph("<b>Total Monthly SIP Required</b>", highlight_style), 
+         Paragraph(f"<b>{_fmt_money(summary.get('total_sip', 0))}</b>", highlight_style)],
+        ["Net Uncovered Corpus", _fmt_money(summary.get("net_uncovered_corpus", 0))],
+    ]
+    s_table = Table(summary_rows, colWidths=[9 * cm, 8 * cm])
+    s_table.setStyle(
+        TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), primary_color),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#F5F5F5")),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+        ])
+    )
+    elements.append(s_table)
+    elements.append(Spacer(1, 0.6*cm))
+
+    # ===== STRESS TEST SECTION =====
+    stress = planner.get("stress_test") or {}
+    grid_rows = stress.get("grid") or []
+    if grid_rows:
+        elements.append(Paragraph("6. Scenario Analysis (Stress Test)", heading_style))
+        elements.append(Paragraph(
+            "This table shows the required monthly SIP under various combinations of return and inflation rates:",
+            normal_style
+        ))
+        elements.append(Spacer(1, 0.3*cm))
+        
+        st_header = [Paragraph("<b>Inflation / Return</b>", normal_style)] + \
+                    [Paragraph(f"<b>{v}%</b>", normal_style) for v in (stress.get("returns") or [])]
+        st_data = [st_header]
+        for row in grid_rows:
+            row_data = [Paragraph(f"<b>{row.get('inflation', '-')}%</b>", normal_style)]
+            for cell in row.get("cells") or []:
+                sip_val = _fmt_money(cell.get("sip", 0))
+                row_data.append(sip_val)
+            st_data.append(row_data)
+        
+        st_table = Table(st_data, repeatRows=1)
+        st_table.setStyle(
+            TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), primary_color),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#F5F5F5")),
+                ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#DDDDDD")),
+                ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAFA")]),
+            ])
+        )
+        elements.append(st_table)
+
+        custom = stress.get("custom") or {}
+        if custom:
+            elements.append(Spacer(1, 0.3*cm))
+            elements.append(
+                Paragraph(
+                    f"<b>Custom Scenario:</b> Return {_fmt_pct(custom.get('return_pct', 0))}, "
+                    f"Inflation {_fmt_pct(custom.get('inflation_pct', 0))} → "
+                    f"Corpus: {_fmt_money(custom.get('corpus', 0))}, "
+                    f"Monthly SIP: {_fmt_money(custom.get('sip', 0))}",
+                    normal_style,
+                )
+            )
+        elements.append(Spacer(1, 0.6*cm))
+
+    # Add disclaimer or notes section
+    elements.append(Paragraph("Important Notes", subheading_style))
+    elements.append(Paragraph(
+        "- This financial plan is based on the assumptions and inputs provided above.",
+        normal_style
+    ))
+    elements.append(Paragraph(
+        "- Actual returns may vary and are subject to market conditions.",
+        normal_style
+    ))
+    elements.append(Paragraph(
+        "- Please review this plan with your financial advisor before making investment decisions.",
+        normal_style
+    ))
+    elements.append(Paragraph(
+        f"- This report was generated on {timezone.localdate().strftime('%d %B %Y')} for informational purposes only.",
+        normal_style
+    ))
+
+    # Build PDF with custom canvas for page numbers
+    doc.build(elements, canvasmaker=NumberedCanvas)
+
+    pdf = buffer.getvalue()
+    buffer.close()
+
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

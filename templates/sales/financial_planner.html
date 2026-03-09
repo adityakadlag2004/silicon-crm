@@ -180,12 +180,6 @@
       </div>
     </div>
 
-    <div class="ki-card fp-section" style="background:var(--ki-primary-bg,#eff6ff);border:2px solid var(--ki-primary-light,#bfdbfe);">
-      <div class="fp-section-title">⚡ Quick Scenario</div>
-      <p style="font-size:0.85rem;color:var(--ki-text-secondary);">Click to load the example scenario from the prompt.</p>
-      <button class="ki-btn ki-btn-primary" onclick="loadExample()"><i class="bi bi-lightning-fill"></i> Load Example (Age 30, Retire 60)</button>
-    </div>
-
   </div>
 
   <!-- ═══════════════ RETIREMENT TAB ═══════════════ -->
@@ -356,6 +350,9 @@
         <div style="font-size:0.72rem;opacity:0.7;text-transform:uppercase;letter-spacing:0.06em;">Total Monthly SIP</div>
         <div style="font-size:2.2rem;font-weight:900;letter-spacing:-0.03em;" id="sum-total-sip">—</div>
         <div style="font-size:0.75rem;opacity:0.7;">Retirement + All Goals</div>
+        <button id="btn-download-report" class="ki-btn ki-btn-secondary" style="margin-top:0.75rem;">
+          <i class="bi bi-file-earmark-pdf"></i> Download Report
+        </button>
       </div>
     </div>
 
@@ -644,6 +641,7 @@ function recalc() {
 
   // ── Post-retirement withdrawal preview table ──
   const tbody = el('withdrawal-tbody');
+  const withdrawalPreview = [];
   if (tbody) {
     let portfolio = corpus;
     let rows = '';
@@ -653,6 +651,13 @@ function recalc() {
       const portfolioStart = portfolio;
       portfolio = (portfolio - withdrawal) * (1 + retRate);
       const rowStyle = portfolio < 0 ? 'color:#dc2626;font-weight:700;' : '';
+      withdrawalPreview.push({
+        year: i,
+        age: retireAge + i - 1,
+        withdrawal,
+        portfolio_start: portfolioStart,
+        portfolio_end: portfolio,
+      });
       rows += `<tr>
         <td>${i}</td>
         <td>${retireAge + i - 1}</td>
@@ -941,6 +946,54 @@ function recalc() {
     ${goalRows.map(g => `<div class="fp-total-row"><span>  ${g.name}</span><span>${fmt(g.fvGoal)} → SIP ${fmt(g.sipGoal)}/mo</span></div>`).join('')}
     <div class="fp-total-row" style="font-weight:800;border-top:2px solid var(--ki-border,#e2e8f0);margin-top:0.5rem;padding-top:0.5rem;"><span>Total Monthly SIP Required</span><span>${fmt(totalSip)}/mo</span></div>
   `;
+
+  // Keep a structured snapshot for report export.
+  window.fpState = {
+    inputs: {
+      client_name: document.getElementById('inp-name').value || 'Client',
+      age,
+      retire_age: retireAge,
+      life_expectancy: lifeExp,
+      income: num('inp-income'),
+      expense,
+      income_growth_pct: num('inp-income-growth'),
+      return_pct: num('inp-return'),
+      inflation_pct: num('inp-inflation'),
+      expense_inflation_pct: num('inp-expense-inflation'),
+    },
+    retirement: {
+      years_to_retirement: ytr,
+      years_in_retirement: yir,
+      real_rate_pct: realRate * 100,
+      future_expense: fvExpense,
+      corpus,
+      retirement_sip: sipRetire,
+      corpus_gap: corpusGap,
+    },
+    goals: goalRows.map(g => ({
+      name: g.name,
+      years_to_goal: g.ytg,
+      future_cost: g.fvGoal,
+      sip: g.sipGoal,
+    })),
+    assets: assetRows.map(a => ({
+      name: a.name,
+      category: a.cat,
+      current_value: a.aVal,
+      projected_value: a.fvAsset,
+      return_pct: a.aRet * 100,
+    })),
+    withdrawal_preview: withdrawalPreview,
+    summary: {
+      corpus,
+      retirement_sip: sipRetire,
+      goal_sip: totalGoalSip,
+      total_sip: totalSip,
+      current_assets: totalAssets,
+      projected_assets: projectedAssets,
+      net_uncovered_corpus: netUncovered,
+    },
+  };
 }
 
 // ─── Stress Test Engine ───────────────────────────────────────────────────────
@@ -1084,19 +1137,107 @@ function resetStress() {
   buildStressGrid();
 }
 
-// ─── Load example scenario ────────────────────────────────────────────────────
-function loadExample() {
-  el('inp-age').value     = 30;
-  el('inp-retire').value  = 60;
-  el('inp-life').value    = 85;
-  el('inp-expense').value = 1000000;
-  el('inp-income').value  = 1200000;
-  el('inp-return').value  = 12;
-  el('inp-inflation').value = 6;
-  el('inp-expense-inflation').value = 6;
-  el('inp-income-growth').value = 8;
-  el('inp-name').value = 'Example Client';
+function getCookie(name) {
+  const cookieValue = document.cookie
+    .split('; ')
+    .find(row => row.startsWith(name + '='));
+  return cookieValue ? decodeURIComponent(cookieValue.split('=')[1]) : null;
+}
+
+function buildStressGridData() {
+  const rows = [];
+  ST_INFLATIONS.forEach(inf => {
+    const row = { inflation: inf, cells: [] };
+    ST_RETURNS.forEach(ret => {
+      const r = ret / 100;
+      const g = inf / 100;
+      const result = stressCalc(r, g);
+      row.cells.push({
+        return: ret,
+        corpus: result.corpus,
+        sip: result.sip,
+        gap: result.gap,
+      });
+    });
+    rows.push(row);
+  });
+  return rows;
+}
+
+function buildPlannerReportPayload() {
+  const state = window.fpState || {};
+  const customRetPct = parseFloat(el('st-custom-ret')?.value) || 10;
+  const customInfPct = parseFloat(el('st-custom-inf')?.value) || 7;
+  const custom = stressCalc(customRetPct / 100, customInfPct / 100);
+
+  return {
+    planner: {
+      client_name: state?.inputs?.client_name || 'Client',
+      inputs: state.inputs || {},
+      retirement: state.retirement || {},
+      goals: state.goals || [],
+      assets: state.assets || [],
+      withdrawal_preview: state.withdrawal_preview || [],
+      summary: state.summary || {},
+      stress_test: {
+        returns: ST_RETURNS,
+        inflations: ST_INFLATIONS,
+        grid: buildStressGridData(),
+        custom: {
+          return_pct: customRetPct,
+          inflation_pct: customInfPct,
+          corpus: custom.corpus,
+          sip: custom.sip,
+          gap: custom.gap,
+        },
+      },
+    },
+  };
+}
+
+async function downloadFinancialPlannerReport() {
   recalc();
+  buildStressGrid();
+  const btn = el('btn-download-report');
+  if (!btn) return;
+
+  btn.disabled = true;
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Generating...';
+
+  try {
+    const response = await fetch("{% url 'clients:financial_planner_download_report' %}", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken') || '',
+      },
+      body: JSON.stringify(buildPlannerReportPayload()),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate report.');
+    }
+
+    const blob = await response.blob();
+    const cd = response.headers.get('Content-Disposition') || '';
+    const filenameMatch = cd.match(/filename="?([^";]+)"?/i);
+    const filename = filenameMatch ? filenameMatch[1] : 'financial_plan_report.pdf';
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(err.message || 'Unable to download report right now.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalHtml;
+  }
 }
 
 // ─── Auto-recalc on any input change ─────────────────────────────────────────
@@ -1106,5 +1247,10 @@ document.querySelectorAll('#tab-inputs input').forEach(inp => {
 
 // Initial calculation
 recalc();
+
+const downloadBtn = el('btn-download-report');
+if (downloadBtn) {
+  downloadBtn.addEventListener('click', downloadFinancialPlannerReport);
+}
 </script>
 {% endblock %}

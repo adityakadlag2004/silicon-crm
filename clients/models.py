@@ -842,3 +842,49 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.title} -> {self.recipient}"
+
+
+class FirmSettings(models.Model):
+    """
+    Singleton model to store firm/company details for branding in reports and documents.
+    Only one instance should exist.
+    """
+    firm_name = models.CharField(max_length=200, default="Kadlag Investment")
+    address = models.TextField(blank=True, help_text="Firm address")
+    email = models.EmailField(blank=True, help_text="Contact email")
+    phone = models.CharField(max_length=20, blank=True, help_text="Contact phone number")
+    website = models.URLField(blank=True, help_text="Company website")
+    logo = models.ImageField(
+        upload_to="firm_logo/",
+        blank=True,
+        null=True,
+        help_text="Firm logo (recommended: 200x60px PNG with transparent background)"
+    )
+    
+    # Color theme for PDFs (optional)
+    primary_color = models.CharField(
+        max_length=7,
+        default="#E5B740",
+        help_text="Primary brand color (hex format, e.g., #E5B740)"
+    )
+    
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Firm Settings"
+        verbose_name_plural = "Firm Settings"
+    
+    def __str__(self):
+        return self.firm_name
+    
+    def save(self, *args, **kwargs):
+        # Ensure only one instance exists (singleton pattern)
+        if not self.pk and FirmSettings.objects.exists():
+            raise ValueError("Only one FirmSettings instance is allowed. Please edit the existing settings.")
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_settings(cls):
+        """Get or create the singleton settings instance."""
+        settings, created = cls.objects.get_or_create(pk=1)
+        return settings

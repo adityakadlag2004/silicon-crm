@@ -30,10 +30,12 @@ from ..models import (
     Notification,
     LeadFollowUp,
     ManagerAccessConfig,
+    FirmSettings,
 )
 from ..forms import (
     EmployeeCreateForm,
     EmployeeDeactivateForm,
+    FirmSettingsForm,
 )
 from .helpers import get_manager_access
 
@@ -418,6 +420,34 @@ def employee_dashboard(request):
     is_manager = role == "manager"
     is_admin = role == "admin"
     manager_access = get_manager_access() if is_manager else None
+
+
+@login_required
+def firm_settings_page(request):
+    admin_emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (admin_emp and admin_emp.role == "admin")):
+        return HttpResponseForbidden("Admins only.")
+
+    settings_obj = FirmSettings.get_settings()
+
+    if request.method == "POST":
+        form = FirmSettingsForm(request.POST, request.FILES, instance=settings_obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Firm settings updated successfully.")
+            return redirect("clients:firm_settings")
+        messages.error(request, "Please correct the errors below.")
+    else:
+        form = FirmSettingsForm(instance=settings_obj)
+
+    return render(
+        request,
+        "settings/firm_settings.html",
+        {
+            "form": form,
+            "settings_obj": settings_obj,
+        },
+    )
     allow_company_sections = is_admin or (is_manager and manager_access and manager_access.allow_employee_performance)
     month_start = date(today.year, today.month, 1)
     month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])

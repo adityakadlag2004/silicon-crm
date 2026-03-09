@@ -7,13 +7,35 @@
 <div class="ki-card">
   <div class="ki-flex-row" style="flex-wrap:wrap;gap:0.75rem;">
     <span class="ki-badge">Period: {{ month_label }}</span>
+    <span class="ki-badge">
+      Scope:
+      {% if selected_employee %}
+        {{ selected_employee.user.username }}
+      {% else %}
+        All Employees
+      {% endif %}
+    </span>
     <a href="{% url 'clients:admin_past_performance' %}" class="ki-btn ki-btn-primary ki-btn-sm">Back to Past Performance</a>
   </div>
+  <form method="get" class="ki-filter-bar" style="margin-top:0.75rem;">
+    <label for="employee" class="form-label">Employee</label>
+    <select name="employee" id="employee" class="form-select" onchange="this.form.submit()">
+      <option value="all" {% if not selected_employee_id %}selected{% endif %}>All Employees (cumulative)</option>
+      {% for e in employees %}
+        <option value="{{ e.id }}" {% if selected_employee_id and selected_employee_id == e.id %}selected{% endif %}>{{ e.user.username }}</option>
+      {% endfor %}
+    </select>
+  </form>
 </div>
 
 <div class="ki-grid-2">
   <div class="ki-card">
-    <h3 class="ki-section-title" style="margin-top:0;">Product-wise Sales</h3>
+    <h3 class="ki-section-title" style="margin-top:0;">
+      Product-wise Sales
+      {% if selected_employee %}
+        — {{ selected_employee.user.username }}
+      {% endif %}
+    </h3>
     {% for p in products %}
       <div style="margin-bottom:1rem;">
         <div class="ki-flex-row">

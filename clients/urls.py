@@ -11,6 +11,7 @@ urlpatterns = [
     
     path("dashboard/admin/", views.admin_dashboard, name="admin_dashboard"),
     path("admin/employees/", views.employee_management, name="employee_management"),
+    path("admin/firm-settings/", views.firm_settings_page, name="firm_settings"),
     path("dashboard/employee/", views.employee_dashboard, name="employee_dashboard"),
 
     # Team management
@@ -124,4 +125,9 @@ urlpatterns = [
 
     # financial planner
     path("sales/financial-planner/", views.financial_planner, name="financial_planner"),
+    path(
+      "sales/financial-planner/download-report/",
+      views.financial_planner_download_report,
+      name="financial_planner_download_report",
+    ),
 ]
