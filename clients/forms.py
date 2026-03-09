@@ -1,7 +1,7 @@
 from django import forms
 from django_select2.forms import ModelSelect2Widget
 from django.forms import inlineformset_factory
-from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress
+from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings
 
 class SaleForm(forms.ModelForm):
     class Meta:
@@ -205,3 +205,36 @@ LeadProductProgressFormSet = inlineformset_factory(
     extra=3,
     can_delete=True,
 )
+
+
+class FirmSettingsForm(forms.ModelForm):
+    class Meta:
+        model = FirmSettings
+        fields = [
+            "firm_name",
+            "address",
+            "email",
+            "phone",
+            "website",
+            "logo",
+            "primary_color",
+        ]
+        widgets = {
+            "address": forms.Textarea(attrs={"rows": 3}),
+            "primary_color": forms.TextInput(attrs={"type": "color"}),
+            "website": forms.URLInput(attrs={"placeholder": "https://example.com"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            if getattr(field.widget, "input_type", "") == "checkbox":
+                field.widget.attrs.setdefault("class", "form-check-input")
+            elif name == "primary_color":
+                field.widget.attrs.setdefault("class", "form-control form-control-color")
+            elif name == "website":
+                field.widget.attrs.setdefault("class", "form-control")
+                # Update help text to clarify URL format requirement
+                field.help_text = "Include https:// or http:// (e.g., https://example.com)"
+            else:
+                field.widget.attrs.setdefault("class", "form-control")

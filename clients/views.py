@@ -3496,9 +3496,26 @@ def admin_past_month_performance(request, year, month):
     if not (is_admin_user or (is_manager and mgr_access and mgr_access.allow_employee_performance)):
         return HttpResponseForbidden("Access denied.")
 
+    employees_qs = Employee.objects.select_related("user").filter(active=True).order_by("user__username")
+    selected_employee = None
+    selected_employee_id = None
+    employee_param = (request.GET.get("employee") or "all").strip()
+    if employee_param and employee_param != "all":
+        try:
+            selected_employee_id = int(employee_param)
+            selected_employee = employees_qs.filter(id=selected_employee_id).first()
+            if not selected_employee:
+                selected_employee_id = None
+        except (TypeError, ValueError):
+            selected_employee_id = None
+
+    month_sales_qs = Sale.objects.filter(date__year=year, date__month=month)
+    if selected_employee:
+        month_sales_qs = month_sales_qs.filter(employee=selected_employee)
+
     # Product-wise summary
     product_sales = (
-        Sale.objects.filter(date__year=year, date__month=month)
+        month_sales_qs
         .values("product")
         .annotate(total_amount=Sum("amount"), total_points=Sum("points"))
         .order_by("-total_amount")
@@ -3506,6 +3523,8 @@ def admin_past_month_performance(request, year, month):
 
     # Target aggregation across employees (if any)
     target_history = MonthlyTargetHistory.objects.filter(year=year, month=month)
+    if selected_employee:
+        target_history = target_history.filter(employee=selected_employee)
     target_map = {}
     if target_history.exists():
         summed_targets = (
@@ -3574,6 +3593,9 @@ def admin_past_month_performance(request, year, month):
         "month_label": f"{month_name[int(month)]} {year}",
         "products": products,
         "top_performers": top_performers,
+        "employees": employees_qs,
+        "selected_employee_id": selected_employee_id,
+        "selected_employee": selected_employee,
     }
 
     return render(request, "dashboards/admin_past_month_performance.html", context)

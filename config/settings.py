@@ -159,15 +159,18 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
-STATIC_ROOT = '/home/ubuntu/silicon-crm/staticfiles/'
 
+# Use different paths for development and production
 if DEBUG:
+    STATIC_ROOT = BASE_DIR / 'staticfiles'
+    MEDIA_ROOT = BASE_DIR / 'media'
     STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 else:
+    STATIC_ROOT = '/home/ubuntu/silicon-crm/staticfiles/'
+    MEDIA_ROOT = '/home/ubuntu/silicon-crm/media/'
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = '/home/ubuntu/silicon-crm/media/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field

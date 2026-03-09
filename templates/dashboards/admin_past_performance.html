@@ -40,7 +40,7 @@
       <div class="ki-card-subtitle">Points: {{ m.points }} | Sales: ₹{{ m.amount|floatformat:0 }}</div>
       <div class="ki-progress mt-2"><div class="ki-progress-bar ki-bar-blue" style="width:{{ m.percent_of_max }}%;"></div></div>
       <div class="mt-2">
-        <a href="{% url 'clients:admin_past_month_performance' m.year m.month %}" class="ki-btn ki-btn-primary ki-btn-sm">View Month</a>
+        <a href="{% url 'clients:admin_past_month_performance' m.year m.month %}?employee={% if selected_employee_id %}{{ selected_employee_id }}{% else %}all{% endif %}" class="ki-btn ki-btn-primary ki-btn-sm">View Month</a>
       </div>
     </div>
   {% endfor %}
