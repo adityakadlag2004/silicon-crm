@@ -27,6 +27,14 @@
       </select>
     </div>
     <div>
+      <label class="form-label">Policy Type</label>
+      <select name="policy_type" class="form-select">
+        <option value="">All</option>
+        <option value="fresh" {% if request.GET.policy_type == "fresh" %}selected{% endif %}>Fresh</option>
+        <option value="port" {% if request.GET.policy_type == "port" %}selected{% endif %}>Port</option>
+      </select>
+    </div>
+    <div>
       <label class="form-label">Status</label>
       <select name="status" class="form-select">
         <option value="">All</option>
@@ -58,6 +66,7 @@
         <th>Date</th>
         <th>Client</th>
         <th>Product</th>
+        <th>Policy Type</th>
         <th>Amount</th>
         <th>Points</th>
         <th>Employee</th>
@@ -71,6 +80,7 @@
         <td>{{ sale.date }}</td>
         <td>{{ sale.client.name }}</td>
         <td>{{ sale.product }}</td>
+        <td>{% if sale.policy_type %}{{ sale.get_policy_type_display }}{% else %}-{% endif %}</td>
         <td>₹{{ sale.amount }}</td>
         <td>{{ sale.points }}</td>
         <td>{{ sale.employee.user.username }}</td>
@@ -83,7 +93,7 @@
         {% endif %}
       </tr>
       {% empty %}
-      <tr><td colspan="{% if is_employee %}7{% else %}8{% endif %}" class="text-center">No sales found</td></tr>
+      <tr><td colspan="{% if is_employee %}8{% else %}9{% endif %}" class="text-center">No sales found</td></tr>
       {% endfor %}
     </tbody>
   </table>

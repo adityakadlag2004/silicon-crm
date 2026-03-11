@@ -72,6 +72,19 @@
           <input type="number" step="0.01" class="form-control" name="cover_amount" id="cover-amount" placeholder="Insurance cover value">
           <small class="form-text text-muted">Total insurance coverage value</small>
         </div>
+        <div class="col-md-6" id="policy-type-group" style="display:none;">
+          <label class="form-label fw-semibold d-block">Policy Type <span class="text-danger">*</span></label>
+          <div class="d-flex gap-2 flex-wrap policy-toggle-group">
+            {% for radio in form.policy_type %}
+              <label class="policy-toggle-option">
+                {{ radio.tag }}
+                <span>{{ radio.choice_label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+          {% if form.policy_type.errors %}<div class="text-danger small mt-1">{{ form.policy_type.errors|striptags }}</div>{% endif %}
+          <small class="form-text text-muted">Port policies earn 0 points. Fresh policies follow the normal incentive rule.</small>
+        </div>
         <div class="col-md-6">
           <label for="id_date" class="form-label fw-semibold">Sale Date <span class="text-danger">*</span></label>
           {{ form.date }}
@@ -109,6 +122,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const clientIdField = document.getElementById("client-id");
   const productSelect = document.getElementById("id_product");
   const coverAmountGroup = document.getElementById("cover-amount-group");
+  const policyTypeGroup = document.getElementById("policy-type-group");
+  const policyTypeInputs = document.querySelectorAll('input[name="policy_type"]');
   const selectedDiv = document.getElementById("client-selected");
   const selectedName = document.getElementById("client-selected-name");
   const incentiveInfo = document.getElementById("incentiveInfo");
@@ -171,14 +186,21 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateProductUI() {
     const selected = productSelect.value;
     const isInsurance = selected === "Life Insurance" || selected === "Health Insurance";
+    const isHealthInsurance = selected === "Health Insurance";
     coverAmountGroup.style.display = isInsurance ? "block" : "none";
+    policyTypeGroup.style.display = isHealthInsurance ? "block" : "none";
     if (!isInsurance) document.getElementById("cover-amount").value = "";
+    if (!isHealthInsurance) {
+      policyTypeInputs.forEach(input => {
+        input.checked = false;
+      });
+    }
 
     const infoMap = {
       "SIP": "Points = (Amount / Unit Amount) x Points Per Unit. Calculated automatically on save.",
       "Lumsum": "Points = (Amount / Unit Amount) x Points Per Unit. One-time investment incentive.",
       "Life Insurance": "Slab-based: cumulative monthly premium matched against configured slabs for payout.",
-      "Health Insurance": "Points = (Amount / Unit Amount) x Points Per Unit. Cover amount tracked separately.",
+      "Health Insurance": "Fresh policies follow normal incentive rules. Port policies always earn 0 points. Cover amount is tracked separately.",
       "Motor Insurance": "Points = (Amount / Unit Amount) x Points Per Unit.",
       "PMS": "Points = (Amount / Unit Amount) x Points Per Unit. Portfolio management incentive.",
       "COB": "Points = (Amount / Unit Amount) x Points Per Unit.",
@@ -203,4 +225,33 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 </script>
+<style>
+  .policy-toggle-group input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .policy-toggle-option {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 110px;
+    padding: 0.65rem 1rem;
+    border: 1px solid var(--ki-border, #d7dee8);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ki-text-primary, #1f2937);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+
+  .policy-toggle-option:has(input:checked) {
+    border-color: var(--ki-primary, #2563eb);
+    background: rgba(37, 99, 235, 0.08);
+    color: var(--ki-primary, #2563eb);
+  }
+</style>
 {% endblock %}

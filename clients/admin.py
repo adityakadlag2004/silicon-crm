@@ -110,14 +110,20 @@ class SaleAdmin(admin.ModelAdmin):
         "client",
         "employee",
         "product",
+        "policy_type_label",
         "amount",
         "points",
         "incentive_amount",
         "date",
     )
-    search_fields = ("client__name", "employee__user__username", "product")
-    list_filter = ("product", "date")
+    search_fields = ("client__name", "employee__user__username", "product", "policy_type")
+    list_filter = ("product", "policy_type", "date")
     actions = ("export_aggregated_incentives",)  # register the action
+
+    def policy_type_label(self, obj):
+        return obj.get_policy_type_display() if obj.policy_type else "-"
+
+    policy_type_label.short_description = "Policy Type"
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

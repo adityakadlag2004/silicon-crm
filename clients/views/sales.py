@@ -103,7 +103,7 @@ def add_sale(request):
 
 @login_required
 def all_sales(request):
-    sales_qs = Sale.objects.all().order_by("-date", "-created_at")
+    sales_qs = Sale.objects.select_related("client", "employee__user").all().order_by("-date", "-created_at")
 
     user_emp = getattr(request.user, "employee", None)
     is_manager = bool(user_emp and user_emp.role == "manager")
@@ -117,6 +117,7 @@ def all_sales(request):
     product = request.GET.get("product")
     client = request.GET.get("client")
     employee = request.GET.get("employee")
+    policy_type = request.GET.get("policy_type")
     status = request.GET.get("status")
     start_date = request.GET.get("start_date")
     end_date = request.GET.get("end_date")
@@ -131,6 +132,7 @@ def all_sales(request):
             | Q(employee__user__first_name__icontains=q)
             | Q(employee__user__last_name__icontains=q)
             | Q(product__icontains=q)
+            | Q(policy_type__icontains=q)
         )
 
     if product:
@@ -143,12 +145,14 @@ def all_sales(request):
             sales_qs = sales_qs.filter(client__name__icontains=client)
     if employee:
         sales_qs = sales_qs.filter(employee__user__username__icontains=employee)
+    if policy_type in [Sale.POLICY_TYPE_FRESH, Sale.POLICY_TYPE_PORT]:
+        sales_qs = sales_qs.filter(policy_type=policy_type)
     if status in [Sale.STATUS_PENDING, Sale.STATUS_APPROVED, Sale.STATUS_REJECTED]:
         sales_qs = sales_qs.filter(status=status)
     if start_date and end_date:
         sales_qs = sales_qs.filter(date__range=[start_date, end_date])
 
-    if not (product or client or employee or start_date or end_date or q):
+    if not (product or client or employee or policy_type or start_date or end_date or q):
         sales_qs = sales_qs.filter(date=date.today())
 
     paginator = Paginator(sales_qs, 50)
