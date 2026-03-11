@@ -219,6 +219,13 @@ class Sale(models.Model):
         ("COB", "COB"),
     ]
 
+    POLICY_TYPE_FRESH = "fresh"
+    POLICY_TYPE_PORT = "port"
+    POLICY_TYPE_CHOICES = [
+        (POLICY_TYPE_FRESH, "Fresh"),
+        (POLICY_TYPE_PORT, "Port"),
+    ]
+
     client = models.ForeignKey("Client", on_delete=models.CASCADE, related_name="sales")
     employee = models.ForeignKey("Employee", on_delete=models.CASCADE, related_name="sales")
     product = models.CharField(max_length=50, choices=PRODUCT_CHOICES)
@@ -228,6 +235,12 @@ class Sale(models.Model):
 
     # New: Cover amount (only relevant for Life & Health Insurance)
     cover_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    policy_type = models.CharField(
+        max_length=10,
+        choices=POLICY_TYPE_CHOICES,
+        blank=True,
+        default="",
+    )
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
     approved_by = models.ForeignKey(
@@ -256,6 +269,11 @@ class Sale(models.Model):
     def compute_points(self):
         """Compute points based on IncentiveRule + IncentiveSlab in DB"""
         from .models import IncentiveRule, IncentiveSlab  # avoid circular import
+
+        if self.product == "Health Insurance" and self.policy_type == self.POLICY_TYPE_PORT:
+            self.points = Decimal("0.000")
+            self.incentive_amount = Decimal("0.00")
+            return
 
         try:
             rule = IncentiveRule.objects.get(product=self.product, active=True)
@@ -312,6 +330,8 @@ class Sale(models.Model):
             self.incentive_amount = Decimal("0.00")
 
     def save(self, *args, **kwargs):
+        if self.product != "Health Insurance":
+            self.policy_type = ""
         self.compute_points()  # always compute before saving
         super().save(*args, **kwargs)
 

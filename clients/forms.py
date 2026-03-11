@@ -3,10 +3,31 @@ from django_select2.forms import ModelSelect2Widget
 from django.forms import inlineformset_factory
 from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings
 
-class SaleForm(forms.ModelForm):
+
+class SalePolicyTypeMixin:
+    def _configure_policy_field(self):
+        if "policy_type" in self.fields:
+            self.fields["policy_type"].required = False
+            self.fields["policy_type"].widget = forms.RadioSelect(
+                choices=Sale.POLICY_TYPE_CHOICES,
+            )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        product = cleaned_data.get("product")
+        policy_type = (cleaned_data.get("policy_type") or "").strip()
+
+        if product == "Health Insurance" and not policy_type:
+            self.add_error("policy_type", "Select Port or Fresh for Health Insurance.")
+        elif product != "Health Insurance":
+            cleaned_data["policy_type"] = ""
+
+        return cleaned_data
+
+class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
     class Meta:
         model = Sale
-        fields = ["client", "product", "amount", "cover_amount", "date"]
+        fields = ["client", "product", "amount", "cover_amount", "policy_type", "date"]
         widgets = {
             "client": ModelSelect2Widget(
                 model=Client,
@@ -20,12 +41,13 @@ class SaleForm(forms.ModelForm):
         employee = kwargs.pop("employee", None)
         super().__init__(*args, **kwargs)
         self.fields["cover_amount"].required = False
+        self._configure_policy_field()
 
 
-class AdminSaleForm(forms.ModelForm):
+class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     class Meta:
         model = Sale
-        fields = ["client", "employee", "product", "amount", "cover_amount", "date"]
+        fields = ["client", "employee", "product", "amount", "cover_amount", "policy_type", "date"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
         }
@@ -34,14 +56,20 @@ class AdminSaleForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if "employee" in self.fields:
             self.fields["employee"].queryset = Employee.objects.filter(active=True)
+        self.fields["cover_amount"].required = False
+        self._configure_policy_field()
 
-class EditSaleForm(forms.ModelForm):
+class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     class Meta:
         model = Sale
-        fields = ["product", "amount", "date"]
+        fields = ["product", "amount", "policy_type", "date"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._configure_policy_field()
 
 class CallingListUploadForm(forms.Form):
     title = forms.CharField(max_length=255)

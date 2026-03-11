@@ -170,6 +170,7 @@
           <th>Date</th>
           <th>Client</th>
           <th>Product</th>
+          <th>Policy Type</th>
           <th>Amount</th>
           <th>Points</th>
           <th>Status</th>
@@ -181,6 +182,7 @@
           <td>{{ sale.date|date:"d M Y" }}</td>
           <td>{{ sale.client.name }}</td>
           <td>{{ sale.product }}</td>
+          <td>{% if sale.policy_type %}{{ sale.get_policy_type_display }}{% else %}-{% endif %}</td>
           <td>₹{{ sale.amount|floatformat:0 }}</td>
           <td>{{ sale.points|floatformat:0 }}</td>
           <td>
