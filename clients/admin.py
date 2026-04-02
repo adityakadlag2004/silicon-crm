@@ -15,6 +15,8 @@ from import_export.admin import ImportExportModelAdmin
 from .models import (
     Client, Employee, Sale, IncentiveRule, MonthlyIncentive, Target,
     MessageTemplate,
+    Renewal,
+    Product,
 )
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
@@ -96,8 +98,11 @@ class TargetAdmin(admin.ModelAdmin):
 
     # Prevent duplicate targets
     def has_add_permission(self, request):
-        # Allow add only if combination does not exist
-        if Target.objects.count() >= (len(Sale.PRODUCT_CHOICES) * 2):
+        # Allow add while there are product/target_type combinations available.
+        product_count = Product.objects.count()
+        if product_count <= 0:
+            return False
+        if Target.objects.count() >= (product_count * 2):
             return False
         return True
 
@@ -227,6 +232,44 @@ class MonthlyIncentiveAdmin(admin.ModelAdmin):
     list_display = ('employee','year','month','total_points','total_amount','created_at')
     search_fields = ('employee__user__username',)
     list_filter = ('year','month')
+
+
+@admin.register(Renewal)
+class RenewalAdmin(admin.ModelAdmin):
+    list_display = (
+        "client",
+        "employee",
+        "product_ref",
+        "product_type",
+        "product_name",
+        "renewal_date",
+        "renewal_end_date",
+        "frequency",
+        "premium_amount",
+        "premium_collected_on",
+        "created_by",
+        "created_at",
+    )
+    list_filter = ("product_type", "frequency", "renewal_date", "renewal_end_date", "premium_collected_on", "employee")
+    search_fields = ("client__name", "client__phone", "product_name", "product_ref__name", "created_by__username", "employee__user__username")
+
+
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ("name", "code", "domain", "is_active", "archived_at", "display_order")
+    list_filter = ("domain", "is_active", "archived_at")
+    search_fields = ("name", "code")
+    ordering = ("display_order", "name")
+    actions = ["archive_products", "restore_products"]
+
+    @admin.action(description="Archive selected products")
+    def archive_products(self, request, queryset):
+        for product in queryset:
+            product.archive(reason="Archived from admin action")
+
+    @admin.action(description="Restore selected products")
+    def restore_products(self, request, queryset):
+        queryset.update(is_active=True, archived_at=None, archived_reason="")
 
 
 

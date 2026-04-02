@@ -1,5 +1,6 @@
 
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}Client Analysis{% endblock %}
 {% block page_title %}Client Analysis{% endblock %}
 {% block content %}
@@ -8,32 +9,16 @@
 
 <div class="ki-card mb-4">
   <form method="get" class="row g-3">
+    {% for meta in product_filters %}
     <div class="col-md-2">
-      <label class="form-label">SIP</label>
-      <select name="sip_status" class="form-select">
+      <label class="form-label">{{ meta.product.name }}</label>
+      <select name="{{ meta.status_param }}" class="form-select">
         <option value="">All</option>
-        <option value="yes" {% if request.GET.sip_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.sip_status == "no" %}selected{% endif %}>No</option>
+        <option value="yes" {% if meta.status_value == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if meta.status_value == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Life Insurance</label>
-      <select name="life_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.life_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.life_status == "no" %}selected{% endif %}>No</option>
-      </select>
-    </div>
-
-    <div class="col-md-2">
-      <label class="form-label">Health Insurance</label>
-      <select name="health_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.health_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.health_status == "no" %}selected{% endif %}>No</option>
-      </select>
-    </div>
+    {% endfor %}
 
     <div class="col-md-2">
       <label class="form-label">Start Date</label>
@@ -60,11 +45,9 @@
         <th>Name</th>
         <th>Email</th>
         <th>Phone</th>
-        <th>SIP</th>
-        <th>Life</th>
-        <th>Health</th>
-        <th>Motor</th>
-        <th>PMS</th>
+        {% for meta in product_filters %}
+        <th>{{ meta.product.name }}</th>
+        {% endfor %}
         <th>Created</th>
       </tr>
     </thead>
@@ -75,15 +58,13 @@
         <td>{{ c.name }}</td>
         <td>{{ c.email }}</td>
         <td>{{ c.phone }}</td>
-        <td>{{ c.sip_status|yesno:"Yes,No" }}</td>
-        <td>{{ c.life_status|yesno:"Yes,No" }}</td>
-        <td>{{ c.health_status|yesno:"Yes,No" }}</td>
-        <td>{{ c.motor_status|yesno:"Yes,No" }}</td>
-        <td>{{ c.pms_status|yesno:"Yes,No" }}</td>
+        {% for meta in product_filters %}
+        <td>{% if c.dynamic_product_status_map|get_item:meta.status_field %}Yes{% else %}No{% endif %}</td>
+        {% endfor %}
         <td>{{ c.created_at|date:"Y-m-d" }}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="10" class="text-center text-muted" style="padding:2rem;">No clients found</td></tr>
+      <tr><td colspan="{{ analysis_colspan }}" class="text-center text-muted" style="padding:2rem;">No clients found</td></tr>
       {% endfor %}
     </tbody>
   </table>

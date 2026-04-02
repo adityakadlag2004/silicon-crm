@@ -97,12 +97,11 @@
 <!-- Product-wise Sales -->
 <h3 class="ki-section-title">Product-wise Sales (This Month)</h3>
 <div class="ki-grid-3 mb-3">
-  <div class="ki-metric-card"><div class="ki-metric-label">SIP</div><div class="ki-metric-value">₹{{ sip_sales }}</div></div>
-  <div class="ki-metric-card"><div class="ki-metric-label">Lumpsum</div><div class="ki-metric-value">₹{{ lumsum_sales }}</div></div>
-  <div class="ki-metric-card"><div class="ki-metric-label">Life Insurance</div><div class="ki-metric-value">₹{{ life_sales }}</div></div>
-  <div class="ki-metric-card"><div class="ki-metric-label">Health Insurance</div><div class="ki-metric-value">₹{{ health_sales }}</div></div>
-  <div class="ki-metric-card"><div class="ki-metric-label">Motor Insurance</div><div class="ki-metric-value">₹{{ motor_sales }}</div></div>
-  <div class="ki-metric-card"><div class="ki-metric-label">PMS</div><div class="ki-metric-value">₹{{ pms_sales }}</div></div>
+  {% for item in product_sales_breakup %}
+    <div class="ki-metric-card"><div class="ki-metric-label">{{ item.label }}</div><div class="ki-metric-value">₹{{ item.amount|floatformat:0 }}</div></div>
+  {% empty %}
+    <div class="text-muted">No sales yet.</div>
+  {% endfor %}
 </div>
 
 <!-- Progress vs Targets -->

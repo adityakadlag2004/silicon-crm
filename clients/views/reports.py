@@ -10,7 +10,7 @@ from django.http import HttpResponseForbidden
 from django.db.models import Sum
 from django.utils.timezone import now
 
-from ..models import Sale, Employee, MonthlyTargetHistory
+from ..models import Sale, Employee, MonthlyTargetHistory, Product
 from .helpers import get_manager_access, _last_n_months
 
 
@@ -324,7 +324,16 @@ def monthly_business_report(request):
     sel_month = int(request.GET.get("month", today.month))
     sel_year = int(request.GET.get("year", today.year))
 
-    products = ["SIP", "Lumsum", "Life Insurance", "Health Insurance", "Motor Insurance", "PMS", "COB"]
+    products = list(Product.objects.order_by("display_order", "name").values_list("name", flat=True))
+    used_products = list(
+        Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
+        .exclude(product="")
+        .values_list("product", flat=True)
+        .distinct()
+    )
+    for product_name in used_products:
+        if product_name not in products:
+            products.append(product_name)
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
 
     approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)

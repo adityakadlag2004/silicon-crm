@@ -23,7 +23,7 @@
     <div class="d-flex align-items-start justify-content-between mb-3">
       <div>
         <h3 class="mb-1" style="font-size:1.1rem;font-weight:700;color:var(--ki-dark);">
-          <i class="bi bi-box-seam me-1" style="color:var(--ki-primary);"></i> {{ rule.product }}
+          <i class="bi bi-box-seam me-1" style="color:var(--ki-primary);"></i> {{ rule.product_ref.name|default:rule.product }}
         </h3>
         <span class="badge {% if rule.active %}bg-success{% else %}bg-secondary{% endif %}" id="badge-{{ rule.id }}">
           {{ rule.active|yesno:"Active,Inactive" }}
@@ -33,7 +33,7 @@
         <button class="ki-btn ki-btn-secondary" style="padding:4px 8px;font-size:.8rem;" onclick="editRule({{ rule.id }})" title="Edit Rule">
           <i class="bi bi-pencil"></i>
         </button>
-        <button class="ki-btn" style="padding:4px 8px;font-size:.8rem;background:#fee2e2;color:#dc2626;" onclick="deleteRule({{ rule.id }}, '{{ rule.product }}')" title="Delete Rule">
+        <button class="ki-btn" style="padding:4px 8px;font-size:.8rem;background:#fee2e2;color:#dc2626;" onclick="deleteRule({{ rule.id }}, '{{ rule.product_ref.name|default:rule.product }}')" title="Delete Rule">
           <i class="bi bi-trash"></i>
         </button>
       </div>
@@ -123,13 +123,9 @@
           <label class="form-label fw-semibold">Product</label>
           <select id="newRuleProduct" class="form-select">
             <option value="">Select product…</option>
-            <option value="SIP">SIP</option>
-            <option value="Lumsum">Lumsum</option>
-            <option value="Life Insurance">Life Insurance</option>
-            <option value="Health Insurance">Health Insurance</option>
-            <option value="Motor Insurance">Motor Insurance</option>
-            <option value="PMS">PMS</option>
-            <option value="COB">COB</option>
+            {% for product in product_options %}
+              <option value="{{ product.id }}">{{ product.name }}</option>
+            {% endfor %}
           </select>
         </div>
         <div class="row g-2">
@@ -253,13 +249,15 @@ function showAddRuleModal() {
 }
 
 async function submitAddRule() {
-  const product = document.getElementById('newRuleProduct').value;
+  const productSelect = document.getElementById('newRuleProduct');
+  const productId = productSelect.value;
+  const productName = productSelect.options[productSelect.selectedIndex]?.text || '';
   const unit_amount = document.getElementById('newRuleUnit').value;
   const points_per_unit = document.getElementById('newRulePPU').value;
-  if (!product) { showToast('Please select a product.', false); return; }
+  if (!productId) { showToast('Please select a product.', false); return; }
   try {
-    await apiPost(URLS.addRule, { product, unit_amount, points_per_unit });
-    showToast(`Rule for ${product} created!`);
+    await apiPost(URLS.addRule, { product_id: productId, product: productName, unit_amount, points_per_unit });
+    showToast(`Rule for ${productName} created!`);
     bootstrap.Modal.getInstance(document.getElementById('addRuleModal')).hide();
     setTimeout(() => location.reload(), 800);
   } catch (e) { showToast(e.message, false); }

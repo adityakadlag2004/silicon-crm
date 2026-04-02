@@ -18,6 +18,7 @@ from django.core.paginator import Paginator
 from ..models import (
     Client,
     Sale,
+    Product,
     Employee,
     CalendarEvent,
     CallRecord,
@@ -33,7 +34,7 @@ def calling_list_generator(request):
 
     Filters supported (GET):
     - sip: all | yes | no
-    - product: one of Sale.PRODUCT_CHOICES or empty
+    - product: one of configured Product names or empty
     - min_amount, max_amount: numeric filters applied to SIP amount (for SIP) or Sale.amount (for Sales)
     - mapped: employee id to filter clients mapped to a specific employee
     - unmapped_only: if present, only clients with mapped_to is null
@@ -343,7 +344,7 @@ def calling_list_generator(request):
         'pms_min': pms_min or '',
         'pms_max': pms_max or '',
         'employees': Employee.objects.select_related('user').filter(active=True),
-        'products': [c[0] for c in Sale.PRODUCT_CHOICES],
+        'products': list(Product.objects.order_by('display_order', 'name').values_list('name', flat=True)),
         'mapped_emp': mapped_emp or '',
         'unmapped_only': bool(unmapped_only),
         'source': source,

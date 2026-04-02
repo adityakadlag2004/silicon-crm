@@ -19,6 +19,25 @@
     <link href="{% static 'django_select2/django_select2.css' %}" rel="stylesheet"/>
     <!-- KI Design System -->
     <link href="{% static 'css/ki-design-system.css' %}" rel="stylesheet" />
+    <style>
+      .ki-sidebar-section {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .ki-sidebar-section .section-chevron {
+        font-size: 0.75rem;
+        opacity: 0.75;
+        transition: transform 0.2s ease;
+      }
+
+      .ki-sidebar-section.collapsed .section-chevron {
+        transform: rotate(-90deg);
+      }
+    </style>
     {% block extra_css %}{% endblock %}
   </head>
   <body>
@@ -61,8 +80,14 @@
               <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
                 <i class="bi bi-receipt"></i> <span>All Sales</span>
               </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
+                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
+              </a>
               <a class="ki-sidebar-item" href="{% url 'clients:admin_add_sale' %}">
                 <i class="bi bi-plus-circle-fill"></i> <span>Add Sale</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
+                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
               </a>
               <a class="ki-sidebar-item" href="{% url 'clients:approve_sales' %}">
                 <i class="bi bi-check-circle-fill"></i> <span>Approve Sales</span>
@@ -119,6 +144,9 @@
               <a class="ki-sidebar-item" href="{% url 'clients:firm_settings' %}">
                 <i class="bi bi-building-gear"></i> <span>Firm Settings</span>
               </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:product_management' %}">
+                <i class="bi bi-box-seam"></i> <span>Product Management</span>
+              </a>
 
               <div class="ki-sidebar-section">Leads</div>
               <a class="ki-sidebar-item" href="{% url 'clients:lead_management' %}">
@@ -146,6 +174,12 @@
               </a>
               <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
                 <i class="bi bi-receipt"></i> <span>All Sales</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
+                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
+                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
               </a>
               {% if manager_access.allow_approve_sales %}
               <a class="ki-sidebar-item" href="{% url 'clients:approve_sales' %}">
@@ -240,6 +274,12 @@
               </a>
               <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
                 <i class="bi bi-receipt"></i> <span>All Sales</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
+                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
+                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
               </a>
               <a class="ki-sidebar-item" href="{% url 'clients:recalc_points' %}">
                 <i class="bi bi-calculator-fill"></i> <span>Recalculate Points</span>
@@ -416,6 +456,50 @@
           item.addEventListener('click', closeSidebar);
         });
       }
+
+      // Collapsible sidebar sections with persistent state
+      const sectionState = JSON.parse(localStorage.getItem('ki-sidebar-sections') || '{}');
+      const sections = document.querySelectorAll('.ki-sidebar-section');
+
+      sections.forEach(function(section, index) {
+        const label = section.textContent.trim();
+        const storageKey = `${index}:${label}`;
+
+        section.innerHTML = `<span>${label}</span><i class="bi bi-chevron-down section-chevron"></i>`;
+        section.setAttribute('role', 'button');
+        section.setAttribute('aria-expanded', 'true');
+
+        const groupItems = [];
+        let sibling = section.nextElementSibling;
+        while (sibling && !sibling.classList.contains('ki-sidebar-section')) {
+          if (sibling.classList.contains('ki-sidebar-item')) {
+            groupItems.push(sibling);
+          }
+          sibling = sibling.nextElementSibling;
+        }
+
+        const hasActiveItem = groupItems.some(function(item) {
+          return item.classList.contains('active');
+        });
+
+        function applyCollapsed(collapsed) {
+          section.classList.toggle('collapsed', collapsed);
+          section.setAttribute('aria-expanded', String(!collapsed));
+          groupItems.forEach(function(item) {
+            item.style.display = collapsed ? 'none' : '';
+          });
+        }
+
+        const startCollapsed = hasActiveItem ? false : Boolean(sectionState[storageKey]);
+        applyCollapsed(startCollapsed);
+
+        section.addEventListener('click', function() {
+          const nextState = !section.classList.contains('collapsed');
+          applyCollapsed(nextState);
+          sectionState[storageKey] = nextState;
+          localStorage.setItem('ki-sidebar-sections', JSON.stringify(sectionState));
+        });
+      });
     })();
     </script>
 

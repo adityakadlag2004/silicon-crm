@@ -20,6 +20,7 @@ from django.db import transaction
 from ..models import (
     Client,
     Sale,
+    Product,
     Employee,
     Target,
     MonthlyTargetHistory,
@@ -40,6 +41,28 @@ from ..forms import (
 from .helpers import get_manager_access
 
 
+def _ordered_product_names(extra_names=None):
+    names = list(Product.objects.order_by("display_order", "name").values_list("name", flat=True))
+    seen = set(names)
+    for item in (extra_names or []):
+        cleaned = (item or "").strip()
+        if cleaned and cleaned not in seen:
+            names.append(cleaned)
+            seen.add(cleaned)
+    return names
+
+
+def _normalize_product_code(raw_code):
+    cleaned = (raw_code or "").strip().upper().replace("-", "_").replace(" ", "_")
+    if not cleaned:
+        return ""
+    normalized = ""
+    for ch in cleaned:
+        if ch.isalnum() or ch == "_":
+            normalized += ch
+    return normalized[:30]
+
+
 @login_required
 def admin_dashboard(request):
     emp = getattr(request.user, "employee", None)
@@ -51,15 +74,8 @@ def admin_dashboard(request):
 
     admin_emp = getattr(request.user, "employee", None)
 
-    products = [p for p, _ in Sale.PRODUCT_CHOICES]
     product_labels = {
-        "SIP": "SIP",
         "Lumsum": "Lumpsum",
-        "Life Insurance": "Life Insurance",
-        "Health Insurance": "Health Insurance",
-        "Motor Insurance": "Motor Insurance",
-        "PMS": "PMS",
-        "COB": "COB",
     }
 
     def _build_breakup(data_map):
@@ -100,6 +116,10 @@ def admin_dashboard(request):
     all_sales_qs = Sale.objects.all()
     monthly_sales_qs = Sale.objects.filter(status=Sale.STATUS_APPROVED, created_at__year=year, created_at__month=month)
     approved_sales_all = Sale.objects.filter(status=Sale.STATUS_APPROVED)
+    products = _ordered_product_names(
+        list(all_sales_qs.exclude(product="").values_list("product", flat=True).distinct())
+        + list(Target.objects.exclude(product="").values_list("product", flat=True).distinct())
+    )
 
     total_clients = Client.objects.count()
     total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
@@ -128,13 +148,6 @@ def admin_dashboard(request):
         for entry in self_sales_qs.values("product").annotate(total=Sum("amount")):
             admin_self_sales_map[entry["product"]] = entry["total"] or Decimal("0")
 
-    sip_sales = monthly_sales_qs.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
-    lumsum_sales = monthly_sales_qs.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
-    life_sales = monthly_sales_qs.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    health_sales = monthly_sales_qs.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    motor_sales = monthly_sales_qs.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    pms_sales = monthly_sales_qs.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
-
     overall_points_map = {p: Decimal("0") for p in products}
     overall_sales_map = {p: Decimal("0") for p in products}
     for entry in monthly_sales_qs.values("product").annotate(total=Sum("points")):
@@ -146,6 +159,12 @@ def admin_dashboard(request):
     admin_overall_points_breakup = _build_breakup(overall_points_map)
     admin_self_sales_breakup = _build_breakup(admin_self_sales_map)
     admin_overall_sales_breakup = _build_breakup(overall_sales_map)
+    sip_sales = overall_sales_map.get("SIP", Decimal("0"))
+    lumsum_sales = overall_sales_map.get("Lumsum", Decimal("0"))
+    life_sales = overall_sales_map.get("Life Insurance", Decimal("0"))
+    health_sales = overall_sales_map.get("Health Insurance", Decimal("0"))
+    motor_sales = overall_sales_map.get("Motor Insurance", Decimal("0"))
+    pms_sales = overall_sales_map.get("PMS", Decimal("0"))
 
     daily_targets = Target.objects.filter(target_type="daily")
     monthly_targets = Target.objects.filter(target_type="monthly")
@@ -448,7 +467,15 @@ def employee_dashboard(request):
         followups_by_date.setdefault(fdate, []).append(f)
     upcoming_followups = list(followup_qs)
 
-    products = [p for p, _ in Sale.PRODUCT_CHOICES]
+    products = _ordered_product_names(
+        list(
+            Sale.objects.filter(employee=emp)
+            .exclude(product="")
+            .values_list("product", flat=True)
+            .distinct()
+        )
+        + list(Target.objects.exclude(product="").values_list("product", flat=True).distinct())
+    )
 
     monthly_sales_approved = Sale.objects.filter(
         employee=emp,
@@ -475,26 +502,13 @@ def employee_dashboard(request):
     points_ratio = (total_points / points_scale) * Decimal("100") if points_scale else Decimal("0")
     extra_points = max(total_points - salary_points, Decimal("0"))
 
-    sip_sales = monthly_sales_approved.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
-    lumsum_sales = monthly_sales_approved.filter(product="Lumsum").aggregate(total=Sum("amount"))["total"] or 0
-    life_sales = monthly_sales_approved.filter(product="Life Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    health_sales = monthly_sales_approved.filter(product="Health Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    motor_sales = monthly_sales_approved.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    pms_sales = monthly_sales_approved.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
-
     product_points_map = {p: Decimal("0") for p in products}
     product_points_qs = monthly_sales_approved.values("product").annotate(total=Sum("points"))
     for entry in product_points_qs:
         product_points_map[entry["product"]] = entry["total"] or Decimal("0")
 
     product_labels = {
-        "SIP": "SIP",
         "Lumsum": "Lumpsum",
-        "Life Insurance": "Life Insurance",
-        "Health Insurance": "Health Insurance",
-        "Motor Insurance": "Motor Insurance",
-        "PMS": "PMS",
-        "COB": "COB",
     }
     product_point_breakup = [
         {
@@ -514,6 +528,12 @@ def employee_dashboard(request):
 
     month_sales = monthly_sales_approved.values("product").annotate(total=Sum("amount"))
     month_sales_dict = {s["product"]: s["total"] for s in month_sales}
+    sip_sales = month_sales_dict.get("SIP", Decimal("0"))
+    lumsum_sales = month_sales_dict.get("Lumsum", Decimal("0"))
+    life_sales = month_sales_dict.get("Life Insurance", Decimal("0"))
+    health_sales = month_sales_dict.get("Health Insurance", Decimal("0"))
+    motor_sales = month_sales_dict.get("Motor Insurance", Decimal("0"))
+    pms_sales = month_sales_dict.get("PMS", Decimal("0"))
     product_sales_breakup = [
         {
             "product": product,
@@ -717,6 +737,136 @@ def firm_settings_page(request):
         {
             "form": form,
             "settings_obj": settings_obj,
+        },
+    )
+
+
+@login_required
+def product_management_page(request):
+    admin_emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (admin_emp and admin_emp.role == "admin")):
+        return HttpResponseForbidden("Admins only.")
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+
+        def _domain_from_renewal_choice(default_domain=Product.DOMAIN_SALE):
+            renewal_raw = request.POST.get("renewal_tracked")
+            renewal_tracked = (renewal_raw or "").strip().lower()
+            if renewal_tracked in {"yes", "no"}:
+                return Product.DOMAIN_BOTH if renewal_tracked == "yes" else Product.DOMAIN_SALE
+
+            # Backward compatibility with old form payloads using explicit domain only.
+            posted_domain = (request.POST.get("domain") or "").strip()
+            if posted_domain in {Product.DOMAIN_SALE, Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH}:
+                if posted_domain == Product.DOMAIN_BOTH:
+                    return Product.DOMAIN_BOTH
+                if posted_domain == Product.DOMAIN_RENEWAL:
+                    return Product.DOMAIN_BOTH
+                return Product.DOMAIN_SALE
+            return default_domain
+
+        if action == "add":
+            name = (request.POST.get("name") or "").strip()
+            domain = _domain_from_renewal_choice(default_domain=Product.DOMAIN_SALE)
+            code = _normalize_product_code(request.POST.get("code"))
+            display_order = request.POST.get("display_order")
+
+            if not name:
+                messages.error(request, "Product name is required.")
+                return redirect("clients:product_management")
+
+            try:
+                display_order_val = int(display_order) if display_order not in (None, "") else 0
+            except ValueError:
+                display_order_val = 0
+
+            if not code:
+                code = _normalize_product_code(name)
+
+            if Product.objects.filter(name__iexact=name).exists():
+                messages.error(request, f"Product '{name}' already exists.")
+                return redirect("clients:product_management")
+
+            if Product.objects.filter(code=code).exists():
+                messages.error(request, f"Product code '{code}' already exists.")
+                return redirect("clients:product_management")
+
+            Product.objects.create(
+                name=name,
+                code=code,
+                domain=domain,
+                display_order=display_order_val,
+                is_active=True,
+            )
+            messages.success(request, f"Product '{name}' added.")
+            return redirect("clients:product_management")
+
+        if action == "update":
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            name = (request.POST.get("name") or "").strip()
+            domain = _domain_from_renewal_choice(
+                default_domain=Product.DOMAIN_BOTH if product.domain in {Product.DOMAIN_BOTH, Product.DOMAIN_RENEWAL} else Product.DOMAIN_SALE
+            )
+            code = _normalize_product_code(request.POST.get("code"))
+            display_order = request.POST.get("display_order")
+
+            if not name:
+                messages.error(request, "Product name is required.")
+                return redirect("clients:product_management")
+
+            try:
+                display_order_val = int(display_order) if display_order not in (None, "") else product.display_order
+            except ValueError:
+                display_order_val = product.display_order
+
+            if not code:
+                code = _normalize_product_code(name)
+
+            if Product.objects.exclude(pk=product.pk).filter(name__iexact=name).exists():
+                messages.error(request, f"Product '{name}' already exists.")
+                return redirect("clients:product_management")
+
+            if Product.objects.exclude(pk=product.pk).filter(code=code).exists():
+                messages.error(request, f"Product code '{code}' already exists.")
+                return redirect("clients:product_management")
+
+            product.name = name
+            product.code = code
+            product.domain = domain
+            product.display_order = display_order_val
+            product.save(update_fields=["name", "code", "domain", "display_order", "updated_at"])
+            messages.success(request, f"Product '{name}' updated.")
+            return redirect("clients:product_management")
+
+        if action == "archive":
+            product_id = request.POST.get("product_id")
+            reason = (request.POST.get("reason") or "").strip()
+            product = get_object_or_404(Product, pk=product_id)
+            product.archive(reason=reason)
+            messages.success(request, f"Product '{product.name}' archived.")
+            return redirect("clients:product_management")
+
+        if action == "restore":
+            product_id = request.POST.get("product_id")
+            product = get_object_or_404(Product, pk=product_id)
+            product.is_active = True
+            product.archived_at = None
+            product.archived_reason = ""
+            product.save(update_fields=["is_active", "archived_at", "archived_reason", "updated_at"])
+            messages.success(request, f"Product '{product.name}' restored.")
+            return redirect("clients:product_management")
+
+        messages.error(request, "Unsupported action.")
+        return redirect("clients:product_management")
+
+    products = Product.objects.all().order_by("display_order", "name")
+    return render(
+        request,
+        "settings/product_management.html",
+        {
+            "products": products,
         },
     )
 

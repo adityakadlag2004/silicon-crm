@@ -18,6 +18,40 @@ class Employee(models.Model):
         return self.user.username
 
 
+class Product(models.Model):
+    DOMAIN_SALE = "sale"
+    DOMAIN_RENEWAL = "renewal"
+    DOMAIN_BOTH = "both"
+    DOMAIN_CHOICES = [
+        (DOMAIN_SALE, "Sales"),
+        (DOMAIN_RENEWAL, "Renewals"),
+        (DOMAIN_BOTH, "Both"),
+    ]
+
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=30, unique=True)
+    domain = models.CharField(max_length=20, choices=DOMAIN_CHOICES, default=DOMAIN_BOTH)
+    display_order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_reason = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["display_order", "name"]
+
+    def __str__(self):
+        state = "Archived" if self.archived_at else "Active"
+        return f"{self.name} ({state})"
+
+    def archive(self, reason=""):
+        self.is_active = False
+        self.archived_at = timezone.now()
+        self.archived_reason = (reason or "").strip()
+        self.save(update_fields=["is_active", "archived_at", "archived_reason", "updated_at"])
+
+
 
 class Client(models.Model):
     # Override default id with our own serial number
@@ -132,6 +166,58 @@ class ClientMappingAudit(models.Model):
         return f"Client {self.client_id}: {self.previous_employee} → {self.new_employee} at {self.changed_at}"
 
 
+class Renewal(models.Model):
+    PRODUCT_TYPE_LIFE = "life_insurance"
+    PRODUCT_TYPE_HEALTH = "health_insurance"
+    PRODUCT_TYPE_OTHER = "other"
+    PRODUCT_TYPE_CHOICES = [
+        (PRODUCT_TYPE_LIFE, "Life Insurance"),
+        (PRODUCT_TYPE_HEALTH, "Health Insurance"),
+        (PRODUCT_TYPE_OTHER, "Other"),
+    ]
+
+    FREQUENCY_MONTHLY = "monthly"
+    FREQUENCY_YEARLY = "yearly"
+    FREQUENCY_CHOICES = [
+        (FREQUENCY_MONTHLY, "Monthly"),
+        (FREQUENCY_YEARLY, "Yearly"),
+    ]
+
+    client = models.ForeignKey("Client", on_delete=models.CASCADE, related_name="renewals")
+    product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="renewal_entries")
+    product_type = models.CharField(max_length=20, choices=PRODUCT_TYPE_CHOICES)
+    product_name = models.CharField(
+        max_length=200,
+        blank=True,
+        null=True,
+        help_text="Required if product type is Other",
+    )
+    renewal_date = models.DateField()
+    renewal_end_date = models.DateField(null=True, blank=True, db_index=True)
+    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES)
+    employee = models.ForeignKey("Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="renewals")
+    premium_amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(0)], default=0)
+    premium_collected_on = models.DateField(default=timezone.localdate, db_index=True)
+    notes = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-renewal_date"]
+
+    def clean(self):
+        if self.product_type == self.PRODUCT_TYPE_OTHER and not (self.product_name or "").strip():
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError({"product_name": "Product name is required when product type is Other."})
+        if self.product_type != self.PRODUCT_TYPE_OTHER:
+            self.product_name = None
+
+    def __str__(self):
+        product_label = self.product_ref.name if self.product_ref_id else self.get_product_type_display()
+        return f"{self.client} - {product_label} - {self.renewal_date}"
+
+
 
 # Add these imports at top if not already present
 from decimal import Decimal
@@ -141,17 +227,8 @@ from django.utils import timezone
 
 # ---------- IncentiveRule (configurable in admin) ----------
 class IncentiveRule(models.Model):
-    PRODUCT_CHOICES = [
-        ("SIP", "SIP"),
-        ("Lumsum", "Lumsum"),
-        ("Life Insurance", "Life Insurance"),
-        ("Health Insurance", "Health Insurance"),
-        ("Motor Insurance", "Motor Insurance"),
-        ("PMS", "PMS"),
-        ("COB", "COB"),
-    ]
-
-    product = models.CharField(max_length=50, choices=PRODUCT_CHOICES, unique=True)
+    product = models.CharField(max_length=50, unique=True)
+    product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="incentive_rules")
     unit_amount = models.DecimalField(max_digits=14, decimal_places=2,
                                       help_text="Base unit (e.g., 1000 or 100000)")
     points_per_unit = models.DecimalField(max_digits=12, decimal_places=3,
@@ -209,16 +286,6 @@ class Sale(models.Model):
         (STATUS_REJECTED, "Rejected"),
     ]
 
-    PRODUCT_CHOICES = [
-        ("SIP", "SIP"),
-        ("Lumsum", "Lumsum"),
-        ("Life Insurance", "Life Insurance"),
-        ("Health Insurance", "Health Insurance"),
-        ("Motor Insurance", "Motor Insurance"),
-        ("PMS", "PMS"),
-        ("COB", "COB"),
-    ]
-
     POLICY_TYPE_FRESH = "fresh"
     POLICY_TYPE_PORT = "port"
     POLICY_TYPE_CHOICES = [
@@ -228,7 +295,9 @@ class Sale(models.Model):
 
     client = models.ForeignKey("Client", on_delete=models.CASCADE, related_name="sales")
     employee = models.ForeignKey("Employee", on_delete=models.CASCADE, related_name="sales")
-    product = models.CharField(max_length=50, choices=PRODUCT_CHOICES)
+    product = models.CharField(max_length=50)
+    product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales")
+    product_name_snapshot = models.CharField(max_length=100, blank=True, default="")
 
     # Business value (used for incentive calculation / points)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
@@ -266,17 +335,34 @@ class Sale(models.Model):
             models.Index(fields=["employee", "product", "date"], name="sale_emp_prod_date_idx"),
         ]
 
+    def _is_health_product(self):
+        if self.product_ref_id:
+            return self.product_ref.code == "HEALTH_INS" or (self.product_ref.name or "").strip().lower() == "health insurance"
+        return (self.product or "").strip().lower() == "health insurance"
+
+    def _effective_product_label(self):
+        if self.product_ref_id:
+            return self.product_ref.name
+        return self.product
+
     def compute_points(self):
         """Compute points based on IncentiveRule + IncentiveSlab in DB"""
         from .models import IncentiveRule, IncentiveSlab  # avoid circular import
 
-        if self.product == "Health Insurance" and self.policy_type == self.POLICY_TYPE_PORT:
+        product_label = self._effective_product_label()
+
+        if self._is_health_product() and self.policy_type == self.POLICY_TYPE_PORT:
             self.points = Decimal("0.000")
             self.incentive_amount = Decimal("0.00")
             return
 
         try:
-            rule = IncentiveRule.objects.get(product=self.product, active=True)
+            rule_qs = IncentiveRule.objects.filter(active=True)
+            if self.product_ref_id:
+                rule_qs = rule_qs.filter(product_ref=self.product_ref)
+            else:
+                rule_qs = rule_qs.filter(product=product_label)
+            rule = rule_qs.get()
 
             # Check if this rule has slabs → slab-based calculation
             slab_qs = IncentiveSlab.objects.filter(rule=rule).order_by("-threshold")
@@ -292,12 +378,11 @@ class Sale(models.Model):
 
                 sale_month = self.date.month if self.date else timezone.now().month
                 sale_year = self.date.year if self.date else timezone.now().year
-                qs = Sale.objects.filter(
-                    employee=self.employee,
-                    product=self.product,
-                    date__year=sale_year,
-                    date__month=sale_month,
-                )
+                qs = Sale.objects.filter(employee=self.employee, date__year=sale_year, date__month=sale_month)
+                if self.product_ref_id:
+                    qs = qs.filter(product_ref=self.product_ref)
+                else:
+                    qs = qs.filter(product=product_label)
                 if self.pk:
                     qs = qs.exclude(pk=self.pk)
                 cumulative_amount = (qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")) + premium
@@ -330,7 +415,13 @@ class Sale(models.Model):
             self.incentive_amount = Decimal("0.00")
 
     def save(self, *args, **kwargs):
-        if self.product != "Health Insurance":
+        if self.product_ref_id:
+            self.product = self.product_ref.name
+            self.product_name_snapshot = self.product_ref.name
+        elif self.product:
+            self.product_name_snapshot = self.product
+
+        if not self._is_health_product():
             self.policy_type = ""
         self.compute_points()  # always compute before saving
         super().save(*args, **kwargs)
@@ -366,7 +457,8 @@ class Target(models.Model):
         ("monthly", "Monthly"),
     ]
 
-    product = models.CharField(max_length=50, choices=Sale.PRODUCT_CHOICES)
+    product = models.CharField(max_length=50)
+    product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="targets")
     target_type = models.CharField(max_length=20, choices=TARGET_TYPE_CHOICES)
     target_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -399,6 +491,7 @@ class BusinessTarget(models.Model):
 class MonthlyTargetHistory(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     product = models.CharField(max_length=50)
+    product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="monthly_target_histories")
     year = models.IntegerField()
     month = models.IntegerField()
     target_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
@@ -448,7 +541,8 @@ class Redemption(models.Model):
         ("sip_stoppage", "SIP Stoppage"),
     ]
 
-    product = models.CharField(max_length=50, choices=Sale.PRODUCT_CHOICES)
+    product = models.CharField(max_length=50)
+    product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="redemptions")
     entry_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default="redemption")
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     date = models.DateField(default=timezone.now)

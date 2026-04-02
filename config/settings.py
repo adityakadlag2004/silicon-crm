@@ -36,7 +36,15 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
-ALLOWED_HOSTS = ["139.59.28.8", "localhost", "127.0.0.1", "bo.kadlaginvestment.com"]
+_default_hosts = ["139.59.28.8", "localhost", "127.0.0.1", "bo.kadlaginvestment.com"]
+_env_hosts = os.environ.get("ALLOWED_HOSTS", "")
+if _env_hosts.strip():
+    ALLOWED_HOSTS = [h.strip() for h in _env_hosts.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = _default_hosts
+
+_trusted_origins = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _trusted_origins.split(",") if o.strip()]
 
 PER_PAGE = 50
 
@@ -222,6 +230,8 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000          # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_CONTENT_TYPE_NOSNIFF = True

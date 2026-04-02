@@ -21,21 +21,21 @@
       </div>
       <!-- Email -->
       <div class="col-md-6">
-        <label class="form-label">Email</label>
+        <label class="form-label">Email *</label>
         <input type="email" name="email" value="{{ form.email.value|default_if_none:'' }}"
-               class="form-control {% if form.email.errors %}is-invalid{% endif %}">
+               class="form-control {% if form.email.errors %}is-invalid{% endif %}" required style="text-transform: uppercase;">
         <div class="invalid-feedback">
-          {% if form.email.errors %}{{ form.email.errors.0 }}{% else %}Enter a valid email address{% endif %}
+          {% if form.email.errors %}{{ form.email.errors.0 }}{% else %}Email is required and must be valid{% endif %}
         </div>
       </div>
       <!-- Phone -->
       <div class="col-md-6">
-        <label class="form-label">Phone</label>
+        <label class="form-label">Phone *</label>
         <input type="text" name="phone" value="{{ form.phone.value|default_if_none:'' }}"
                class="form-control {% if form.phone.errors %}is-invalid{% endif %}" 
-               pattern="^[0-9]{10}$" placeholder="10-digit number">
+               pattern="^[0-9]{10}$" placeholder="10-digit number" required style="text-transform: uppercase;">
         <div class="invalid-feedback">
-          {% if form.phone.errors %}{{ form.phone.errors.0 }}{% else %}Enter a valid 10-digit phone number{% endif %}
+          {% if form.phone.errors %}{{ form.phone.errors.0 }}{% else %}Phone is required (10 digits){% endif %}
         </div>
       </div>
       <!-- PAN -->
@@ -108,5 +108,16 @@
     }, false)
   })
 })()
+
+document.addEventListener('DOMContentLoaded', function () {
+  const upperSelectors = ['input[name="name"]', 'input[name="email"]', 'input[name="phone"]'];
+  upperSelectors.forEach(function(selector) {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    el.addEventListener('input', function() {
+      this.value = this.value.toUpperCase();
+    });
+  });
+});
 </script>
 {% endblock %}

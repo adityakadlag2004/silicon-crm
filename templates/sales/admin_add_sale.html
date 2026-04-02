@@ -110,6 +110,8 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+  const insuranceProductNames = {{ insurance_product_names|default:'[]'|safe }};
+  const healthProductName = "{{ health_product_name|default:''|escapejs }}";
   const searchInput = document.getElementById("client-search");
   const resultsDiv = document.getElementById("client-results");
   const clientSelect = document.getElementById("id_client");
@@ -179,8 +181,8 @@ document.addEventListener("DOMContentLoaded", function () {
   if (productSelect) {
     function updateCover() {
       const sel = productSelect.value;
-      const isInsurance = sel === "Life Insurance" || sel === "Health Insurance";
-      const isHealthInsurance = sel === "Health Insurance";
+      const isInsurance = insuranceProductNames.includes(sel);
+      const isHealthInsurance = healthProductName && sel === healthProductName;
       coverAmountGroup.style.display = isInsurance ? "block" : "none";
       policyTypeGroup.style.display = isHealthInsurance ? "block" : "none";
       if (!isHealthInsurance) {

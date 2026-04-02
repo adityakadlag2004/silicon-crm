@@ -17,13 +17,9 @@
       <label class="form-label">Product</label>
       <select name="product" class="form-select">
         <option value="">All</option>
-        <option value="SIP" {% if request.GET.product == "SIP" %}selected{% endif %}>SIP</option>
-        <option value="Lumsum" {% if request.GET.product == "Lumsum" %}selected{% endif %}>Lumpsum</option>
-        <option value="Life Insurance" {% if request.GET.product == "Life Insurance" %}selected{% endif %}>Life Insurance</option>
-        <option value="Health Insurance" {% if request.GET.product == "Health Insurance" %}selected{% endif %}>Health Insurance</option>
-        <option value="Motor Insurance" {% if request.GET.product == "Motor Insurance" %}selected{% endif %}>Motor Insurance</option>
-        <option value="PMS" {% if request.GET.product == "PMS" %}selected{% endif %}>PMS</option>
-        <option value="COB" {% if request.GET.product == "COB" %}selected{% endif %}>COB</option>
+        {% for p in product_options %}
+        <option value="{{ p.name }}" {% if request.GET.product == p.name %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
       </select>
     </div>
     <div>

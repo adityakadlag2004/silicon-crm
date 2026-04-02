@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}All Renewals{% endblock %}
+{% block page_title %}All Renewals{% endblock %}
+
+{% block content %}
+<h2 class="ki-section-title"><i class="bi bi-arrow-repeat"></i> All Renewals</h2>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="ki-card">
+      <div class="text-muted small">Today's Premium Collection</div>
+      <div style="font-size:1.35rem;font-weight:700;">Rs {{ today_submission_total|floatformat:2 }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="ki-card">
+      <div class="text-muted small">Today's Submission Count</div>
+      <div style="font-size:1.35rem;font-weight:700;">{{ today_submission_count }}</div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="ki-card">
+      <div class="text-muted small">Filtered Premium Total</div>
+      <div style="font-size:1.35rem;font-weight:700;">Rs {{ filtered_total_premium|floatformat:2 }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="ki-card mb-4">
+  <form method="get" class="ki-filter-bar" style="flex-wrap:wrap;gap:1rem;align-items:flex-end;">
+    <div style="min-width:220px;">
+      <label class="form-label">Search</label>
+      <input type="text" name="q" class="form-control" placeholder="Client, phone, notes, product" value="{{ request.GET.q|default:'' }}">
+    </div>
+    <div>
+      <label class="form-label">Product</label>
+      <select name="product" class="form-select">
+        <option value="">All</option>
+        {% for p in product_options %}
+        <option value="{{ p.id }}" {% if request.GET.product == p.id|stringformat:"s" %}selected{% endif %}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Frequency</label>
+      <select name="frequency" class="form-select">
+        <option value="">All</option>
+        <option value="monthly" {% if request.GET.frequency == "monthly" %}selected{% endif %}>Monthly</option>
+        <option value="yearly" {% if request.GET.frequency == "yearly" %}selected{% endif %}>Yearly</option>
+      </select>
+    </div>
+    {% if not is_employee %}
+    <div>
+      <label class="form-label">Created By</label>
+      <input type="text" name="employee" class="form-control" placeholder="Username" value="{{ request.GET.employee|default:'' }}">
+    </div>
+    {% endif %}
+    <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date|default:'' }}"></div>
+    <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date|default:'' }}"></div>
+    <div><label class="form-label">Payment Start</label><input type="date" name="payment_start" class="form-control" value="{{ request.GET.payment_start|default:'' }}"></div>
+    <div><label class="form-label">Payment End</label><input type="date" name="payment_end" class="form-control" value="{{ request.GET.payment_end|default:'' }}"></div>
+    <div style="display:flex;gap:0.7rem;margin-top:0.5rem;flex-wrap:wrap;">
+      <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-search"></i> Search</button>
+      <a href="{% url 'clients:all_renewals' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
+      <a href="{% url 'clients:add_renewal' %}" class="ki-btn ki-btn-primary"><i class="bi bi-plus-lg"></i> Add Renewal</a>
+    </div>
+  </form>
+</div>
+
+<div class="ki-card ki-table-wrap">
+  <table class="ki-table">
+    <thead>
+      <tr>
+        <th>Renewal Date</th>
+        <th>End Date</th>
+        <th>Client</th>
+        <th>Product Type</th>
+        <th>Product Name</th>
+        <th>Frequency</th>
+        <th>Employee</th>
+        <th>Premium (Rs)</th>
+        <th>Payment Submitted On</th>
+        <th>Notes</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for renewal in renewals %}
+      <tr>
+        <td>{{ renewal.renewal_date }}</td>
+        <td>{{ renewal.renewal_end_date|default:"-" }}</td>
+        <td>{{ renewal.client.name }}</td>
+        <td>{% if renewal.product_ref %}{{ renewal.product_ref.name }}{% else %}{{ renewal.get_product_type_display }}{% endif %}</td>
+        <td>{{ renewal.product_name|default:"-" }}</td>
+        <td>{{ renewal.get_frequency_display }}</td>
+        <td>{{ renewal.employee.user.username|default:"-" }}</td>
+        <td>{{ renewal.premium_amount|floatformat:2 }}</td>
+        <td>{{ renewal.premium_collected_on }}</td>
+        <td>{{ renewal.notes|default:"-" }}</td>
+        <td>
+          <a href="{% url 'clients:edit_renewal' renewal.id %}" class="ki-btn ki-btn-sm ki-btn-primary"><i class="bi bi-pencil"></i> Edit</a>
+          <a href="{% url 'clients:delete_renewal' renewal.id %}" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i> Delete</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="11" class="text-center">No renewals found</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <nav aria-label="Page navigation">
+    <ul class="ki-pagination">
+      {% if renewals.has_previous %}
+        <li>{% if qstring %}<a href="?{{ qstring }}&page=1">&laquo; First</a>{% else %}<a href="?page=1">&laquo; First</a>{% endif %}</li>
+        <li>{% if qstring %}<a href="?{{ qstring }}&page={{ renewals.previous_page_number }}">Previous</a>{% else %}<a href="?page={{ renewals.previous_page_number }}">Previous</a>{% endif %}</li>
+      {% endif %}
+
+      {% for num in renewals.paginator.page_range %}
+        <li {% if renewals.number == num %}class="active"{% endif %}>
+          {% if qstring %}<a href="?{{ qstring }}&page={{ num }}">{{ num }}</a>{% else %}<a href="?page={{ num }}">{{ num }}</a>{% endif %}
+        </li>
+      {% endfor %}
+
+      {% if renewals.has_next %}
+        <li>{% if qstring %}<a href="?{{ qstring }}&page={{ renewals.next_page_number }}">Next</a>{% else %}<a href="?page={{ renewals.next_page_number }}">Next</a>{% endif %}</li>
+        <li>{% if qstring %}<a href="?{{ qstring }}&page={{ renewals.paginator.num_pages }}">Last &raquo;</a>{% else %}<a href="?page={{ renewals.paginator.num_pages }}">Last &raquo;</a>{% endif %}</li>
+      {% endif %}
+    </ul>
+  </nav>
+</div>
+{% endblock %}
