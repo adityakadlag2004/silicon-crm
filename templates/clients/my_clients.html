@@ -11,30 +11,16 @@
       <label class="form-label">Search</label>
       <input type="text" name="q" class="form-control" placeholder="Name, email, phone, PAN" value="{{ request.GET.q|default:'' }}">
     </div>
+    {% for meta in product_filters %}
     <div>
-      <label class="form-label">SIP</label>
-      <select name="sip_status" class="form-select">
+      <label class="form-label">{{ meta.product.name }}</label>
+      <select name="{{ meta.status_param }}" class="form-select">
         <option value="">All</option>
-        <option value="yes" {% if request.GET.sip_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.sip_status == "no" %}selected{% endif %}>No</option>
+        <option value="yes" {% if meta.status_value == "yes" %}selected{% endif %}>Yes</option>
+        <option value="no" {% if meta.status_value == "no" %}selected{% endif %}>No</option>
       </select>
     </div>
-    <div>
-      <label class="form-label">PMS</label>
-      <select name="pms_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.pms_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.pms_status == "no" %}selected{% endif %}>No</option>
-      </select>
-    </div>
-    <div>
-      <label class="form-label">Life</label>
-      <select name="life_status" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if request.GET.life_status == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if request.GET.life_status == "no" %}selected{% endif %}>No</option>
-      </select>
-    </div>
+    {% endfor %}
     <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
       <button type="submit" class="ki-btn ki-btn-primary">Filter</button>
       <a href="{% url 'clients:my_clients' %}" class="ki-btn ki-btn-secondary">Reset</a>
@@ -46,46 +32,16 @@
 
     <div class="ki-filter-accordion" id="moreFiltersSection">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;">
+        {% for meta in product_filters %}
         <div>
-          <label class="form-label">SIP Min</label>
-          <input type="number" name="sip_min" class="form-control" value="{{ request.GET.sip_min }}">
+          <label class="form-label">{{ meta.product.name }} Min</label>
+          <input type="number" name="{{ meta.min_param }}" class="form-control" value="{{ meta.min_value }}">
         </div>
         <div>
-          <label class="form-label">SIP Max</label>
-          <input type="number" name="sip_max" class="form-control" value="{{ request.GET.sip_max }}">
+          <label class="form-label">{{ meta.product.name }} Max</label>
+          <input type="number" name="{{ meta.max_param }}" class="form-control" value="{{ meta.max_value }}">
         </div>
-        <div>
-          <label class="form-label">PMS Min</label>
-          <input type="number" name="pms_min" class="form-control" value="{{ request.GET.pms_min }}">
-        </div>
-        <div>
-          <label class="form-label">PMS Max</label>
-          <input type="number" name="pms_max" class="form-control" value="{{ request.GET.pms_max }}">
-        </div>
-        <div>
-          <label class="form-label">Life Min</label>
-          <input type="number" name="life_min" class="form-control" value="{{ request.GET.life_min }}">
-        </div>
-        <div>
-          <label class="form-label">Life Max</label>
-          <input type="number" name="life_max" class="form-control" value="{{ request.GET.life_max }}">
-        </div>
-        <div>
-          <label class="form-label">Health</label>
-          <select name="health_status" class="form-select">
-            <option value="">All</option>
-            <option value="yes" {% if request.GET.health_status == "yes" %}selected{% endif %}>Yes</option>
-            <option value="no" {% if request.GET.health_status == "no" %}selected{% endif %}>No</option>
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Health Min</label>
-          <input type="number" name="health_min" class="form-control" value="{{ request.GET.health_min }}">
-        </div>
-        <div>
-          <label class="form-label">Health Max</label>
-          <input type="number" name="health_max" class="form-control" value="{{ request.GET.health_max }}">
-        </div>
+        {% endfor %}
       </div>
     </div>
   </form>
@@ -118,9 +74,8 @@
         <th>Name</th>
         <th>Phone</th>
         <th>Email</th>
-        <th>SIP</th>
+        <th>Products</th>
         <th>Lumsum Inv.</th>
-        <th>PMS</th>
         <th>Mapped To</th>
         <th style="width:140px;">Actions</th>
       </tr>
@@ -132,16 +87,20 @@
         <td>{{ client.name }}</td>
         <td>{{ client.phone|default:''|floatformat:0 }}</td>
         <td>{{ client.email }}</td>
-        <td>₹{{ client.sip_amount|default:0 }}</td>
+        <td>
+          {% for badge in client.dynamic_product_badges %}
+            <span class="ki-chip" style="margin:0 0.2rem 0.2rem 0;display:inline-block;">{{ badge.name }}</span>
+          {% endfor %}
+          {% if not client.dynamic_product_badges %}-{% endif %}
+        </td>
         <td>₹{{ client.lumsum_investment|default:0 }}</td>
-        <td>₹{{ client.pms_amount|default:0 }}</td>
         <td>{% if client.mapped_to %}{{ client.mapped_to.user.username }}{% else %}-{% endif %}</td>
         <td style="display:flex;gap:0.35rem;flex-wrap:wrap;">
           <a href="{% url 'clients:edit_client' client.id %}" class="ki-btn ki-btn-sm ki-btn-secondary"><i class="bi bi-pencil"></i> Edit</a>
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="8" class="text-center">No clients found</td></tr>
+      <tr><td colspan="7" class="text-center">No clients found</td></tr>
       {% endfor %}
     </tbody>
   </table>

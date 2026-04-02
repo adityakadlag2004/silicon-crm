@@ -12,6 +12,7 @@ urlpatterns = [
     path("dashboard/admin/", views.admin_dashboard, name="admin_dashboard"),
     path("admin/employees/", views.employee_management, name="employee_management"),
     path("admin/firm-settings/", views.firm_settings_page, name="firm_settings"),
+    path("admin/products/", views.product_management_page, name="product_management"),
     path("dashboard/employee/", views.employee_dashboard, name="employee_dashboard"),
 
     # Team management
@@ -42,6 +43,15 @@ urlpatterns = [
     path("sales/<int:sale_id>/delete/", views.delete_sale, name="delete_sale"),
     path("sales/recalc/", views.recalc_points, name="recalc_points"),
     path("sales/all/", views.all_sales, name="all_sales"),
+
+    # renewals CRUD
+    path("renewals/add/", views.add_renewal, name="add_renewal"),
+    path("renewals/<int:client_id>/add/", views.add_renewal, name="add_renewal_for_client"),
+    path("renewals/all/", views.all_renewals, name="all_renewals"),
+    path("renewals/<int:renewal_id>/edit/", views.edit_renewal, name="edit_renewal"),
+    path("renewals/<int:renewal_id>/delete/", views.delete_renewal, name="delete_renewal"),
+    path("renewals/quick-add-client/", views.quick_add_client_for_renewal, name="quick_add_client_for_renewal"),
+
     path("leads/", views.lead_management, name="lead_management"),
     path("leads/stats/team/", views.lead_progress_overview_admin, name="lead_progress_admin"),
     path("leads/stats/mine/", views.lead_progress_overview_employee, name="lead_progress_employee"),

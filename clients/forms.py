@@ -1,7 +1,24 @@
 from django import forms
 from django_select2.forms import ModelSelect2Widget
 from django.forms import inlineformset_factory
-from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings
+from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings, Renewal, Product
+
+
+def _is_health_product_name(product_name):
+    product = Product.objects.filter(name=(product_name or "").strip()).only("code", "name").first()
+    if product:
+        return product.code == "HEALTH_INS" or (product.name or "").strip().lower() == "health insurance"
+    return (product_name or "").strip().lower() == "health insurance"
+
+
+def _renewal_type_from_product(product_ref):
+    if not product_ref:
+        return Renewal.PRODUCT_TYPE_OTHER
+    if product_ref.code == "LIFE_INS" or (product_ref.name or "").strip().lower() == "life insurance":
+        return Renewal.PRODUCT_TYPE_LIFE
+    if product_ref.code == "HEALTH_INS" or (product_ref.name or "").strip().lower() == "health insurance":
+        return Renewal.PRODUCT_TYPE_HEALTH
+    return Renewal.PRODUCT_TYPE_OTHER
 
 
 class SalePolicyTypeMixin:
@@ -17,14 +34,16 @@ class SalePolicyTypeMixin:
         product = cleaned_data.get("product")
         policy_type = (cleaned_data.get("policy_type") or "").strip()
 
-        if product == "Health Insurance" and not policy_type:
+        if _is_health_product_name(product) and not policy_type:
             self.add_error("policy_type", "Select Port or Fresh for Health Insurance.")
-        elif product != "Health Insurance":
+        elif not _is_health_product_name(product):
             cleaned_data["policy_type"] = ""
 
         return cleaned_data
 
 class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
+    product = forms.ChoiceField(choices=(), widget=forms.Select())
+
     class Meta:
         model = Sale
         fields = ["client", "product", "amount", "cover_amount", "policy_type", "date"]
@@ -40,11 +59,24 @@ class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         employee = kwargs.pop("employee", None)
         super().__init__(*args, **kwargs)
+        product_choices = [
+            (p.name, p.name)
+            for p in Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
+                domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]
+            )
+        ]
+        if self.instance and self.instance.pk and self.instance.product:
+            existing = self.instance.product
+            if existing and all(existing != v for v, _ in product_choices):
+                product_choices.append((existing, existing))
+        self.fields["product"].choices = product_choices
         self.fields["cover_amount"].required = False
         self._configure_policy_field()
 
 
 class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
+    product = forms.ChoiceField(choices=(), widget=forms.Select())
+
     class Meta:
         model = Sale
         fields = ["client", "employee", "product", "amount", "cover_amount", "policy_type", "date"]
@@ -54,12 +86,25 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        product_choices = [
+            (p.name, p.name)
+            for p in Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
+                domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]
+            )
+        ]
+        if self.instance and self.instance.pk and self.instance.product:
+            existing = self.instance.product
+            if existing and all(existing != v for v, _ in product_choices):
+                product_choices.append((existing, existing))
+        self.fields["product"].choices = product_choices
         if "employee" in self.fields:
             self.fields["employee"].queryset = Employee.objects.filter(active=True)
         self.fields["cover_amount"].required = False
         self._configure_policy_field()
 
 class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
+    product = forms.ChoiceField(choices=(), widget=forms.Select())
+
     class Meta:
         model = Sale
         fields = ["product", "amount", "policy_type", "date"]
@@ -69,7 +114,123 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        product_choices = [
+            (p.name, p.name)
+            for p in Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
+                domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]
+            )
+        ]
+        if self.instance and self.instance.pk and self.instance.product:
+            existing = self.instance.product
+            if existing and all(existing != v for v, _ in product_choices):
+                product_choices.append((existing, existing))
+        self.fields["product"].choices = product_choices
         self._configure_policy_field()
+
+
+class RenewalForm(forms.ModelForm):
+    product_ref = forms.ModelChoiceField(
+        queryset=Product.objects.none(),
+        required=True,
+        label="Product",
+    )
+
+    class Meta:
+        model = Renewal
+        fields = [
+            "client",
+            "employee",
+            "product_ref",
+            "product_name",
+            "renewal_date",
+            "renewal_end_date",
+            "frequency",
+            "premium_amount",
+            "premium_collected_on",
+            "notes",
+        ]
+        widgets = {
+            "renewal_date": forms.DateInput(attrs={"type": "date"}),
+            "renewal_end_date": forms.DateInput(attrs={"type": "date"}),
+            "premium_collected_on": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["client"].required = False
+        self.fields["employee"].required = False
+        self.fields["employee"].queryset = Employee.objects.filter(active=True)
+        self.fields["product_ref"].queryset = Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
+            domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        product_ref = cleaned_data.get("product_ref")
+        product_name = (cleaned_data.get("product_name") or "").strip()
+        product_type = _renewal_type_from_product(product_ref)
+        cleaned_data["product_type"] = product_type
+        if product_type in (Renewal.PRODUCT_TYPE_LIFE, Renewal.PRODUCT_TYPE_HEALTH):
+            cleaned_data["product_name"] = None
+        else:
+            if not product_name:
+                cleaned_data["product_name"] = product_ref.name if product_ref else None
+        return cleaned_data
+
+
+class EditRenewalForm(forms.ModelForm):
+    product_ref = forms.ModelChoiceField(
+        queryset=Product.objects.none(),
+        required=True,
+        label="Product",
+    )
+
+    class Meta:
+        model = Renewal
+        fields = [
+            "employee",
+            "product_ref",
+            "product_name",
+            "renewal_date",
+            "renewal_end_date",
+            "frequency",
+            "premium_amount",
+            "premium_collected_on",
+            "notes",
+        ]
+        widgets = {
+            "renewal_date": forms.DateInput(attrs={"type": "date"}),
+            "renewal_end_date": forms.DateInput(attrs={"type": "date"}),
+            "premium_collected_on": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["employee"].required = False
+        self.fields["employee"].queryset = Employee.objects.filter(active=True)
+        product_qs = Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
+            domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]
+        )
+        if self.instance and self.instance.pk and self.instance.product_ref_id:
+            product_qs = Product.objects.filter(pk=self.instance.product_ref_id) | product_qs
+        self.fields["product_ref"].queryset = product_qs.distinct()
+        if self.instance and self.instance.pk and self.instance.product_ref_id:
+            self.fields["product_ref"].initial = self.instance.product_ref
+
+    def clean(self):
+        cleaned_data = super().clean()
+        product_ref = cleaned_data.get("product_ref")
+        product_name = (cleaned_data.get("product_name") or "").strip()
+        product_type = _renewal_type_from_product(product_ref)
+        cleaned_data["product_type"] = product_type
+        if product_type in (Renewal.PRODUCT_TYPE_LIFE, Renewal.PRODUCT_TYPE_HEALTH):
+            cleaned_data["product_name"] = None
+        else:
+            if not product_name:
+                cleaned_data["product_name"] = product_ref.name if product_ref else None
+        return cleaned_data
 
 class CallingListUploadForm(forms.Form):
     title = forms.CharField(max_length=255)
@@ -105,6 +266,11 @@ class ClientForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        is_add_flow = not getattr(self.instance, "pk", None)
+        if is_add_flow:
+            self.fields["name"].required = True
+            self.fields["phone"].required = True
+            self.fields["email"].required = True
         if "mapped_to" in self.fields:
             self.fields["mapped_to"].queryset = Employee.objects.filter(active=True)
         for name, field in self.fields.items():
@@ -121,6 +287,24 @@ class ClientForm(forms.ModelForm):
         # optional: uppercase PAN
         if "pan" in self.fields:
             self.fields["pan"].widget.attrs["style"] = "text-transform: uppercase;"
+
+    def clean_name(self):
+        value = (self.cleaned_data.get("name") or "").strip().upper()
+        if not value:
+            raise forms.ValidationError("Client name is required.")
+        return value
+
+    def clean_phone(self):
+        value = (self.cleaned_data.get("phone") or "").strip().upper()
+        if not getattr(self.instance, "pk", None) and not value:
+            raise forms.ValidationError("Phone is required.")
+        return value
+
+    def clean_email(self):
+        value = (self.cleaned_data.get("email") or "").strip().upper()
+        if not getattr(self.instance, "pk", None) and not value:
+            raise forms.ValidationError("Email is required.")
+        return value
 
     def clean_lumsum_investment(self):
         val = self.cleaned_data.get("lumsum_investment")

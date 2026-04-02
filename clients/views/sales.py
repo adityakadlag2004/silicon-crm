@@ -14,13 +14,31 @@ from django.db.models import Q, Sum
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 
-from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab
+from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Product
 from ..forms import AdminSaleForm, EditSaleForm, SaleForm
 from .helpers import get_manager_access
 
 
+def _sale_product_meta():
+    products = list(Product.objects.filter(domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]))
+    health = next((p for p in products if p.code == "HEALTH_INS"), None)
+    if not health:
+        health = next((p for p in products if (p.name or "").strip().lower() == "health insurance"), None)
+    insurance_names = [
+        p.name
+        for p in products
+        if p.code in {"HEALTH_INS", "LIFE_INS"}
+        or (p.name or "").strip().lower() in {"health insurance", "life insurance"}
+    ]
+    return {
+        "health_product_name": health.name if health else "",
+        "insurance_product_names": sorted(set(insurance_names)),
+    }
+
+
 @login_required
 def add_sale(request):
+    product_meta = _sale_product_meta()
     if request.method == "POST":
         form = AdminSaleForm(request.POST)
         if form.is_valid():
@@ -49,6 +67,7 @@ def add_sale(request):
                             "current_employee_id": getattr(request.user, "employee").id
                             if hasattr(request.user, "employee")
                             else None,
+                            **product_meta,
                         },
                     )
                 try:
@@ -64,10 +83,14 @@ def add_sale(request):
                             "current_employee_id": getattr(request.user, "employee").id
                             if hasattr(request.user, "employee")
                             else None,
+                            **product_meta,
                         },
                     )
 
             sale.compute_points()
+
+            if sale.product:
+                sale.product_ref = Product.objects.filter(name=sale.product).first()
 
             if is_admin_user:
                 sale.status = Sale.STATUS_APPROVED
@@ -97,7 +120,7 @@ def add_sale(request):
     return render(
         request,
         "sales/add_sale.html",
-        {"form": form, "employees": employees_qs, "current_employee_id": current_emp_id},
+        {"form": form, "employees": employees_qs, "current_employee_id": current_emp_id, **product_meta},
     )
 
 
@@ -171,6 +194,7 @@ def all_sales(request):
         "qstring": qstring,
         "q": q,
         "status": status,
+        "product_options": Product.objects.filter(domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
     }
     return render(request, "sales/all_sales.html", context)
 
@@ -189,6 +213,8 @@ def admin_add_sale(request):
                 form.add_error("employee", "Please select an employee for this sale.")
             else:
                 sale.compute_points()
+                if sale.product:
+                    sale.product_ref = Product.objects.filter(name=sale.product).first()
                 sale.status = Sale.STATUS_APPROVED
                 sale.approved_by = request.user
                 sale.approved_at = timezone.now()
@@ -199,7 +225,7 @@ def admin_add_sale(request):
     else:
         form = AdminSaleForm()
 
-    return render(request, "sales/admin_add_sale.html", {"form": form})
+    return render(request, "sales/admin_add_sale.html", {"form": form, **_sale_product_meta()})
 
 
 @login_required
@@ -267,9 +293,21 @@ def manage_incentive_rules(request):
         messages.error(request, "You do not have permission to access incentive rules.")
         return redirect("clients:admin_dashboard")
 
-    rules = IncentiveRule.objects.prefetch_related("slabs").all()
+    rules = IncentiveRule.objects.select_related("product_ref").prefetch_related("slabs").all()
+    product_options = Product.objects.filter(
+        is_active=True,
+        archived_at__isnull=True,
+        domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
+    ).order_by("display_order", "name")
 
-    return render(request, "incentives/manage_rules.html", {"rules": rules})
+    return render(
+        request,
+        "incentives/manage_rules.html",
+        {
+            "rules": rules,
+            "product_options": product_options,
+        },
+    )
 
 
 @login_required
@@ -283,6 +321,24 @@ def update_incentive_rule(request, rule_id):
     rule = get_object_or_404(IncentiveRule, id=rule_id)
     try:
         data = json.loads(request.body)
+        product_id = data.get("product_id")
+        if product_id not in (None, ""):
+            try:
+                selected_product = Product.objects.filter(
+                    pk=int(product_id),
+                    is_active=True,
+                    archived_at__isnull=True,
+                    domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
+                ).first()
+            except (TypeError, ValueError):
+                selected_product = None
+            if not selected_product:
+                return JsonResponse({"error": "Invalid product selection."}, status=400)
+            duplicate_qs = IncentiveRule.objects.exclude(pk=rule.pk).filter(product_ref=selected_product)
+            if duplicate_qs.exists():
+                return JsonResponse({"error": f"Rule for '{selected_product.name}' already exists."}, status=400)
+            rule.product_ref = selected_product
+            rule.product = selected_product.name
         if "unit_amount" in data:
             rule.unit_amount = Decimal(str(data["unit_amount"]))
         if "points_per_unit" in data:
@@ -290,7 +346,8 @@ def update_incentive_rule(request, rule_id):
         if "active" in data:
             rule.active = bool(data["active"])
         rule.save()
-        return JsonResponse({"success": True, "message": f"{rule.product} updated."})
+        label = rule.product_ref.name if rule.product_ref_id else rule.product
+        return JsonResponse({"success": True, "message": f"{label} updated."})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -305,18 +362,41 @@ def add_incentive_rule(request):
 
     try:
         data = json.loads(request.body)
-        product = data.get("product", "").strip()
+        product = (data.get("product", "") or "").strip()
+        product_id = data.get("product_id")
         unit_amount = Decimal(str(data.get("unit_amount", 0)))
         points_per_unit = Decimal(str(data.get("points_per_unit", 0)))
 
-        if not product:
-            return JsonResponse({"error": "Product name is required."}, status=400)
+        selected_product = None
+        if product_id not in (None, ""):
+            try:
+                selected_product = Product.objects.filter(
+                    pk=int(product_id),
+                    is_active=True,
+                    archived_at__isnull=True,
+                    domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
+                ).first()
+            except (TypeError, ValueError):
+                selected_product = None
 
-        if IncentiveRule.objects.filter(product=product).exists():
+        if not selected_product and product:
+            selected_product = Product.objects.filter(name=product).first()
+
+        if selected_product:
+            product = selected_product.name
+
+        if not product:
+            return JsonResponse({"error": "Product is required."}, status=400)
+
+        existing_qs = IncentiveRule.objects.filter(product=product)
+        if selected_product:
+            existing_qs = existing_qs | IncentiveRule.objects.filter(product_ref=selected_product)
+        if existing_qs.exists():
             return JsonResponse({"error": f"Rule for '{product}' already exists."}, status=400)
 
         rule = IncentiveRule.objects.create(
             product=product,
+            product_ref=selected_product,
             unit_amount=unit_amount,
             points_per_unit=points_per_unit,
             active=True,
@@ -326,6 +406,7 @@ def add_incentive_rule(request):
             "rule": {
                 "id": rule.id,
                 "product": rule.product,
+                "product_id": rule.product_ref_id,
                 "unit_amount": str(rule.unit_amount),
                 "points_per_unit": str(rule.points_per_unit),
                 "active": rule.active,
@@ -463,13 +544,16 @@ def edit_sale(request, sale_id):
     if request.method == "POST":
         form = EditSaleForm(request.POST, instance=sale)
         if form.is_valid():
-            form.save()
+            updated = form.save(commit=False)
+            if updated.product:
+                updated.product_ref = Product.objects.filter(name=updated.product).first()
+            updated.save()
             messages.success(request, "Sale updated successfully!")
             return redirect("clients:all_sales")
     else:
         form = EditSaleForm(instance=sale)
 
-    return render(request, "sales/edit_sale.html", {"form": form, "sale": sale})
+    return render(request, "sales/edit_sale.html", {"form": form, "sale": sale, **_sale_product_meta()})
 
 
 @login_required

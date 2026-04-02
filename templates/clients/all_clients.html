@@ -111,6 +111,7 @@
   .pb-pms { background: #fef3c7; color: #92400e; }
   .pb-life { background: #dcfce7; color: #166534; }
   .pb-health { background: #fce7f3; color: #9d174d; }
+  .pb-motor { background: #e0f2fe; color: #0c4a6e; }
 
   /* Table improvements */
   .client-name-cell {
@@ -177,23 +178,13 @@
         <input type="text" name="q" class="form-control" placeholder="Search by name, email, phone, or PAN..." value="{{ q }}" autocomplete="off">
       </div>
 
-      <select name="sip_status" class="form-select filter-select">
-        <option value="">SIP: All</option>
-        <option value="yes" {% if sip_status == "yes" %}selected{% endif %}>SIP: Yes</option>
-        <option value="no" {% if sip_status == "no" %}selected{% endif %}>SIP: No</option>
+      {% for meta in product_filters %}
+      <select name="{{ meta.status_param }}" class="form-select filter-select">
+        <option value="">{{ meta.product.name }}: All</option>
+        <option value="yes" {% if meta.status_value == "yes" %}selected{% endif %}>{{ meta.product.name }}: Yes</option>
+        <option value="no" {% if meta.status_value == "no" %}selected{% endif %}>{{ meta.product.name }}: No</option>
       </select>
-
-      <select name="pms_status" class="form-select filter-select">
-        <option value="">PMS: All</option>
-        <option value="yes" {% if pms_status == "yes" %}selected{% endif %}>PMS: Yes</option>
-        <option value="no" {% if pms_status == "no" %}selected{% endif %}>PMS: No</option>
-      </select>
-
-      <select name="life_status" class="form-select filter-select">
-        <option value="">Life: All</option>
-        <option value="yes" {% if life_status == "yes" %}selected{% endif %}>Life: Yes</option>
-        <option value="no" {% if life_status == "no" %}selected{% endif %}>Life: No</option>
-      </select>
+      {% endfor %}
 
       <select name="mapped_to" class="form-select filter-select" style="min-width:160px;">
         <option value="">Mapped To: All</option>
@@ -213,46 +204,16 @@
     <!-- Advanced Filters -->
     <div class="adv-filters" id="advFilters">
       <div class="adv-filters-grid">
+        {% for meta in product_filters %}
         <div>
-          <label class="form-label">SIP Min</label>
-          <input type="number" name="sip_min" class="form-control form-control-sm" value="{{ sip_min|default:'' }}">
+          <label class="form-label">{{ meta.product.name }} Min</label>
+          <input type="number" name="{{ meta.min_param }}" class="form-control form-control-sm" value="{{ meta.min_value|default:'' }}">
         </div>
         <div>
-          <label class="form-label">SIP Max</label>
-          <input type="number" name="sip_max" class="form-control form-control-sm" value="{{ sip_max|default:'' }}">
+          <label class="form-label">{{ meta.product.name }} Max</label>
+          <input type="number" name="{{ meta.max_param }}" class="form-control form-control-sm" value="{{ meta.max_value|default:'' }}">
         </div>
-        <div>
-          <label class="form-label">PMS Min</label>
-          <input type="number" name="pms_min" class="form-control form-control-sm" value="{{ pms_min|default:'' }}">
-        </div>
-        <div>
-          <label class="form-label">PMS Max</label>
-          <input type="number" name="pms_max" class="form-control form-control-sm" value="{{ pms_max|default:'' }}">
-        </div>
-        <div>
-          <label class="form-label">Life Min</label>
-          <input type="number" name="life_min" class="form-control form-control-sm" value="{{ life_min|default:'' }}">
-        </div>
-        <div>
-          <label class="form-label">Life Max</label>
-          <input type="number" name="life_max" class="form-control form-control-sm" value="{{ life_max|default:'' }}">
-        </div>
-        <div>
-          <label class="form-label">Health</label>
-          <select name="health_status" class="form-select form-select-sm">
-            <option value="">All</option>
-            <option value="yes" {% if health_status == "yes" %}selected{% endif %}>Yes</option>
-            <option value="no" {% if health_status == "no" %}selected{% endif %}>No</option>
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Health Min</label>
-          <input type="number" name="health_min" class="form-control form-control-sm" value="{{ health_min|default:'' }}">
-        </div>
-        <div>
-          <label class="form-label">Health Max</label>
-          <input type="number" name="health_max" class="form-control form-control-sm" value="{{ health_max|default:'' }}">
-        </div>
+        {% endfor %}
       </div>
     </div>
   </form>
@@ -284,18 +245,8 @@
         </th>
         <th>Products</th>
         <th>
-          <a class="sortable {% if sort == 'sip_amount' or sort == '-sip_amount' %}active{% endif %}" data-sort="sip_amount">
-            SIP <i class="bi bi-chevron-expand sort-icon"></i>
-          </a>
-        </th>
-        <th>
           <a class="sortable {% if sort == 'lumsum_investment' or sort == '-lumsum_investment' %}active{% endif %}" data-sort="lumsum_investment">
             Lumpsum <i class="bi bi-chevron-expand sort-icon"></i>
-          </a>
-        </th>
-        <th>
-          <a class="sortable {% if sort == 'pms_amount' or sort == '-pms_amount' %}active{% endif %}" data-sort="pms_amount">
-            PMS <i class="bi bi-chevron-expand sort-icon"></i>
           </a>
         </th>
         <th>
@@ -321,18 +272,15 @@
         </td>
         <td>
           <div class="product-badges">
-            {% if client.sip_status %}<span class="product-badge pb-sip">SIP</span>{% endif %}
-            {% if client.pms_status %}<span class="product-badge pb-pms">PMS</span>{% endif %}
-            {% if client.life_status %}<span class="product-badge pb-life">Life</span>{% endif %}
-            {% if client.health_status %}<span class="product-badge pb-health">Health</span>{% endif %}
-            {% if not client.sip_status and not client.pms_status and not client.life_status and not client.health_status %}
+            {% for badge in client.dynamic_product_badges %}
+              <span class="product-badge {{ badge.badge_class }}">{{ badge.name }}</span>
+            {% endfor %}
+            {% if not client.dynamic_product_badges %}
               <span style="color:var(--ki-text-muted);font-size:0.8rem;">—</span>
             {% endif %}
           </div>
         </td>
-        <td>{% if client.sip_amount %}₹{{ client.sip_amount|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td>{% if client.lumsum_investment %}₹{{ client.lumsum_investment|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-        <td>{% if client.pms_amount %}₹{{ client.pms_amount|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td>
           {% if client.mapped_to %}
             <span class="mapped-badge"><i class="bi bi-person-fill" style="font-size:0.75rem;"></i> {{ client.mapped_to.user.get_full_name|default:client.mapped_to.user.username }}</span>
@@ -353,7 +301,7 @@
       </tr>
       {% empty %}
       <tr>
-        <td colspan="8" class="text-center" style="padding:3rem 1rem;">
+        <td colspan="6" class="text-center" style="padding:3rem 1rem;">
           <div style="color:var(--ki-text-muted);">
             <i class="bi bi-inbox" style="font-size:2rem;display:block;margin-bottom:0.5rem;"></i>
             No clients found{% if q %} matching "<strong>{{ q }}</strong>"{% endif %}

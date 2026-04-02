@@ -117,6 +117,8 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+  const insuranceProductNames = {{ insurance_product_names|default:'[]'|safe }};
+  const healthProductName = "{{ health_product_name|default:''|escapejs }}";
   const searchInput = document.getElementById("client-search");
   const resultsDiv = document.getElementById("client-results");
   const clientIdField = document.getElementById("client-id");
@@ -185,8 +187,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // Show cover field & incentive info based on product
   function updateProductUI() {
     const selected = productSelect.value;
-    const isInsurance = selected === "Life Insurance" || selected === "Health Insurance";
-    const isHealthInsurance = selected === "Health Insurance";
+    const isInsurance = insuranceProductNames.includes(selected);
+    const isHealthInsurance = healthProductName && selected === healthProductName;
     coverAmountGroup.style.display = isInsurance ? "block" : "none";
     policyTypeGroup.style.display = isHealthInsurance ? "block" : "none";
     if (!isInsurance) document.getElementById("cover-amount").value = "";
@@ -196,18 +198,12 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
 
-    const infoMap = {
-      "SIP": "Points = (Amount / Unit Amount) x Points Per Unit. Calculated automatically on save.",
-      "Lumsum": "Points = (Amount / Unit Amount) x Points Per Unit. One-time investment incentive.",
-      "Life Insurance": "Slab-based: cumulative monthly premium matched against configured slabs for payout.",
-      "Health Insurance": "Fresh policies follow normal incentive rules. Port policies always earn 0 points. Cover amount is tracked separately.",
-      "Motor Insurance": "Points = (Amount / Unit Amount) x Points Per Unit.",
-      "PMS": "Points = (Amount / Unit Amount) x Points Per Unit. Portfolio management incentive.",
-      "COB": "Points = (Amount / Unit Amount) x Points Per Unit.",
-    };
-    if (selected && infoMap[selected]) {
+    const infoText = isHealthInsurance
+      ? "Fresh policies follow normal incentive rules. Port policies always earn 0 points."
+      : "Points are calculated automatically from active incentive rules and slabs.";
+    if (selected) {
       incentiveTitle.textContent = selected + " — Incentive Info";
-      incentiveText.textContent = infoMap[selected];
+      incentiveText.textContent = infoText;
       incentiveInfo.style.display = "block";
     } else {
       incentiveInfo.style.display = "none";

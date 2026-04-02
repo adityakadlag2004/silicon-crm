@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.db.models import Sum
-from .models import Sale, Client, Notification, Employee
+from django.db.models import Sum, Q
+from .models import Sale, Client, Notification, Employee, Product
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -10,11 +10,18 @@ def update_client_status(sender, instance, **kwargs):
     client = instance.client
     sales = Sale.objects.filter(client=client)
 
-    client.sip_amount = sales.filter(product="SIP").aggregate(total=Sum("amount"))["total"] or 0
-    client.life_cover = sales.filter(product="Life Insurance").aggregate(total=Sum("cover_amount"))["total"] or 0
-    client.health_cover = sales.filter(product="Health Insurance").aggregate(total=Sum("cover_amount"))["total"] or 0
-    client.motor_insured_value = sales.filter(product="Motor Insurance").aggregate(total=Sum("amount"))["total"] or 0
-    client.pms_amount = sales.filter(product="PMS").aggregate(total=Sum("amount"))["total"] or 0
+    code_to_name = {p.code: p.name for p in Product.objects.all().only("code", "name")}
+
+    def _sum_amount(product_code, fallback_name, field_name):
+        product_name = code_to_name.get(product_code, fallback_name)
+        amount = sales.filter(Q(product_ref__code=product_code) | Q(product=product_name)).aggregate(total=Sum(field_name))["total"]
+        return amount or 0
+
+    client.sip_amount = _sum_amount("SIP", "SIP", "amount")
+    client.life_cover = _sum_amount("LIFE_INS", "Life Insurance", "cover_amount")
+    client.health_cover = _sum_amount("HEALTH_INS", "Health Insurance", "cover_amount")
+    client.motor_insured_value = _sum_amount("MOTOR_INS", "Motor Insurance", "amount")
+    client.pms_amount = _sum_amount("PMS", "PMS", "amount")
 
     client.sip_status = client.sip_amount > 0
     client.life_status = client.life_cover > 0

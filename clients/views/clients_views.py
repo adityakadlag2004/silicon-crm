@@ -6,17 +6,156 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test, permission_required
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.utils import timezone
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.db import transaction
 from django.core.paginator import Paginator
 from django.urls import reverse
 from django.conf import settings
 
-from ..models import Client, Employee, MessageTemplate
+from ..models import Client, Employee, MessageTemplate, Product, Renewal, Sale
 from ..forms import ClientForm, ClientReassignForm
 
 
 PER_PAGE = getattr(settings, "PER_PAGE", 50)
+
+
+def _badge_class_for_product(product):
+    code = (product.code or "").strip().upper()
+    name = (product.name or "").strip().lower()
+    if "SIP" in code or "sip" in name:
+        return "pb-sip"
+    if "PMS" in code or "pms" in name:
+        return "pb-pms"
+    if "LIFE" in code or "life" in name:
+        return "pb-life"
+    if "HEALTH" in code or "health" in name:
+        return "pb-health"
+    if "MOTOR" in code or "motor" in name:
+        return "pb-motor"
+    return ""
+
+
+def _build_client_product_filters(request):
+    active_products = Product.objects.filter(is_active=True).order_by("display_order", "name")
+    product_filters = []
+
+    for product in active_products:
+        prefix = f"product_{product.id}"
+        product_filters.append({
+            "product": product,
+            "status_field": prefix,
+            "badge_class": _badge_class_for_product(product),
+            "status_param": f"{prefix}_status",
+            "min_param": f"{prefix}_min",
+            "max_param": f"{prefix}_max",
+            "status_value": request.GET.get(f"{prefix}_status", ""),
+            "min_value": request.GET.get(f"{prefix}_min", ""),
+            "max_value": request.GET.get(f"{prefix}_max", ""),
+        })
+    return product_filters
+
+
+def _client_product_totals_map(client_ids, product_ids):
+    totals_map = {}
+    if not client_ids or not product_ids:
+        return totals_map
+
+    sale_rows = (
+        Sale.objects.filter(client_id__in=client_ids, product_ref_id__in=product_ids)
+        .values("client_id", "product_ref_id")
+        .annotate(total=Sum("amount"))
+    )
+    renewal_rows = (
+        Renewal.objects.filter(client_id__in=client_ids, product_ref_id__in=product_ids)
+        .values("client_id", "product_ref_id")
+        .annotate(total=Sum("premium_amount"))
+    )
+
+    for row in sale_rows:
+        key = (row["client_id"], row["product_ref_id"])
+        totals_map[key] = totals_map.get(key, Decimal("0")) + (row["total"] or Decimal("0"))
+    for row in renewal_rows:
+        key = (row["client_id"], row["product_ref_id"])
+        totals_map[key] = totals_map.get(key, Decimal("0")) + (row["total"] or Decimal("0"))
+
+    return totals_map
+
+
+def _apply_client_product_filters(clients_qs, product_filters):
+    if not product_filters:
+        return clients_qs
+
+    scoped_client_ids = list(clients_qs.values_list("id", flat=True))
+    product_ids = [meta["product"].id for meta in product_filters]
+    totals_map = _client_product_totals_map(scoped_client_ids, product_ids)
+
+    candidate_ids = set(scoped_client_ids)
+
+    for meta in product_filters:
+        status_value = meta["status_value"]
+        min_value = meta["min_value"]
+        max_value = meta["max_value"]
+        product_id = meta["product"].id
+
+        if status_value in ["yes", "no"]:
+            if status_value == "yes":
+                matched_ids = {
+                    cid for cid in candidate_ids
+                    if totals_map.get((cid, product_id), Decimal("0")) > 0
+                }
+            else:
+                matched_ids = {
+                    cid for cid in candidate_ids
+                    if totals_map.get((cid, product_id), Decimal("0")) <= 0
+                }
+            candidate_ids &= matched_ids
+
+        if min_value:
+            try:
+                min_amount = Decimal(str(min_value))
+                matched_ids = {
+                    cid for cid in candidate_ids
+                    if totals_map.get((cid, product_id), Decimal("0")) >= min_amount
+                }
+                candidate_ids &= matched_ids
+            except Exception:
+                pass
+
+        if max_value:
+            try:
+                max_amount = Decimal(str(max_value))
+                matched_ids = {
+                    cid for cid in candidate_ids
+                    if totals_map.get((cid, product_id), Decimal("0")) <= max_amount
+                }
+                candidate_ids &= matched_ids
+            except Exception:
+                pass
+
+    if not candidate_ids:
+        return clients_qs.none()
+    return clients_qs.filter(id__in=candidate_ids)
+
+
+def _attach_client_product_badges(clients, product_filters):
+    client_ids = [client.id for client in clients]
+    product_ids = [meta["product"].id for meta in product_filters]
+    totals_map = _client_product_totals_map(client_ids, product_ids)
+
+    for client in clients:
+        badges = []
+        status_map = {}
+        for meta in product_filters:
+            total_amount = totals_map.get((client.id, meta["product"].id), Decimal("0"))
+            is_active = bool(total_amount > 0)
+            status_map[meta["status_field"]] = is_active
+            if is_active:
+                badges.append({
+                    "name": meta["product"].name,
+                    "badge_class": meta["badge_class"],
+                })
+        client.dynamic_product_badges = badges
+        client.dynamic_product_status_map = status_map
 
 
 @login_required
@@ -52,45 +191,8 @@ def all_clients(request):
             | Q(pan__icontains=q)
         )
 
-    # ── Product status filters ──
-    sip_status = request.GET.get("sip_status")
-    pms_status = request.GET.get("pms_status")
-    life_status = request.GET.get("life_status")
-    health_status = request.GET.get("health_status")
-    sip_min = request.GET.get("sip_min")
-    sip_max = request.GET.get("sip_max")
-    pms_min = request.GET.get("pms_min")
-    pms_max = request.GET.get("pms_max")
-    life_min = request.GET.get("life_min")
-    life_max = request.GET.get("life_max")
-    health_min = request.GET.get("health_min")
-    health_max = request.GET.get("health_max")
-
-    if sip_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(sip_status=(sip_status == "yes"))
-    if pms_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(pms_status=(pms_status == "yes"))
-    if life_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(life_status=(life_status == "yes"))
-    if health_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(health_status=(health_status == "yes"))
-
-    for field, fmin, fmax in [
-        ("sip_amount", sip_min, sip_max),
-        ("pms_amount", pms_min, pms_max),
-        ("life_cover", life_min, life_max),
-        ("health_cover", health_min, health_max),
-    ]:
-        if fmin:
-            try:
-                clients_qs = clients_qs.filter(**{f"{field}__gte": float(fmin)})
-            except ValueError:
-                pass
-        if fmax:
-            try:
-                clients_qs = clients_qs.filter(**{f"{field}__lte": float(fmax)})
-            except ValueError:
-                pass
+    product_filters = _build_client_product_filters(request)
+    clients_qs = _apply_client_product_filters(clients_qs, product_filters)
 
     # ── Mapped-to filter ──
     mapped_to_id = request.GET.get("mapped_to")
@@ -111,6 +213,8 @@ def all_clients(request):
     except Exception:
         page_obj = paginator.get_page(1)
 
+    _attach_client_product_badges(page_obj.object_list, product_filters)
+
     current = page_obj.number
     total_pages = paginator.num_pages
     start = max(current - 3, 1)
@@ -129,23 +233,12 @@ def all_clients(request):
         "page_range": page_range,
         "total_pages": total_pages,
         "total_count": total_count,
-        "sip_status": sip_status,
-        "pms_status": pms_status,
-        "life_status": life_status,
-        "health_status": health_status,
-        "sip_min": sip_min,
-        "sip_max": sip_max,
-        "pms_min": pms_min,
-        "pms_max": pms_max,
-        "life_min": life_min,
-        "life_max": life_max,
-        "health_min": health_min,
-        "health_max": health_max,
         "q": q,
         "base_qs": base_qs,
         "sort": sort_param,
         "mapped_to_id": mapped_to_id or "",
         "employees": employees,
+        "product_filters": product_filters,
     }
     return render(request, "clients/all_clients.html", context)
 
@@ -168,44 +261,8 @@ def my_clients(request):
             | Q(pan__icontains=q)
         )
 
-    sip_status = request.GET.get("sip_status")
-    pms_status = request.GET.get("pms_status")
-    life_status = request.GET.get("life_status")
-    health_status = request.GET.get("health_status")
-    sip_min = request.GET.get("sip_min")
-    sip_max = request.GET.get("sip_max")
-    pms_min = request.GET.get("pms_min")
-    pms_max = request.GET.get("pms_max")
-    life_min = request.GET.get("life_min")
-    life_max = request.GET.get("life_max")
-    health_min = request.GET.get("health_min")
-    health_max = request.GET.get("health_max")
-
-    if sip_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(sip_status=(sip_status == "yes"))
-    if pms_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(pms_status=(pms_status == "yes"))
-    if life_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(life_status=(life_status == "yes"))
-    if health_status in ["yes", "no"]:
-        clients_qs = clients_qs.filter(health_status=(health_status == "yes"))
-
-    for field, fmin, fmax in [
-        ("sip_amount", sip_min, sip_max),
-        ("pms_amount", pms_min, pms_max),
-        ("life_cover", life_min, life_max),
-        ("health_cover", health_min, health_max),
-    ]:
-        if fmin:
-            try:
-                clients_qs = clients_qs.filter(**{f"{field}__gte": float(fmin)})
-            except ValueError:
-                pass
-        if fmax:
-            try:
-                clients_qs = clients_qs.filter(**{f"{field}__lte": float(fmax)})
-            except ValueError:
-                pass
+    product_filters = _build_client_product_filters(request)
+    clients_qs = _apply_client_product_filters(clients_qs, product_filters)
 
     edited_filter_active = request.GET.get("edited") == "1"
     if edited_filter_active:
@@ -217,6 +274,8 @@ def my_clients(request):
         page_obj = paginator.get_page(page_num)
     except Exception:
         page_obj = paginator.get_page(1)
+
+    _attach_client_product_badges(page_obj.object_list, product_filters)
 
     current = page_obj.number
     total_pages = paginator.num_pages
@@ -240,21 +299,10 @@ def my_clients(request):
         "total_pages": total_pages,
         "base_qs": base_qs,
         "q": q,
-        "sip_status": sip_status,
-        "pms_status": pms_status,
-        "life_status": life_status,
-        "health_status": health_status,
-        "sip_min": sip_min,
-        "sip_max": sip_max,
-        "pms_min": pms_min,
-        "pms_max": pms_max,
-        "life_min": life_min,
-        "life_max": life_max,
-        "health_min": health_min,
-        "health_max": health_max,
         "edited_filter_active": edited_filter_active,
         "edited_toggle_qs": edited_toggle_qs,
         "templates": templates,
+        "product_filters": product_filters,
     }
     return render(request, "clients/my_clients.html", context)
 
@@ -356,12 +404,8 @@ def client_analysis(request):
     else:
         clients = Client.objects.filter(mapped_to=request.user.employee)
 
-    filters = {}
-    for field in ("sip_status", "life_status", "health_status", "motor_status", "pms_status"):
-        val = request.GET.get(field)
-        if val in ["yes", "no"]:
-            filters[field] = val == "yes"
-    clients = clients.filter(**filters)
+    product_filters = _build_client_product_filters(request)
+    clients = _apply_client_product_filters(clients, product_filters)
 
     start_date = request.GET.get("start_date")
     end_date = request.GET.get("end_date")
@@ -374,22 +418,32 @@ def client_analysis(request):
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = 'attachment; filename="clients_analysis.csv"'
         writer = csv.writer(response)
-        writer.writerow(
-            ["ID", "Name", "Email", "Phone", "SIP", "Life", "Health", "Motor", "PMS", "Created At"]
-        )
-        for c in clients:
+        writer.writerow(["ID", "Name", "Email", "Phone", *[meta["product"].name for meta in product_filters], "Created At"])
+
+        analysis_clients = list(clients)
+        _attach_client_product_badges(analysis_clients, product_filters)
+        for c in analysis_clients:
             writer.writerow([
-                c.id, c.name, c.email, c.phone,
-                "Yes" if c.sip_status else "No",
-                "Yes" if c.life_status else "No",
-                "Yes" if c.health_status else "No",
-                "Yes" if c.motor_status else "No",
-                "Yes" if c.pms_status else "No",
+                c.id,
+                c.name,
+                c.email,
+                c.phone,
+                *[("Yes" if c.dynamic_product_status_map.get(meta["status_field"]) else "No") for meta in product_filters],
                 c.created_at.strftime("%Y-%m-%d"),
             ])
         return response
 
-    return render(request, "clients/client_analysis.html", {"clients": clients})
+    _attach_client_product_badges(clients, product_filters)
+    analysis_colspan = 5 + len(product_filters)
+    return render(
+        request,
+        "clients/client_analysis.html",
+        {
+            "clients": clients,
+            "product_filters": product_filters,
+            "analysis_colspan": analysis_colspan,
+        },
+    )
 
 
 @login_required

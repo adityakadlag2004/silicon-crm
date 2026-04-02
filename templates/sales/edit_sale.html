@@ -40,6 +40,7 @@
 </div>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+  const healthProductName = "{{ health_product_name|default:''|escapejs }}";
   const productSelect = document.getElementById("id_product");
   const policyTypeGroup = document.getElementById("policy-type-group");
   const policyTypeInputs = document.querySelectorAll('input[name="policy_type"]');
@@ -53,7 +54,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   function updatePolicyTypeVisibility() {
-    const isHealthInsurance = productSelect && productSelect.value === "Health Insurance";
+    const isHealthInsurance = productSelect && healthProductName && productSelect.value === healthProductName;
     policyTypeGroup.style.display = isHealthInsurance ? "block" : "none";
     if (!isHealthInsurance) {
       policyTypeInputs.forEach(input => {
