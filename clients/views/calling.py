@@ -25,7 +25,21 @@ from ..models import (
     CallingList,
     Prospect,
 )
-from .helpers import get_manager_access
+from .helpers import get_manager_access, throttle_view
+
+
+CALLING_UPLOAD_ALLOWED_EXTENSIONS = ('.csv', '.xls', '.xlsx')
+CALLING_UPLOAD_MAX_SIZE = 5 * 1024 * 1024
+
+
+def _validate_calling_upload(file_obj):
+    filename = (getattr(file_obj, 'name', '') or '').lower()
+    if not filename.endswith(CALLING_UPLOAD_ALLOWED_EXTENSIONS):
+        raise ValueError('Unsupported file type. Please upload CSV, XLS, or XLSX files only.')
+    size = getattr(file_obj, 'size', 0) or 0
+    if size > CALLING_UPLOAD_MAX_SIZE:
+        raise ValueError('File too large. Maximum allowed upload size is 5 MB.')
+    return 'csv' if filename.endswith('.csv') else 'excel'
 
 
 @login_required
@@ -362,6 +376,7 @@ def calling_list_generator(request):
 
 
 @login_required
+@throttle_view(max_requests=10, window_seconds=60, key_prefix="calling.upload")
 def upload_list(request):
     if request.method == "POST" and request.FILES.get("file"):
         try:
@@ -370,21 +385,26 @@ def upload_list(request):
             pd = None
 
         file = request.FILES["file"]
+        try:
+            file_format = _validate_calling_upload(file)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect('clients:upload_list')
 
         rows = []
         columns = set()
         if pd is not None:
-            if file.name.endswith('.csv'):
+            if file_format == 'csv':
                 df = pd.read_csv(file)
             else:
                 df = pd.read_excel(file)
             rows = df.to_dict(orient='records')
             columns = set(df.columns)
         else:
-            if not file.name.endswith('.csv'):
+            if file_format != 'csv':
                 messages.error(request, 'Excel uploads require pandas. Please upload a CSV or install pandas.')
                 return redirect('clients:upload_list')
-            decoded = file.read().decode('utf-8')
+            decoded = file.read().decode('utf-8-sig')
             reader = csv.DictReader(io.StringIO(decoded))
             rows = [r for r in reader]
             columns = set(rows[0].keys()) if rows else set()

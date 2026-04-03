@@ -69,6 +69,27 @@ from .forms import (
 )
 
 
+CALLING_UPLOAD_ALLOWED_EXTENSIONS = ('.csv', '.xls', '.xlsx')
+CALLING_UPLOAD_MAX_SIZE = 5 * 1024 * 1024
+
+
+def _is_admin_user(user):
+    if user.is_superuser:
+        return True
+    emp = getattr(user, 'employee', None)
+    return bool(emp and emp.role == 'admin')
+
+
+def _validate_calling_upload(file_obj):
+    filename = (getattr(file_obj, 'name', '') or '').lower()
+    if not filename.endswith(CALLING_UPLOAD_ALLOWED_EXTENSIONS):
+        raise ValueError('Unsupported file type. Please upload CSV, XLS, or XLSX files only.')
+    size = getattr(file_obj, 'size', 0) or 0
+    if size > CALLING_UPLOAD_MAX_SIZE:
+        raise ValueError('File too large. Maximum allowed upload size is 5 MB.')
+    return 'csv' if filename.endswith('.csv') else 'excel'
+
+
 def get_manager_access():
     return ManagerAccessConfig.current()
 from django.db.models import Count, Avg, Sum
@@ -1329,20 +1350,25 @@ def net_business(request):
     # handle POST to add/update/delete manual net business entry
     if request.method == 'POST':
         action = request.POST.get('action', 'add')
+        editable_entries = NetBusinessEntry.objects.all() if _is_admin_user(request.user) else NetBusinessEntry.objects.filter(created_by=request.user)
         try:
             if action == 'bulk_delete':
-                selected_ids = request.POST.getlist('selected_ids')
+                selected_ids = [int(v) for v in request.POST.getlist('selected_ids') if str(v).strip()]
                 if not selected_ids:
                     raise ValueError('Select at least one entry to delete')
-                deleted_count, _ = NetBusinessEntry.objects.filter(id__in=selected_ids).delete()
+                deleted_count, _ = editable_entries.filter(id__in=selected_ids).delete()
+                if deleted_count == 0:
+                    raise ValueError('No matching entries found or permission denied')
                 messages.success(request, f'Deleted {deleted_count} entries')
                 return redirect('clients:net_business')
 
             if action == 'delete':
-                entry_id = request.POST.get('entry_id')
+                entry_id = int(request.POST.get('entry_id'))
                 if not entry_id:
                     raise ValueError('Missing entry id')
-                NetBusinessEntry.objects.filter(id=entry_id).delete()
+                deleted_count, _ = editable_entries.filter(id=entry_id).delete()
+                if deleted_count == 0:
+                    raise ValueError('Entry not found or permission denied')
                 messages.success(request, 'Entry deleted')
                 return redirect('clients:net_business')
 
@@ -1361,10 +1387,10 @@ def net_business(request):
             entry_date = date(year_val, month_val, 1)
 
             if action == 'update':
-                entry_id = request.POST.get('entry_id')
+                entry_id = int(request.POST.get('entry_id'))
                 if not entry_id:
                     raise ValueError('Missing entry id')
-                entry = NetBusinessEntry.objects.get(id=entry_id)
+                entry = editable_entries.get(id=entry_id)
                 entry.entry_type = entry_type
                 entry.amount = amount
                 entry.date = entry_date
@@ -1558,20 +1584,25 @@ def net_sip(request):
 
     if request.method == 'POST':
         action = request.POST.get('action', 'add')
+        editable_entries = NetSipEntry.objects.all() if _is_admin_user(request.user) else NetSipEntry.objects.filter(created_by=request.user)
         try:
             if action == 'bulk_delete':
-                selected_ids = request.POST.getlist('selected_ids')
+                selected_ids = [int(v) for v in request.POST.getlist('selected_ids') if str(v).strip()]
                 if not selected_ids:
                     raise ValueError('Select at least one entry to delete')
-                deleted_count, _ = NetSipEntry.objects.filter(id__in=selected_ids).delete()
+                deleted_count, _ = editable_entries.filter(id__in=selected_ids).delete()
+                if deleted_count == 0:
+                    raise ValueError('No matching entries found or permission denied')
                 messages.success(request, f'Deleted {deleted_count} entries')
                 return redirect('clients:net_sip')
 
             if action == 'delete':
-                entry_id = request.POST.get('entry_id')
+                entry_id = int(request.POST.get('entry_id'))
                 if not entry_id:
                     raise ValueError('Missing entry id')
-                NetSipEntry.objects.filter(id=entry_id).delete()
+                deleted_count, _ = editable_entries.filter(id=entry_id).delete()
+                if deleted_count == 0:
+                    raise ValueError('Entry not found or permission denied')
                 messages.success(request, 'Entry deleted')
                 return redirect('clients:net_sip')
 
@@ -1589,10 +1620,10 @@ def net_sip(request):
             entry_date = date(year_val, month_val, 1)
 
             if action == 'update':
-                entry_id = request.POST.get('entry_id')
+                entry_id = int(request.POST.get('entry_id'))
                 if not entry_id:
                     raise ValueError('Missing entry id')
-                entry = NetSipEntry.objects.get(id=entry_id)
+                entry = editable_entries.get(id=entry_id)
                 entry.entry_type = entry_type
                 entry.amount = amount
                 entry.date = entry_date
@@ -3653,12 +3684,17 @@ def upload_list(request):
         from django.utils import timezone
 
         file = request.FILES["file"]
+        try:
+            file_format = _validate_calling_upload(file)
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return redirect('clients:upload_list')
 
         # Read rows as list of dicts; prefer pandas if available for Excel support
         rows = []
         columns = set()
         if pd is not None:
-            if file.name.endswith('.csv'):
+            if file_format == 'csv':
                 df = pd.read_csv(file)
             else:
                 df = pd.read_excel(file)
@@ -3666,10 +3702,10 @@ def upload_list(request):
             columns = set(df.columns)
         else:
             # pandas not available: support CSV via csv.DictReader only
-            if not file.name.endswith('.csv'):
+            if file_format != 'csv':
                 messages.error(request, 'Excel uploads require pandas. Please upload a CSV or install pandas.')
                 return redirect('clients:upload_list')
-            decoded = file.read().decode('utf-8')
+            decoded = file.read().decode('utf-8-sig')
             reader = csv.DictReader(io.StringIO(decoded))
             rows = [r for r in reader]
             columns = set(rows[0].keys()) if rows else set()
@@ -4177,6 +4213,14 @@ def create_calendar_event(request):
         notes = data.get("notes") or ""
         related_prospect_id = data.get("related_prospect_id")
         client_id = data.get("client_id")
+        user_employee = getattr(request.user, 'employee', None)
+
+        if not user_employee:
+            return JsonResponse({"success": False, "error": "Employee profile not found for user."}, status=403)
+
+        allowed_event_types = {choice[0] for choice in CalendarEvent.EVENT_TYPES}
+        if ev_type not in allowed_event_types:
+            return JsonResponse({"success": False, "error": "Invalid event type."}, status=400)
 
         # parse scheduled_time (ISO) to aware datetime
         scheduled_dt = None
@@ -4192,16 +4236,23 @@ def create_calendar_event(request):
 
         related_prospect = None
         client = None
+        restrict_to_own_records = not request.user.is_superuser and getattr(user_employee, 'role', None) == 'employee'
+
         if related_prospect_id:
-            try:
-                related_prospect = Prospect.objects.get(id=related_prospect_id)
-            except Prospect.DoesNotExist:
-                related_prospect = None
+            prospect_qs = Prospect.objects.all()
+            if restrict_to_own_records:
+                prospect_qs = prospect_qs.filter(assigned_to=user_employee)
+            related_prospect = prospect_qs.filter(id=related_prospect_id).first()
+            if related_prospect is None:
+                return JsonResponse({"success": False, "error": "Prospect not found or permission denied."}, status=403)
+
         if client_id:
-            try:
-                client = Client.objects.get(id=client_id)
-            except Exception:
-                client = None
+            client_qs = Client.objects.all()
+            if restrict_to_own_records:
+                client_qs = client_qs.filter(mapped_to=user_employee)
+            client = client_qs.filter(id=client_id).first()
+            if client is None:
+                return JsonResponse({"success": False, "error": "Client not found or permission denied."}, status=403)
 
         end_dt = None
         if end_time:
@@ -4210,7 +4261,7 @@ def create_calendar_event(request):
                 end_dt = timezone.make_aware(end_dt)
 
         event = CalendarEvent.objects.create(
-            employee=request.user.employee,
+            employee=user_employee,
             title=title,
             type=ev_type,
             notes=notes,

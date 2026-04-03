@@ -115,9 +115,11 @@
   </form>
 </div>
 
+{{ insurance_product_names|json_script:"insurance-product-names" }}
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const insuranceProductNames = {{ insurance_product_names|default:'[]'|safe }};
+  const insuranceProductNames = JSON.parse(document.getElementById("insurance-product-names").textContent);
   const healthProductName = "{{ health_product_name|default:''|escapejs }}";
   const searchInput = document.getElementById("client-search");
   const resultsDiv = document.getElementById("client-results");

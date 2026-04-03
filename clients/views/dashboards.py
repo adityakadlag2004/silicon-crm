@@ -63,6 +63,13 @@ def _normalize_product_code(raw_code):
     return normalized[:30]
 
 
+def _is_admin_user(user):
+    if user.is_superuser:
+        return True
+    emp = getattr(user, "employee", None)
+    return bool(emp and emp.role == "admin")
+
+
 @login_required
 def admin_dashboard(request):
     emp = getattr(request.user, "employee", None)
@@ -982,20 +989,25 @@ def net_business(request):
 
     if request.method == 'POST':
         action = request.POST.get('action', 'add')
+        editable_entries = NetBusinessEntry.objects.all() if _is_admin_user(request.user) else NetBusinessEntry.objects.filter(created_by=request.user)
         try:
             if action == 'bulk_delete':
-                selected_ids = request.POST.getlist('selected_ids')
+                selected_ids = [int(v) for v in request.POST.getlist('selected_ids') if str(v).strip()]
                 if not selected_ids:
                     raise ValueError('Select at least one entry to delete')
-                deleted_count, _ = NetBusinessEntry.objects.filter(id__in=selected_ids).delete()
+                deleted_count, _ = editable_entries.filter(id__in=selected_ids).delete()
+                if deleted_count == 0:
+                    raise ValueError('No matching entries found or permission denied')
                 messages.success(request, f'Deleted {deleted_count} entries')
                 return redirect('clients:net_business')
 
             if action == 'delete':
-                entry_id = request.POST.get('entry_id')
+                entry_id = int(request.POST.get('entry_id'))
                 if not entry_id:
                     raise ValueError('Missing entry id')
-                NetBusinessEntry.objects.filter(id=entry_id).delete()
+                deleted_count, _ = editable_entries.filter(id=entry_id).delete()
+                if deleted_count == 0:
+                    raise ValueError('Entry not found or permission denied')
                 messages.success(request, 'Entry deleted')
                 return redirect('clients:net_business')
 
@@ -1013,10 +1025,10 @@ def net_business(request):
             entry_date = date(year_val, month_val, 1)
 
             if action == 'update':
-                entry_id = request.POST.get('entry_id')
+                entry_id = int(request.POST.get('entry_id'))
                 if not entry_id:
                     raise ValueError('Missing entry id')
-                entry = NetBusinessEntry.objects.get(id=entry_id)
+                entry = editable_entries.get(id=entry_id)
                 entry.entry_type = entry_type
                 entry.amount = amount
                 entry.date = entry_date
@@ -1197,20 +1209,25 @@ def net_sip(request):
 
     if request.method == 'POST':
         action = request.POST.get('action', 'add')
+        editable_entries = NetSipEntry.objects.all() if _is_admin_user(request.user) else NetSipEntry.objects.filter(created_by=request.user)
         try:
             if action == 'bulk_delete':
-                selected_ids = request.POST.getlist('selected_ids')
+                selected_ids = [int(v) for v in request.POST.getlist('selected_ids') if str(v).strip()]
                 if not selected_ids:
                     raise ValueError('Select at least one entry to delete')
-                deleted_count, _ = NetSipEntry.objects.filter(id__in=selected_ids).delete()
+                deleted_count, _ = editable_entries.filter(id__in=selected_ids).delete()
+                if deleted_count == 0:
+                    raise ValueError('No matching entries found or permission denied')
                 messages.success(request, f'Deleted {deleted_count} entries')
                 return redirect('clients:net_sip')
 
             if action == 'delete':
-                entry_id = request.POST.get('entry_id')
+                entry_id = int(request.POST.get('entry_id'))
                 if not entry_id:
                     raise ValueError('Missing entry id')
-                NetSipEntry.objects.filter(id=entry_id).delete()
+                deleted_count, _ = editable_entries.filter(id=entry_id).delete()
+                if deleted_count == 0:
+                    raise ValueError('Entry not found or permission denied')
                 messages.success(request, 'Entry deleted')
                 return redirect('clients:net_sip')
 
@@ -1228,10 +1245,10 @@ def net_sip(request):
             entry_date = date(year_val, month_val, 1)
 
             if action == 'update':
-                entry_id = request.POST.get('entry_id')
+                entry_id = int(request.POST.get('entry_id'))
                 if not entry_id:
                     raise ValueError('Missing entry id')
-                entry = NetSipEntry.objects.get(id=entry_id)
+                entry = editable_entries.get(id=entry_id)
                 entry.entry_type = entry_type
                 entry.amount = amount
                 entry.date = entry_date

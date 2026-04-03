@@ -324,19 +324,30 @@ def monthly_business_report(request):
     sel_month = int(request.GET.get("month", today.month))
     sel_year = int(request.GET.get("year", today.year))
 
-    products = list(Product.objects.order_by("display_order", "name").values_list("name", flat=True))
-    used_products = list(
-        Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
-        .exclude(product="")
+    approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
+
+    # Show all active products, and include disabled products only if they have sales in the selected month.
+    products = list(
+        Product.objects.filter(is_active=True)
+        .order_by("display_order", "name")
+        .values_list("name", flat=True)
+    )
+
+    used_products = set(
+        approved.exclude(product="")
         .values_list("product", flat=True)
         .distinct()
     )
-    for product_name in used_products:
-        if product_name not in products:
+    used_ref_products = set(
+        approved.filter(product_ref__isnull=False)
+        .values_list("product_ref__name", flat=True)
+        .distinct()
+    )
+
+    for product_name in sorted(used_products | used_ref_products):
+        if product_name and product_name not in products:
             products.append(product_name)
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
-
-    approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
 
     rows = []
     grand = {p: Decimal("0") for p in products}

@@ -30,13 +30,20 @@ if _env_path.is_file():
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("SECRET_KEY", "change-me-in-production")
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
-_default_hosts = ["139.59.28.8", "localhost", "127.0.0.1", "bo.kadlaginvestment.com"]
+# SECURITY WARNING: keep the secret key used in production secret!
+_secret_key = os.environ.get("SECRET_KEY", "").strip()
+if _secret_key:
+    SECRET_KEY = _secret_key
+elif DEBUG:
+    # Dev-only fallback to keep local setup simple.
+    SECRET_KEY = "dev-only-insecure-key-change-me"
+else:
+    raise ValueError("SECRET_KEY environment variable is required when DEBUG=False")
+
+_default_hosts = ["localhost", "127.0.0.1", "bo.kadlaginvestment.com"]
 _env_hosts = os.environ.get("ALLOWED_HOSTS", "")
 if _env_hosts.strip():
     ALLOWED_HOSTS = [h.strip() for h in _env_hosts.split(",") if h.strip()]
@@ -87,7 +94,6 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
-                'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
@@ -96,6 +102,9 @@ TEMPLATES = [
         },
     },
 ]
+
+if DEBUG:
+    TEMPLATES[0]['OPTIONS']['context_processors'].insert(0, 'django.template.context_processors.debug')
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
@@ -108,12 +117,15 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'crmdb'),
         'USER': os.environ.get('DB_USER', 'crmuser'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
+        'PASSWORD': os.environ.get('DB_PASSWORD', '') if DEBUG else os.environ.get('DB_PASSWORD', '').strip(),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
         'CONN_MAX_AGE': 600,  # Reuse DB connections for 10 min (saves reconnect overhead)
     }
 }
+
+if not DEBUG and not DATABASES['default']['PASSWORD']:
+    raise ValueError('DB_PASSWORD environment variable is required when DEBUG=False')
 
 CACHES = {
     "default": {
@@ -233,8 +245,11 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST = True
     SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
     CSRF_COOKIE_SECURE = True
+    CSRF_COOKIE_SAMESITE = "Lax"
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
     X_FRAME_OPTIONS = "DENY"
 
