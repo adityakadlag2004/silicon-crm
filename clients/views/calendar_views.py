@@ -13,6 +13,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 
 from ..models import CalendarEvent, Client, Prospect
+from .helpers import throttle_view
 
 
 @login_required
@@ -180,6 +181,7 @@ def calendar_events_json(request):
 
 
 @login_required
+@throttle_view(max_requests=60, window_seconds=60, key_prefix="calendar.update", json_response=True)
 @require_POST
 def update_calendar_event(request):
     """Handle drag/resize updates from FullCalendar."""
@@ -209,6 +211,7 @@ def update_calendar_event(request):
 
 
 @login_required
+@throttle_view(max_requests=30, window_seconds=60, key_prefix="calendar.create", json_response=True)
 @require_POST
 def create_calendar_event(request):
     """Create a CalendarEvent via AJAX."""
@@ -221,6 +224,14 @@ def create_calendar_event(request):
         notes = data.get("notes") or ""
         related_prospect_id = data.get("related_prospect_id")
         client_id = data.get("client_id")
+        user_employee = getattr(request.user, "employee", None)
+
+        if not user_employee:
+            return JsonResponse({"success": False, "error": "Employee profile not found for user."}, status=403)
+
+        allowed_event_types = {choice[0] for choice in CalendarEvent.EVENT_TYPES}
+        if ev_type not in allowed_event_types:
+            return JsonResponse({"success": False, "error": "Invalid event type."}, status=400)
 
         scheduled_dt = None
         if scheduled_time:
@@ -232,16 +243,23 @@ def create_calendar_event(request):
 
         related_prospect = None
         client = None
+        restrict_to_own_records = not request.user.is_superuser and getattr(user_employee, "role", None) == "employee"
+
         if related_prospect_id:
-            try:
-                related_prospect = Prospect.objects.get(id=related_prospect_id)
-            except Prospect.DoesNotExist:
-                related_prospect = None
+            prospect_qs = Prospect.objects.all()
+            if restrict_to_own_records:
+                prospect_qs = prospect_qs.filter(assigned_to=user_employee)
+            related_prospect = prospect_qs.filter(id=related_prospect_id).first()
+            if related_prospect is None:
+                return JsonResponse({"success": False, "error": "Prospect not found or permission denied."}, status=403)
+
         if client_id:
-            try:
-                client = Client.objects.get(id=client_id)
-            except Exception:
-                client = None
+            client_qs = Client.objects.all()
+            if restrict_to_own_records:
+                client_qs = client_qs.filter(mapped_to=user_employee)
+            client = client_qs.filter(id=client_id).first()
+            if client is None:
+                return JsonResponse({"success": False, "error": "Client not found or permission denied."}, status=403)
 
         end_dt = None
         if end_time:
@@ -250,7 +268,7 @@ def create_calendar_event(request):
                 end_dt = timezone.make_aware(end_dt)
 
         event = CalendarEvent.objects.create(
-            employee=request.user.employee,
+            employee=user_employee,
             title=title,
             type=ev_type,
             notes=notes,
@@ -279,6 +297,7 @@ def create_calendar_event(request):
 
 
 @login_required
+@throttle_view(max_requests=30, window_seconds=60, key_prefix="calendar.delete", json_response=True)
 @require_POST
 def delete_calendar_event(request):
     """Delete a CalendarEvent owned by the requesting employee."""
@@ -301,6 +320,7 @@ def delete_calendar_event(request):
 
 
 @login_required
+@throttle_view(max_requests=30, window_seconds=60, key_prefix="calendar.update_details", json_response=True)
 @require_POST
 def update_calendar_event_details(request):
     """Update title/type/notes/scheduled_time for an existing CalendarEvent."""

@@ -64,10 +64,12 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{ labels_json|json_script:"admin-performance-labels" }}
+{{ totals_json|json_script:"admin-performance-data" }}
 <script>
   (function() {
-    const labels = {{ labels_json|safe }};
-    const data = {{ totals_json|safe }};
+    const labels = JSON.parse(document.getElementById('admin-performance-labels').textContent);
+    const data = JSON.parse(document.getElementById('admin-performance-data').textContent);
     const ctx = document.getElementById('adminPerformanceChart').getContext('2d');
     new Chart(ctx, {
       type: 'bar',

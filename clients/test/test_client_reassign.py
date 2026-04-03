@@ -1,6 +1,6 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
-from app.models import Employee, Client, ClientMappingAudit
+from clients.models import Employee, Client, ClientMappingAudit
 
 User = get_user_model()
 

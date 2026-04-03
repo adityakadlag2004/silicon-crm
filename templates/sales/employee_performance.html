@@ -83,11 +83,15 @@
 
 </div>
 
+{{ days|json_script:"perf-days" }}
+{{ sales_series|json_script:"perf-sales" }}
+{{ calls_series|json_script:"perf-calls" }}
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const days = {{ days|safe }};
-  const sales = {{ sales_series|safe }};
-  const calls = {{ calls_series|safe }};
+  const days = JSON.parse(document.getElementById('perf-days').textContent);
+  const sales = JSON.parse(document.getElementById('perf-sales').textContent);
+  const calls = JSON.parse(document.getElementById('perf-calls').textContent);
 
   const ctx = document.getElementById('trendChart').getContext('2d');
   new Chart(ctx, {
