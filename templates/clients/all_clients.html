@@ -290,6 +290,9 @@
         </td>
         <td>
           <div style="display:flex;gap:0.3rem;">
+            <a href="{% url 'clients:client_profile' client.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="View profile">
+              <i class="bi bi-eye"></i>
+            </a>
             <a href="{% url 'clients:edit_client' client.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="Edit">
               <i class="bi bi-pencil"></i>
             </a>

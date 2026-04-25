@@ -8,6 +8,8 @@ urlpatterns = [
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("clients/<int:client_id>/edit/", views.edit_client, name="edit_client"),
+    path("clients/<int:client_id>/profile/", views.client_profile, name="client_profile"),
+    path("clients/<int:client_id>/drive-folder/", views.client_drive_folder, name="client_drive_folder"),
     
     path("dashboard/admin/", views.admin_dashboard, name="admin_dashboard"),
     path("admin/employees/", views.employee_management, name="employee_management"),

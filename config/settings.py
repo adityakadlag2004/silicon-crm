@@ -43,7 +43,7 @@ elif DEBUG:
 else:
     raise ValueError("SECRET_KEY environment variable is required when DEBUG=False")
 
-_default_hosts = ["localhost", "127.0.0.1", "bo.kadlaginvestment.com"]
+_default_hosts = ["localhost", "127.0.0.1"]
 _env_hosts = os.environ.get("ALLOWED_HOSTS", "")
 if _env_hosts.strip():
     ALLOWED_HOSTS = [h.strip() for h in _env_hosts.split(",") if h.strip()]
@@ -186,8 +186,8 @@ if DEBUG:
     MEDIA_ROOT = BASE_DIR / 'media'
     STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 else:
-    STATIC_ROOT = '/home/ubuntu/silicon-crm/staticfiles/'
-    MEDIA_ROOT = '/home/ubuntu/silicon-crm/media/'
+    STATIC_ROOT = os.environ.get('STATIC_ROOT', str(BASE_DIR / 'staticfiles'))
+    MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'

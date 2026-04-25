@@ -157,10 +157,22 @@ def admin_past_performance(request, n_months=12):
         except (Employee.DoesNotExist, ValueError, TypeError):
             selected_employee = None
 
+    # Chart: always show points history across the full last n_months window
+    # so users see a true "past performance" trend instead of being limited
+    # to whatever months exist in the selected year.
     labels = []
     totals_data = []
-    months_data = []
+    for y, m in months:
+        label = f"{month_name[m]} {y}"
+        sale_filter = {"date__year": y, "date__month": m}
+        if selected_employee:
+            sale_filter["employee"] = selected_employee
+        total_points = Sale.objects.filter(**sale_filter).aggregate(total=Sum("points"))["total"] or 0
+        labels.append(label)
+        totals_data.append(int(total_points))
 
+    # Snapshot cards: keep the year filter so users can drill into a specific year.
+    months_data = []
     for y, m in months_for_year:
         label = f"{month_name[m]} {y}"
         sale_filter = {"date__year": y, "date__month": m}
@@ -170,7 +182,6 @@ def admin_past_performance(request, n_months=12):
         total_points = Sale.objects.filter(**sale_filter).aggregate(total=Sum("points"))["total"] or 0
         total_amount = Sale.objects.filter(**sale_filter).aggregate(total=Sum("amount"))["total"] or 0
 
-        totals_data.append(int(total_points))
         months_data.append({
             "year": y,
             "month": m,
@@ -178,11 +189,10 @@ def admin_past_performance(request, n_months=12):
             "points": int(total_points),
             "amount": float(total_amount),
         })
-        labels.append(label)
 
-    max_points = max(totals_data) if totals_data else 0
+    max_points_snapshot = max((md["points"] for md in months_data), default=0)
     for md in months_data:
-        md["percent_of_max"] = round((md["points"] / max_points) * 100, 1) if max_points else 0
+        md["percent_of_max"] = round((md["points"] / max_points_snapshot) * 100, 1) if max_points_snapshot else 0
 
     latest_year, latest_month = months_for_year[-1] if months_for_year else months[-1]
     top_performers_qs = Sale.objects.filter(date__year=latest_year, date__month=latest_month)
@@ -214,8 +224,8 @@ def admin_past_performance(request, n_months=12):
         })
 
     context = {
-        "labels_json": json.dumps(labels),
-        "totals_json": json.dumps(totals_data),
+        "labels_json": labels,
+        "totals_json": totals_data,
         "months_data": months_data,
         "top_performers": top_performers,
         "latest_month_label": months_data[-1]["label"],
@@ -304,12 +314,58 @@ def admin_past_month_performance(request, year, month):
             "total_amount": float(r.get("total_amount") or 0),
         })
 
+    # Per-product employee breakdown: for each product in this month, list which
+    # employees sold it with their amount/points contribution.
+    per_product_employee_qs = (
+        Sale.objects.filter(date__year=year, date__month=month)
+        .values(
+            "product",
+            "employee__id",
+            "employee__user__username",
+            "employee__user__first_name",
+            "employee__user__last_name",
+        )
+        .annotate(total_amount=Sum("amount"), total_points=Sum("points"))
+        .order_by("product", "-total_points")
+    )
+
+    product_employee_map = {}
+    for r in per_product_employee_qs:
+        prod = r["product"]
+        first = (r.get("employee__user__first_name") or "").strip()
+        last = (r.get("employee__user__last_name") or "").strip()
+        full_name = (first + " " + last).strip() if (first or last) else (r.get("employee__user__username") or "Unknown")
+        product_employee_map.setdefault(prod, []).append({
+            "employee_id": r.get("employee__id"),
+            "username": r.get("employee__user__username") or "",
+            "full_name": full_name,
+            "total_points": int(r.get("total_points") or 0),
+            "total_amount": float(r.get("total_amount") or 0),
+        })
+
+    product_employee_stats = []
+    for p in products:
+        employees_for_prod = product_employee_map.get(p["product"], [])
+        prod_total_points = p["total_points"] or 0
+        for emp_row in employees_for_prod:
+            emp_row["points_share"] = (
+                round((emp_row["total_points"] / prod_total_points) * 100, 1)
+                if prod_total_points else 0
+            )
+        product_employee_stats.append({
+            "product": p["product"],
+            "total_amount": p["total_amount"],
+            "total_points": p["total_points"],
+            "employees": employees_for_prod,
+        })
+
     context = {
         "year": int(year),
         "month": int(month),
         "month_label": f"{month_name[int(month)]} {year}",
         "products": products,
         "top_performers": top_performers,
+        "product_employee_stats": product_employee_stats,
     }
     return render(request, "dashboards/admin_past_month_performance.html", context)
 

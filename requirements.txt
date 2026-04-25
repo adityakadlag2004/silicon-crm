@@ -6,6 +6,8 @@ django-crontab==0.7.1
 django-import-export==4.3.14
 django-select2==8.4.3
 django-widget-tweaks==1.5.0
+google-api-python-client==2.194.0
+google-auth==2.49.2
 phonenumbers==9.0.19
 pillow==12.0.0
 psycopg2-binary==2.9.11

@@ -26,6 +26,7 @@ install_log.txt
 # Environment secrets — NEVER commit
 .env
 .env.*
+secrets/
 
 # VS Code
 .vscode/
