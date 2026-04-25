@@ -364,12 +364,6 @@ def client_profile(request, client_id):
         Client.objects.select_related("mapped_to__user"), id=client_id
     )
 
-    user_emp = getattr(request.user, "employee", None)
-    role = getattr(user_emp, "role", None)
-    is_admin = request.user.is_superuser or role in ("admin", "manager")
-    if not is_admin and user_emp and client.mapped_to_id and client.mapped_to_id != user_emp.id:
-        return HttpResponseForbidden("You can view only your assigned clients.")
-
     sales = (
         Sale.objects.filter(client=client)
         .select_related("employee__user")
@@ -398,11 +392,6 @@ def client_drive_folder(request, client_id):
     Stores the folder id/url on the Client so subsequent clicks are instant.
     """
     client = get_object_or_404(Client, id=client_id)
-    user_emp = getattr(request.user, "employee", None)
-    role = getattr(user_emp, "role", None)
-    is_admin = request.user.is_superuser or role in ("admin", "manager")
-    if not is_admin and user_emp and client.mapped_to_id and client.mapped_to_id != user_emp.id:
-        return HttpResponseForbidden("You can view only your assigned clients.")
 
     if client.drive_folder_url:
         return redirect(client.drive_folder_url)
