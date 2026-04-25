@@ -4762,6 +4762,10 @@ def bulk_reassign_view(request):
     - POST action='load' : show clients belonging to selected source_employee (preview & select)
     - POST action='apply': perform reassign for selected client ids to target_employee
     """
+    emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (emp and emp.role in ("admin", "manager"))):
+        return redirect("clients:employee_dashboard")
+
     employees = Employee.objects.all().select_related('user')
     context = {
         'employees': employees,

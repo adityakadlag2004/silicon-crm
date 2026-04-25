@@ -14,6 +14,7 @@ from django.conf import settings
 
 from ..models import Client, Employee, MessageTemplate, Product, Renewal, Sale
 from ..forms import ClientForm, ClientReassignForm
+from ..services.google_drive import DriveNotConfigured, get_or_create_client_folder
 
 
 PER_PAGE = getattr(settings, "PER_PAGE", 50)
@@ -358,6 +359,70 @@ def edit_client(request, client_id):
 
 
 @login_required
+def client_profile(request, client_id):
+    client = get_object_or_404(
+        Client.objects.select_related("mapped_to__user"), id=client_id
+    )
+
+    user_emp = getattr(request.user, "employee", None)
+    role = getattr(user_emp, "role", None)
+    is_admin = request.user.is_superuser or role in ("admin", "manager")
+    if not is_admin and user_emp and client.mapped_to_id and client.mapped_to_id != user_emp.id:
+        return HttpResponseForbidden("You can view only your assigned clients.")
+
+    sales = (
+        Sale.objects.filter(client=client)
+        .select_related("employee__user")
+        .order_by("-date", "-id")
+    )
+    renewals = (
+        Renewal.objects.filter(client=client)
+        .select_related("employee__user", "product_ref")
+        .order_by("-renewal_date")
+    )
+    sales_summary = sales.aggregate(total_amount=Sum("amount"), total_points=Sum("points"))
+
+    return render(request, "clients/client_profile.html", {
+        "client": client,
+        "sales": sales,
+        "renewals": renewals,
+        "sales_total_amount": sales_summary.get("total_amount") or 0,
+        "sales_total_points": sales_summary.get("total_points") or 0,
+    })
+
+
+@login_required
+def client_drive_folder(request, client_id):
+    """Ensure a Drive folder exists for this client; redirect to it.
+
+    Stores the folder id/url on the Client so subsequent clicks are instant.
+    """
+    client = get_object_or_404(Client, id=client_id)
+    user_emp = getattr(request.user, "employee", None)
+    role = getattr(user_emp, "role", None)
+    is_admin = request.user.is_superuser or role in ("admin", "manager")
+    if not is_admin and user_emp and client.mapped_to_id and client.mapped_to_id != user_emp.id:
+        return HttpResponseForbidden("You can view only your assigned clients.")
+
+    if client.drive_folder_url:
+        return redirect(client.drive_folder_url)
+
+    try:
+        folder_id, folder_url = get_or_create_client_folder(client.name, client.id)
+    except DriveNotConfigured as e:
+        messages.error(request, str(e))
+        return redirect("clients:client_profile", client_id=client.id)
+    except Exception as e:
+        messages.error(request, f"Could not create Drive folder: {e}")
+        return redirect("clients:client_profile", client_id=client.id)
+
+    client.drive_folder_id = folder_id
+    client.drive_folder_url = folder_url
+    client.save(update_fields=["drive_folder_id", "drive_folder_url"])
+    return redirect(folder_url)
+
+
+@login_required
 def search_clients(request):
     query = request.GET.get("q", "")
     clients = Client.objects.filter(
@@ -475,7 +540,11 @@ def client_reassign_view(request, client_id):
 
 @login_required
 def bulk_reassign_view(request):
-    employees = Employee.objects.all().select_related("user")
+    emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (emp and emp.role in ("admin", "manager"))):
+        return redirect("clients:employee_dashboard")
+
+    employees = Employee.objects.filter(active=True).select_related("user")
     context = {
         "employees": employees,
         "clients_preview": None,

@@ -1,10 +1,20 @@
-from django.db import models
-from django.contrib.auth.models import User
+import logging
+import re
+
+from decimal import Decimal
+
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
-from django.db import transaction
-from django.db.models import Max
+from django.db import models, transaction
+from django.db.models import Max, Sum
 from django.utils import timezone
+from django.utils.html import strip_tags
+
+logger = logging.getLogger(__name__)
+
+# Compiled once at module load — used by MessageTemplate.render() for safe variable substitution.
+_TEMPLATE_VAR_RE = re.compile(r'\{\{\s*(\w+)\s*\}\}')
 
 
 class Employee(models.Model):
@@ -101,6 +111,10 @@ class Client(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(null=True, blank=True)
     edited_by = models.ForeignKey('Employee', null=True, blank=True, on_delete=models.SET_NULL, related_name='edited_clients')
+
+    # Google Drive doc-folder (created lazily on first request from the client profile page).
+    drive_folder_id = models.CharField(max_length=100, blank=True, default="")
+    drive_folder_url = models.URLField(max_length=500, blank=True, default="")
 
     def __str__(self):
         return f"{self.id} - {self.name}"
@@ -219,18 +233,16 @@ class Renewal(models.Model):
 
 
 
-# Add these imports at top if not already present
-from decimal import Decimal
-from django.db import models, transaction
-from django.db.models import Sum
-from django.utils import timezone
-
 # ---------- IncentiveRule (configurable in admin) ----------
 class IncentiveRule(models.Model):
     product = models.CharField(max_length=50, unique=True)
     product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="incentive_rules")
-    unit_amount = models.DecimalField(max_digits=14, decimal_places=2,
-                                      help_text="Base unit (e.g., 1000 or 100000)")
+    unit_amount = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        help_text="Base unit (e.g., 1000 or 100000)",
+    )
     points_per_unit = models.DecimalField(max_digits=12, decimal_places=3,
                                           help_text="Points awarded per unit_amount")
     active = models.BooleanField(default=True)
@@ -267,13 +279,6 @@ class IncentiveSlab(models.Model):
     def __str__(self):
         return f"{self.rule.product} – ₹{self.threshold} → {self.payout} pts"
 
-
-from django.db import models
-from decimal import Decimal
-
-from django.db import models
-from django.utils import timezone
-from decimal import Decimal
 
 
 class Sale(models.Model):
@@ -496,7 +501,7 @@ class MonthlyTargetHistory(models.Model):
     month = models.IntegerField()
     target_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     achieved_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
-    points_value = models.IntegerField(default=0)  # ✅ new field
+    points_value = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
 
     class Meta:
         unique_together = ("employee", "product", "year", "month")
@@ -597,8 +602,7 @@ class NetSipEntry(models.Model):
         return f"{self.get_entry_type_display()} ₹{self.amount} on {self.date}"
 
 
-from django.conf import settings
-# Calling and Calender
+# Calling and Calendar
 # Prospect status choices
 STATUS_CHOICES = [
     ("new", "Not Called"),
@@ -857,16 +861,6 @@ class CalendarEvent(models.Model):
         return f"{self.title} ({self.employee})"
 
 
-from django.db import models
-from django.conf import settings
-from django.template import Template, Context
-from django.utils import timezone
-
-# adjust the Employee import/path if your project uses a different app/model
-# from employees.models import Employee
-from django.template import Template, Context
-from django.utils.html import strip_tags
-
 class MessageTemplate(models.Model):
     name = models.CharField(max_length=120)
     content = models.TextField(help_text="Use any placeholders from the Client model like {{ name }}, {{ phone }}, {{ sip_amount }} etc.")
@@ -896,14 +890,15 @@ class MessageTemplate(models.Model):
         if extra_context:
             context_data.update(extra_context)
 
-        # Render safely
+        # Replaces {{ variable }} patterns only — no tag execution, prevents injection.
         try:
-            template = Template(self.content)
-            context = Context(context_data)
-            rendered = template.render(context)
+            rendered = _TEMPLATE_VAR_RE.sub(
+                lambda m: str(context_data.get(m.group(1).strip(), m.group(0))),
+                self.content,
+            )
             return strip_tags(rendered).strip()
         except Exception as e:
-            print("Render error:", e)
+            logger.error("MessageTemplate render error: %s", e)
             return self.content
 
 
@@ -963,7 +958,7 @@ class FirmSettings(models.Model):
     Singleton model to store firm/company details for branding in reports and documents.
     Only one instance should exist.
     """
-    firm_name = models.CharField(max_length=200, default="Kadlag Investment")
+    firm_name = models.CharField(max_length=200, default="")
     address = models.TextField(blank=True, help_text="Firm address")
     email = models.EmailField(blank=True, help_text="Contact email")
     phone = models.CharField(max_length=20, blank=True, help_text="Contact phone number")

@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}{{ client.name }} — Profile{% endblock %}
+{% block page_title %}Client Profile{% endblock %}
+
+{% block extra_css %}
+<style>
+  .profile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .profile-identity { display: flex; align-items: center; gap: 0.9rem; }
+  .profile-avatar {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--ki-primary-pale); color: var(--ki-primary);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 1.4rem;
+  }
+  .profile-name { font-size: 1.4rem; font-weight: 700; color: var(--ki-text-primary); margin: 0; }
+  .profile-sub { color: var(--ki-text-muted); font-size: 0.88rem; margin-top: 0.15rem; }
+
+  .profile-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+  .profile-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 1rem;
+  }
+  @media (max-width: 900px) { .profile-grid { grid-template-columns: 1fr; } }
+
+  .info-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 0.5rem;
+    padding: 0.45rem 0;
+    border-bottom: 1px dashed var(--ki-card-border);
+  }
+  .info-row:last-child { border-bottom: 0; }
+  .info-label { color: var(--ki-text-muted); font-size: 0.85rem; }
+  .info-value { color: var(--ki-text-primary); font-weight: 500; }
+
+  .product-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+  .product-card {
+    background: var(--ki-body-bg);
+    border: 1px solid var(--ki-card-border);
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+  }
+  .product-card .pc-title { font-weight: 600; color: var(--ki-text-primary); display: flex; align-items: center; gap: 0.4rem; }
+  .product-card .pc-sub { color: var(--ki-text-muted); font-size: 0.82rem; margin-top: 0.25rem; }
+  .status-pill { font-size: 0.72rem; font-weight: 600; padding: 0.12rem 0.55rem; border-radius: 12px; }
+  .status-yes { background: #dcfce7; color: #166534; }
+  .status-no { background: #f1f5f9; color: #475569; }
+
+  .drive-card {
+    background: linear-gradient(135deg, var(--ki-primary-pale), #ffffff);
+    border: 1px solid var(--ki-card-border);
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+  }
+  .drive-card .dc-title { font-weight: 700; color: var(--ki-text-primary); display: flex; align-items: center; gap: 0.4rem; }
+  .drive-card .dc-sub { color: var(--ki-text-muted); font-size: 0.85rem; margin-top: 0.3rem; margin-bottom: 0.7rem; }
+
+  .mini-table { width: 100%; border-collapse: collapse; }
+  .mini-table th, .mini-table td { padding: 0.45rem 0.5rem; text-align: left; font-size: 0.87rem; border-bottom: 1px solid var(--ki-card-border); }
+  .mini-table th { color: var(--ki-text-muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .text-right { text-align: right; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="profile-header">
+  <div class="profile-identity">
+    <div class="profile-avatar">{{ client.name|slice:":1"|upper }}</div>
+    <div>
+      <h2 class="profile-name">{{ client.name }}</h2>
+      <div class="profile-sub">
+        Client #{{ client.id }}
+        {% if client.mapped_to %}
+          · Mapped to <strong>{{ client.mapped_to.user.get_full_name|default:client.mapped_to.user.username }}</strong>
+        {% else %}
+          · <span style="color:var(--ki-warning);">Unmapped</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  <div class="profile-actions">
+    <a href="{% url 'clients:all_clients' %}" class="ki-btn ki-btn-secondary ki-btn-sm">
+      <i class="bi bi-arrow-left"></i> Back
+    </a>
+    <a href="{% url 'clients:edit_client' client.id %}" class="ki-btn ki-btn-primary ki-btn-sm">
+      <i class="bi bi-pencil"></i> Edit
+    </a>
+    <a href="{% url 'clients:map_client' client.id %}" class="ki-btn ki-btn-secondary ki-btn-sm">
+      <i class="bi bi-diagram-3"></i> Map
+    </a>
+  </div>
+</div>
+
+{% if messages %}
+  {% for m in messages %}
+    <div class="ki-card" style="border-left:4px solid var(--ki-danger);margin-bottom:0.75rem;">
+      <div style="color:var(--ki-danger);font-size:0.9rem;">{{ m }}</div>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="profile-grid">
+  <!-- LEFT COLUMN -->
+  <div>
+    <div class="ki-card">
+      <h3 class="ki-section-title" style="margin-top:0;">Basic Info</h3>
+      <div class="info-row"><span class="info-label">Email</span><span class="info-value">{{ client.email|default:"—" }}</span></div>
+      <div class="info-row"><span class="info-label">Phone</span><span class="info-value">{{ client.phone|default:"—" }}</span></div>
+      <div class="info-row"><span class="info-label">PAN</span><span class="info-value">{{ client.pan|default:"—" }}</span></div>
+      <div class="info-row"><span class="info-label">Date of Birth</span><span class="info-value">{{ client.date_of_birth|date:"d M Y"|default:"—" }}</span></div>
+      <div class="info-row"><span class="info-label">Address</span><span class="info-value">{{ client.address|default:"—"|linebreaksbr }}</span></div>
+      <div class="info-row"><span class="info-label">Status</span><span class="info-value">{{ client.status }}</span></div>
+      <div class="info-row"><span class="info-label">Added</span><span class="info-value">{{ client.created_at|date:"d M Y" }}</span></div>
+    </div>
+
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;">Portfolio</h3>
+      <div class="product-section">
+        <div class="product-card">
+          <div class="pc-title"><i class="bi bi-piggy-bank"></i> SIP
+            <span class="status-pill {% if client.sip_status %}status-yes{% else %}status-no{% endif %}">{% if client.sip_status %}Yes{% else %}No{% endif %}</span>
+          </div>
+          <div class="pc-sub">
+            {% if client.sip_amount %}Amount: ₹{{ client.sip_amount|floatformat:0 }}{% if client.sip_topup %} · Topup: ₹{{ client.sip_topup|floatformat:0 }}{% endif %}{% else %}—{% endif %}
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="pc-title"><i class="bi bi-cash-stack"></i> Lumpsum</div>
+          <div class="pc-sub">{% if client.lumsum_investment %}₹{{ client.lumsum_investment|floatformat:0 }}{% else %}—{% endif %}</div>
+        </div>
+        <div class="product-card">
+          <div class="pc-title"><i class="bi bi-heart-pulse"></i> Health
+            <span class="status-pill {% if client.health_status %}status-yes{% else %}status-no{% endif %}">{% if client.health_status %}Yes{% else %}No{% endif %}</span>
+          </div>
+          <div class="pc-sub">
+            {% if client.health_cover %}Cover: ₹{{ client.health_cover|floatformat:0 }}{% endif %}
+            {% if client.health_product %} · {{ client.health_product }}{% endif %}
+            {% if not client.health_cover and not client.health_product %}—{% endif %}
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="pc-title"><i class="bi bi-shield-check"></i> Life
+            <span class="status-pill {% if client.life_status %}status-yes{% else %}status-no{% endif %}">{% if client.life_status %}Yes{% else %}No{% endif %}</span>
+          </div>
+          <div class="pc-sub">
+            {% if client.life_cover %}Cover: ₹{{ client.life_cover|floatformat:0 }}{% endif %}
+            {% if client.life_product %} · {{ client.life_product }}{% endif %}
+            {% if not client.life_cover and not client.life_product %}—{% endif %}
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="pc-title"><i class="bi bi-car-front"></i> Motor
+            <span class="status-pill {% if client.motor_status %}status-yes{% else %}status-no{% endif %}">{% if client.motor_status %}Yes{% else %}No{% endif %}</span>
+          </div>
+          <div class="pc-sub">
+            {% if client.motor_insured_value %}Insured: ₹{{ client.motor_insured_value|floatformat:0 }}{% endif %}
+            {% if client.motor_product %} · {{ client.motor_product }}{% endif %}
+            {% if not client.motor_insured_value and not client.motor_product %}—{% endif %}
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="pc-title"><i class="bi bi-briefcase"></i> PMS
+            <span class="status-pill {% if client.pms_status %}status-yes{% else %}status-no{% endif %}">{% if client.pms_status %}Yes{% else %}No{% endif %}</span>
+          </div>
+          <div class="pc-sub">
+            {% if client.pms_amount %}Amount: ₹{{ client.pms_amount|floatformat:0 }}{% endif %}
+            {% if client.pms_start_date %} · Started {{ client.pms_start_date|date:"d M Y" }}{% endif %}
+            {% if not client.pms_amount and not client.pms_start_date %}—{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;">Sales ({{ sales|length }})</h3>
+      {% if sales %}
+        <div style="overflow-x:auto;">
+          <table class="mini-table">
+            <thead><tr><th>Date</th><th>Product</th><th>Employee</th><th class="text-right">Amount</th><th class="text-right">Points</th><th>Status</th></tr></thead>
+            <tbody>
+              {% for s in sales %}
+                <tr>
+                  <td>{{ s.date|date:"d M Y" }}</td>
+                  <td>{{ s.product_name_snapshot|default:s.product }}</td>
+                  <td>{{ s.employee.user.get_full_name|default:s.employee.user.username }}</td>
+                  <td class="text-right">₹{{ s.amount|floatformat:0 }}</td>
+                  <td class="text-right">{{ s.points|floatformat:0 }}</td>
+                  <td><span class="status-pill {% if s.status == 'approved' %}status-yes{% else %}status-no{% endif %}">{{ s.status|capfirst }}</span></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr style="background:var(--ki-body-bg);font-weight:600;">
+                <td colspan="3">Total</td>
+                <td class="text-right">₹{{ sales_total_amount|floatformat:0 }}</td>
+                <td class="text-right">{{ sales_total_points|floatformat:0 }}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">No sales recorded for this client.</p>
+      {% endif %}
+    </div>
+
+    {% if renewals %}
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;">Renewals ({{ renewals|length }})</h3>
+      <div style="overflow-x:auto;">
+        <table class="mini-table">
+          <thead><tr><th>Next Renewal</th><th>Product</th><th>Frequency</th><th class="text-right">Premium</th><th>Collected</th></tr></thead>
+          <tbody>
+            {% for r in renewals %}
+              <tr>
+                <td>{{ r.renewal_date|date:"d M Y" }}</td>
+                <td>{{ r.product_ref.name|default:r.product_name }}</td>
+                <td>{{ r.frequency|capfirst }}</td>
+                <td class="text-right">₹{{ r.premium_amount|floatformat:0 }}</td>
+                <td>{{ r.premium_collected_on|date:"d M Y" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div>
+    <div class="drive-card">
+      <div class="dc-title"><i class="bi bi-folder2-open" style="color:var(--ki-primary);"></i> Document Folder</div>
+      <div class="dc-sub">Google Drive folder for this client — upload KYC, policies, statements and any documents you need to keep handy.</div>
+      {% if client.drive_folder_url %}
+        <a href="{% url 'clients:client_drive_folder' client.id %}" target="_blank" rel="noopener" class="ki-btn ki-btn-primary ki-btn-sm">
+          <i class="bi bi-folder-symlink"></i> Open Drive Folder
+        </a>
+        <div class="dc-sub" style="margin-top:0.5rem;margin-bottom:0;">Opens in a new tab.</div>
+      {% else %}
+        <a href="{% url 'clients:client_drive_folder' client.id %}" target="_blank" rel="noopener" class="ki-btn ki-btn-primary ki-btn-sm">
+          <i class="bi bi-folder-plus"></i> Create Drive Folder
+        </a>
+        <div class="dc-sub" style="margin-top:0.5rem;margin-bottom:0;">
+          Creates a subfolder under "All Clients" and opens it. One-time per client.
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;">Activity</h3>
+      <div class="info-row"><span class="info-label">Total Invested</span><span class="info-value">₹{{ sales_total_amount|floatformat:0 }}</span></div>
+      <div class="info-row"><span class="info-label">Total Points</span><span class="info-value">{{ sales_total_points|floatformat:0 }}</span></div>
+      <div class="info-row"><span class="info-label">Last edit</span><span class="info-value">{{ client.edited_at|date:"d M Y"|default:"—" }}{% if client.edited_by %} by {{ client.edited_by.user.username }}{% endif %}</span></div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

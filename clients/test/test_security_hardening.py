@@ -149,3 +149,17 @@ class SecurityHardeningTests(TestCase):
         )
 
         self.assertEqual(throttled.status_code, 429)
+
+    def test_employee_cannot_bulk_reassign(self):
+        """Plain employees must be redirected away from the bulk reassign view."""
+        user, _emp = self._create_user_with_employee("plain_employee", role="employee")
+        self.client.login(username="plain_employee", password="pass123")
+        response = self.client.post(reverse("clients:bulk_reassign"), follow=True)
+        self.assertRedirects(response, reverse("clients:employee_dashboard"))
+
+    def test_manager_can_access_bulk_reassign(self):
+        """Managers should be allowed through the bulk reassign view."""
+        user, _emp = self._create_user_with_employee("mgr_user", role="manager")
+        self.client.login(username="mgr_user", password="pass123")
+        response = self.client.get(reverse("clients:bulk_reassign"))
+        self.assertEqual(response.status_code, 200)
