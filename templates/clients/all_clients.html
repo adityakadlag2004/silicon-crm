@@ -77,18 +77,51 @@
     color: var(--ki-primary);
   }
 
-  /* Advanced filters */
+  /* Compact filter toolbar */
+  .adv-badge {
+    display: inline-flex !important;
+    align-items: center; justify-content: center;
+    min-width: 18px; height: 18px;
+    padding: 0 5px;
+    margin-left: 4px;
+    border-radius: 9px;
+    background: var(--ki-primary, #d97706);
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
   .adv-filters {
     display: none;
-    padding-top: 0.75rem;
-    margin-top: 0.75rem;
+    padding-top: 0.85rem;
+    margin-top: 0.85rem;
     border-top: 1px solid var(--ki-card-border);
   }
   .adv-filters.open { display: block; }
   .adv-filters-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 0.6rem;
+  }
+  .adv-product {
+    background: var(--ki-body-bg);
+    border: 1px solid var(--ki-card-border);
+    border-radius: 8px;
+    padding: 0.5rem 0.65rem;
+  }
+  .adv-product-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ki-text-secondary);
+    margin-bottom: 0.35rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .adv-product-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 80px;
+    gap: 0.35rem;
   }
 
   /* Product mini-badge */
@@ -167,26 +200,23 @@
 </div>
 
 <!-- Search & Filters Card -->
+{# Count active "more" filters so we can show a badge on the toggle button #}
+{% with adv_count=0 %}
+  {% for meta in product_filters %}
+    {% if meta.status_value or meta.min_value or meta.max_value %}{% with adv_count=adv_count|add:1 %}{% endwith %}{% endif %}
+  {% endfor %}
+{% endwith %}
 <div class="ki-card mb-3">
   <form method="get" id="filterForm">
-    <!-- Keep sort param -->
     <input type="hidden" name="sort" id="sortInput" value="{{ sort }}">
 
     <div class="clients-search-row">
-      <div class="search-input-wrap">
+      <div class="search-input-wrap" style="flex:1;min-width:280px;">
         <i class="bi bi-search"></i>
-        <input type="text" name="q" class="form-control" placeholder="Search by name, email, phone, or PAN..." value="{{ q }}" autocomplete="off">
+        <input type="text" name="q" class="form-control" placeholder="Search name, email, phone, or PAN…" value="{{ q }}" autocomplete="off">
       </div>
 
-      {% for meta in product_filters %}
-      <select name="{{ meta.status_param }}" class="form-select filter-select">
-        <option value="">{{ meta.product.name }}: All</option>
-        <option value="yes" {% if meta.status_value == "yes" %}selected{% endif %}>{{ meta.product.name }}: Yes</option>
-        <option value="no" {% if meta.status_value == "no" %}selected{% endif %}>{{ meta.product.name }}: No</option>
-      </select>
-      {% endfor %}
-
-      <select name="mapped_to" class="form-select filter-select" style="min-width:160px;">
+      <select name="mapped_to" class="form-select filter-select" style="min-width:170px;">
         <option value="">Mapped To: All</option>
         <option value="unmapped" {% if mapped_to_id == "unmapped" %}selected{% endif %}>Unmapped</option>
         {% for emp in employees %}
@@ -196,22 +226,28 @@
         {% endfor %}
       </select>
 
-      <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel-fill"></i> Filter</button>
+      <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel-fill"></i> Apply</button>
       <a href="{% url 'clients:all_clients' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-x-circle"></i> Reset</a>
-      <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" id="advToggle"><i class="bi bi-sliders"></i> More</button>
+      <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" id="advToggle">
+        <i class="bi bi-sliders"></i> Filters <span id="advCount" class="adv-badge" style="display:none;">0</span>
+      </button>
     </div>
 
-    <!-- Advanced Filters -->
+    <!-- Collapsible filters: per-product status + amount ranges -->
     <div class="adv-filters" id="advFilters">
       <div class="adv-filters-grid">
         {% for meta in product_filters %}
-        <div>
-          <label class="form-label">{{ meta.product.name }} Min</label>
-          <input type="number" name="{{ meta.min_param }}" class="form-control form-control-sm" value="{{ meta.min_value|default:'' }}">
-        </div>
-        <div>
-          <label class="form-label">{{ meta.product.name }} Max</label>
-          <input type="number" name="{{ meta.max_param }}" class="form-control form-control-sm" value="{{ meta.max_value|default:'' }}">
+        <div class="adv-product">
+          <div class="adv-product-name">{{ meta.product.name }}</div>
+          <div class="adv-product-row">
+            <select name="{{ meta.status_param }}" class="form-select form-select-sm">
+              <option value="">Has: All</option>
+              <option value="yes" {% if meta.status_value == "yes" %}selected{% endif %}>Has: Yes</option>
+              <option value="no"  {% if meta.status_value == "no" %}selected{% endif %}>Has: No</option>
+            </select>
+            <input type="number" name="{{ meta.min_param }}" class="form-control form-control-sm" placeholder="Min" value="{{ meta.min_value|default:'' }}">
+            <input type="number" name="{{ meta.max_param }}" class="form-control form-control-sm" placeholder="Max" value="{{ meta.max_value|default:'' }}">
+          </div>
         </div>
         {% endfor %}
       </div>
@@ -369,24 +405,27 @@
 
 <script>
 (function(){
-  // ── Advanced filters toggle ──
+  // ── Compact filter toggle + active-count badge ──
   const advToggle = document.getElementById('advToggle');
   const advFilters = document.getElementById('advFilters');
+  const advBadge   = document.getElementById('advCount');
   if (advToggle && advFilters) {
-    // Auto-open if any adv filter has a value
-    const hasAdv = advFilters.querySelectorAll('input, select');
-    let anyFilled = false;
-    hasAdv.forEach(el => {
-      if (el.value && el.value.trim()) anyFilled = true;
-    });
-    if (anyFilled) advFilters.classList.add('open');
+    const fields = advFilters.querySelectorAll('input, select');
+    let activeCount = 0;
+    fields.forEach(el => { if (el.value && el.value.trim()) activeCount++; });
+
+    if (advBadge) {
+      if (activeCount > 0) {
+        advBadge.textContent = activeCount;
+        advBadge.style.display = 'inline-flex';
+      } else {
+        advBadge.style.display = 'none';
+      }
+    }
+    if (activeCount > 0) advFilters.classList.add('open');
 
     advToggle.addEventListener('click', function(){
       advFilters.classList.toggle('open');
-      const isOpen = advFilters.classList.contains('open');
-      this.innerHTML = isOpen
-        ? '<i class="bi bi-sliders"></i> Less'
-        : '<i class="bi bi-sliders"></i> More';
     });
   }
 

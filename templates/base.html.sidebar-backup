@@ -1,0 +1,575 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{% block title %}Dashboard{% endblock %} — Kadlag Investment BO</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#E5B740" />
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    <link rel="apple-touch-icon" href="{% static 'icons/icon-192.png' %}">
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+    <!-- Select2 CSS -->
+    <link href="{% static 'django_select2/django_select2.css' %}" rel="stylesheet"/>
+    <!-- KI Design System -->
+    <link href="{% static 'css/ki-design-system.css' %}" rel="stylesheet" />
+    <style>
+      .ki-sidebar-section {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .ki-sidebar-section .section-chevron {
+        font-size: 0.75rem;
+        opacity: 0.75;
+        transition: transform 0.2s ease;
+      }
+
+      .ki-sidebar-section.collapsed .section-chevron {
+        transform: rotate(-90deg);
+      }
+    </style>
+    {% block extra_css %}{% endblock %}
+  </head>
+  <body>
+    <div class="ki-app">
+      <!-- Sidebar Overlay (mobile) -->
+      <div class="ki-sidebar-overlay" id="sidebarOverlay"></div>
+
+      <!-- Sidebar -->
+      <aside class="ki-sidebar" id="kiSidebar">
+        <div class="ki-sidebar-brand">
+          <div class="ki-sidebar-brand-icon">KI</div>
+          <div class="ki-sidebar-brand-text">Kadlag Investment BO</div>
+          <button class="ki-sidebar-collapse-btn" id="sidebarCollapseBtn" title="Collapse sidebar">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+        </div>
+
+        <nav class="ki-sidebar-nav">
+          {% if request.user.is_authenticated %}
+
+            {# ─── ADMIN SIDEBAR ─── #}
+            {% if request.user.employee.role == "admin" %}
+
+              <a class="ki-sidebar-item" href="{% url 'clients:admin_dashboard' %}">
+                <i class="bi bi-grid-1x2-fill"></i> <span>Dashboard</span>
+              </a>
+
+              <div class="ki-sidebar-section">Clients</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_clients' %}">
+                <i class="bi bi-people-fill"></i> <span>All Clients</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_client' %}">
+                <i class="bi bi-person-plus-fill"></i> <span>Add Client</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:bulk_reassign' %}">
+                <i class="bi bi-arrow-left-right"></i> <span>Bulk Reassign</span>
+              </a>
+
+              <div class="ki-sidebar-section">Sales</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
+                <i class="bi bi-receipt"></i> <span>All Sales</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
+                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:admin_add_sale' %}">
+                <i class="bi bi-plus-circle-fill"></i> <span>Add Sale</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
+                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:approve_sales' %}">
+                <i class="bi bi-check-circle-fill"></i> <span>Approve Sales</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:manage_incentive_rules' %}">
+                <i class="bi bi-trophy-fill"></i> <span>Incentive Rules</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:recalc_points' %}">
+                <i class="bi bi-calculator-fill"></i> <span>Recalculate Points</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:client_analysis' %}">
+                <i class="bi bi-pie-chart-fill"></i> <span>Client Analysis</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:financial_planner' %}">
+                <i class="bi bi-calculator"></i> <span>Financial Planner</span>
+              </a>
+              <div class="ki-sidebar-section">Calling</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:upload_list' %}">
+                <i class="bi bi-cloud-upload-fill"></i> <span>Upload List</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:admin_lists' %}">
+                <i class="bi bi-telephone-fill"></i> <span>Manage Lists</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:calling_list_generator' %}">
+                <i class="bi bi-list-task"></i> <span>List Generator</span>
+              </a>
+
+              <div class="ki-sidebar-section">Business Tracking</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:admin_past_performance' %}">
+                <i class="bi bi-graph-up-arrow"></i> <span>Past Performance</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:net_business' %}">
+                <i class="bi bi-cash-stack"></i> <span>Net Business</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:net_sip' %}">
+                <i class="bi bi-arrow-repeat"></i> <span>Net SIP</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:monthly_business_report' %}">
+                <i class="bi bi-file-earmark-text-fill"></i> <span>Monthly Report</span>
+              </a>
+
+              <div class="ki-sidebar-section">Team</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:team_list' %}">
+                <i class="bi bi-people-fill"></i> <span>All Members</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:team_list' %}?add=1">
+                <i class="bi bi-person-plus-fill"></i> <span>Add Member</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:employee_management' %}">
+                <i class="bi bi-shield-lock-fill"></i> <span>Manager Rights</span>
+              </a>
+
+              <div class="ki-sidebar-section">Settings</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:firm_settings' %}">
+                <i class="bi bi-building-gear"></i> <span>Firm Settings</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:product_management' %}">
+                <i class="bi bi-box-seam"></i> <span>Product Management</span>
+              </a>
+
+              <div class="ki-sidebar-section">Leads</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:lead_management' %}">
+                <i class="bi bi-funnel-fill"></i> <span>Lead Management</span>
+              </a>
+
+            {# ─── MANAGER SIDEBAR ─── #}
+            {% elif request.user.employee.role == "manager" %}
+
+              <a class="ki-sidebar-item" href="{% url 'clients:employee_dashboard' %}">
+                <i class="bi bi-grid-1x2-fill"></i> <span>Dashboard</span>
+              </a>
+
+              <div class="ki-sidebar-section">Clients</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_clients' %}">
+                <i class="bi bi-people-fill"></i> <span>All Clients</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:my_clients' %}">
+                <i class="bi bi-person-check-fill"></i> <span>My Clients</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_client' %}">
+                <i class="bi bi-person-plus-fill"></i> <span>Add Client</span>
+              </a>
+
+              <div class="ki-sidebar-section">Sales</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_sale' %}">
+                <i class="bi bi-plus-circle-fill"></i> <span>Add Sale</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
+                <i class="bi bi-receipt"></i> <span>All Sales</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
+                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
+                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
+              </a>
+              {% if manager_access.allow_approve_sales %}
+              <a class="ki-sidebar-item" href="{% url 'clients:approve_sales' %}">
+                <i class="bi bi-check-circle-fill"></i> <span>Approve Sales</span>
+              </a>
+              {% endif %}
+              {% if manager_access.allow_manage_incentives %}
+              <a class="ki-sidebar-item" href="{% url 'clients:manage_incentive_rules' %}">
+                <i class="bi bi-trophy-fill"></i> <span>Incentive Rules</span>
+              </a>
+              {% endif %}
+              {% if manager_access.allow_recalc_points %}
+              <a class="ki-sidebar-item" href="{% url 'clients:recalc_points' %}">
+                <i class="bi bi-calculator-fill"></i> <span>Recalculate Points</span>
+              </a>
+              {% endif %}
+              {% if manager_access.allow_client_analysis %}
+              <a class="ki-sidebar-item" href="{% url 'clients:client_analysis' %}">
+                <i class="bi bi-pie-chart-fill"></i> <span>Client Analysis</span>
+              </a>
+              {% endif %}
+              {% if manager_access.allow_employee_performance %}
+              <a class="ki-sidebar-item" href="{% url 'clients:admin_past_performance' %}">
+                <i class="bi bi-graph-up-arrow"></i> <span>Past Performance</span>
+              </a>
+              {% endif %}
+              <a class="ki-sidebar-item" href="{% url 'clients:financial_planner' %}">
+                <i class="bi bi-calculator"></i> <span>Financial Planner</span>
+              </a>
+
+              <div class="ki-sidebar-section">Calling</div>
+              {% if manager_access.allow_calling_admin %}
+              <a class="ki-sidebar-item" href="{% url 'clients:upload_list' %}">
+                <i class="bi bi-cloud-upload-fill"></i> <span>Upload List</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:admin_lists' %}">
+                <i class="bi bi-telephone-fill"></i> <span>Manage Lists</span>
+              </a>
+              {% else %}
+              <a class="ki-sidebar-item" href="{% url 'clients:employee_lists' %}">
+                <i class="bi bi-telephone-fill"></i> <span>My Calling Lists</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:employee_calendar' %}">
+                <i class="bi bi-calendar-event-fill"></i> <span>My Calendar</span>
+              </a>
+              {% endif %}
+              <a class="ki-sidebar-item" href="{% url 'clients:calling_list_generator' %}">
+                <i class="bi bi-list-task"></i> <span>List Generator</span>
+              </a>
+
+              {% if manager_access.allow_business_tracking %}
+              <div class="ki-sidebar-section">Business Tracking</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:admin_past_performance' %}">
+                <i class="bi bi-graph-up-arrow"></i> <span>Business Tracking</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:net_business' %}">
+                <i class="bi bi-cash-stack"></i> <span>Net Business</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:net_sip' %}">
+                <i class="bi bi-arrow-repeat"></i> <span>Net SIP</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:monthly_business_report' %}">
+                <i class="bi bi-file-earmark-text-fill"></i> <span>Monthly Report</span>
+              </a>
+              {% endif %}
+
+              {% if manager_access.allow_lead_management %}
+              <div class="ki-sidebar-section">Leads</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:lead_management' %}">
+                <i class="bi bi-funnel-fill"></i> <span>Lead Management</span>
+              </a>
+              {% endif %}
+
+            {# ─── EMPLOYEE SIDEBAR ─── #}
+            {% elif request.user.employee.role == "employee" %}
+
+              <a class="ki-sidebar-item" href="{% url 'clients:employee_dashboard' %}">
+                <i class="bi bi-grid-1x2-fill"></i> <span>Dashboard</span>
+              </a>
+
+              <div class="ki-sidebar-section">Clients</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_clients' %}">
+                <i class="bi bi-people-fill"></i> <span>All Clients</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:my_clients' %}">
+                <i class="bi bi-person-check-fill"></i> <span>My Clients</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_client' %}">
+                <i class="bi bi-person-plus-fill"></i> <span>Add Client</span>
+              </a>
+
+              <div class="ki-sidebar-section">Sales</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_sale' %}">
+                <i class="bi bi-plus-circle-fill"></i> <span>Add Sale</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
+                <i class="bi bi-receipt"></i> <span>All Sales</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
+                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
+                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:recalc_points' %}">
+                <i class="bi bi-calculator-fill"></i> <span>Recalculate Points</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:client_analysis' %}">
+                <i class="bi bi-pie-chart-fill"></i> <span>Client Analysis</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:financial_planner' %}">
+                <i class="bi bi-calculator"></i> <span>Financial Planner</span>
+              </a>
+              <div class="ki-sidebar-section">Calling</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:employee_lists' %}">
+                <i class="bi bi-telephone-fill"></i> <span>My Calling Lists</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:employee_calendar' %}">
+                <i class="bi bi-calendar-event-fill"></i> <span>My Calendar</span>
+              </a>
+              <a class="ki-sidebar-item" href="{% url 'clients:calling_list_generator' %}">
+                <i class="bi bi-list-task"></i> <span>List Generator</span>
+              </a>
+
+              <div class="ki-sidebar-section">Leads</div>
+              <a class="ki-sidebar-item" href="{% url 'clients:lead_management' %}">
+                <i class="bi bi-funnel-fill"></i> <span>Lead Management</span>
+              </a>
+
+            {% endif %}
+          {% endif %}
+        </nav>
+      </aside>
+
+      <!-- Main Content Area -->
+      <div class="ki-main">
+        <!-- Top Bar -->
+        <header class="ki-topbar">
+          <div class="ki-topbar-left">
+            <button class="ki-topbar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+              <i class="bi bi-list"></i>
+            </button>
+            <div class="ki-breadcrumb">
+              <strong>{% block page_title %}Dashboard{% endblock %}</strong>
+            </div>
+          </div>
+          <div class="ki-topbar-right">
+            {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
+            <button class="ki-topbar-btn" type="button" data-bs-toggle="modal" data-bs-target="#notificationsModal" title="Notifications">
+              <i class="bi bi-bell-fill"></i>
+              <span class="ki-topbar-badge" id="nav-unread">0</span>
+            </button>
+            {% endif %}
+            <div class="ki-topbar-user">
+              <i class="bi bi-person-circle"></i>
+              <span>{{ request.user.username }}</span>
+            </div>
+            <a href="{% url 'clients:logout' %}" class="ki-btn-logout" title="Logout">
+              <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
+            </a>
+          </div>
+        </header>
+
+        <!-- Page Content -->
+        <div class="ki-content">
+          {% if messages %}
+            {% for message in messages %}
+              <div class="ki-alert {% if message.level_tag == 'error' %}ki-alert-danger{% elif message.level_tag == 'success' %}ki-alert-success{% elif message.level_tag == 'warning' %}ki-alert-warning{% else %}ki-alert-info{% endif %}">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+          {% block content %}{% endblock %}
+        </div>
+      </div>
+    </div>
+
+    {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
+    <!-- Notifications Modal -->
+    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+          <div class="ki-modal-header modal-header">
+            <h5 class="modal-title">Notifications</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="modal-notes-body" style="max-height:60vh; overflow-y:auto;">
+            <p class="text-muted mb-0">Loading…</p>
+          </div>
+          <div class="modal-footer">
+            <button class="ki-btn ki-btn-secondary ki-btn-sm" id="btn-mark-read">Mark all read</button>
+            <button class="ki-btn ki-btn-danger ki-btn-sm" id="btn-clear-notes">Clear all</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('{% static "js/sw.js" %}');
+        });
+      }
+    </script>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Select2 JS -->
+    <script src="{% static 'django_select2/django_select2.js' %}"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+
+    <!-- Sidebar Toggle Script -->
+    <script>
+    (function() {
+      const app     = document.querySelector('.ki-app');
+      const sidebar = document.getElementById('kiSidebar');
+      const overlay = document.getElementById('sidebarOverlay');
+      const toggle  = document.getElementById('sidebarToggle');
+      const colBtn  = document.getElementById('sidebarCollapseBtn');
+      const MOBILE  = 1024;
+
+      // ── Mobile open/close ──
+      function openSidebar()  { sidebar.classList.add('show'); overlay.classList.add('show'); overlay.style.display = 'block'; document.body.style.overflow = 'hidden'; }
+      function closeSidebar() { sidebar.classList.remove('show'); overlay.classList.remove('show'); setTimeout(() => { overlay.style.display = 'none'; }, 300); document.body.style.overflow = ''; }
+
+      // ── Desktop collapse/expand ──
+      function collapseSidebar() {
+        sidebar.classList.add('collapsed');
+        app.classList.add('sidebar-collapsed');
+        localStorage.setItem('ki-sidebar-collapsed', '1');
+      }
+      function expandSidebar() {
+        sidebar.classList.remove('collapsed');
+        app.classList.remove('sidebar-collapsed');
+        localStorage.setItem('ki-sidebar-collapsed', '0');
+      }
+
+      // Restore saved state on desktop
+      if (window.innerWidth > MOBILE && localStorage.getItem('ki-sidebar-collapsed') === '1') {
+        collapseSidebar();
+      }
+
+      // Top-bar hamburger: mobile=slide, desktop=collapse
+      toggle && toggle.addEventListener('click', function() {
+        if (window.innerWidth <= MOBILE) {
+          if (sidebar.classList.contains('show')) closeSidebar(); else openSidebar();
+        } else {
+          if (sidebar.classList.contains('collapsed')) expandSidebar(); else collapseSidebar();
+        }
+      });
+
+      // Sidebar chevron collapse button (desktop only)
+      colBtn && colBtn.addEventListener('click', function() {
+        if (sidebar.classList.contains('collapsed')) expandSidebar(); else collapseSidebar();
+      });
+
+      overlay && overlay.addEventListener('click', closeSidebar);
+
+      // Add data-tooltip attributes to sidebar items for collapsed hover labels
+      document.querySelectorAll('.ki-sidebar-item').forEach(function(item) {
+        const span = item.querySelector('span');
+        if (span) item.setAttribute('data-tooltip', span.textContent.trim());
+      });
+
+      // Highlight active sidebar item
+      const currentPath = window.location.pathname;
+      document.querySelectorAll('.ki-sidebar-item').forEach(function(item) {
+        if (item.getAttribute('href') === currentPath) {
+          item.classList.add('active');
+        }
+      });
+
+      // Close sidebar on navigation click (mobile)
+      if (window.innerWidth <= MOBILE) {
+        document.querySelectorAll('.ki-sidebar-item').forEach(function(item) {
+          item.addEventListener('click', closeSidebar);
+        });
+      }
+
+      // Collapsible sidebar sections with persistent state
+      const sectionState = JSON.parse(localStorage.getItem('ki-sidebar-sections') || '{}');
+      const sections = document.querySelectorAll('.ki-sidebar-section');
+
+      sections.forEach(function(section, index) {
+        const label = section.textContent.trim();
+        const storageKey = `${index}:${label}`;
+
+        section.innerHTML = `<span>${label}</span><i class="bi bi-chevron-down section-chevron"></i>`;
+        section.setAttribute('role', 'button');
+        section.setAttribute('aria-expanded', 'true');
+
+        const groupItems = [];
+        let sibling = section.nextElementSibling;
+        while (sibling && !sibling.classList.contains('ki-sidebar-section')) {
+          if (sibling.classList.contains('ki-sidebar-item')) {
+            groupItems.push(sibling);
+          }
+          sibling = sibling.nextElementSibling;
+        }
+
+        const hasActiveItem = groupItems.some(function(item) {
+          return item.classList.contains('active');
+        });
+
+        function applyCollapsed(collapsed) {
+          section.classList.toggle('collapsed', collapsed);
+          section.setAttribute('aria-expanded', String(!collapsed));
+          groupItems.forEach(function(item) {
+            item.style.display = collapsed ? 'none' : '';
+          });
+        }
+
+        const startCollapsed = hasActiveItem ? false : Boolean(sectionState[storageKey]);
+        applyCollapsed(startCollapsed);
+
+        section.addEventListener('click', function() {
+          const nextState = !section.classList.contains('collapsed');
+          applyCollapsed(nextState);
+          sectionState[storageKey] = nextState;
+          localStorage.setItem('ki-sidebar-sections', JSON.stringify(sectionState));
+        });
+      });
+    })();
+    </script>
+
+    <!-- Notifications Script -->
+    <script>
+      function renderNotifications(data) {
+        const body = document.getElementById('modal-notes-body');
+        const badge = document.getElementById('nav-unread');
+        if (!body || !badge) return;
+
+        badge.style.display = data.unread > 0 ? 'flex' : 'none';
+        badge.textContent = data.unread;
+
+        if (!data.notifications.length) {
+          body.innerHTML = '<p class="text-muted mb-0">No notifications.</p>';
+          return;
+        }
+
+        body.innerHTML = data.notifications.map(n => {
+          const targetLink = '{% url "clients:approve_sales" %}';
+          return `
+          <div class="ki-event-item mb-2" style="background:${n.is_read ? 'var(--ki-card-bg)' : 'var(--ki-primary-bg)'};">
+            <div style="flex:1;">
+              <div style="font-weight:700;color:var(--ki-text-primary);">${n.title}</div>
+              <div style="color:var(--ki-text-secondary);font-size:0.9rem;">${n.body}</div>
+              <div style="color:var(--ki-text-muted);font-size:0.8rem;margin-top:0.25rem;">${n.created_at}</div>
+            </div>
+            <a class="ki-btn ki-btn-primary ki-btn-sm" href="${targetLink}">Open</a>
+          </div>
+        `;}).join('');
+      }
+
+      async function loadNotifications() {
+        try {
+          const res = await fetch('{% url "clients:notifications_json" %}', {credentials: 'same-origin'});
+          if (!res.ok) return;
+          const data = await res.json();
+          renderNotifications(data);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
+        loadNotifications();
+        const modal = document.getElementById('notificationsModal');
+        modal && modal.addEventListener('show.bs.modal', loadNotifications);
+
+        const btnRead = document.getElementById('btn-mark-read');
+        btnRead && btnRead.addEventListener('click', async () => {
+          await fetch('{% url "clients:notifications_mark_all_read" %}', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}});
+          loadNotifications();
+        });
+
+        const btnClear = document.getElementById('btn-clear-notes');
+        btnClear && btnClear.addEventListener('click', async () => {
+          await fetch('{% url "clients:notifications_clear" %}', {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}});
+          loadNotifications();
+        });
+        {% endif %}
+      });
+    </script>
+
+    {% block extra_js %}{% endblock %}
+  </body>
+</html>

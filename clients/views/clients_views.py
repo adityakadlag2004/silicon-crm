@@ -313,9 +313,27 @@ def add_client(request):
     if request.method == "POST":
         form = ClientForm(request.POST)
         if form.is_valid():
-            form.save()
+            client = form.save()
             messages.success(request, "Client added successfully!")
-            return redirect("clients:all_clients")
+            drive_created = False
+            if request.POST.get("create_drive_folder"):
+                try:
+                    folder_id, folder_url = get_or_create_client_folder(client.name, client.id)
+                    client.drive_folder_id = folder_id
+                    client.drive_folder_url = folder_url
+                    client.save(update_fields=["drive_folder_id", "drive_folder_url"])
+                    drive_created = True
+                    messages.success(request, "Google Drive folder created — opening it in a new tab.")
+                except DriveNotConfigured as e:
+                    messages.warning(request, f"Client saved, but Drive folder skipped: {e}")
+                except Exception as e:
+                    messages.warning(request, f"Client saved, but Drive folder failed: {e}")
+            # Land on the new client's profile (so the team can see/edit immediately).
+            # If the Drive folder was just created, the profile auto-opens it in a new tab.
+            target = reverse("clients:client_profile", args=[client.id])
+            if drive_created:
+                target += "?open_drive=1"
+            return redirect(target)
     else:
         form = ClientForm()
     return render(request, "clients/add_client.html", {"form": form})

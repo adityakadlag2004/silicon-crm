@@ -174,6 +174,14 @@ def all_renewals(request):
 	today_qs = scoped_qs.filter(premium_collected_on=today)
 	today_submission_total = today_qs.aggregate(total=Sum("premium_amount"))["total"] or 0
 	today_submission_count = today_qs.count()
+
+	# Month-to-date premium collection (collected_on between 1st of this month and today).
+	month_start = today.replace(day=1)
+	month_qs = scoped_qs.filter(premium_collected_on__range=[month_start, today])
+	month_submission_total = month_qs.aggregate(total=Sum("premium_amount"))["total"] or 0
+	month_submission_count = month_qs.count()
+	month_label = today.strftime("%B %Y")
+
 	filtered_total_premium = renewals_qs.aggregate(total=Sum("premium_amount"))["total"] or 0
 
 	paginator = Paginator(renewals_qs, 50)
@@ -192,6 +200,9 @@ def all_renewals(request):
 		"qstring": qstring,
 		"today_submission_total": today_submission_total,
 		"today_submission_count": today_submission_count,
+		"month_submission_total": month_submission_total,
+		"month_submission_count": month_submission_count,
+		"month_label": month_label,
 		"filtered_total_premium": filtered_total_premium,
 		"product_options": Product.objects.filter(domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
 	}
