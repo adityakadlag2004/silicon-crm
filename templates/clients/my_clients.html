@@ -5,41 +5,59 @@
 
 <h2 class="ki-section-title">My Clients</h2>
 
+<style>
+  .mc-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+  .mc-search { flex: 1; min-width: 280px; position: relative; }
+  .mc-search i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ki-text-muted); }
+  .mc-search input { padding-left: 2.2rem; }
+  .mc-adv-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 18px; height: 18px; padding: 0 5px; margin-left: 4px;
+    border-radius: 9px; background: var(--ki-primary, #d97706); color: #fff;
+    font-size: 0.7rem; font-weight: 700; line-height: 1;
+  }
+  .mc-adv { display: none; padding-top: 0.85rem; margin-top: 0.85rem; border-top: 1px solid var(--ki-card-border); }
+  .mc-adv.open { display: block; }
+  .mc-adv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.6rem; }
+  .mc-prod {
+    background: var(--ki-body-bg); border: 1px solid var(--ki-card-border);
+    border-radius: 8px; padding: 0.5rem 0.65rem;
+  }
+  .mc-prod-name { font-size: 0.78rem; font-weight: 600; color: var(--ki-text-secondary); margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .mc-prod-row { display: grid; grid-template-columns: 1fr 80px 80px; gap: 0.35rem; }
+</style>
+
 <div class="ki-card mb-4">
-  <form method="get" class="ki-filter-bar">
-    <div style="min-width:220px;">
-      <label class="form-label">Search</label>
-      <input type="text" name="q" class="form-control" placeholder="Name, email, phone, PAN" value="{{ request.GET.q|default:'' }}">
-    </div>
-    {% for meta in product_filters %}
-    <div>
-      <label class="form-label">{{ meta.product.name }}</label>
-      <select name="{{ meta.status_param }}" class="form-select">
-        <option value="">All</option>
-        <option value="yes" {% if meta.status_value == "yes" %}selected{% endif %}>Yes</option>
-        <option value="no" {% if meta.status_value == "no" %}selected{% endif %}>No</option>
-      </select>
-    </div>
-    {% endfor %}
-    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
-      <button type="submit" class="ki-btn ki-btn-primary">Filter</button>
-      <a href="{% url 'clients:my_clients' %}" class="ki-btn ki-btn-secondary">Reset</a>
-      <span class="ki-filter-toggle" id="moreFiltersToggle"><i class="bi bi-funnel"></i> More filters ▾</span>
+  <form method="get">
+    <div class="mc-filter-row">
+      <div class="mc-search">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" class="form-control" placeholder="Search name, email, phone, PAN…" value="{{ request.GET.q|default:'' }}">
+      </div>
+      <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel-fill"></i> Apply</button>
+      <a href="{% url 'clients:my_clients' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-x-circle"></i> Reset</a>
+      <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" id="mcAdvToggle">
+        <i class="bi bi-sliders"></i> Filters <span id="mcAdvCount" class="mc-adv-badge" style="display:none;">0</span>
+      </button>
       <a href="?{% if edited_filter_active %}{{ edited_toggle_qs }}{% else %}{% if base_qs %}{{ base_qs }}&{% endif %}edited=1{% endif %}" class="ki-btn ki-btn-sm ki-btn-secondary" style="text-decoration:none;{% if edited_filter_active %}background:var(--ki-primary-lighter);color:#fff;{% endif %}">
-        {% if edited_filter_active %}Hide Edited Filter{% else %}Show Edited Only{% endif %}
+        {% if edited_filter_active %}<i class="bi bi-eye-slash"></i> Hide Edited{% else %}<i class="bi bi-eye"></i> Edited Only{% endif %}
       </a>
     </div>
 
-    <div class="ki-filter-accordion" id="moreFiltersSection">
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.75rem;">
+    <div class="mc-adv" id="mcAdvFilters">
+      <div class="mc-adv-grid">
         {% for meta in product_filters %}
-        <div>
-          <label class="form-label">{{ meta.product.name }} Min</label>
-          <input type="number" name="{{ meta.min_param }}" class="form-control" value="{{ meta.min_value }}">
-        </div>
-        <div>
-          <label class="form-label">{{ meta.product.name }} Max</label>
-          <input type="number" name="{{ meta.max_param }}" class="form-control" value="{{ meta.max_value }}">
+        <div class="mc-prod">
+          <div class="mc-prod-name">{{ meta.product.name }}</div>
+          <div class="mc-prod-row">
+            <select name="{{ meta.status_param }}" class="form-select form-select-sm">
+              <option value="">Has: All</option>
+              <option value="yes" {% if meta.status_value == "yes" %}selected{% endif %}>Has: Yes</option>
+              <option value="no"  {% if meta.status_value == "no" %}selected{% endif %}>Has: No</option>
+            </select>
+            <input type="number" name="{{ meta.min_param }}" class="form-control form-control-sm" placeholder="Min" value="{{ meta.min_value }}">
+            <input type="number" name="{{ meta.max_param }}" class="form-control form-control-sm" placeholder="Max" value="{{ meta.max_value }}">
+          </div>
         </div>
         {% endfor %}
       </div>
@@ -169,16 +187,23 @@
 </div>
 
 <script>
-// Toggle more filters accordion
-const toggle = document.getElementById('moreFiltersToggle');
-const moreFilters = document.getElementById('moreFiltersSection');
-if (toggle && moreFilters) {
-  toggle.addEventListener('click', function(){
-    const isOpen = moreFilters.style.display === 'block';
-    moreFilters.style.display = isOpen ? 'none' : 'block';
-    toggle.textContent = isOpen ? 'More filters ▾' : 'Hide filters ▴';
-  });
-}
+// Compact filter toggle + active-count badge
+(function(){
+  const toggle = document.getElementById('mcAdvToggle');
+  const panel  = document.getElementById('mcAdvFilters');
+  const badge  = document.getElementById('mcAdvCount');
+  if (!toggle || !panel) return;
+
+  let active = 0;
+  panel.querySelectorAll('input, select').forEach(el => { if (el.value && el.value.trim()) active++; });
+  if (badge) {
+    if (active > 0) { badge.textContent = active; badge.style.display = 'inline-flex'; }
+    else { badge.style.display = 'none'; }
+  }
+  if (active > 0) panel.classList.add('open');
+
+  toggle.addEventListener('click', function(){ panel.classList.toggle('open'); });
+})();
 
 (function(){
   // CSRF cookie helper

@@ -6,19 +6,27 @@
 <h2 class="ki-section-title"><i class="bi bi-arrow-repeat"></i> All Renewals</h2>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="ki-card">
       <div class="text-muted small">Today's Premium Collection</div>
       <div style="font-size:1.35rem;font-weight:700;">Rs {{ today_submission_total|floatformat:2 }}</div>
+      <div class="text-muted small" style="margin-top:0.15rem;">{{ today_submission_count }} renewal{{ today_submission_count|pluralize }} today</div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
+    <div class="ki-card">
+      <div class="text-muted small">{{ month_label }} (so far)</div>
+      <div style="font-size:1.35rem;font-weight:700;">Rs {{ month_submission_total|floatformat:2 }}</div>
+      <div class="text-muted small" style="margin-top:0.15rem;">{{ month_submission_count }} renewal{{ month_submission_count|pluralize }} this month</div>
+    </div>
+  </div>
+  <div class="col-md-3">
     <div class="ki-card">
       <div class="text-muted small">Today's Submission Count</div>
       <div style="font-size:1.35rem;font-weight:700;">{{ today_submission_count }}</div>
     </div>
   </div>
-  <div class="col-md-4">
+  <div class="col-md-3">
     <div class="ki-card">
       <div class="text-muted small">Filtered Premium Total</div>
       <div style="font-size:1.35rem;font-weight:700;">Rs {{ filtered_total_premium|floatformat:2 }}</div>

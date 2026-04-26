@@ -20,345 +20,529 @@
     <!-- KI Design System -->
     <link href="{% static 'css/ki-design-system.css' %}" rel="stylesheet" />
     <style>
-      .ki-sidebar-section {
+      /* ───────── Top Navbar (industry-standard horizontal nav) ───────── */
+      :root {
+        --kn-h: 60px;                 /* navbar height */
+        --kn-bg: #ffffff;
+        --kn-fg: var(--ki-text-primary, #1f2937);
+        --kn-fg-muted: var(--ki-text-secondary, #6b7280);
+        --kn-border: var(--ki-card-border, #e5e7eb);
+        --kn-hover-bg: #f3f4f6;
+        --kn-active-bg: var(--ki-primary-pale, #fef3c7);
+        --kn-active-fg: var(--ki-primary, #d97706);
+        --kn-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+      }
+
+      body { padding-top: var(--kn-h); background: var(--ki-body-bg, #f9fafb); }
+
+      .kn-navbar {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        height: var(--kn-h);
+        background: var(--kn-bg);
+        border-bottom: 1px solid var(--kn-border);
+        box-shadow: var(--kn-shadow);
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        z-index: 1030;
+        padding: 0 1.25rem;
+      }
+
+      .kn-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-weight: 700;
+        color: var(--kn-fg);
+        text-decoration: none;
+        margin-right: 1.5rem;
+        flex-shrink: 0;
+      }
+      .kn-brand:hover { color: var(--kn-active-fg); }
+      .kn-brand-logo {
+        width: 34px; height: 34px; border-radius: 8px;
+        background: linear-gradient(135deg, var(--ki-primary, #d97706), #f59e0b);
+        color: white;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 0.9rem;
+        letter-spacing: 0.02em;
+      }
+      .kn-brand-title { font-size: 0.95rem; white-space: nowrap; }
+
+      .kn-toggle {
+        display: none;
+        background: transparent;
+        border: 1px solid var(--kn-border);
+        border-radius: 6px;
+        padding: 0.4rem 0.6rem;
+        font-size: 1.2rem;
+        color: var(--kn-fg);
         cursor: pointer;
-        user-select: none;
+        margin-right: 0.5rem;
+      }
+      .kn-toggle:hover { background: var(--kn-hover-bg); }
+
+      .kn-nav {
+        display: flex;
+        align-items: center;
+        gap: 0.15rem;
+        flex: 1;
+        overflow: visible;
       }
 
-      .ki-sidebar-section .section-chevron {
-        font-size: 0.75rem;
-        opacity: 0.75;
-        transition: transform 0.2s ease;
+      .kn-link, .kn-dropdown-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.45rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: var(--kn-fg);
+        background: transparent;
+        border: none;
+        text-decoration: none;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background-color 0.15s, color 0.15s;
+      }
+      .kn-link i, .kn-dropdown-toggle i { font-size: 0.95rem; opacity: 0.7; }
+      .kn-link:hover, .kn-dropdown-toggle:hover { background: var(--kn-hover-bg); color: var(--kn-fg); }
+      .kn-link.active, .kn-dropdown-toggle.active {
+        background: var(--kn-active-bg);
+        color: var(--kn-active-fg);
+      }
+      .kn-link.active i, .kn-dropdown-toggle.active i { opacity: 1; }
+
+      .kn-dropdown { position: relative; }
+      .kn-dropdown-toggle .kn-caret {
+        font-size: 0.65rem;
+        opacity: 0.5;
+        margin-left: 0.15rem;
       }
 
-      .ki-sidebar-section.collapsed .section-chevron {
-        transform: rotate(-90deg);
+      .kn-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        min-width: 240px;
+        background: var(--kn-bg);
+        border: 1px solid var(--kn-border);
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.05);
+        padding: 0.4rem;
+        list-style: none;
+        margin: 0;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-4px);
+        transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+        z-index: 1040;
       }
+      .kn-dropdown.open .kn-menu,
+      .kn-dropdown:hover .kn-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+      .kn-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.5rem 0.7rem;
+        border-radius: 6px;
+        color: var(--kn-fg);
+        text-decoration: none;
+        font-size: 0.88rem;
+      }
+      .kn-menu-item:hover { background: var(--kn-hover-bg); color: var(--kn-fg); }
+      .kn-menu-item.active { background: var(--kn-active-bg); color: var(--kn-active-fg); }
+      .kn-menu-item i { font-size: 0.95rem; opacity: 0.7; width: 18px; text-align: center; }
+      .kn-menu-item.active i { opacity: 1; }
+      .kn-menu-divider {
+        height: 1px;
+        background: var(--kn-border);
+        margin: 0.35rem 0.2rem;
+      }
+      .kn-menu-section {
+        padding: 0.4rem 0.7rem 0.2rem;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--kn-fg-muted);
+        font-weight: 600;
+      }
+
+      .kn-right {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-left: auto;
+        flex-shrink: 0;
+      }
+
+      .kn-icon-btn {
+        position: relative;
+        background: transparent;
+        border: none;
+        color: var(--kn-fg);
+        font-size: 1.1rem;
+        padding: 0.45rem 0.6rem;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .kn-icon-btn:hover { background: var(--kn-hover-bg); }
+      .kn-badge {
+        position: absolute;
+        top: 4px; right: 4px;
+        background: var(--ki-danger, #ef4444);
+        color: white;
+        font-size: 0.65rem;
+        font-weight: 700;
+        min-width: 16px; height: 16px;
+        border-radius: 8px;
+        display: none;
+        align-items: center; justify-content: center;
+        padding: 0 4px;
+      }
+
+      .kn-user-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.35rem 0.7rem;
+        border-radius: 6px;
+        background: transparent;
+        border: 1px solid var(--kn-border);
+        color: var(--kn-fg);
+        font-size: 0.88rem;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .kn-user-toggle:hover { background: var(--kn-hover-bg); }
+      .kn-user-toggle i { font-size: 1.1rem; }
+      .kn-user-toggle .kn-caret { font-size: 0.65rem; opacity: 0.6; }
+      .kn-user-menu { right: 0; left: auto; min-width: 200px; }
+
+      /* Page content */
+      .kn-content {
+        padding: 1.5rem 2rem;
+        max-width: 1600px;
+        margin: 0 auto;
+      }
+      @media (max-width: 768px) {
+        .kn-content { padding: 1rem; }
+      }
+
+      .kn-page-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+      }
+      .kn-page-header h1 {
+        font-size: 1.4rem;
+        font-weight: 700;
+        margin: 0;
+        color: var(--kn-fg);
+      }
+
+      /* ── Mobile: hamburger collapses nav into off-canvas ── */
+      @media (max-width: 1180px) {
+        .kn-toggle { display: inline-flex; align-items: center; }
+        .kn-nav {
+          position: fixed;
+          top: var(--kn-h);
+          left: 0;
+          width: min(320px, 90vw);
+          height: calc(100vh - var(--kn-h));
+          background: var(--kn-bg);
+          border-right: 1px solid var(--kn-border);
+          box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+          flex-direction: column;
+          align-items: stretch;
+          gap: 0;
+          padding: 0.5rem;
+          overflow-y: auto;
+          transform: translateX(-100%);
+          transition: transform 0.25s ease;
+          z-index: 1035;
+        }
+        .kn-nav.show { transform: translateX(0); }
+        .kn-nav .kn-link, .kn-nav .kn-dropdown-toggle { width: 100%; justify-content: flex-start; padding: 0.65rem 0.8rem; }
+        .kn-nav .kn-dropdown { width: 100%; }
+        .kn-menu {
+          position: static;
+          opacity: 1; visibility: visible; transform: none;
+          width: 100%;
+          box-shadow: none;
+          border: none;
+          padding: 0 0 0.4rem 1.2rem;
+          margin-top: -0.2rem;
+          display: none;
+        }
+        .kn-dropdown.open .kn-menu { display: block; }
+        .kn-dropdown-toggle .kn-caret { margin-left: auto; transition: transform 0.2s; }
+        .kn-dropdown.open .kn-dropdown-toggle .kn-caret { transform: rotate(180deg); }
+
+        .kn-overlay {
+          display: none;
+          position: fixed;
+          top: var(--kn-h); left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.4);
+          z-index: 1034;
+        }
+        .kn-overlay.show { display: block; }
+
+        .kn-brand-title { display: none; }
+      }
+
     </style>
     {% block extra_css %}{% endblock %}
   </head>
   <body>
-    <div class="ki-app">
-      <!-- Sidebar Overlay (mobile) -->
-      <div class="ki-sidebar-overlay" id="sidebarOverlay"></div>
 
-      <!-- Sidebar -->
-      <aside class="ki-sidebar" id="kiSidebar">
-        <div class="ki-sidebar-brand">
-          <div class="ki-sidebar-brand-icon">KI</div>
-          <div class="ki-sidebar-brand-text">Kadlag Investment BO</div>
-          <button class="ki-sidebar-collapse-btn" id="sidebarCollapseBtn" title="Collapse sidebar">
-            <i class="bi bi-chevron-left"></i>
-          </button>
-        </div>
+    {# ─────────── TOP NAVBAR ─────────── #}
+    <header class="kn-navbar">
+      <button class="kn-toggle" id="navToggle" aria-label="Toggle menu">
+        <i class="bi bi-list"></i>
+      </button>
 
-        <nav class="ki-sidebar-nav">
-          {% if request.user.is_authenticated %}
+      <a class="kn-brand" href="{% if request.user.is_authenticated %}{% if request.user.employee.role == 'admin' %}{% url 'clients:admin_dashboard' %}{% else %}{% url 'clients:employee_dashboard' %}{% endif %}{% else %}/{% endif %}">
+        <span class="kn-brand-logo">KI</span>
+        <span class="kn-brand-title">Kadlag Investment</span>
+      </a>
 
-            {# ─── ADMIN SIDEBAR ─── #}
-            {% if request.user.employee.role == "admin" %}
+      <nav class="kn-nav" id="navMenu">
 
-              <a class="ki-sidebar-item" href="{% url 'clients:admin_dashboard' %}">
-                <i class="bi bi-grid-1x2-fill"></i> <span>Dashboard</span>
-              </a>
+        {% if request.user.is_authenticated %}
 
-              <div class="ki-sidebar-section">Clients</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_clients' %}">
-                <i class="bi bi-people-fill"></i> <span>All Clients</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:add_client' %}">
-                <i class="bi bi-person-plus-fill"></i> <span>Add Client</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:bulk_reassign' %}">
-                <i class="bi bi-arrow-left-right"></i> <span>Bulk Reassign</span>
-              </a>
+          {# ─── ADMIN ─── #}
+          {% if request.user.employee.role == "admin" %}
 
-              <div class="ki-sidebar-section">Sales</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
-                <i class="bi bi-receipt"></i> <span>All Sales</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
-                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:admin_add_sale' %}">
-                <i class="bi bi-plus-circle-fill"></i> <span>Add Sale</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
-                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:approve_sales' %}">
-                <i class="bi bi-check-circle-fill"></i> <span>Approve Sales</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:manage_incentive_rules' %}">
-                <i class="bi bi-trophy-fill"></i> <span>Incentive Rules</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:recalc_points' %}">
-                <i class="bi bi-calculator-fill"></i> <span>Recalculate Points</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:client_analysis' %}">
-                <i class="bi bi-pie-chart-fill"></i> <span>Client Analysis</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:financial_planner' %}">
-                <i class="bi bi-calculator"></i> <span>Financial Planner</span>
-              </a>
-              <div class="ki-sidebar-section">Calling</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:upload_list' %}">
-                <i class="bi bi-cloud-upload-fill"></i> <span>Upload List</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:admin_lists' %}">
-                <i class="bi bi-telephone-fill"></i> <span>Manage Lists</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:calling_list_generator' %}">
-                <i class="bi bi-list-task"></i> <span>List Generator</span>
-              </a>
-
-              <div class="ki-sidebar-section">Business Tracking</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:admin_past_performance' %}">
-                <i class="bi bi-graph-up-arrow"></i> <span>Past Performance</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:net_business' %}">
-                <i class="bi bi-cash-stack"></i> <span>Net Business</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:net_sip' %}">
-                <i class="bi bi-arrow-repeat"></i> <span>Net SIP</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:monthly_business_report' %}">
-                <i class="bi bi-file-earmark-text-fill"></i> <span>Monthly Report</span>
-              </a>
-
-              <div class="ki-sidebar-section">Team</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:team_list' %}">
-                <i class="bi bi-people-fill"></i> <span>All Members</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:team_list' %}?add=1">
-                <i class="bi bi-person-plus-fill"></i> <span>Add Member</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_management' %}">
-                <i class="bi bi-shield-lock-fill"></i> <span>Manager Rights</span>
-              </a>
-
-              <div class="ki-sidebar-section">Settings</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:firm_settings' %}">
-                <i class="bi bi-building-gear"></i> <span>Firm Settings</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:product_management' %}">
-                <i class="bi bi-box-seam"></i> <span>Product Management</span>
-              </a>
-
-              <div class="ki-sidebar-section">Leads</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:lead_management' %}">
-                <i class="bi bi-funnel-fill"></i> <span>Lead Management</span>
-              </a>
-
-            {# ─── MANAGER SIDEBAR ─── #}
-            {% elif request.user.employee.role == "manager" %}
-
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_dashboard' %}">
-                <i class="bi bi-grid-1x2-fill"></i> <span>Dashboard</span>
-              </a>
-
-              <div class="ki-sidebar-section">Clients</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_clients' %}">
-                <i class="bi bi-people-fill"></i> <span>All Clients</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:my_clients' %}">
-                <i class="bi bi-person-check-fill"></i> <span>My Clients</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:add_client' %}">
-                <i class="bi bi-person-plus-fill"></i> <span>Add Client</span>
-              </a>
-
-              <div class="ki-sidebar-section">Sales</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:add_sale' %}">
-                <i class="bi bi-plus-circle-fill"></i> <span>Add Sale</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
-                <i class="bi bi-receipt"></i> <span>All Sales</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
-                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
-                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
-              </a>
-              {% if manager_access.allow_approve_sales %}
-              <a class="ki-sidebar-item" href="{% url 'clients:approve_sales' %}">
-                <i class="bi bi-check-circle-fill"></i> <span>Approve Sales</span>
-              </a>
-              {% endif %}
-              {% if manager_access.allow_manage_incentives %}
-              <a class="ki-sidebar-item" href="{% url 'clients:manage_incentive_rules' %}">
-                <i class="bi bi-trophy-fill"></i> <span>Incentive Rules</span>
-              </a>
-              {% endif %}
-              {% if manager_access.allow_recalc_points %}
-              <a class="ki-sidebar-item" href="{% url 'clients:recalc_points' %}">
-                <i class="bi bi-calculator-fill"></i> <span>Recalculate Points</span>
-              </a>
-              {% endif %}
-              {% if manager_access.allow_client_analysis %}
-              <a class="ki-sidebar-item" href="{% url 'clients:client_analysis' %}">
-                <i class="bi bi-pie-chart-fill"></i> <span>Client Analysis</span>
-              </a>
-              {% endif %}
-              {% if manager_access.allow_employee_performance %}
-              <a class="ki-sidebar-item" href="{% url 'clients:admin_past_performance' %}">
-                <i class="bi bi-graph-up-arrow"></i> <span>Past Performance</span>
-              </a>
-              {% endif %}
-              <a class="ki-sidebar-item" href="{% url 'clients:financial_planner' %}">
-                <i class="bi bi-calculator"></i> <span>Financial Planner</span>
-              </a>
-
-              <div class="ki-sidebar-section">Calling</div>
-              {% if manager_access.allow_calling_admin %}
-              <a class="ki-sidebar-item" href="{% url 'clients:upload_list' %}">
-                <i class="bi bi-cloud-upload-fill"></i> <span>Upload List</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:admin_lists' %}">
-                <i class="bi bi-telephone-fill"></i> <span>Manage Lists</span>
-              </a>
-              {% else %}
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_lists' %}">
-                <i class="bi bi-telephone-fill"></i> <span>My Calling Lists</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_calendar' %}">
-                <i class="bi bi-calendar-event-fill"></i> <span>My Calendar</span>
-              </a>
-              {% endif %}
-              <a class="ki-sidebar-item" href="{% url 'clients:calling_list_generator' %}">
-                <i class="bi bi-list-task"></i> <span>List Generator</span>
-              </a>
-
-              {% if manager_access.allow_business_tracking %}
-              <div class="ki-sidebar-section">Business Tracking</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:admin_past_performance' %}">
-                <i class="bi bi-graph-up-arrow"></i> <span>Business Tracking</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:net_business' %}">
-                <i class="bi bi-cash-stack"></i> <span>Net Business</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:net_sip' %}">
-                <i class="bi bi-arrow-repeat"></i> <span>Net SIP</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:monthly_business_report' %}">
-                <i class="bi bi-file-earmark-text-fill"></i> <span>Monthly Report</span>
-              </a>
-              {% endif %}
-
-              {% if manager_access.allow_lead_management %}
-              <div class="ki-sidebar-section">Leads</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:lead_management' %}">
-                <i class="bi bi-funnel-fill"></i> <span>Lead Management</span>
-              </a>
-              {% endif %}
-
-            {# ─── EMPLOYEE SIDEBAR ─── #}
-            {% elif request.user.employee.role == "employee" %}
-
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_dashboard' %}">
-                <i class="bi bi-grid-1x2-fill"></i> <span>Dashboard</span>
-              </a>
-
-              <div class="ki-sidebar-section">Clients</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_clients' %}">
-                <i class="bi bi-people-fill"></i> <span>All Clients</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:my_clients' %}">
-                <i class="bi bi-person-check-fill"></i> <span>My Clients</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:add_client' %}">
-                <i class="bi bi-person-plus-fill"></i> <span>Add Client</span>
-              </a>
-
-              <div class="ki-sidebar-section">Sales</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:add_sale' %}">
-                <i class="bi bi-plus-circle-fill"></i> <span>Add Sale</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_sales' %}">
-                <i class="bi bi-receipt"></i> <span>All Sales</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:add_renewal' %}">
-                <i class="bi bi-plus-circle"></i> <span>Add Renewal</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:all_renewals' %}">
-                <i class="bi bi-arrow-repeat"></i> <span>All Renewals</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:recalc_points' %}">
-                <i class="bi bi-calculator-fill"></i> <span>Recalculate Points</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:client_analysis' %}">
-                <i class="bi bi-pie-chart-fill"></i> <span>Client Analysis</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:financial_planner' %}">
-                <i class="bi bi-calculator"></i> <span>Financial Planner</span>
-              </a>
-              <div class="ki-sidebar-section">Calling</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_lists' %}">
-                <i class="bi bi-telephone-fill"></i> <span>My Calling Lists</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:employee_calendar' %}">
-                <i class="bi bi-calendar-event-fill"></i> <span>My Calendar</span>
-              </a>
-              <a class="ki-sidebar-item" href="{% url 'clients:calling_list_generator' %}">
-                <i class="bi bi-list-task"></i> <span>List Generator</span>
-              </a>
-
-              <div class="ki-sidebar-section">Leads</div>
-              <a class="ki-sidebar-item" href="{% url 'clients:lead_management' %}">
-                <i class="bi bi-funnel-fill"></i> <span>Lead Management</span>
-              </a>
-
-            {% endif %}
-          {% endif %}
-        </nav>
-      </aside>
-
-      <!-- Main Content Area -->
-      <div class="ki-main">
-        <!-- Top Bar -->
-        <header class="ki-topbar">
-          <div class="ki-topbar-left">
-            <button class="ki-topbar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
-              <i class="bi bi-list"></i>
-            </button>
-            <div class="ki-breadcrumb">
-              <strong>{% block page_title %}Dashboard{% endblock %}</strong>
-            </div>
-          </div>
-          <div class="ki-topbar-right">
-            {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
-            <button class="ki-topbar-btn" type="button" data-bs-toggle="modal" data-bs-target="#notificationsModal" title="Notifications">
-              <i class="bi bi-bell-fill"></i>
-              <span class="ki-topbar-badge" id="nav-unread">0</span>
-            </button>
-            {% endif %}
-            <div class="ki-topbar-user">
-              <i class="bi bi-person-circle"></i>
-              <span>{{ request.user.username }}</span>
-            </div>
-            <a href="{% url 'clients:logout' %}" class="ki-btn-logout" title="Logout">
-              <i class="bi bi-box-arrow-right"></i> <span>Logout</span>
+            <a class="kn-link" href="{% url 'clients:admin_dashboard' %}">
+              <i class="bi bi-grid-1x2-fill"></i> Dashboard
             </a>
-          </div>
-        </header>
 
-        <!-- Page Content -->
-        <div class="ki-content">
-          {% if messages %}
-            {% for message in messages %}
-              <div class="ki-alert {% if message.level_tag == 'error' %}ki-alert-danger{% elif message.level_tag == 'success' %}ki-alert-success{% elif message.level_tag == 'warning' %}ki-alert-warning{% else %}ki-alert-info{% endif %}">
-                {{ message }}
-              </div>
-            {% endfor %}
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-people-fill"></i> Clients <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:bulk_reassign' %}"><i class="bi bi-arrow-left-right"></i> Bulk Reassign</a></li>
+              </ul>
+            </div>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-receipt"></i> Sales <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:admin_add_sale' %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:approve_sales' %}"><i class="bi bi-check-circle-fill"></i> Approve Sales</a></li>
+                <li><div class="kn-menu-divider"></div></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+                <li><div class="kn-menu-divider"></div></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:recalc_points' %}"><i class="bi bi-calculator-fill"></i> Recalculate Points</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
+              </ul>
+            </div>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-graph-up-arrow"></i> Reports <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
+              </ul>
+            </div>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-people"></i> Team <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}"><i class="bi bi-people-fill"></i> All Members</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}?add=1"><i class="bi bi-person-plus-fill"></i> Add Member</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:employee_management' %}"><i class="bi bi-shield-lock-fill"></i> Manager Rights</a></li>
+              </ul>
+            </div>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-gear-fill"></i> Settings <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:product_management' %}"><i class="bi bi-box-seam"></i> Products</a></li>
+              </ul>
+            </div>
+
+            <a class="kn-link" href="{% url 'clients:lead_management' %}">
+              <i class="bi bi-funnel-fill"></i> Leads
+            </a>
+
+          {# ─── MANAGER ─── #}
+          {% elif request.user.employee.role == "manager" %}
+
+            <a class="kn-link" href="{% url 'clients:employee_dashboard' %}">
+              <i class="bi bi-grid-1x2-fill"></i> Dashboard
+            </a>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-people-fill"></i> Clients <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
+              </ul>
+            </div>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-receipt"></i> Sales <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:add_sale' %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
+                {% if manager_access.allow_approve_sales %}<li><a class="kn-menu-item" href="{% url 'clients:approve_sales' %}"><i class="bi bi-check-circle-fill"></i> Approve Sales</a></li>{% endif %}
+                <li><div class="kn-menu-divider"></div></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+                {% if manager_access.allow_manage_incentives or manager_access.allow_recalc_points or manager_access.allow_client_analysis %}<li><div class="kn-menu-divider"></div></li>{% endif %}
+                {% if manager_access.allow_manage_incentives %}<li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>{% endif %}
+                {% if manager_access.allow_recalc_points %}<li><a class="kn-menu-item" href="{% url 'clients:recalc_points' %}"><i class="bi bi-calculator-fill"></i> Recalculate Points</a></li>{% endif %}
+                {% if manager_access.allow_client_analysis %}<li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>{% endif %}
+                <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
+              </ul>
+            </div>
+
+            {% if manager_access.allow_business_tracking or manager_access.allow_employee_performance %}
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-graph-up-arrow"></i> Reports <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                {% if manager_access.allow_employee_performance %}<li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>{% endif %}
+                {% if manager_access.allow_business_tracking %}
+                  <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
+                  <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
+                  <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
+                {% endif %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if manager_access.allow_lead_management %}
+            <a class="kn-link" href="{% url 'clients:lead_management' %}">
+              <i class="bi bi-funnel-fill"></i> Leads
+            </a>
+            {% endif %}
+
+          {# ─── EMPLOYEE ─── #}
+          {% elif request.user.employee.role == "employee" %}
+
+            <a class="kn-link" href="{% url 'clients:employee_dashboard' %}">
+              <i class="bi bi-grid-1x2-fill"></i> Dashboard
+            </a>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-people-fill"></i> Clients <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
+              </ul>
+            </div>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-receipt"></i> Sales <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:add_sale' %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
+                <li><div class="kn-menu-divider"></div></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+                <li><div class="kn-menu-divider"></div></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:recalc_points' %}"><i class="bi bi-calculator-fill"></i> Recalculate Points</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
+              </ul>
+            </div>
+
+            <a class="kn-link" href="{% url 'clients:lead_management' %}">
+              <i class="bi bi-funnel-fill"></i> Leads
+            </a>
+
           {% endif %}
-          {% block content %}{% endblock %}
-        </div>
+        {% endif %}
+      </nav>
+
+      <div class="kn-right">
+        {% if request.user.is_authenticated %}
+          {% if request.user.employee.role == "admin" %}
+          <button class="kn-icon-btn" type="button" data-bs-toggle="modal" data-bs-target="#notificationsModal" title="Notifications">
+            <i class="bi bi-bell-fill"></i>
+            <span class="kn-badge" id="nav-unread">0</span>
+          </button>
+          {% endif %}
+
+          <div class="kn-dropdown">
+            <button class="kn-user-toggle" type="button">
+              <i class="bi bi-person-circle"></i>
+              <span class="d-none d-md-inline">{{ request.user.username }}</span>
+              <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu kn-user-menu">
+              <li class="kn-menu-section">Signed in as</li>
+              <li style="padding: 0 0.7rem 0.4rem; font-size: 0.85rem; color: var(--kn-fg);">
+                <strong>{{ request.user.username }}</strong>
+                {% if request.user.employee.role %}<div style="font-size:0.75rem;color:var(--kn-fg-muted);text-transform:capitalize;">{{ request.user.employee.role }}</div>{% endif %}
+              </li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
+            </ul>
+          </div>
+        {% endif %}
       </div>
-    </div>
+    </header>
+
+    <div class="kn-overlay" id="navOverlay"></div>
+
+    {# ─────────── PAGE CONTENT ─────────── #}
+    <main class="kn-content">
+      {% if self|stringformat:"s" %}{# render page title if block defined #}{% endif %}
+      {% block page_title_wrap %}
+        <div class="kn-page-header">
+          <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+        </div>
+      {% endblock %}
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="ki-alert {% if message.level_tag == 'error' %}ki-alert-danger{% elif message.level_tag == 'success' %}ki-alert-success{% elif message.level_tag == 'warning' %}ki-alert-warning{% else %}ki-alert-info{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </main>
 
     {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
     <!-- Notifications Modal -->
@@ -395,118 +579,86 @@
     <script src="{% static 'django_select2/django_select2.js' %}"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 
-    <!-- Sidebar Toggle Script -->
+    <!-- Top navbar interactions -->
     <script>
-    (function() {
-      const app     = document.querySelector('.ki-app');
-      const sidebar = document.getElementById('kiSidebar');
-      const overlay = document.getElementById('sidebarOverlay');
-      const toggle  = document.getElementById('sidebarToggle');
-      const colBtn  = document.getElementById('sidebarCollapseBtn');
-      const MOBILE  = 1024;
+      (function() {
+        const MOBILE = 1180;
+        const nav = document.getElementById('navMenu');
+        const overlay = document.getElementById('navOverlay');
+        const toggle = document.getElementById('navToggle');
 
-      // ── Mobile open/close ──
-      function openSidebar()  { sidebar.classList.add('show'); overlay.classList.add('show'); overlay.style.display = 'block'; document.body.style.overflow = 'hidden'; }
-      function closeSidebar() { sidebar.classList.remove('show'); overlay.classList.remove('show'); setTimeout(() => { overlay.style.display = 'none'; }, 300); document.body.style.overflow = ''; }
+        function isMobile() { return window.innerWidth <= MOBILE; }
 
-      // ── Desktop collapse/expand ──
-      function collapseSidebar() {
-        sidebar.classList.add('collapsed');
-        app.classList.add('sidebar-collapsed');
-        localStorage.setItem('ki-sidebar-collapsed', '1');
-      }
-      function expandSidebar() {
-        sidebar.classList.remove('collapsed');
-        app.classList.remove('sidebar-collapsed');
-        localStorage.setItem('ki-sidebar-collapsed', '0');
-      }
-
-      // Restore saved state on desktop
-      if (window.innerWidth > MOBILE && localStorage.getItem('ki-sidebar-collapsed') === '1') {
-        collapseSidebar();
-      }
-
-      // Top-bar hamburger: mobile=slide, desktop=collapse
-      toggle && toggle.addEventListener('click', function() {
-        if (window.innerWidth <= MOBILE) {
-          if (sidebar.classList.contains('show')) closeSidebar(); else openSidebar();
-        } else {
-          if (sidebar.classList.contains('collapsed')) expandSidebar(); else collapseSidebar();
+        // ── Hamburger ──
+        function openNav() {
+          nav.classList.add('show');
+          overlay.classList.add('show');
+          document.body.style.overflow = 'hidden';
         }
-      });
-
-      // Sidebar chevron collapse button (desktop only)
-      colBtn && colBtn.addEventListener('click', function() {
-        if (sidebar.classList.contains('collapsed')) expandSidebar(); else collapseSidebar();
-      });
-
-      overlay && overlay.addEventListener('click', closeSidebar);
-
-      // Add data-tooltip attributes to sidebar items for collapsed hover labels
-      document.querySelectorAll('.ki-sidebar-item').forEach(function(item) {
-        const span = item.querySelector('span');
-        if (span) item.setAttribute('data-tooltip', span.textContent.trim());
-      });
-
-      // Highlight active sidebar item
-      const currentPath = window.location.pathname;
-      document.querySelectorAll('.ki-sidebar-item').forEach(function(item) {
-        if (item.getAttribute('href') === currentPath) {
-          item.classList.add('active');
+        function closeNav() {
+          nav.classList.remove('show');
+          overlay.classList.remove('show');
+          document.body.style.overflow = '';
+          // collapse any open dropdowns on mobile
+          document.querySelectorAll('.kn-dropdown.open').forEach(d => d.classList.remove('open'));
         }
-      });
-
-      // Close sidebar on navigation click (mobile)
-      if (window.innerWidth <= MOBILE) {
-        document.querySelectorAll('.ki-sidebar-item').forEach(function(item) {
-          item.addEventListener('click', closeSidebar);
+        toggle && toggle.addEventListener('click', () => {
+          nav.classList.contains('show') ? closeNav() : openNav();
         });
-      }
+        overlay && overlay.addEventListener('click', closeNav);
 
-      // Collapsible sidebar sections with persistent state
-      const sectionState = JSON.parse(localStorage.getItem('ki-sidebar-sections') || '{}');
-      const sections = document.querySelectorAll('.ki-sidebar-section');
-
-      sections.forEach(function(section, index) {
-        const label = section.textContent.trim();
-        const storageKey = `${index}:${label}`;
-
-        section.innerHTML = `<span>${label}</span><i class="bi bi-chevron-down section-chevron"></i>`;
-        section.setAttribute('role', 'button');
-        section.setAttribute('aria-expanded', 'true');
-
-        const groupItems = [];
-        let sibling = section.nextElementSibling;
-        while (sibling && !sibling.classList.contains('ki-sidebar-section')) {
-          if (sibling.classList.contains('ki-sidebar-item')) {
-            groupItems.push(sibling);
-          }
-          sibling = sibling.nextElementSibling;
-        }
-
-        const hasActiveItem = groupItems.some(function(item) {
-          return item.classList.contains('active');
-        });
-
-        function applyCollapsed(collapsed) {
-          section.classList.toggle('collapsed', collapsed);
-          section.setAttribute('aria-expanded', String(!collapsed));
-          groupItems.forEach(function(item) {
-            item.style.display = collapsed ? 'none' : '';
+        // ── Dropdowns ──
+        document.querySelectorAll('.kn-dropdown').forEach(function(dd) {
+          const btn = dd.querySelector('.kn-dropdown-toggle, .kn-user-toggle');
+          if (!btn) return;
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            // On desktop dropdowns also work via :hover, but click toggles too
+            const isOpen = dd.classList.contains('open');
+            // Close other open dropdowns at the same level (desktop only)
+            if (!isMobile()) {
+              document.querySelectorAll('.kn-dropdown.open').forEach(d => {
+                if (d !== dd) d.classList.remove('open');
+              });
+            }
+            dd.classList.toggle('open', !isOpen);
           });
-        }
-
-        const startCollapsed = hasActiveItem ? false : Boolean(sectionState[storageKey]);
-        applyCollapsed(startCollapsed);
-
-        section.addEventListener('click', function() {
-          const nextState = !section.classList.contains('collapsed');
-          applyCollapsed(nextState);
-          sectionState[storageKey] = nextState;
-          localStorage.setItem('ki-sidebar-sections', JSON.stringify(sectionState));
         });
-      });
-    })();
+        // Close dropdowns when clicking outside (desktop)
+        document.addEventListener('click', function(e) {
+          if (isMobile()) return;
+          if (!e.target.closest('.kn-dropdown')) {
+            document.querySelectorAll('.kn-dropdown.open').forEach(d => d.classList.remove('open'));
+          }
+        });
+        // Close mobile nav when clicking a navigation link
+        nav && nav.querySelectorAll('a.kn-link, a.kn-menu-item').forEach(function(a) {
+          a.addEventListener('click', function() {
+            if (isMobile()) closeNav();
+          });
+        });
+
+        // ── Active link highlighting ──
+        const path = window.location.pathname;
+        let foundActive = false;
+        nav && nav.querySelectorAll('a.kn-link, a.kn-menu-item').forEach(function(a) {
+          if (a.getAttribute('href') === path) {
+            a.classList.add('active');
+            foundActive = true;
+            // also mark parent dropdown toggle as active
+            const parent = a.closest('.kn-dropdown');
+            if (parent) {
+              const tog = parent.querySelector('.kn-dropdown-toggle');
+              tog && tog.classList.add('active');
+            }
+          }
+        });
+
+        // ── ESC closes mobile nav ──
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && nav.classList.contains('show')) closeNav();
+        });
+      })();
     </script>
 
     <!-- Notifications Script -->

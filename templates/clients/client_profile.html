@@ -266,4 +266,18 @@
   </div>
 </div>
 
+{% if client.drive_folder_url %}
+<script>
+  (function() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('open_drive') === '1') {
+      const folderUrl = "{{ client.drive_folder_url|escapejs }}";
+      window.open(folderUrl, '_blank', 'noopener');
+      // Strip the query param so refresh doesn't re-open the folder.
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  })();
+</script>
+{% endif %}
+
 {% endblock %}
