@@ -209,16 +209,39 @@ def admin_dashboard(request):
                 "progress": progress,
             })
 
+    # ── Pre-aggregate once instead of per-product / per-employee loops.
+    # This collapses 4 N×M N+1 loops (≥120 queries) into 4 group-by queries.
+    today_by_product = {
+        r["product"]: r["total"] or Decimal("0")
+        for r in approved_sales_all.filter(date=today).values("product").annotate(total=Sum("amount"))
+    }
+    month_by_product = {
+        r["product"]: r["total"] or Decimal("0")
+        for r in monthly_sales_qs.values("product").annotate(total=Sum("amount"))
+    }
+    today_by_emp_product = {
+        (r["employee_id"], r["product"]): r["total"] or Decimal("0")
+        for r in approved_sales_all.filter(date=today)
+                                    .values("employee_id", "product")
+                                    .annotate(total=Sum("amount"))
+    }
+    month_by_emp_product = {
+        (r["employee_id"], r["product"]): r["total"] or Decimal("0")
+        for r in monthly_sales_qs
+                                    .values("employee_id", "product")
+                                    .annotate(total=Sum("amount"))
+    }
+
     overall_daily_progress = []
     for product in products:
         target_value = daily_target_map.get(product, Decimal("0")) * (active_employee_count or 0)
-        achieved = approved_sales_all.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+        achieved = today_by_product.get(product, Decimal("0"))
         progress = (achieved / target_value * 100) if target_value else 0
         overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
     overall_monthly_progress = []
     for product in products:
-        achieved = monthly_sales_qs.filter(product=product).aggregate(total=Sum("amount"))['total'] or 0
+        achieved = month_by_product.get(product, Decimal("0"))
         target_base = monthly_target_map.get(product, Decimal("0"))
         target_value = (target_base or 0) * (active_employee_count or 0)
         progress = (achieved / target_value * 100) if target_value else 0
@@ -233,7 +256,7 @@ def admin_dashboard(request):
             "products": []
         }
         for product in products:
-            achieved = approved_sales_all.filter(employee=emp_obj, product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+            achieved = today_by_emp_product.get((emp_obj.id, product), Decimal("0"))
             target = daily_target_map.get(product, 0)
             progress = (achieved / target * 100) if target else 0
             emp_entry["products"].append({
@@ -251,12 +274,7 @@ def admin_dashboard(request):
             "products": []
         }
         for product in products:
-            achieved = approved_sales_all.filter(
-                employee=emp_obj,
-                product=product,
-                date__year=year,
-                date__month=month
-            ).aggregate(total=Sum("amount"))['total'] or 0
+            achieved = month_by_emp_product.get((emp_obj.id, product), Decimal("0"))
             target = monthly_target_map.get(product, 0)
             progress = (achieved / target * 100) if target else 0
             emp_entry["products"].append({

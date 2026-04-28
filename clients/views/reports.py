@@ -405,18 +405,28 @@ def monthly_business_report(request):
             products.append(product_name)
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
 
+    # Pre-aggregate amounts grouped by (employee, product) and points by employee.
+    # Replaces an N×M loop of per-cell `.aggregate(Sum)` calls with two queries.
+    amount_by_emp_product = {
+        (r["employee_id"], r["product"]): r["total"] or Decimal("0")
+        for r in approved.values("employee_id", "product").annotate(total=Sum("amount"))
+    }
+    points_by_emp = {
+        r["employee_id"]: r["total"] or Decimal("0")
+        for r in approved.values("employee_id").annotate(total=Sum("points"))
+    }
+
     rows = []
     grand = {p: Decimal("0") for p in products}
     grand["points"] = Decimal("0")
 
     for e in employees:
-        emp_sales = approved.filter(employee=e)
         product_vals = []
         for p in products:
-            total = emp_sales.filter(product=p).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            total = amount_by_emp_product.get((e.id, p), Decimal("0"))
             product_vals.append(total)
             grand[p] += total
-        pts = emp_sales.aggregate(t=Sum("points"))["t"] or Decimal("0")
+        pts = points_by_emp.get(e.id, Decimal("0"))
         grand["points"] += pts
         rows.append({"employee": e, "product_vals": product_vals, "points": pts})
 
