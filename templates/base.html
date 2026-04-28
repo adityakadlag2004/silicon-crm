@@ -4,21 +4,23 @@
   <head>
     <meta charset="UTF-8" />
     <title>{% block title %}Dashboard{% endblock %} — Kadlag Investment BO</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#E5B740" />
     <link rel="manifest" href="{% static 'manifest.json' %}">
     <link rel="apple-touch-icon" href="{% static 'icons/icon-192.png' %}">
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
 
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
+    <!-- Bootstrap CSS (self-hosted) -->
+    <link href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}" rel="stylesheet" />
+    <!-- Bootstrap Icons (self-hosted) -->
+    <link href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}" rel="stylesheet" />
     <!-- Select2 CSS -->
     <link href="{% static 'django_select2/django_select2.css' %}" rel="stylesheet"/>
     <!-- KI Design System -->
     <link href="{% static 'css/ki-design-system.css' %}" rel="stylesheet" />
+    <!-- KI Mobile (loaded last so it cascades over everything) -->
+    <link href="{% static 'css/ki-mobile.css' %}" rel="stylesheet" />
     <style>
       /* ───────── Top Navbar (industry-standard horizontal nav) ───────── */
       :root {
@@ -44,7 +46,7 @@
         box-shadow: var(--kn-shadow);
         display: flex;
         align-items: center;
-        z-index: 1030;
+        z-index: 1040;       /* must stay above .kn-overlay so nav slide-out is clickable */
         padding: 0 1.25rem;
       }
 
@@ -290,7 +292,7 @@
           position: fixed;
           top: var(--kn-h); left: 0; right: 0; bottom: 0;
           background: rgba(0,0,0,0.4);
-          z-index: 1034;
+          z-index: 1030;     /* below .kn-navbar (1040) so nav slide-out stays clickable */
         }
         .kn-overlay.show { display: block; }
 
@@ -384,6 +386,7 @@
               <ul class="kn-menu">
                 <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:product_management' %}"><i class="bi bi-box-seam"></i> Products</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:audit_log' %}"><i class="bi bi-journal-text"></i> Audit Log</a></li>
               </ul>
             </div>
 
@@ -573,11 +576,12 @@
       }
     </script>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Bootstrap JS (self-hosted) -->
+    <script src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
     <!-- Select2 JS -->
     <script src="{% static 'django_select2/django_select2.js' %}"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- htmx (self-hosted) -->
+    <script src="{% static 'vendor/htmx/htmx.min.js' %}"></script>
 
     <!-- Top navbar interactions -->
     <script>

@@ -7,9 +7,20 @@
 <h2 class="ki-section-title"><i class="bi bi-receipt-cutoff"></i> All Sales</h2>
 
 <!-- Filters -->
+<style>
+  .sales-filter { display: grid; grid-template-columns: 2fr repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; align-items: end; }
+  .sales-filter-actions { grid-column: 1 / -1; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  @media (max-width: 768px) {
+    .sales-filter { grid-template-columns: 1fr 1fr; }
+    .sales-filter > div:first-child { grid-column: 1 / -1; }
+  }
+  @media (max-width: 480px) {
+    .sales-filter { grid-template-columns: 1fr; }
+  }
+</style>
 <div class="ki-card mb-4">
-  <form method="get" class="ki-filter-bar" style="flex-wrap:wrap;gap:1rem;align-items:flex-end;">
-    <div style="min-width:220px;">
+  <form method="get" class="sales-filter">
+    <div>
       <label class="form-label">Search</label>
       <input type="text" name="q" class="form-control" placeholder="Client, phone, employee, product" value="{{ request.GET.q|default:'' }}">
     </div>
@@ -42,14 +53,14 @@
     {% if not is_employee %}
     <div>
       <label class="form-label">Employee</label>
-      <input type="text" name="employee" class="form-control" placeholder="Employee Username" value="{{ request.GET.employee }}">
+      <input type="text" name="employee" class="form-control" placeholder="Username" value="{{ request.GET.employee }}">
     </div>
     {% endif %}
     <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date }}"></div>
     <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date }}"></div>
-    <div style="display:flex;gap:0.7rem;margin-top:0.5rem;flex-wrap:wrap;">
-      <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-search"></i> Search</button>
-      <a href="{% url 'clients:all_sales' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
+    <div class="sales-filter-actions">
+      <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-search"></i> Search</button>
+      <a href="{% url 'clients:all_sales' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
     </div>
   </form>
 </div>
@@ -83,8 +94,10 @@
         <td>{{ sale.status|title }}</td>
         {% if not is_employee %}
         <td>
-          <a href="{% url 'clients:edit_sale' sale.id %}" class="ki-btn ki-btn-sm ki-btn-primary"><i class="bi bi-pencil"></i> Edit</a>
-          <a href="{% url 'clients:delete_sale' sale.id %}" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i> Delete</a>
+          <div style="display:flex;gap:0.3rem;flex-wrap:wrap;">
+            <a href="{% url 'clients:edit_sale' sale.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+            <a href="{% url 'clients:delete_sale' sale.id %}" class="ki-btn ki-btn-sm" title="Delete" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i></a>
+          </div>
         </td>
         {% endif %}
       </tr>

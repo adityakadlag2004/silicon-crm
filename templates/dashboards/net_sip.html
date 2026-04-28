@@ -97,7 +97,9 @@
 		<div class="fw-bold text-uppercase" style="letter-spacing:0.5px;">Net SIP Graph</div>
 		<div class="text-muted">Live totals from SIP fresh and stoppage entries</div>
 	</div>
-	<canvas id="netSipChart" height="120"></canvas>
+	<div style="position:relative;width:100%;height:300px;">
+		<canvas id="netSipChart"></canvas>
+	</div>
 </div>
 
 <div class="ki-card">
@@ -248,7 +250,7 @@
 	</div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
 <script>
 	(function() {
 		const periodTotals = JSON.parse('{{ period_totals_json|escapejs }}');
@@ -277,9 +279,13 @@
 				data: { labels, datasets: buildDataset(mode) },
 				options: {
 					responsive: true,
+					maintainAspectRatio: false,
 					interaction: { mode: 'index', intersect: false },
 					plugins: { legend: { display: true } },
-					scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + v } } }
+					scales: {
+						y: { beginAtZero: true, ticks: { callback: v => '₹' + v, font: { size: 11 } } },
+						x: { ticks: { font: { size: 10 }, maxRotation: 45, autoSkip: true } }
+					}
 				}
 			});
 		}

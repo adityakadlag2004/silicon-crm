@@ -6,27 +6,51 @@
 
 <h2 class="ki-section-title">Performance Overview (Last {{ labels_json|length }} Months)</h2>
 
+<style>
+  .pp-chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 280px;
+  }
+  @media (max-width: 768px) {
+    .pp-chart-wrap { height: 240px; }
+  }
+  .pp-snapshot-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+  .pp-snapshot-header h2 { margin-bottom: 0 !important; flex: 1 1 auto; }
+  .pp-snapshot-header form { flex: 0 1 auto; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  @media (max-width: 600px) {
+    .pp-snapshot-header form { width: 100%; }
+    .pp-snapshot-header form .form-select { flex: 1; min-width: 120px; }
+  }
+</style>
+
 <div class="ki-card">
   <div class="ki-flex-row" style="flex-wrap:wrap;gap:0.5rem;">
     <span class="ki-badge">Latest: {{ latest_month_label }}</span>
     <span class="ki-badge">Scope: {{ scope_label }}</span>
     <a href="{% url 'clients:admin_dashboard' %}" class="ki-btn ki-btn-primary ki-btn-sm">Back to Dashboard</a>
   </div>
-  <canvas id="adminPerformanceChart" height="100" class="mt-3"></canvas>
+  <div class="pp-chart-wrap mt-3">
+    <canvas id="adminPerformanceChart"></canvas>
+  </div>
 </div>
 
-<div class="ki-flex-row" style="flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;">
-  <h2 class="ki-section-title" style="margin-bottom:0;">Monthly Snapshots — {{ selected_year }}</h2>
-  <form method="get" class="ki-filter-bar">
-    <label for="year" class="form-label">Year</label>
-    <select name="year" id="year" onchange="this.form.submit()" class="form-select">
+<div class="pp-snapshot-header">
+  <h2 class="ki-section-title">Monthly Snapshots — {{ selected_year }}</h2>
+  <form method="get">
+    <select name="year" id="year" onchange="this.form.submit()" class="form-select form-select-sm">
       {% for y in year_options %}
         <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
       {% endfor %}
     </select>
-    <label for="employee" class="form-label">Employee</label>
-    <select name="employee" id="employee" onchange="this.form.submit()" class="form-select">
-      <option value="all" {% if not selected_employee_id %}selected{% endif %}>All Employees (cumulative)</option>
+    <select name="employee" id="employee" onchange="this.form.submit()" class="form-select form-select-sm">
+      <option value="all" {% if not selected_employee_id %}selected{% endif %}>All Employees</option>
       {% for e in employees %}
         <option value="{{ e.id }}" {% if selected_employee_id and selected_employee_id == e.id %}selected{% endif %}>{{ e.user.username }}</option>
       {% endfor %}
@@ -63,7 +87,7 @@
   {% endif %}
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
 {{ labels_json|json_script:"admin-performance-labels" }}
 {{ totals_json|json_script:"admin-performance-data" }}
 <script>
@@ -86,8 +110,12 @@
       },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: true } },
-        scales: { y: { beginAtZero: true } }
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 11 } } },
+          x: { ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 0, autoSkip: true } }
+        }
       }
     });
   })();

@@ -269,7 +269,7 @@
   <table class="ki-table" id="clientsTable">
     <thead>
       <tr>
-        <th style="width:60px;">
+        <th class="hide-on-mobile" style="width:60px;">
           <a class="sortable {% if sort == 'id' or sort == '-id' %}active{% endif %}" data-sort="id">
             # <i class="bi bi-chevron-expand sort-icon"></i>
           </a>
@@ -280,7 +280,7 @@
           </a>
         </th>
         <th>Products</th>
-        <th>
+        <th class="hide-on-mobile">
           <a class="sortable {% if sort == 'lumsum_investment' or sort == '-lumsum_investment' %}active{% endif %}" data-sort="lumsum_investment">
             Lumpsum <i class="bi bi-chevron-expand sort-icon"></i>
           </a>
@@ -296,7 +296,7 @@
     <tbody>
       {% for client in clients_page %}
       <tr>
-        <td><span style="font-weight:600;color:var(--ki-text-muted);">{{ client.id }}</span></td>
+        <td class="hide-on-mobile"><span style="font-weight:600;color:var(--ki-text-muted);">{{ client.id }}</span></td>
         <td>
           <div class="client-name-cell">
             <span class="name">{{ client.name }}</span>
@@ -316,7 +316,7 @@
             {% endif %}
           </div>
         </td>
-        <td>{% if client.lumsum_investment %}₹{{ client.lumsum_investment|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td class="hide-on-mobile">{% if client.lumsum_investment %}₹{{ client.lumsum_investment|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
         <td>
           {% if client.mapped_to %}
             <span class="mapped-badge"><i class="bi bi-person-fill" style="font-size:0.75rem;"></i> {{ client.mapped_to.user.get_full_name|default:client.mapped_to.user.username }}</span>

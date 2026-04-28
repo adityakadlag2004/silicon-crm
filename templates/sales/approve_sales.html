@@ -1,29 +1,74 @@
 {% extends "base.html" %}
 {% block title %}Approve Sales{% endblock %}
 {% block page_title %}Approve Sales{% endblock %}
+{% block extra_css %}
+<style>
+  /* Desktop: keep classic table view */
+  .approve-card-list { display: none; }
+  .approve-table-wrap { display: block; }
+
+  .approve-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  .approve-reject-form { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+  .approve-reject-form input[name="reason"] { width: 160px; min-width: 0; }
+
+  /* Mobile: switch to a card-per-sale layout — much easier to tap */
+  @media (max-width: 768px) {
+    .approve-table-wrap { display: none; }
+    .approve-card-list { display: block; }
+
+    .approve-card {
+      background: var(--ki-card-bg, #fff);
+      border: 1px solid var(--ki-card-border, #e5e7eb);
+      border-radius: 10px;
+      padding: 0.85rem;
+      margin-bottom: 0.7rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .approve-card-head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 0.5rem; margin-bottom: 0.5rem;
+    }
+    .approve-card-client { font-weight: 700; color: var(--ki-text-primary, #1f2937); font-size: 1rem; }
+    .approve-card-date { font-size: 0.78rem; color: var(--ki-text-muted, #6b7280); }
+    .approve-card-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem 0.8rem; font-size: 0.85rem; margin-bottom: 0.7rem; }
+    .approve-card-meta .label { color: var(--ki-text-muted, #6b7280); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .approve-card-meta .value { color: var(--ki-text-primary, #1f2937); font-weight: 500; }
+
+    .approve-card-actions { display: grid; gap: 0.45rem; }
+    .approve-card-actions .approve-reject-form { width: 100%; flex-wrap: nowrap; }
+    .approve-card-actions .approve-reject-form input[name="reason"] { flex: 1; width: auto; }
+    .approve-card-actions form { width: 100%; }
+    .approve-card-actions form button { width: 100%; }
+    .approve-card-actions .approve-reject-form button { width: auto; flex-shrink: 0; }
+  }
+</style>
+{% endblock %}
 {% block content %}
 
   <h2 class="ki-section-title mb-3"><i class="bi bi-check2-square"></i> Pending Sales Approvals</h2>
-  <form method="get" class="row g-3 mb-3">
-    <div class="col-md-3">
-      <label class="form-label">Employee</label>
-      <input type="text" name="employee" value="{{ employee_filter }}" class="form-control" placeholder="Username or name">
-    </div>
-    <div class="col-md-3">
-      <label class="form-label">Start Date</label>
-      <input type="date" name="start_date" value="{{ start_date }}" class="form-control">
-    </div>
-    <div class="col-md-3">
-      <label class="form-label">End Date</label>
-      <input type="date" name="end_date" value="{{ end_date }}" class="form-control">
-    </div>
-    <div class="col-md-3 d-flex align-items-end">
-      <button type="submit" class="ki-btn ki-btn-primary me-2"><i class="bi bi-funnel"></i> Filter</button>
-      <a href="{% url 'clients:approve_sales' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
-    </div>
-  </form>
+  <div class="ki-card mb-3">
+    <form method="get" class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Employee</label>
+        <input type="text" name="employee" value="{{ employee_filter }}" class="form-control" placeholder="Username or name">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Start Date</label>
+        <input type="date" name="start_date" value="{{ start_date }}" class="form-control">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">End Date</label>
+        <input type="date" name="end_date" value="{{ end_date }}" class="form-control">
+      </div>
+      <div class="col-md-3 d-flex align-items-end gap-2">
+        <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel"></i> Filter</button>
+        <a href="{% url 'clients:approve_sales' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
+      </div>
+    </form>
+  </div>
 
-  <div class="ki-card ki-table-wrap">
+  <!-- Desktop table view -->
+  <div class="ki-card ki-table-wrap approve-table-wrap">
     <table class="ki-table">
       <thead>
         <tr>
@@ -47,20 +92,22 @@
           <td>₹{{ sale.amount }}</td>
           <td>{{ sale.points }}</td>
           <td>{{ sale.employee.user.get_full_name|default:sale.employee.user.username }}</td>
-          <td class="d-flex gap-2">
-            <form method="post" action="{% url 'clients:approve_sales' %}">
-              {% csrf_token %}
-              <input type="hidden" name="sale_id" value="{{ sale.id }}">
-              <input type="hidden" name="action" value="approve">
-              <button class="ki-btn ki-btn-sm ki-btn-primary" type="submit"><i class="bi bi-check-lg"></i> Approve</button>
-            </form>
-            <form method="post" action="{% url 'clients:approve_sales' %}" class="d-flex gap-1">
-              {% csrf_token %}
-              <input type="hidden" name="sale_id" value="{{ sale.id }}">
-              <input type="hidden" name="action" value="reject">
-              <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason" style="width:150px;">
-              <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);" type="submit"><i class="bi bi-x-lg"></i> Reject</button>
-            </form>
+          <td>
+            <div class="approve-actions">
+              <form method="post" action="{% url 'clients:approve_sales' %}">
+                {% csrf_token %}
+                <input type="hidden" name="sale_id" value="{{ sale.id }}">
+                <input type="hidden" name="action" value="approve">
+                <button class="ki-btn ki-btn-sm ki-btn-primary" type="submit"><i class="bi bi-check-lg"></i> Approve</button>
+              </form>
+              <form method="post" action="{% url 'clients:approve_sales' %}" class="approve-reject-form">
+                {% csrf_token %}
+                <input type="hidden" name="sale_id" value="{{ sale.id }}">
+                <input type="hidden" name="action" value="reject">
+                <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason">
+                <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);" type="submit"><i class="bi bi-x-lg"></i> Reject</button>
+              </form>
+            </div>
           </td>
         </tr>
         {% empty %}
@@ -68,5 +115,41 @@
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <!-- Mobile card view -->
+  <div class="approve-card-list">
+    {% for sale in sales %}
+    <div class="approve-card">
+      <div class="approve-card-head">
+        <div class="approve-card-client">{{ sale.client.name }}</div>
+        <div class="approve-card-date">{{ sale.date }}</div>
+      </div>
+      <div class="approve-card-meta">
+        <div><div class="label">Product</div><div class="value">{{ sale.product }}</div></div>
+        <div><div class="label">Policy</div><div class="value">{% if sale.policy_type %}{{ sale.get_policy_type_display }}{% else %}—{% endif %}</div></div>
+        <div><div class="label">Amount</div><div class="value">₹{{ sale.amount }}</div></div>
+        <div><div class="label">Points</div><div class="value">{{ sale.points }}</div></div>
+        <div style="grid-column: 1 / -1;"><div class="label">Employee</div><div class="value">{{ sale.employee.user.get_full_name|default:sale.employee.user.username }}</div></div>
+      </div>
+      <div class="approve-card-actions">
+        <form method="post" action="{% url 'clients:approve_sales' %}">
+          {% csrf_token %}
+          <input type="hidden" name="sale_id" value="{{ sale.id }}">
+          <input type="hidden" name="action" value="approve">
+          <button class="ki-btn ki-btn-primary" type="submit"><i class="bi bi-check-lg"></i> Approve</button>
+        </form>
+        <form method="post" action="{% url 'clients:approve_sales' %}" class="approve-reject-form">
+          {% csrf_token %}
+          <input type="hidden" name="sale_id" value="{{ sale.id }}">
+          <input type="hidden" name="action" value="reject">
+          <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason for rejection">
+          <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);" type="submit"><i class="bi bi-x-lg"></i></button>
+        </form>
+      </div>
+    </div>
+    {% empty %}
+    <div class="ki-card text-center text-muted">No pending sales.</div>
+    {% endfor %}
   </div>
 {% endblock %}
