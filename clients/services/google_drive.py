@@ -114,3 +114,29 @@ def get_or_create_client_folder(client_name: str, client_id: int) -> tuple[str, 
     ).execute()
     folder_id = created["id"]
     return folder_id, _folder_url(folder_id)
+
+
+def archive_client_folder(folder_id: str, client_name: str, client_id: int) -> bool:
+    """Mark a client's Drive folder as archived by prefixing the name with [DELETED].
+
+    Used when a client is deleted in the CRM — preserves docs (regulatory records)
+    while clearly flagging that the source client no longer exists.
+
+    Returns True if rename succeeded, False otherwise. Never raises (best-effort).
+    """
+    if not folder_id:
+        return False
+    try:
+        service = _service()
+        new_name = f"[DELETED {client_id}] {client_name}"
+        service.files().update(
+            fileId=folder_id,
+            body={"name": new_name},
+            fields="id,name",
+            supportsAllDrives=True,
+        ).execute()
+        return True
+    except Exception:
+        # Lifecycle is best-effort: if Drive is unavailable we don't want to
+        # block a client deletion. Sentry will catch the exception if configured.
+        return False

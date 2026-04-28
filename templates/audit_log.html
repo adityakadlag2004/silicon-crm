@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Audit Log{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+
+{% block extra_css %}
+<style>
+  .audit-filter { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; }
+  .audit-filter > div { flex: 1 1 180px; min-width: 0; }
+  .audit-row {
+    display: grid;
+    grid-template-columns: 160px 180px 200px 1fr;
+    gap: 0.6rem;
+    padding: 0.65rem 0.4rem;
+    border-bottom: 1px solid var(--ki-card-border, #e5e7eb);
+    align-items: start;
+  }
+  .audit-row:last-child { border-bottom: 0; }
+  .audit-when { color: var(--ki-text-muted, #6b7280); font-size: 0.82rem; white-space: nowrap; }
+  .audit-actor { font-weight: 600; }
+  .audit-action {
+    display: inline-block;
+    padding: 0.18rem 0.55rem;
+    border-radius: 12px;
+    background: var(--ki-primary-pale, #fef3c7);
+    color: var(--ki-primary, #d97706);
+    font-size: 0.76rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .audit-action.danger { background: #fee2e2; color: #b91c1c; }
+  .audit-action.success { background: #dcfce7; color: #166534; }
+  .audit-summary { color: var(--ki-text-primary, #1f2937); }
+  .audit-details {
+    margin-top: 0.25rem;
+    font-size: 0.78rem;
+    color: var(--ki-text-muted, #6b7280);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-word;
+  }
+  @media (max-width: 768px) {
+    .audit-row { grid-template-columns: 1fr; gap: 0.2rem; padding: 0.6rem 0.2rem; }
+    .audit-when { order: -1; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="ki-card mb-3">
+  <form method="get" class="audit-filter">
+    <div>
+      <label class="form-label">Action</label>
+      <select name="action" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for a in action_options %}
+          <option value="{{ a }}" {% if a == selected_action %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Target Type</label>
+      <select name="target" class="form-select form-select-sm">
+        <option value="">All</option>
+        {% for t in target_options %}
+          <option value="{{ t }}" {% if t == selected_target %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Actor (username)</label>
+      <input type="text" name="actor" class="form-control form-control-sm" value="{{ selected_actor }}" placeholder="username">
+    </div>
+    <div style="flex:0 0 auto;">
+      <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel"></i> Apply</button>
+      <a href="{% url 'clients:audit_log' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-x-circle"></i> Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="ki-card">
+  <h3 class="ki-section-title" style="margin-top:0;">
+    Recent activity
+    <span class="text-muted" style="font-weight:400;font-size:0.85rem;">· {{ total_count }} event{{ total_count|pluralize }}</span>
+  </h3>
+
+  {% for log in page_obj %}
+    <div class="audit-row">
+      <div class="audit-when">{{ log.created_at|date:"d M Y, H:i" }}</div>
+      <div class="audit-actor">{% if log.actor %}{{ log.actor.username }}{% else %}<span class="text-muted">system</span>{% endif %}</div>
+      <div>
+        <span class="audit-action {% if 'rejected' in log.action or 'deleted' in log.action %}danger{% elif 'approved' in log.action %}success{% endif %}">{{ log.action }}</span>
+      </div>
+      <div>
+        <div class="audit-summary">{{ log.summary }}</div>
+        {% if log.details %}<div class="audit-details">{{ log.details }}</div>{% endif %}
+      </div>
+    </div>
+  {% empty %}
+    <p class="text-muted mb-0">No audit events yet.</p>
+  {% endfor %}
+</div>
+
+{% if page_obj.has_other_pages %}
+<nav aria-label="Page navigation" class="mt-3">
+  <ul class="pagination justify-content-center">
+    {% if page_obj.has_previous %}
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if selected_action %}&action={{ selected_action }}{% endif %}{% if selected_target %}&target={{ selected_target }}{% endif %}{% if selected_actor %}&actor={{ selected_actor }}{% endif %}">Prev</a></li>
+    {% endif %}
+    <li class="page-item active"><span class="page-link">{{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+    {% if page_obj.has_next %}
+      <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if selected_action %}&action={{ selected_action }}{% endif %}{% if selected_target %}&target={{ selected_target }}{% endif %}{% if selected_actor %}&actor={{ selected_actor }}{% endif %}">Next</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+{% endblock %}
