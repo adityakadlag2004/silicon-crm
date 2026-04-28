@@ -1,0 +1,216 @@
+/* ==========================================================================
+   Global mobile responsiveness — applies system-wide to make every page
+   work as a mobile web app. Loaded last so it cascades over everything.
+
+   Breakpoints:
+     ≤ 1180px  — top navbar collapses to hamburger (set in base.html)
+     ≤ 768px   — tablets/large phones: tighter padding, single-column stats
+     ≤ 480px   — small phones: compact tables, smaller fonts
+   ========================================================================== */
+
+/* ---------- Larger touch targets everywhere on touch devices ---------- */
+@media (hover: none) and (pointer: coarse) {
+  .ki-btn, .ki-btn-sm, .btn, button, .form-control, .form-select,
+  .dropdown-item, .kn-link, .kn-menu-item, .ki-sidebar-item,
+  a.ki-btn, a.ki-btn-sm {
+    min-height: 40px;
+  }
+  .ki-btn-sm, a.ki-btn-sm {
+    min-height: 36px;
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+  }
+  /* Icon-only action buttons in tables — ensure they stay tappable */
+  td .ki-btn-sm i { font-size: 1.05rem; }
+}
+
+/* ---------- Tables ----------
+   Wrap tables so they scroll horizontally on narrow screens instead of
+   blowing out the layout. Provide a soft right-edge fade as a hint that
+   there's more content. */
+.ki-table-wrap, .table-responsive {
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 768px) {
+  /* Any table not already inside a wrapper gets one via overflow handling */
+  table.ki-table, table.table {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* But if the parent already provides scroll, let the table behave normally */
+  .ki-table-wrap > table.ki-table,
+  .table-responsive > table.table {
+    display: table;
+    overflow-x: visible;
+  }
+  .ki-table-wrap, .table-responsive {
+    overflow-x: auto;
+    /* Soft scroll hint */
+    background:
+      linear-gradient(to right, #fff 30%, rgba(255,255,255,0)) 0 0/40px 100% no-repeat,
+      linear-gradient(to right, rgba(255,255,255,0), #fff 70%) 100% 0/40px 100% no-repeat;
+    background-attachment: local, local;
+  }
+  .ki-table th, .ki-table td, .table th, .table td {
+    padding: 0.55rem 0.5rem;
+    font-size: 0.86rem;
+    white-space: nowrap;
+  }
+  /* The first column (usually name/id) may wrap to keep the table narrower */
+  .ki-table td:first-child, .ki-table th:first-child { white-space: normal; }
+}
+
+/* ---------- Page content padding ---------- */
+@media (max-width: 768px) {
+  .kn-content, .ki-content { padding: 0.85rem !important; }
+  .kn-page-header h1 { font-size: 1.15rem; }
+}
+
+/* ---------- Cards & sections ---------- */
+@media (max-width: 768px) {
+  .ki-card { padding: 0.8rem !important; border-radius: 10px; }
+  .ki-section-title { font-size: 1rem; margin-bottom: 0.7rem; }
+
+  /* Stat / metric grids stack to one column */
+  .ki-grid-3, .ki-grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 0.6rem;
+  }
+}
+@media (max-width: 480px) {
+  .ki-card { padding: 0.7rem !important; }
+}
+
+/* ---------- Forms ---------- */
+@media (max-width: 768px) {
+  /* Bootstrap row.g-3 spacing reduced */
+  .row.g-3 > [class*="col-"] { margin-bottom: 0.4rem; }
+  .form-label { font-size: 0.85rem; margin-bottom: 0.25rem; }
+  .form-control, .form-select { font-size: 0.95rem; }
+  /* Filter bars wrap and stretch full-width */
+  .ki-filter-bar { flex-wrap: wrap; gap: 0.45rem; }
+  .ki-filter-bar > * {
+    flex: 1 1 100%;
+    /* !important to override inline `min-width: 220px` etc. on legacy templates */
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  .ki-filter-bar .ki-btn { flex: 0 0 auto; }
+
+  /* Bootstrap d-flex utility rows that hold filters/buttons should wrap on phones */
+  .d-flex.align-items-end,
+  .d-flex.justify-content-between,
+  .d-flex.justify-content-end {
+    flex-wrap: wrap !important;
+    gap: 0.4rem;
+  }
+}
+
+/* ---------- Action button rows ---------- */
+@media (max-width: 768px) {
+  /* Any flex row of buttons wraps on small screens */
+  .ki-flex-row, .clients-actions, .clients-search-row { flex-wrap: wrap !important; }
+  /* Action button groups in tables should not break the row height */
+  td > div { flex-wrap: wrap; gap: 0.25rem !important; }
+}
+
+/* ---------- Modals ---------- */
+@media (max-width: 600px) {
+  .modal-dialog { margin: 0.5rem; max-width: calc(100vw - 1rem); }
+  .modal-body { padding: 0.85rem; }
+  .modal-header, .modal-footer { padding: 0.7rem 0.85rem; }
+}
+
+/* ---------- Profile page (and any 2-column layout) ---------- */
+@media (max-width: 900px) {
+  .profile-grid { grid-template-columns: 1fr !important; }
+  .info-row { grid-template-columns: 110px 1fr !important; }
+}
+
+/* ---------- Pagination ---------- */
+@media (max-width: 768px) {
+  /* Bootstrap-style pagination wrapper */
+  .ki-pagination .pagination,
+  /* Direct ul.ki-pagination (used in all_sales) */
+  ul.ki-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0;
+    list-style: none;
+  }
+  .ki-pagination .page-link,
+  ul.ki-pagination li a {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* ---------- Top navbar polish on mobile ---------- */
+@media (max-width: 768px) {
+  .kn-brand-title { display: none; }      /* keep just the logo tile */
+  .kn-user-toggle { padding: 0.3rem 0.55rem; }
+  .kn-user-toggle .d-none { display: none !important; }
+  .kn-icon-btn { padding: 0.4rem 0.55rem; font-size: 1rem; }
+  body { padding-top: 56px; }
+  .kn-navbar { height: 56px; padding: 0 0.85rem; }
+  .kn-nav { top: 56px; height: calc(100vh - 56px); }
+}
+
+/* ---------- Charts ----------
+   Chart.js is responsive when its parent has a defined width. Make sure
+   chart canvases stay readable on narrow screens — enforce a min-height
+   so they don't flatten to nothing in responsive mode. */
+canvas { max-width: 100% !important; }
+@media (max-width: 768px) {
+  canvas[id*="Chart"], canvas[id*="chart"] {
+    min-height: 220px !important;
+    max-height: 320px !important;
+  }
+}
+
+/* ---------- "Bulk messaging" toolbar (my_clients) ---------- */
+@media (max-width: 768px) {
+  #messageTemplateSelect { min-width: 0 !important; flex: 1; }
+}
+
+/* ---------- PWA / iOS niceties ---------- */
+html, body { -webkit-tap-highlight-color: rgba(217, 119, 6, 0.15); }
+@supports (padding: env(safe-area-inset-bottom)) {
+  body { padding-bottom: env(safe-area-inset-bottom); }
+  .kn-navbar { padding-top: env(safe-area-inset-top); height: calc(60px + env(safe-area-inset-top)); }
+  body { padding-top: calc(60px + env(safe-area-inset-top)); }
+  @media (max-width: 768px) {
+    .kn-navbar { height: calc(56px + env(safe-area-inset-top)); }
+    body { padding-top: calc(56px + env(safe-area-inset-top)); }
+    .kn-nav { top: calc(56px + env(safe-area-inset-top)); height: calc(100vh - 56px - env(safe-area-inset-top)); }
+  }
+}
+
+/* Prevent iOS zoom on input focus (font-size must be ≥16px) */
+@media (max-width: 768px) {
+  input[type="text"], input[type="email"], input[type="number"],
+  input[type="tel"], input[type="password"], input[type="date"],
+  input[type="search"], select, textarea {
+    font-size: 16px;
+  }
+}
+
+/* Hide specific non-critical columns on tiny screens — keeps tables readable */
+@media (max-width: 480px) {
+  .hide-on-mobile, th.hide-on-mobile, td.hide-on-mobile { display: none !important; }
+}
+
+/* ---------- Sticky scroll hints ---------- */
+.scroll-hint::after {
+  content: "← swipe →";
+  display: block;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--ki-text-muted, #6b7280);
+  margin-top: 0.3rem;
+}
+@media (min-width: 769px) { .scroll-hint::after { display: none; } }

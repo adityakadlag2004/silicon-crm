@@ -93,7 +93,7 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
 <script>
   const labels = JSON.parse('{{ labels_json|escapejs }}');
   const points = JSON.parse('{{ points_json|escapejs }}');
