@@ -248,6 +248,7 @@ def approve_sales(request):
             sale.approved_by = request.user
             sale.approved_at = timezone.now()
             sale.rejection_reason = ""
+            sale._audit_actor = request.user   # picked up by AuditLog signal
             sale.save()
             messages.success(request, f"Approved sale #{sale.id}.")
         elif action == "reject":
@@ -255,6 +256,7 @@ def approve_sales(request):
             sale.approved_by = request.user
             sale.approved_at = timezone.now()
             sale.rejection_reason = reason
+            sale._audit_actor = request.user   # picked up by AuditLog signal
             sale.save()
             messages.info(request, f"Rejected sale #{sale.id}.")
         return redirect("clients:approve_sales")

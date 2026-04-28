@@ -15,6 +15,7 @@ urlpatterns = [
     path("admin/employees/", views.employee_management, name="employee_management"),
     path("admin/firm-settings/", views.firm_settings_page, name="firm_settings"),
     path("admin/products/", views.product_management_page, name="product_management"),
+    path("admin/audit-log/", views.audit_log, name="audit_log"),
     path("dashboard/employee/", views.employee_dashboard, name="employee_dashboard"),
 
     # Team management

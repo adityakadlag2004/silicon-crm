@@ -180,6 +180,46 @@ class ClientMappingAudit(models.Model):
         return f"Client {self.client_id}: {self.previous_employee} → {self.new_employee} at {self.changed_at}"
 
 
+class AuditLog(models.Model):
+    """Append-only audit trail for sensitive events (sale approvals, role changes, etc.).
+
+    Designed to be cheap to write from a signal handler: action is a free-form
+    string, target is identified by model name + primary key (no FK so we don't
+    cascade-delete history), and details holds arbitrary JSON.
+    """
+    ACTION_SALE_APPROVED = "sale.approved"
+    ACTION_SALE_REJECTED = "sale.rejected"
+    ACTION_SALE_PENDING = "sale.pending_again"
+    ACTION_SALE_DELETED = "sale.deleted"
+    ACTION_CLIENT_DELETED = "client.deleted"
+    ACTION_EMPLOYEE_ROLE_CHANGED = "employee.role_changed"
+
+    action = models.CharField(max_length=64, db_index=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="audit_actions",
+    )
+    # Polymorphic target — model name + pk. No FK so a deleted target keeps history.
+    target_model = models.CharField(max_length=64, blank=True, default="")
+    target_id = models.PositiveBigIntegerField(null=True, blank=True)
+    # Human-readable summary, ~one sentence.
+    summary = models.CharField(max_length=255, blank=True, default="")
+    # Structured payload (e.g. {"from": "pending", "to": "approved", "amount": "1500.00"}).
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["target_model", "target_id"], name="audit_target_idx"),
+            models.Index(fields=["action", "-created_at"], name="audit_action_time_idx"),
+        ]
+
+    def __str__(self):
+        who = self.actor.username if self.actor_id else "system"
+        return f"[{self.created_at:%Y-%m-%d %H:%M}] {who} · {self.action} · {self.summary}"
+
+
 class Renewal(models.Model):
     PRODUCT_TYPE_LIFE = "life_insurance"
     PRODUCT_TYPE_HEALTH = "health_insurance"
