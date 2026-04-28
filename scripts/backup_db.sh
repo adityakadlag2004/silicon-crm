@@ -2,10 +2,10 @@
 # Daily Postgres backup. Designed to be invoked by cron.
 #
 # Behaviour:
-#   1. Dumps DB to /var/backups/silicon/silicon-YYYY-MM-DD.sql.gz
-#   2. Keeps last KEEP_LOCAL daily backups locally (default 14)
-#   3. If GOOGLE_DRIVE_BACKUP_FOLDER_ID is set, uploads via the same
-#      service-account JSON key used by the Drive folder feature.
+#   1. Dumps DB to $BACKUP_DIR/silicon-latest.sql.gz (single file, overwritten
+#      atomically each day). No rotation, no accumulating storage.
+#   2. If BACKUP_RCLONE_REMOTE is set, mirrors $BACKUP_DIR to that remote.
+#      Using `rclone sync` so the remote also has just the one current file.
 #
 # Setup on the server:
 #   sudo mkdir -p /var/backups/silicon
@@ -17,18 +17,14 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/silicon}"
-KEEP_LOCAL="${KEEP_LOCAL:-14}"
-TIMESTAMP="$(date +%Y-%m-%d)"
 
-# Load only DB_* and GOOGLE_* env vars from .env (avoids shell-parsing the whole file,
-# which breaks if SECRET_KEY contains special characters like parens).
+# Load only DB_* and BACKUP_* env vars from .env (avoids shell-parsing the whole
+# file, which breaks if SECRET_KEY contains special characters like parens).
 if [ -f "$PROJECT_ROOT/.env" ]; then
   while IFS='=' read -r key value; do
-    # Skip comments and blank lines
     [[ "$key" =~ ^[[:space:]]*# ]] && continue
     [[ -z "$key" ]] && continue
-    # Only export the keys we actually need
-    if [[ "$key" =~ ^(DB_NAME|DB_USER|DB_PASSWORD|DB_HOST|DB_PORT|GOOGLE_DRIVE_BACKUP_FOLDER_ID|GOOGLE_APPLICATION_CREDENTIALS)$ ]]; then
+    if [[ "$key" =~ ^(DB_NAME|DB_USER|DB_PASSWORD|DB_HOST|DB_PORT|BACKUP_RCLONE_REMOTE)$ ]]; then
       export "$key=$value"
     fi
   done < "$PROJECT_ROOT/.env"
@@ -38,29 +34,44 @@ fi
 : "${DB_USER:?DB_USER not set}"
 
 mkdir -p "$BACKUP_DIR"
-OUTFILE="$BACKUP_DIR/silicon-${TIMESTAMP}.sql.gz"
+OUTFILE="$BACKUP_DIR/silicon-latest.sql.gz"
+TMPFILE="$OUTFILE.tmp"
 
 echo "[$(date -Iseconds)] Backing up $DB_NAME → $OUTFILE"
+
+# Dump to a temp file first, then atomically rename. Means an in-progress
+# backup never replaces the previous good one — if pg_dump fails, the old
+# silicon-latest.sql.gz is still intact and restorable.
 PGPASSWORD="${DB_PASSWORD:-}" pg_dump \
   -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" \
   -U "$DB_USER" "$DB_NAME" \
-  | gzip -9 > "$OUTFILE"
+  | gzip -9 > "$TMPFILE"
 
-# Verify the dump is non-trivial
-SIZE=$(stat -c%s "$OUTFILE" 2>/dev/null || stat -f%z "$OUTFILE")
+# Verify the dump is non-trivial before promoting it
+SIZE=$(stat -c%s "$TMPFILE" 2>/dev/null || stat -f%z "$TMPFILE")
 if [ "$SIZE" -lt 1024 ]; then
-  echo "[$(date -Iseconds)] ERROR: backup is suspiciously small ($SIZE bytes)" >&2
+  echo "[$(date -Iseconds)] ERROR: backup is suspiciously small ($SIZE bytes) — keeping previous" >&2
+  rm -f "$TMPFILE"
   exit 1
 fi
+
+mv -f "$TMPFILE" "$OUTFILE"
 echo "[$(date -Iseconds)] OK ($SIZE bytes)"
 
-# Rotate — keep last KEEP_LOCAL files
-ls -1t "$BACKUP_DIR"/silicon-*.sql.gz 2>/dev/null | tail -n +$((KEEP_LOCAL + 1)) | xargs -r rm -v
+# Clean up any old date-stamped backups from earlier versions of this script.
+ls -1 "$BACKUP_DIR"/silicon-2[0-9][0-9][0-9]-*.sql.gz 2>/dev/null | xargs -r rm -v
 
-# Optional: upload to Google Drive if configured
-if [ -n "${GOOGLE_DRIVE_BACKUP_FOLDER_ID:-}" ] && [ -f "${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}" ]; then
-  echo "[$(date -Iseconds)] Uploading to Drive folder $GOOGLE_DRIVE_BACKUP_FOLDER_ID"
-  "$PROJECT_ROOT/.venv/bin/python" "$PROJECT_ROOT/scripts/upload_backup_to_drive.py" "$OUTFILE"
+# Mirror $BACKUP_DIR → remote via rclone if configured.
+# Using `sync` (not `copy`) so older files in the remote are deleted to match
+# the local retention — keeps Drive storage bounded.
+#
+# Direct Drive API upload is intentionally NOT used: service accounts have no
+# storage quota in personal Gmail Drive, and gcloud-default OAuth has the Drive
+# scope blocked. rclone handles its own user-level OAuth cleanly.
+#   Setup: rclone config  →  set BACKUP_RCLONE_REMOTE=<name>:<folder> in .env
+if [ -n "${BACKUP_RCLONE_REMOTE:-}" ] && command -v rclone >/dev/null 2>&1; then
+  echo "[$(date -Iseconds)] Mirroring $BACKUP_DIR → $BACKUP_RCLONE_REMOTE"
+  rclone sync "$BACKUP_DIR" "$BACKUP_RCLONE_REMOTE" --quiet
 fi
 
 echo "[$(date -Iseconds)] Done."
