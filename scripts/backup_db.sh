@@ -2,10 +2,10 @@
 # Daily Postgres backup. Designed to be invoked by cron.
 #
 # Behaviour:
-#   1. Dumps DB to $BACKUP_DIR/silicon-latest.sql.gz (single file, overwritten
-#      atomically each day). No rotation, no accumulating storage.
-#   2. If BACKUP_RCLONE_REMOTE is set, mirrors $BACKUP_DIR to that remote.
-#      Using `rclone sync` so the remote also has just the one current file.
+#   1. Dumps DB to $BACKUP_DIR/silicon-YYYY-MM-DD.sql.gz
+#   2. Keeps the last KEEP_LOCAL files locally (default 7).
+#   3. If BACKUP_RCLONE_REMOTE is set, mirrors $BACKUP_DIR to that remote
+#      via `rclone sync` so the remote retains the same set of files.
 #
 # Setup on the server:
 #   sudo mkdir -p /var/backups/silicon
@@ -17,6 +17,7 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/silicon}"
+KEEP_LOCAL="${KEEP_LOCAL:-7}"
 
 # Load only DB_* and BACKUP_* env vars from .env (avoids shell-parsing the whole
 # file, which breaks if SECRET_KEY contains special characters like parens).
@@ -34,14 +35,14 @@ fi
 : "${DB_USER:?DB_USER not set}"
 
 mkdir -p "$BACKUP_DIR"
-OUTFILE="$BACKUP_DIR/silicon-latest.sql.gz"
+TIMESTAMP="$(date +%Y-%m-%d)"
+OUTFILE="$BACKUP_DIR/silicon-${TIMESTAMP}.sql.gz"
 TMPFILE="$OUTFILE.tmp"
 
 echo "[$(date -Iseconds)] Backing up $DB_NAME → $OUTFILE"
 
-# Dump to a temp file first, then atomically rename. Means an in-progress
-# backup never replaces the previous good one — if pg_dump fails, the old
-# silicon-latest.sql.gz is still intact and restorable.
+# Dump to a temp file first, then atomically rename. If pg_dump fails midway,
+# previous date-stamped backups stay intact.
 PGPASSWORD="${DB_PASSWORD:-}" pg_dump \
   -h "${DB_HOST:-localhost}" -p "${DB_PORT:-5432}" \
   -U "$DB_USER" "$DB_NAME" \
@@ -58,9 +59,14 @@ fi
 mv -f "$TMPFILE" "$OUTFILE"
 echo "[$(date -Iseconds)] OK ($SIZE bytes)"
 
-# Clean up any old date-stamped backups from earlier versions of this script.
-# `|| true` so that a missing-files exit status doesn't trip set -e/pipefail.
-( ls -1 "$BACKUP_DIR"/silicon-2[0-9][0-9][0-9]-*.sql.gz 2>/dev/null || true ) | xargs -r rm -v || true
+# Rotate — keep last KEEP_LOCAL date-stamped files; delete older ones.
+# `|| true` so a missing-files exit status doesn't trip set -e/pipefail.
+( ls -1t "$BACKUP_DIR"/silicon-2[0-9][0-9][0-9]-*.sql.gz 2>/dev/null || true ) \
+  | tail -n +$((KEEP_LOCAL + 1)) \
+  | xargs -r rm -v || true
+# Also clean up any leftover legacy "silicon-latest.sql.gz" from the
+# single-file era, so the remote sync doesn't keep it indefinitely.
+rm -f "$BACKUP_DIR/silicon-latest.sql.gz"
 
 # Mirror $BACKUP_DIR → remote via rclone if configured.
 # Using `sync` (not `copy`) so older files in the remote are deleted to match
