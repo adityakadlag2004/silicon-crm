@@ -59,7 +59,8 @@ mv -f "$TMPFILE" "$OUTFILE"
 echo "[$(date -Iseconds)] OK ($SIZE bytes)"
 
 # Clean up any old date-stamped backups from earlier versions of this script.
-ls -1 "$BACKUP_DIR"/silicon-2[0-9][0-9][0-9]-*.sql.gz 2>/dev/null | xargs -r rm -v
+# `|| true` so that a missing-files exit status doesn't trip set -e/pipefail.
+( ls -1 "$BACKUP_DIR"/silicon-2[0-9][0-9][0-9]-*.sql.gz 2>/dev/null || true ) | xargs -r rm -v || true
 
 # Mirror $BACKUP_DIR → remote via rclone if configured.
 # Using `sync` (not `copy`) so older files in the remote are deleted to match
