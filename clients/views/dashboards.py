@@ -25,7 +25,6 @@ from ..models import (
     Target,
     MonthlyTargetHistory,
     CalendarEvent,
-    CallRecord,
     NetBusinessEntry,
     NetSipEntry,
     Notification,
@@ -940,11 +939,11 @@ def employee_performance(request):
             total_amount = 0
     points = sales_qs.aggregate(total=Sum('points'))['total'] or 0
 
-    calls_qs = CallRecord.objects.filter(employee=employee, call_time__date__range=(start, end))
-    calls_made = calls_qs.count()
-    connects = calls_qs.filter(outcome__in=['connected', 'success', 'Interested']).count() if calls_made else 0
-    connect_rate = (connects / calls_made * 100) if calls_made else 0
-    conversion_rate = (total_sales / calls_made * 100) if calls_made else 0
+    # Calling component removed — call/connect metrics no longer tracked.
+    calls_made = 0
+    connects = 0
+    connect_rate = 0
+    conversion_rate = 0
 
     days = []
     sales_series = []
@@ -953,7 +952,7 @@ def employee_performance(request):
     while current <= end:
         days.append(current.strftime('%Y-%m-%d'))
         sales_series.append(sales_qs.filter(date=current).aggregate(cnt=Count('id'))['cnt'] or 0)
-        calls_series.append(calls_qs.filter(call_time__date=current).aggregate(cnt=Count('id'))['cnt'] or 0)
+        calls_series.append(0)
         current += timedelta(days=1)
 
     recent_sales = sales_qs.order_by('-date')[:10]
