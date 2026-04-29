@@ -8,7 +8,6 @@ All view functions are re-exported here so that existing imports
 from .helpers import *  # noqa: F401,F403
 from .auth import *  # noqa: F401,F403
 from .leads import *  # noqa: F401,F403
-from .calling import *  # noqa: F401,F403
 from .dashboards import *  # noqa: F401,F403
 from .clients_views import *  # noqa: F401,F403
 from .sales import *  # noqa: F401,F403

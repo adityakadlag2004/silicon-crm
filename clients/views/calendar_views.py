@@ -12,7 +12,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 
 
-from ..models import CalendarEvent, Client, Prospect
+from ..models import CalendarEvent, Client
 from .helpers import throttle_view
 
 
@@ -101,9 +101,8 @@ def calendar_events_json(request):
 
     events = []
     for e in events_qs:
+        # Calling component removed — all events are manual now.
         source = "manual"
-        if e.related_prospect and getattr(e.related_prospect, "calling_list_id", None):
-            source = "calling_list"
 
         status_val = e.status
         if e.status == "pending" and e.scheduled_time and e.scheduled_time < now_ts:
@@ -124,8 +123,8 @@ def calendar_events_json(request):
                 "notes": e.notes,
                 "status": status_val,
                 "source": source,
-                "related_prospect_id": e.related_prospect.id if e.related_prospect else None,
-                "related_prospect_name": e.related_prospect.name if e.related_prospect else None,
+                "related_prospect_id": None,
+                "related_prospect_name": None,
             },
         })
 
@@ -164,16 +163,12 @@ def calendar_events_json(request):
                                 "status": "pending",
                                 "source": "birthday",
                                 "notes": "Auto-generated birthday call",
-                                "related_prospect_id": obj.id if obj.__class__.__name__ == "Prospect" else None,
+                                "related_prospect_id": None,
                             },
                         })
 
         if not types_param or "birthday" in (types_param or ""):
             add_birthdays(Client.objects.filter(date_of_birth__isnull=False, mapped_to=employee))
-            add_birthdays(
-                Prospect.objects.filter(date_of_birth__isnull=False, assigned_to=employee),
-                label_prefix="Prospect Birthday",
-            )
     except Exception:
         pass
 
@@ -241,17 +236,9 @@ def create_calendar_event(request):
         else:
             scheduled_dt = timezone.now()
 
-        related_prospect = None
+        # Calling component removed — prospects no longer exist.
         client = None
         restrict_to_own_records = not request.user.is_superuser and getattr(user_employee, "role", None) == "employee"
-
-        if related_prospect_id:
-            prospect_qs = Prospect.objects.all()
-            if restrict_to_own_records:
-                prospect_qs = prospect_qs.filter(assigned_to=user_employee)
-            related_prospect = prospect_qs.filter(id=related_prospect_id).first()
-            if related_prospect is None:
-                return JsonResponse({"success": False, "error": "Prospect not found or permission denied."}, status=403)
 
         if client_id:
             client_qs = Client.objects.all()
@@ -274,7 +261,6 @@ def create_calendar_event(request):
             notes=notes,
             scheduled_time=scheduled_dt,
             end_time=end_dt,
-            related_prospect=related_prospect,
             client=client,
         )
 
@@ -287,8 +273,8 @@ def create_calendar_event(request):
                 "type": event.type,
                 "notes": event.notes,
                 "status": event.status,
-                "related_prospect_id": event.related_prospect.id if event.related_prospect else None,
-                "related_prospect_name": event.related_prospect.name if event.related_prospect else None,
+                "related_prospect_id": None,
+                "related_prospect_name": None,
             },
         }
         return JsonResponse({"success": True, "event": ev_json})

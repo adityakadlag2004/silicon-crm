@@ -232,20 +232,6 @@ class EditRenewalForm(forms.ModelForm):
                 cleaned_data["product_name"] = product_ref.name if product_ref else None
         return cleaned_data
 
-class CallingListUploadForm(forms.Form):
-    title = forms.CharField(max_length=255)
-    file = forms.FileField()
-    daily_calls = forms.IntegerField(
-        min_value=1,
-        initial=5,
-        help_text="Number of calls per employee per day"
-    )
-    employees = forms.ModelMultipleChoiceField(
-        queryset=Employee.objects.filter(role="employee", active=True),
-        required=False,
-        widget=forms.CheckboxSelectMultiple
-    )
-
 class ClientForm(forms.ModelForm):
     class Meta:
         model = Client

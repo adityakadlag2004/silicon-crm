@@ -100,16 +100,7 @@ urlpatterns = [
     path("past-performance/<int:year>/<int:month>/", views.past_month_performance, name="past_month_performance"),
     
 
-    # calling
-    path("calling/upload/", views.upload_list, name="upload_list"),
-  path("calling/list-generator/", views.calling_list_generator, name="calling_list_generator"),
-    path("calling/admin-lists/", views.admin_lists, name="admin_lists"),
-    path("calling/employee-lists/", views.employee_lists, name="employee_lists"),
-    path("calling/workspace/<int:list_id>/", views.calling_workspace, name="callingworkspace"),
-    path("calling/admin-list/<int:list_id>/", views.admin_list_detail, name="admin_list_detail"),
-    path("calling/delete-list/<int:list_id>/", views.delete_calling_list, name="delete_calling_list"),
-    path("calling/log-result/<int:prospect_id>/", views.log_result, name="log_result"),
-    path("calling/add-followup/<int:prospect_id>/", views.add_followup, name="add_followup"),
+    # calling component removed — see migration for table drops
 
 
     # calendar
