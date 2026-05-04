@@ -58,7 +58,32 @@
     font-size: 0.88rem;
     background: #fff;
   }
-  .ls-row-actions { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+  .ls-row-actions { display: flex; }
+  .ls-actions-btn {
+    background: transparent;
+    border: 1px solid var(--ki-card-border, #e5e7eb);
+    color: var(--ki-text-muted, #6b7280);
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .ls-actions-btn:hover { background: var(--ki-body-bg, #f9fafb); color: var(--ki-text-primary); }
+  .ls-actions-menu .dropdown-item {
+    display: flex; align-items: center; gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.88rem;
+  }
+  .ls-actions-menu .dropdown-item i { width: 16px; text-align: center; }
+  .ls-actions-menu .dropdown-item.text-danger:hover { color: #b91c1c !important; background: #fef2f2; }
+  .ls-actions-menu form { margin: 0; }
+  .ls-actions-menu form button.dropdown-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+  }
 
   .ls-status-badge {
     display: inline-block;
@@ -149,7 +174,7 @@
         {% for col in columns %}
           <th>{{ col.name }}</th>
         {% endfor %}
-        <th style="width: 90px;">Actions</th>
+        <th style="width:54px;text-align:center;"></th>
       </tr>
     </thead>
     <tbody>
@@ -180,26 +205,49 @@
               {% endif %}
             </td>
           {% endfor %}
-          <td>
-            <div class="ls-row-actions">
-              <a href="{% url 'clients:lead_sheet_record_detail' sheet.id record.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="View profile + follow-ups"><i class="bi bi-eye"></i></a>
-              {% if can_edit %}
-                <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary" title="Add follow-up" data-bs-toggle="modal" data-bs-target="#fuModal_{{ record.id }}"><i class="bi bi-calendar-plus"></i></button>
-              {% endif %}
-              {% if not record.converted_client %}
-                <form method="post" action="{% url 'clients:lead_sheet_record_convert' sheet.id record.id %}" style="display:inline;" onsubmit="return confirm('Create a Client from this row?');">
-                  {% csrf_token %}
-                  <button type="submit" class="ki-btn ki-btn-sm ki-btn-secondary" title="Convert to client"><i class="bi bi-person-plus"></i></button>
-                </form>
-              {% else %}
-                <a href="{% url 'clients:client_profile' record.converted_client.id %}" class="ki-btn ki-btn-sm ki-btn-primary" title="View client #{{ record.converted_client.id }}"><i class="bi bi-person-check-fill"></i></a>
-              {% endif %}
-              {% if can_edit %}
-                <form method="post" action="{% url 'clients:lead_sheet_record_delete' sheet.id record.id %}" style="display:inline;" onsubmit="return confirm('Delete this row?');">
-                  {% csrf_token %}
-                  <button type="submit" class="ki-btn ki-btn-sm" style="color:#b91c1c;border-color:#b91c1c;" title="Delete row"><i class="bi bi-trash"></i></button>
-                </form>
-              {% endif %}
+          <td style="width:54px;text-align:center;">
+            <div class="dropdown ls-row-actions">
+              <button type="button" class="ls-actions-btn" data-bs-toggle="dropdown" aria-expanded="false" title="Actions">
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end ls-actions-menu">
+                <li>
+                  <a href="{% url 'clients:lead_sheet_record_detail' sheet.id record.id %}" class="dropdown-item">
+                    <i class="bi bi-eye"></i> View profile
+                  </a>
+                </li>
+                {% if can_edit %}
+                  <li>
+                    <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#fuModal_{{ record.id }}">
+                      <i class="bi bi-calendar-plus"></i> Add follow-up
+                    </button>
+                  </li>
+                {% endif %}
+                <li><hr class="dropdown-divider" style="margin:0.25rem 0;"></li>
+                {% if not record.converted_client %}
+                  <li>
+                    <form method="post" action="{% url 'clients:lead_sheet_record_convert' sheet.id record.id %}" onsubmit="return confirm('Create a Client from this row?');">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item"><i class="bi bi-person-plus"></i> Convert to Client</button>
+                    </form>
+                  </li>
+                {% else %}
+                  <li>
+                    <a href="{% url 'clients:client_profile' record.converted_client.id %}" class="dropdown-item">
+                      <i class="bi bi-person-check-fill"></i> View Client #{{ record.converted_client.id }}
+                    </a>
+                  </li>
+                {% endif %}
+                {% if can_edit %}
+                  <li><hr class="dropdown-divider" style="margin:0.25rem 0;"></li>
+                  <li>
+                    <form method="post" action="{% url 'clients:lead_sheet_record_delete' sheet.id record.id %}" onsubmit="return confirm('Delete this row? This will also delete its follow-ups.');">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash"></i> Delete row</button>
+                    </form>
+                  </li>
+                {% endif %}
+              </ul>
             </div>
           </td>
         </tr>
