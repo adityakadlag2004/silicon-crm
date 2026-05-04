@@ -214,6 +214,9 @@ def lead_sheet_detail(request, sheet_id):
         r.cells = [(col, vals.get(col.field_key, "")) for col in columns]
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__username")
 
+    has_phone_col = any(c.type == LeadSheetColumn.TYPE_PHONE for c in columns)
+    has_email_col = any(c.type == LeadSheetColumn.TYPE_EMAIL for c in columns)
+
     return render(request, "leads/sheet_detail.html", {
         "sheet": sheet,
         "columns": columns,
@@ -223,6 +226,8 @@ def lead_sheet_detail(request, sheet_id):
         "is_admin": _is_admin(request),
         "employees": employees,
         "column_types": LeadSheetColumn.TYPE_CHOICES,
+        "has_phone_col": has_phone_col,
+        "has_email_col": has_email_col,
     })
 
 
@@ -370,6 +375,9 @@ def lead_sheet_import_csv(request, sheet_id):
         messages.error(request, "CSV file too large (max 5 MB).")
         return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
 
+    dedupe_phone = request.POST.get("dedupe_phone") == "on"
+    dedupe_email = request.POST.get("dedupe_email") == "on"
+
     try:
         text = upload.read().decode("utf-8-sig", errors="replace")
         reader = csv.DictReader(io.StringIO(text))
@@ -393,15 +401,67 @@ def lead_sheet_import_csv(request, sheet_id):
                 next_order += 1
             header_to_col[h] = col
 
+        # Identify which columns to dedupe on (any column of that type)
+        phone_cols = [c for c in sheet.columns.all() if c.type == LeadSheetColumn.TYPE_PHONE] if dedupe_phone else []
+        email_cols = [c for c in sheet.columns.all() if c.type == LeadSheetColumn.TYPE_EMAIL] if dedupe_email else []
+
+        # Pre-load existing values to compare against
+        def _norm_phone(s):
+            return re.sub(r"[\s\-]", "", str(s or "")).lower()
+        def _norm_email(s):
+            return str(s or "").strip().lower()
+
+        existing_phones = set()
+        existing_emails = set()
+        if phone_cols or email_cols:
+            for r in sheet.records.only("values").iterator():
+                vals = r.values or {}
+                for c in phone_cols:
+                    p = _norm_phone(vals.get(c.field_key, ""))
+                    if p:
+                        existing_phones.add(p)
+                for c in email_cols:
+                    e = _norm_email(vals.get(c.field_key, ""))
+                    if e:
+                        existing_emails.add(e)
+
         rows_to_create = []
-        skipped = 0
+        skipped_blank = 0
+        skipped_dupe = 0
+        seen_phones_in_csv = set()
+        seen_emails_in_csv = set()
+
         for row in reader:
             values = {}
             for h, col in header_to_col.items():
                 values[col.field_key] = _sanitize_value(col, row.get(h, ""))
             if not any(v for v in values.values()):
-                skipped += 1
+                skipped_blank += 1
                 continue
+
+            # Check duplicates BOTH against existing rows AND within this CSV
+            is_dupe = False
+            if phone_cols:
+                for c in phone_cols:
+                    p = _norm_phone(values.get(c.field_key, ""))
+                    if p and (p in existing_phones or p in seen_phones_in_csv):
+                        is_dupe = True
+                        break
+                    if p:
+                        seen_phones_in_csv.add(p)
+            if not is_dupe and email_cols:
+                for c in email_cols:
+                    e = _norm_email(values.get(c.field_key, ""))
+                    if e and (e in existing_emails or e in seen_emails_in_csv):
+                        is_dupe = True
+                        break
+                    if e:
+                        seen_emails_in_csv.add(e)
+
+            if is_dupe:
+                skipped_dupe += 1
+                continue
+
             rows_to_create.append(LeadSheetRecord(
                 sheet=sheet, values=values,
                 created_by=request.user, updated_by=request.user,
@@ -414,13 +474,15 @@ def lead_sheet_import_csv(request, sheet_id):
 
         added = len(rows_to_create)
         new_total = previous_count + added
-        msg = (
-            f"Added {added} row{'s' if added != 1 else ''} "
-            f"({previous_count} → {new_total} total)"
-        )
-        if skipped:
-            msg += f"; skipped {skipped} blank row{'s' if skipped != 1 else ''}"
-        messages.success(request, msg + ".")
+        parts = [
+            f"Added {added} row{'s' if added != 1 else ''}",
+            f"({previous_count} → {new_total} total)",
+        ]
+        if skipped_dupe:
+            parts.append(f"· skipped {skipped_dupe} duplicate{'s' if skipped_dupe != 1 else ''}")
+        if skipped_blank:
+            parts.append(f"· skipped {skipped_blank} blank")
+        messages.success(request, " ".join(parts) + ".")
     except Exception as e:
         messages.error(request, f"Import failed: {e}")
 
