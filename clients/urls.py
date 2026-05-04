@@ -86,6 +86,10 @@ urlpatterns = [
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/update/", views.lead_sheet_record_update, name="lead_sheet_record_update"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/delete/", views.lead_sheet_record_delete, name="lead_sheet_record_delete"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/convert/", views.lead_sheet_record_convert, name="lead_sheet_record_convert"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/", views.lead_sheet_record_detail, name="lead_sheet_record_detail"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/followups/add/", views.lead_sheet_followup_add, name="lead_sheet_followup_add"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/followups/<int:followup_id>/done/", views.lead_sheet_followup_done, name="lead_sheet_followup_done"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/followups/<int:followup_id>/delete/", views.lead_sheet_followup_delete, name="lead_sheet_followup_delete"),
     path("leads/sheets/<int:sheet_id>/import-csv/", views.lead_sheet_import_csv, name="lead_sheet_import_csv"),
   # Employee performance
   path("sales/performance/", views.employee_performance, name="employee_performance"),

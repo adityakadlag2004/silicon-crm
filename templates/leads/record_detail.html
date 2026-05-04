@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Lead row · {{ sheet.name }}{% endblock %}
+{% block page_title %}Lead Profile{% endblock %}
+
+{% block extra_css %}
+<style>
+  .rec-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.25rem; }
+  @media (max-width: 900px) { .rec-grid { grid-template-columns: 1fr; } }
+
+  .rec-row {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 0.5rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px dashed var(--ki-card-border, #e5e7eb);
+  }
+  .rec-row:last-child { border-bottom: 0; }
+  .rec-label { color: var(--ki-text-muted, #6b7280); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .rec-value { color: var(--ki-text-primary, #1f2937); font-weight: 500; word-break: break-word; }
+  .rec-value:empty::before, .rec-value-empty { content: "—"; color: #cbd5e1; }
+
+  .rec-status-badge {
+    display: inline-block;
+    padding: 0.18rem 0.65rem;
+    border-radius: 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .rec-status-new        { background: #dbeafe; color: #1e40af; }
+  .rec-status-contacted  { background: #fef3c7; color: #92400e; }
+  .rec-status-interested { background: #fce7f3; color: #9d174d; }
+  .rec-status-converted  { background: #dcfce7; color: #166534; }
+  .rec-status-dropped    { background: #f1f5f9; color: #64748b; }
+
+  .fu-item {
+    display: flex; gap: 0.7rem; align-items: flex-start;
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    background: var(--ki-body-bg, #f9fafb);
+    border-left: 3px solid var(--ki-primary, #d97706);
+  }
+  .fu-item.completed { border-left-color: #16a34a; opacity: 0.8; }
+  .fu-item.overdue   { border-left-color: #ef4444; background: #fef2f2; }
+  .fu-when { font-weight: 600; color: var(--ki-text-primary); font-size: 0.88rem; }
+  .fu-meta { color: var(--ki-text-muted); font-size: 0.78rem; margin-top: 0.1rem; }
+  .fu-note { color: var(--ki-text-secondary, #4b5563); font-size: 0.85rem; margin-top: 0.3rem; white-space: pre-wrap; }
+  .fu-actions { margin-left: auto; display: flex; gap: 0.3rem; flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="ki-flex-row" style="flex-wrap:wrap;justify-content:space-between;gap:0.75rem;margin-bottom:1rem;">
+  <div>
+    <a href="{% url 'clients:lead_sheet_detail' sheet.id %}" class="ki-btn ki-btn-secondary ki-btn-sm">
+      <i class="bi bi-arrow-left"></i> {{ sheet.name }}
+    </a>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+    {% if can_edit %}
+      <button type="button" class="ki-btn ki-btn-primary ki-btn-sm" data-bs-toggle="modal" data-bs-target="#addFollowupModal">
+        <i class="bi bi-calendar-plus"></i> Add Follow-up
+      </button>
+    {% endif %}
+    {% if not record.converted_client and can_edit %}
+      <form method="post" action="{% url 'clients:lead_sheet_record_convert' sheet.id record.id %}" style="display:inline;" onsubmit="return confirm('Create a Client from this row?');">
+        {% csrf_token %}
+        <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-person-plus"></i> Convert to Client</button>
+      </form>
+    {% elif record.converted_client %}
+      <a href="{% url 'clients:client_profile' record.converted_client.id %}" class="ki-btn ki-btn-primary ki-btn-sm">
+        <i class="bi bi-person-check-fill"></i> View Client #{{ record.converted_client.id }}
+      </a>
+    {% endif %}
+    {% if can_edit %}
+      <form method="post" action="{% url 'clients:lead_sheet_record_delete' sheet.id record.id %}" style="display:inline;" onsubmit="return confirm('Delete this row? This will also delete its follow-ups.');">
+        {% csrf_token %}
+        <button type="submit" class="ki-btn ki-btn-sm" style="color:#b91c1c;border-color:#b91c1c;"><i class="bi bi-trash"></i> Delete row</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="rec-grid">
+
+  <!-- LEFT: row values -->
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;">
+      Details
+      <span class="text-muted" style="font-weight:400;font-size:0.85rem;"> · row #{{ record.id }}</span>
+    </h3>
+    {% for col, val in cells %}
+      <div class="rec-row">
+        <span class="rec-label">{{ col.name }}</span>
+        <span class="rec-value{% if not val %} rec-value-empty{% endif %}">
+          {% if col.type == 'status' and val %}
+            <span class="rec-status-badge rec-status-{{ val }}">{{ val }}</span>
+          {% elif col.type == 'email' and val %}
+            <a href="mailto:{{ val }}">{{ val }}</a>
+          {% elif col.type == 'phone' and val %}
+            <a href="tel:{{ val }}">{{ val }}</a>
+          {% else %}
+            {{ val }}
+          {% endif %}
+        </span>
+      </div>
+    {% endfor %}
+    <div class="rec-row" style="border-top:1px solid var(--ki-card-border, #e5e7eb);margin-top:0.75rem;padding-top:0.75rem;">
+      <span class="rec-label">Created</span>
+      <span class="rec-value">{{ record.created_at|date:"d M Y, H:i" }}{% if record.created_by %} by {{ record.created_by.username }}{% endif %}</span>
+    </div>
+    {% if record.updated_at and record.updated_at != record.created_at %}
+      <div class="rec-row">
+        <span class="rec-label">Last edit</span>
+        <span class="rec-value">{{ record.updated_at|date:"d M Y, H:i" }}{% if record.updated_by %} by {{ record.updated_by.username }}{% endif %}</span>
+      </div>
+    {% endif %}
+    <div style="background:#f1f5f9;border-radius:6px;padding:0.5rem 0.7rem;font-size:0.8rem;color:var(--ki-text-muted);margin-top:0.6rem;">
+      <i class="bi bi-info-circle"></i>
+      To edit values, go back to the sheet — every cell is click-to-edit.
+    </div>
+  </div>
+
+  <!-- RIGHT: follow-up timeline -->
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;">
+      Follow-ups
+      <span class="text-muted" style="font-weight:400;font-size:0.85rem;"> · {{ pending_followups|length }} pending · {{ completed_followups|length }} done</span>
+    </h3>
+
+    {% if not pending_followups and not completed_followups %}
+      <p class="text-muted mb-0" style="font-size:0.88rem;">No follow-ups scheduled yet.{% if can_edit %} Click "Add Follow-up" above to schedule one.{% endif %}</p>
+    {% endif %}
+
+    {% if pending_followups %}
+      <div style="font-weight:600;font-size:0.78rem;color:var(--ki-text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.4rem;">Upcoming</div>
+      {% for fu in pending_followups %}
+        <div class="fu-item {% if fu.scheduled_at < now %}overdue{% endif %}">
+          <div style="flex:1;min-width:0;">
+            <div class="fu-when">
+              <i class="bi bi-clock"></i> {{ fu.scheduled_at|date:"d M Y, H:i" }}
+              {% if fu.scheduled_at < now %}<span style="color:#ef4444;font-size:0.75rem;font-weight:700;margin-left:0.4rem;">OVERDUE</span>{% endif %}
+            </div>
+            {% if fu.created_by %}<div class="fu-meta">scheduled by {{ fu.created_by.username }}</div>{% endif %}
+            {% if fu.note %}<div class="fu-note">{{ fu.note }}</div>{% endif %}
+          </div>
+          {% if can_edit %}
+            <div class="fu-actions">
+              <button type="button" class="ki-btn ki-btn-sm ki-btn-primary" data-bs-toggle="modal" data-bs-target="#doneModal_{{ fu.id }}" title="Mark as done">
+                <i class="bi bi-check-lg"></i>
+              </button>
+              <form method="post" action="{% url 'clients:lead_sheet_followup_delete' sheet.id record.id fu.id %}" style="display:inline;" onsubmit="return confirm('Delete this follow-up?');">
+                {% csrf_token %}
+                <button type="submit" class="ki-btn ki-btn-sm" style="color:#b91c1c;border-color:#b91c1c;" title="Delete"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+          {% endif %}
+        </div>
+
+        {# Mark-done modal per follow-up #}
+        {% if can_edit %}
+        <div class="modal fade" id="doneModal_{{ fu.id }}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+              <form method="post" action="{% url 'clients:lead_sheet_followup_done' sheet.id record.id fu.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                  <h5 class="modal-title">Mark follow-up done</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                  <div class="text-muted" style="font-size:0.85rem;">Scheduled {{ fu.scheduled_at|date:"d M Y, H:i" }}</div>
+                  {% if fu.note %}<div style="font-size:0.85rem;margin-top:0.3rem;"><strong>Original note:</strong> {{ fu.note }}</div>{% endif %}
+                  <div class="mt-3">
+                    <label class="form-label">Outcome / notes (optional)</label>
+                    <textarea name="completion_note" class="form-control" rows="3" placeholder="What was the outcome of this follow-up?"></textarea>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                  <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Mark done</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+
+    {% if completed_followups %}
+      <div style="font-weight:600;font-size:0.78rem;color:var(--ki-text-muted);text-transform:uppercase;letter-spacing:0.04em;margin:0.8rem 0 0.4rem;">History</div>
+      {% for fu in completed_followups %}
+        <div class="fu-item completed">
+          <div style="flex:1;min-width:0;">
+            <div class="fu-when">
+              <i class="bi bi-check2-circle" style="color:#16a34a;"></i> {{ fu.scheduled_at|date:"d M Y, H:i" }}
+            </div>
+            <div class="fu-meta">
+              completed {{ fu.completed_at|date:"d M Y, H:i" }}{% if fu.completed_by %} by {{ fu.completed_by.username }}{% endif %}
+            </div>
+            {% if fu.note %}<div class="fu-note"><strong>Plan:</strong> {{ fu.note }}</div>{% endif %}
+            {% if fu.completion_note %}<div class="fu-note"><strong>Outcome:</strong> {{ fu.completion_note }}</div>{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+
+{# Add Follow-up modal #}
+{% if can_edit %}
+<div class="modal fade" id="addFollowupModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{% url 'clients:lead_sheet_followup_add' sheet.id record.id %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">Schedule follow-up</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">When <span style="color:#ef4444;">*</span></label>
+            <input type="datetime-local" name="scheduled_at" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Note (optional)</label>
+            <textarea name="note" class="form-control" rows="3" placeholder="What's the plan for this follow-up?"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-calendar-plus"></i> Schedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -961,6 +961,38 @@ class LeadSheetRecord(models.Model):
         return f"{self.sheet.name} row #{self.pk}"
 
 
+class LeadSheetFollowUp(models.Model):
+    """A scheduled follow-up against a LeadSheetRecord — same shape as
+    LeadFollowUp on the Lead model, but separate so the two systems can
+    evolve independently."""
+    record = models.ForeignKey(
+        LeadSheetRecord, related_name="followups", on_delete=models.CASCADE,
+    )
+    scheduled_at = models.DateTimeField(db_index=True)
+    note = models.TextField(blank=True, default="")
+    completed = models.BooleanField(default=False, db_index=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completion_note = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["completed", "scheduled_at"]
+        indexes = [
+            models.Index(fields=["record", "-scheduled_at"], name="lsfu_record_time_idx"),
+        ]
+
+    def __str__(self):
+        return f"Follow-up for {self.record} at {self.scheduled_at}"
+
+
 class CalendarEvent(models.Model):
     EVENT_TYPES = [
         ("call_followup", "Call Follow-up"),

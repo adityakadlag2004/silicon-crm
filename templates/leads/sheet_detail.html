@@ -183,6 +183,10 @@
           {% endfor %}
           <td>
             <div class="ls-row-actions">
+              <a href="{% url 'clients:lead_sheet_record_detail' sheet.id record.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="View profile + follow-ups"><i class="bi bi-eye"></i></a>
+              {% if can_edit %}
+                <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary" title="Add follow-up" data-bs-toggle="modal" data-bs-target="#fuModal_{{ record.id }}"><i class="bi bi-calendar-plus"></i></button>
+              {% endif %}
               {% if not record.converted_client %}
                 <form method="post" action="{% url 'clients:lead_sheet_record_convert' sheet.id record.id %}" style="display:inline;" onsubmit="return confirm('Create a Client from this row?');">
                   {% csrf_token %}
@@ -221,6 +225,40 @@
   <strong>No columns yet.</strong>
   <div style="margin-top:0.4rem;">Click "Columns" above to add some, or import a CSV — it'll create columns from the headers.</div>
 </div>
+{% endif %}
+
+{# ── Per-row "Add follow-up" modals ── #}
+{% if can_edit %}
+  {% for record in records %}
+    <div class="modal fade" id="fuModal_{{ record.id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <form method="post" action="{% url 'clients:lead_sheet_followup_add' sheet.id record.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'clients:lead_sheet_detail' sheet.id %}">
+            <div class="modal-header">
+              <h5 class="modal-title">Add follow-up · row #{{ record.id }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">When <span style="color:#ef4444;">*</span></label>
+                <input type="datetime-local" name="scheduled_at" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Note (optional)</label>
+                <textarea name="note" class="form-control" rows="3" placeholder="What's the plan for this follow-up?"></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-calendar-plus"></i> Schedule</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
 {% endif %}
 
 {# ── Add Row modal ── #}

@@ -27,6 +27,7 @@ from ..models import (
     Employee,
     LeadSheet,
     LeadSheetColumn,
+    LeadSheetFollowUp,
     LeadSheetRecord,
     Product,
 )
@@ -523,6 +524,109 @@ def lead_sheet_record_convert(request, sheet_id, record_id):
     record.save(update_fields=["converted_client", "updated_by", "updated_at"])
     messages.success(request, f"Created client #{client.id} from this row.")
     return redirect("clients:client_profile", client_id=client.id)
+
+
+# ── Record profile / detail ──────────────────────────────────────────────────
+
+@login_required
+def lead_sheet_record_detail(request, sheet_id, record_id):
+    """Profile page for a single lead-sheet row, showing all values + the
+    full follow-up timeline."""
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_view(request.user):
+        return HttpResponseForbidden("You don't have access to this sheet.")
+    record = get_object_or_404(
+        LeadSheetRecord.objects.select_related("converted_client", "created_by", "updated_by"),
+        id=record_id, sheet=sheet,
+    )
+    columns = list(sheet.columns.all())
+    vals = record.values or {}
+    cells = [(col, vals.get(col.field_key, "")) for col in columns]
+    followups = list(
+        record.followups.select_related("created_by", "completed_by").order_by("completed", "scheduled_at")
+    )
+    pending_followups = [f for f in followups if not f.completed]
+    completed_followups = [f for f in followups if f.completed]
+
+    return render(request, "leads/record_detail.html", {
+        "sheet": sheet,
+        "record": record,
+        "cells": cells,
+        "pending_followups": pending_followups,
+        "completed_followups": completed_followups,
+        "can_edit": sheet.can_edit(request.user),
+        "now": timezone.now(),
+    })
+
+
+# ── Follow-up actions ────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def lead_sheet_followup_add(request, sheet_id, record_id):
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_edit(request.user):
+        return HttpResponseForbidden("No edit permission.")
+    record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+
+    scheduled_raw = (request.POST.get("scheduled_at") or "").strip()
+    note = (request.POST.get("note") or "").strip()
+    if not scheduled_raw:
+        messages.error(request, "Pick a date/time for the follow-up.")
+        return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record.id)
+
+    # Accept "YYYY-MM-DDTHH:MM" (HTML datetime-local) and a few other shapes.
+    parsed = None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(scheduled_raw, fmt)
+            break
+        except ValueError:
+            continue
+    if parsed is None:
+        messages.error(request, "Could not parse the follow-up date/time.")
+        return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record.id)
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed)
+
+    LeadSheetFollowUp.objects.create(
+        record=record, scheduled_at=parsed, note=note, created_by=request.user,
+    )
+    sheet.save(update_fields=["updated_at"])
+    messages.success(request, "Follow-up scheduled.")
+    # Stay on whichever page they came from
+    next_url = request.POST.get("next") or ""
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record.id)
+
+
+@login_required
+@require_POST
+def lead_sheet_followup_done(request, sheet_id, record_id, followup_id):
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_edit(request.user):
+        return HttpResponseForbidden("No edit permission.")
+    fu = get_object_or_404(LeadSheetFollowUp, id=followup_id, record_id=record_id, record__sheet=sheet)
+    fu.completed = True
+    fu.completed_at = timezone.now()
+    fu.completed_by = request.user
+    fu.completion_note = (request.POST.get("completion_note") or "").strip()
+    fu.save()
+    messages.success(request, "Marked complete.")
+    return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record_id)
+
+
+@login_required
+@require_POST
+def lead_sheet_followup_delete(request, sheet_id, record_id, followup_id):
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_edit(request.user):
+        return HttpResponseForbidden("No edit permission.")
+    fu = get_object_or_404(LeadSheetFollowUp, id=followup_id, record_id=record_id, record__sheet=sheet)
+    fu.delete()
+    messages.success(request, "Follow-up removed.")
+    return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record_id)
 
 
 # ── Archive / unarchive sheet ────────────────────────────────────────────────
