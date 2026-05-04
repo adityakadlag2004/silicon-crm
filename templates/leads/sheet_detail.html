@@ -156,19 +156,29 @@
     <tbody>
       {% for record in records %}
         <tr data-record-id="{{ record.id }}">
-          {% for col in columns %}
+          {% for col, val in record.cells %}
             <td>
-              {% with val=record.values|default:'{}' %}
-                {% if col.type == 'status' %}
-                  <span class="ls-cell-edit ls-status-badge ls-status-{{ val|stringformat:'s' }}"
-                        data-field="{{ col.field_key }}" data-type="status"
-                        data-options="{{ col.options|join:'|' }}">{{ val|default:'' }}</span>
-                {% else %}
-                  <span class="ls-cell-edit"
-                        data-field="{{ col.field_key }}" data-type="{{ col.type }}"
-                        {% if col.options %}data-options="{{ col.options|join:'|' }}"{% endif %}>{{ val|default:'' }}</span>
-                {% endif %}
-              {% endwith %}
+              {% if col.type == 'status' %}
+                <span class="ls-cell-edit ls-status-badge {% if val %}ls-status-{{ val }}{% endif %}"
+                      data-field="{{ col.field_key }}" data-type="status"
+                      data-options="{{ col.options|join:'|' }}">{{ val }}</span>
+              {% elif col.type == 'select' %}
+                <span class="ls-cell-edit"
+                      data-field="{{ col.field_key }}" data-type="select"
+                      data-options="{{ col.options|join:'|' }}">{{ val }}</span>
+              {% elif col.type == 'date' and val %}
+                <span class="ls-cell-edit" data-field="{{ col.field_key }}" data-type="date">{{ val }}</span>
+              {% elif col.type == 'phone' and val %}
+                <span class="ls-cell-edit" data-field="{{ col.field_key }}" data-type="phone">{{ val }}</span>
+              {% elif col.type == 'email' and val %}
+                <span class="ls-cell-edit" data-field="{{ col.field_key }}" data-type="email">
+                  <a href="mailto:{{ val }}" onclick="event.stopPropagation();" style="color:inherit;">{{ val }}</a>
+                </span>
+              {% elif col.type == 'number' and val %}
+                <span class="ls-cell-edit" data-field="{{ col.field_key }}" data-type="number" style="text-align:right;display:inline-block;min-width:60px;">{{ val }}</span>
+              {% else %}
+                <span class="ls-cell-edit" data-field="{{ col.field_key }}" data-type="{{ col.type }}">{{ val }}</span>
+              {% endif %}
             </td>
           {% endfor %}
           <td>

@@ -207,6 +207,11 @@ def lead_sheet_detail(request, sheet_id):
 
     columns = list(sheet.columns.all())
     records = list(sheet.records.select_related("converted_client").order_by("-created_at", "-id"))
+    # Pre-compute each record's per-column value so the template can iterate
+    # cleanly without needing a custom dict-lookup filter.
+    for r in records:
+        vals = r.values or {}
+        r.cells = [(col, vals.get(col.field_key, "")) for col in columns]
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__username")
 
     return render(request, "leads/sheet_detail.html", {
