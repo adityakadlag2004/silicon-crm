@@ -390,9 +390,15 @@
               </ul>
             </div>
 
-            <a class="kn-link" href="{% url 'clients:lead_management' %}">
-              <i class="bi bi-funnel-fill"></i> Leads
-            </a>
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-funnel-fill"></i> Leads <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:lead_sheets' %}"><i class="bi bi-table"></i> Lead Records</a></li>
+              </ul>
+            </div>
 
           {# ─── MANAGER ─── #}
           {% elif request.user.employee.role == "manager" %}
@@ -447,11 +453,17 @@
             </div>
             {% endif %}
 
-            {% if manager_access.allow_lead_management %}
-            <a class="kn-link" href="{% url 'clients:lead_management' %}">
-              <i class="bi bi-funnel-fill"></i> Leads
-            </a>
-            {% endif %}
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-funnel-fill"></i> Leads <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                {% if manager_access.allow_lead_management %}
+                  <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
+                {% endif %}
+                <li><a class="kn-menu-item" href="{% url 'clients:lead_sheets' %}"><i class="bi bi-table"></i> Lead Records</a></li>
+              </ul>
+            </div>
 
           {# ─── EMPLOYEE ─── #}
           {% elif request.user.employee.role == "employee" %}
@@ -488,9 +500,15 @@
               </ul>
             </div>
 
-            <a class="kn-link" href="{% url 'clients:lead_management' %}">
-              <i class="bi bi-funnel-fill"></i> Leads
-            </a>
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-funnel-fill"></i> Leads <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:lead_sheets' %}"><i class="bi bi-table"></i> Lead Records</a></li>
+              </ul>
+            </div>
 
           {% endif %}
         {% endif %}

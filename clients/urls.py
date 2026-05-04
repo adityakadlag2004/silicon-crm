@@ -73,6 +73,20 @@ urlpatterns = [
     path("leads/<int:lead_id>/add-remark/", views.lead_add_remark, name="lead_add_remark"),
     path("leads/<int:lead_id>/", views.lead_detail, name="lead_detail"),
     path("leads/<int:lead_id>/edit/", views.lead_update, name="lead_update"),
+
+    # Lead Records — spreadsheet-style lead tracking
+    path("leads/sheets/", views.lead_sheets_list, name="lead_sheets"),
+    path("leads/sheets/create/", views.lead_sheet_create, name="lead_sheet_create"),
+    path("leads/sheets/<int:sheet_id>/", views.lead_sheet_detail, name="lead_sheet_detail"),
+    path("leads/sheets/<int:sheet_id>/access/", views.lead_sheet_access, name="lead_sheet_access"),
+    path("leads/sheets/<int:sheet_id>/archive/", views.lead_sheet_archive, name="lead_sheet_archive"),
+    path("leads/sheets/<int:sheet_id>/columns/add/", views.lead_sheet_column_add, name="lead_sheet_column_add"),
+    path("leads/sheets/<int:sheet_id>/columns/<int:column_id>/delete/", views.lead_sheet_column_delete, name="lead_sheet_column_delete"),
+    path("leads/sheets/<int:sheet_id>/records/add/", views.lead_sheet_record_add, name="lead_sheet_record_add"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/update/", views.lead_sheet_record_update, name="lead_sheet_record_update"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/delete/", views.lead_sheet_record_delete, name="lead_sheet_record_delete"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/convert/", views.lead_sheet_record_convert, name="lead_sheet_record_convert"),
+    path("leads/sheets/<int:sheet_id>/import-csv/", views.lead_sheet_import_csv, name="lead_sheet_import_csv"),
   # Employee performance
   path("sales/performance/", views.employee_performance, name="employee_performance"),
   path("dashboard/net-business/", views.net_business, name="net_business"),
