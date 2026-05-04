@@ -825,6 +825,142 @@ class LeadProductProgress(models.Model):
         lead.recompute_stage(save=True)
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# Lead Records: lightweight spreadsheet system for tracking incoming leads
+# per product / source. Each LeadSheet has its own user-defined columns.
+# ────────────────────────────────────────────────────────────────────────────
+
+
+class LeadSheet(models.Model):
+    """A spreadsheet-like collection of leads, e.g. 'Health Insurance Q3 leads'.
+
+    Access model:
+      - is_private=True              → only owner + admins/superusers
+      - is_private=False, no shared  → all employees (firm-wide)
+      - is_private=False, shared set → owner + admins + employees in shared_with
+    """
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    product = models.ForeignKey(
+        "Product", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="lead_sheets",
+        help_text="Optional: which product this sheet is tracking leads for.",
+    )
+    owner = models.ForeignKey(
+        "Employee", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="owned_lead_sheets",
+    )
+    is_private = models.BooleanField(
+        default=False,
+        help_text="If true, only owner + admins can view. Otherwise see shared_with.",
+    )
+    shared_with = models.ManyToManyField(
+        "Employee", blank=True, related_name="shared_lead_sheets",
+        help_text="If non-empty (and not private), these employees + owner + admins can view.",
+    )
+    archived = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-created_at"]
+        indexes = [
+            models.Index(fields=["owner", "archived"], name="ls_owner_arch_idx"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def can_view(self, user):
+        """True if the user can view this sheet given the access model above."""
+        if user.is_superuser:
+            return True
+        emp = getattr(user, "employee", None)
+        if not emp:
+            return False
+        if emp.role == "admin":
+            return True
+        if self.is_private:
+            return self.owner_id == emp.id
+        # not private — open to firm or to listed employees
+        if not self.shared_with.exists():
+            return True
+        return self.owner_id == emp.id or self.shared_with.filter(pk=emp.pk).exists()
+
+    def can_edit(self, user):
+        """For now: edit permission = view permission. Tighten later if needed."""
+        return self.can_view(user)
+
+
+class LeadSheetColumn(models.Model):
+    """Column definition for a LeadSheet. Records store values keyed by `field_key`."""
+    TYPE_TEXT = "text"
+    TYPE_NUMBER = "number"
+    TYPE_DATE = "date"
+    TYPE_PHONE = "phone"
+    TYPE_EMAIL = "email"
+    TYPE_SELECT = "select"
+    TYPE_STATUS = "status"
+    TYPE_CHOICES = [
+        (TYPE_TEXT, "Text"),
+        (TYPE_NUMBER, "Number"),
+        (TYPE_DATE, "Date"),
+        (TYPE_PHONE, "Phone"),
+        (TYPE_EMAIL, "Email"),
+        (TYPE_SELECT, "Dropdown"),
+        (TYPE_STATUS, "Status badge"),
+    ]
+
+    sheet = models.ForeignKey(LeadSheet, related_name="columns", on_delete=models.CASCADE)
+    name = models.CharField(max_length=100, help_text="Display name shown in the column header.")
+    field_key = models.SlugField(max_length=60, help_text="Internal key — record values are stored under this.")
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES, default=TYPE_TEXT)
+    options = models.JSONField(
+        default=list, blank=True,
+        help_text="For 'select' or 'status' types: list of allowed values.",
+    )
+    required = models.BooleanField(default=False)
+    display_order = models.PositiveIntegerField(default=0, db_index=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["display_order", "id"]
+        unique_together = [("sheet", "field_key")]
+
+    def __str__(self):
+        return f"{self.sheet.name} · {self.name}"
+
+
+class LeadSheetRecord(models.Model):
+    """One row in a LeadSheet. Values stored in JSONB keyed by column.field_key."""
+    sheet = models.ForeignKey(LeadSheet, related_name="records", on_delete=models.CASCADE)
+    values = models.JSONField(default=dict, blank=True)
+    converted_client = models.ForeignKey(
+        "Client", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="originating_lead_records",
+        help_text="Set when this row has been converted into a Client.",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="+",
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["sheet", "-created_at"], name="lsr_sheet_time_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.sheet.name} row #{self.pk}"
+
+
 class CalendarEvent(models.Model):
     EVENT_TYPES = [
         ("call_followup", "Call Follow-up"),
