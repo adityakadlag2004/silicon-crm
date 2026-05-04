@@ -408,12 +408,18 @@ def lead_sheet_import_csv(request, sheet_id):
             ))
 
         with transaction.atomic():
+            previous_count = sheet.records.count()
             LeadSheetRecord.objects.bulk_create(rows_to_create)
             sheet.save(update_fields=["updated_at"])
 
-        msg = f"Imported {len(rows_to_create)} row{'s' if len(rows_to_create) != 1 else ''}"
+        added = len(rows_to_create)
+        new_total = previous_count + added
+        msg = (
+            f"Added {added} row{'s' if added != 1 else ''} "
+            f"({previous_count} → {new_total} total)"
+        )
         if skipped:
-            msg += f" (skipped {skipped} blank row{'s' if skipped != 1 else ''})"
+            msg += f"; skipped {skipped} blank row{'s' if skipped != 1 else ''}"
         messages.success(request, msg + ".")
     except Exception as e:
         messages.error(request, f"Import failed: {e}")

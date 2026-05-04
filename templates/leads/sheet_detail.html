@@ -354,12 +354,17 @@
             <input type="file" name="csv_file" accept=".csv,text/csv" class="form-control" required>
             <div class="form-text">First row should contain column headers. Max 5 MB.</div>
           </div>
+          <div style="background:#dcfce7;border:1px solid #bbf7d0;border-radius:8px;padding:0.7rem 0.9rem;font-size:0.85rem;color:#166534;margin-bottom:0.6rem;">
+            <i class="bi bi-info-circle-fill"></i>
+            <strong>Imports always append</strong> — your existing {{ records|length }} row{{ records|length|pluralize }} stay untouched. New rows from the CSV are added on top.
+          </div>
           <div style="background:#f1f5f9;border-radius:8px;padding:0.7rem 0.9rem;font-size:0.85rem;">
             <strong>How matching works:</strong>
             <ul style="margin:0.4rem 0 0 1.1rem;padding:0;">
               <li>Headers matching existing columns (case-insensitive) → values land in those columns.</li>
               <li>Headers that don't match any existing column → a new <em>text</em> column is created automatically.</li>
               <li>Empty rows are skipped.</li>
+              <li>You can re-import as many CSVs as you like — every import adds to the same sheet.</li>
             </ul>
           </div>
         </div>
