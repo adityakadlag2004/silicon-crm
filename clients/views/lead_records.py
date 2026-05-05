@@ -218,6 +218,9 @@ def lead_sheet_detail(request, sheet_id):
     has_phone_col = any(c.type == LeadSheetColumn.TYPE_PHONE for c in columns)
     has_email_col = any(c.type == LeadSheetColumn.TYPE_EMAIL for c in columns)
 
+    # Distinct set of tags currently in this sheet (for autosuggest datalist)
+    available_tags = sorted({t for r in records for t in (r.tags or [])})
+
     return render(request, "leads/sheet_detail.html", {
         "sheet": sheet,
         "columns": columns,
@@ -229,6 +232,7 @@ def lead_sheet_detail(request, sheet_id):
         "column_types": LeadSheetColumn.TYPE_CHOICES,
         "has_phone_col": has_phone_col,
         "has_email_col": has_email_col,
+        "available_tags": available_tags,
     })
 
 
@@ -524,6 +528,60 @@ def lead_sheet_record_convert(request, sheet_id, record_id):
     record.save(update_fields=["converted_client", "updated_by", "updated_at"])
     messages.success(request, f"Created client #{client.id} from this row.")
     return redirect("clients:client_profile", client_id=client.id)
+
+
+# ── Tags (per-row, AJAX) ─────────────────────────────────────────────────────
+
+_TAG_MAX = 32
+_TAGS_PER_RECORD_MAX = 12
+
+
+def _normalize_tag(s: str) -> str:
+    """Lowercase, trim, replace whitespace with dash, drop punctuation, cap length."""
+    s = (s or "").strip().lower()
+    s = re.sub(r"\s+", "-", s)
+    s = re.sub(r"[^a-z0-9\-_]", "", s)  # only alphanumeric, dash, underscore survive
+    s = re.sub(r"-+", "-", s).strip("-_")  # collapse runs and trim leading/trailing
+    return s[:_TAG_MAX]
+
+
+@login_required
+@require_POST
+def lead_sheet_record_tag_add(request, sheet_id, record_id):
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_edit(request.user):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    tag = _normalize_tag(request.POST.get("tag", ""))
+    if not tag:
+        return JsonResponse({"ok": False, "error": "empty tag"}, status=400)
+    tags = list(record.tags or [])
+    if tag in tags:
+        return JsonResponse({"ok": True, "tags": tags, "noop": True})
+    if len(tags) >= _TAGS_PER_RECORD_MAX:
+        return JsonResponse({"ok": False, "error": f"max {_TAGS_PER_RECORD_MAX} tags per row"}, status=400)
+    tags.append(tag)
+    record.tags = tags
+    record.updated_by = request.user
+    record.save(update_fields=["tags", "updated_by", "updated_at"])
+    sheet.save(update_fields=["updated_at"])
+    return JsonResponse({"ok": True, "tags": tags, "added": tag})
+
+
+@login_required
+@require_POST
+def lead_sheet_record_tag_remove(request, sheet_id, record_id):
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_edit(request.user):
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    tag = _normalize_tag(request.POST.get("tag", ""))
+    tags = [t for t in (record.tags or []) if t != tag]
+    record.tags = tags
+    record.updated_by = request.user
+    record.save(update_fields=["tags", "updated_by", "updated_at"])
+    sheet.save(update_fields=["updated_at"])
+    return JsonResponse({"ok": True, "tags": tags, "removed": tag})
 
 
 # ── Record profile / detail ──────────────────────────────────────────────────
