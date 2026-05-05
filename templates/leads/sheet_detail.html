@@ -62,6 +62,49 @@
   .ls-row-actions { display: flex; gap: 0.25rem; flex-wrap: nowrap; justify-content: flex-end; }
   .ls-row-actions .ki-btn-sm { padding: 0.25rem 0.45rem; }
 
+  /* Tag chips: inline add/remove with auto-color from string hash */
+  .ls-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+  .ls-tag {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    padding: 0.15rem 0.45rem 0.15rem 0.55rem;
+    border-radius: 12px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .ls-tag-x {
+    background: transparent;
+    border: 0;
+    color: inherit;
+    opacity: 0.55;
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+    padding: 0 0 0 0.05rem;
+  }
+  .ls-tag-x:hover { opacity: 1; }
+  /* 6 distinct chip palettes — tag string is hashed to one of these */
+  .ls-tag-c0 { background: #dbeafe; color: #1e40af; }
+  .ls-tag-c1 { background: #dcfce7; color: #166534; }
+  .ls-tag-c2 { background: #fef3c7; color: #92400e; }
+  .ls-tag-c3 { background: #fce7f3; color: #9d174d; }
+  .ls-tag-c4 { background: #ede9fe; color: #5b21b6; }
+  .ls-tag-c5 { background: #cffafe; color: #155e75; }
+  .ls-tag-add {
+    display: inline-flex; align-items: center; gap: 0.2rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: var(--ki-text-muted, #6b7280);
+    background: transparent;
+    border: 1px dashed var(--ki-card-border, #cbd5e1);
+    cursor: pointer;
+    line-height: 1.4;
+  }
+  .ls-tag-add:hover { border-style: solid; color: var(--ki-primary, #d97706); border-color: var(--ki-primary, #d97706); }
+
   .ls-status-badge {
     display: inline-block;
     padding: 0.18rem 0.55rem;
@@ -151,6 +194,7 @@
         {% for col in columns %}
           <th>{{ col.name }}</th>
         {% endfor %}
+        <th style="width:1%;white-space:nowrap;">Tags</th>
         <th style="width:1%;white-space:nowrap;text-align:right;">Actions</th>
       </tr>
     </thead>
@@ -182,6 +226,21 @@
               {% endif %}
             </td>
           {% endfor %}
+          <td style="white-space:normal;">
+            <div class="ls-tags" data-record-tags-cell data-record-id="{{ record.id }}">
+              {% for tag in record.tags %}
+                <span class="ls-tag" data-tag="{{ tag }}">
+                  <span class="ls-tag-text">{{ tag }}</span>
+                  {% if can_edit %}<button type="button" class="ls-tag-x" title="Remove tag">×</button>{% endif %}
+                </span>
+              {% endfor %}
+              {% if can_edit %}
+                <button type="button" class="ls-tag-add" data-add-tag-btn>
+                  <i class="bi bi-plus-lg"></i> Tag
+                </button>
+              {% endif %}
+            </div>
+          </td>
           <td style="width:1%;white-space:nowrap;">
             <div class="ls-row-actions">
               <a href="{% url 'clients:lead_sheet_record_detail' sheet.id record.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="View profile + follow-ups"><i class="bi bi-eye"></i></a>
@@ -594,6 +653,134 @@
 
     document.querySelectorAll('.ls-cell-edit').forEach(cell => {
       cell.addEventListener('click', () => startEdit(cell));
+    });
+  })();
+</script>
+{% endif %}
+
+{# ── Tag chips (add/remove via AJAX, autosuggest from sheet's existing tags) ── #}
+{% if can_edit %}
+<datalist id="tagSuggestions">
+  {% for t in available_tags %}<option value="{{ t }}">{% endfor %}
+</datalist>
+<script>
+  (function() {
+    const csrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
+    const CSRF = csrfMatch ? csrfMatch[1] : '';
+    const addUrlBase = "{% url 'clients:lead_sheet_record_tag_add' sheet.id 0 %}".slice(0, -5);
+    const removeUrlBase = "{% url 'clients:lead_sheet_record_tag_remove' sheet.id 0 %}".slice(0, -8);
+
+    function colorClassFor(tag) {
+      // Same-tag-same-color: simple string hash mod 6
+      let h = 0;
+      for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) | 0;
+      return 'ls-tag-c' + (Math.abs(h) % 6);
+    }
+
+    // Apply colors to existing chips on page load
+    document.querySelectorAll('.ls-tag').forEach(chip => {
+      const tag = chip.dataset.tag;
+      if (tag) chip.classList.add(colorClassFor(tag));
+    });
+
+    function buildChip(tag) {
+      const chip = document.createElement('span');
+      chip.className = 'ls-tag ' + colorClassFor(tag);
+      chip.dataset.tag = tag;
+      const text = document.createElement('span');
+      text.className = 'ls-tag-text';
+      text.textContent = tag;
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'ls-tag-x';
+      x.title = 'Remove tag';
+      x.textContent = '×';
+      chip.appendChild(text);
+      chip.appendChild(x);
+      return chip;
+    }
+
+    async function addTag(cell, tag) {
+      tag = (tag || '').trim().toLowerCase().replace(/\s+/g, '-').slice(0, 32);
+      if (!tag) return;
+      const recordId = cell.dataset.recordId;
+      // Prevent duplicate visual add
+      if (cell.querySelector(`.ls-tag[data-tag="${CSS.escape(tag)}"]`)) return;
+      const body = new URLSearchParams(); body.set('tag', tag);
+      try {
+        const res = await fetch(addUrlBase + recordId + '/tags/add/', {
+          method: 'POST',
+          headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
+          body: body.toString(),
+          credentials: 'same-origin',
+        });
+        const data = await res.json();
+        if (!data.ok) { alert('Add tag failed: ' + (data.error || 'unknown')); return; }
+        if (!data.noop) {
+          const addBtn = cell.querySelector('.ls-tag-add');
+          cell.insertBefore(buildChip(tag), addBtn);
+          // Add new tag to autosuggest if not already there
+          const dl = document.getElementById('tagSuggestions');
+          if (dl && !dl.querySelector(`option[value="${CSS.escape(tag)}"]`)) {
+            const opt = document.createElement('option');
+            opt.value = tag;
+            dl.appendChild(opt);
+          }
+        }
+      } catch (err) { alert('Network error: ' + err.message); }
+    }
+
+    async function removeTag(chip) {
+      const cell = chip.closest('[data-record-tags-cell]');
+      const recordId = cell.dataset.recordId;
+      const tag = chip.dataset.tag;
+      const body = new URLSearchParams(); body.set('tag', tag);
+      try {
+        const res = await fetch(removeUrlBase + recordId + '/tags/remove/', {
+          method: 'POST',
+          headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
+          body: body.toString(),
+          credentials: 'same-origin',
+        });
+        const data = await res.json();
+        if (data.ok) chip.remove();
+        else alert('Remove tag failed: ' + (data.error || 'unknown'));
+      } catch (err) { alert('Network error: ' + err.message); }
+    }
+
+    // Wire up "+ Tag" buttons → small inline input
+    document.querySelectorAll('[data-add-tag-btn]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cell = btn.closest('[data-record-tags-cell]');
+        // Replace the button with an input until user commits or blurs
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.maxLength = 32;
+        input.placeholder = 'tag…';
+        input.setAttribute('list', 'tagSuggestions');
+        input.style.cssText = 'border:1px solid var(--ki-primary,#d97706);border-radius:12px;padding:0.1rem 0.5rem;font-size:0.74rem;width:90px;outline:none;';
+        btn.replaceWith(input);
+        input.focus();
+        let done = false;
+        const finish = (commit) => {
+          if (done) return; done = true;
+          const val = input.value;
+          input.replaceWith(btn);
+          if (commit) addTag(cell, val);
+        };
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+          else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+        input.addEventListener('blur', () => finish(true));
+      });
+    });
+
+    // Wire up existing × buttons (event delegation so future chips work too)
+    document.addEventListener('click', (e) => {
+      if (e.target.classList && e.target.classList.contains('ls-tag-x')) {
+        removeTag(e.target.closest('.ls-tag'));
+      }
     });
   })();
 </script>

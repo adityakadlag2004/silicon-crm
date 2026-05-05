@@ -106,6 +106,17 @@
         </span>
       </div>
     {% endfor %}
+
+    {% if record.tags %}
+      <div class="rec-row">
+        <span class="rec-label">Tags</span>
+        <span class="rec-value" style="display:flex;flex-wrap:wrap;gap:0.3rem;">
+          {% for tag in record.tags %}
+            <span style="display:inline-block;padding:0.15rem 0.55rem;border-radius:12px;font-size:0.74rem;font-weight:600;background:#f1f5f9;color:#475569;">{{ tag }}</span>
+          {% endfor %}
+        </span>
+      </div>
+    {% endif %}
     <div class="rec-row" style="border-top:1px solid var(--ki-card-border, #e5e7eb);margin-top:0.75rem;padding-top:0.75rem;">
       <span class="rec-label">Created</span>
       <span class="rec-value">{{ record.created_at|date:"d M Y, H:i" }}{% if record.created_by %} by {{ record.created_by.username }}{% endif %}</span>

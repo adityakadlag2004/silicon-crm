@@ -935,6 +935,9 @@ class LeadSheetRecord(models.Model):
     """One row in a LeadSheet. Values stored in JSONB keyed by column.field_key."""
     sheet = models.ForeignKey(LeadSheet, related_name="records", on_delete=models.CASCADE)
     values = models.JSONField(default=dict, blank=True)
+    # Free-form short labels (e.g. "hot", "callback", "vip"). Each sheet's tag set
+    # is the union of tags across its records — no separate tag table needed.
+    tags = models.JSONField(default=list, blank=True)
     converted_client = models.ForeignKey(
         "Client", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="originating_lead_records",
