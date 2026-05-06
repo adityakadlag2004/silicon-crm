@@ -18,17 +18,39 @@
   .sheet-pill.shared  { background: #dcfce7; color: #166534; }
   .sheet-pill.firm    { background: #dbeafe; color: #1e40af; }
 
-  /* Table — fits viewport, no horizontal scroll. Cells wrap text instead. */
-  .ls-table-wrap { border: 1px solid var(--ki-card-border, #e5e7eb); border-radius: 10px; background: #fff; }
-  .ls-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; table-layout: auto; }
+  /* Table — equal-width data columns, single-line cells.
+     If the total minimum width exceeds the viewport, the wrapper
+     scrolls horizontally instead of crushing the columns. */
+  .ls-table-wrap {
+    border: 1px solid var(--ki-card-border, #e5e7eb);
+    border-radius: 10px;
+    background: #fff;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ls-table {
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    table-layout: fixed;
+    /* Each data column gets at least 160px; tags 200px; actions auto.
+       The table grows wider than the viewport if there are many columns,
+       at which point the wrapper scrolls. */
+    width: 100%;
+  }
   .ls-table th, .ls-table td {
-    padding: 0.5rem 0.7rem;
+    padding: 0.55rem 0.75rem;
     border-bottom: 1px solid var(--ki-card-border, #e5e7eb);
     text-align: left;
     vertical-align: middle;
-    word-break: break-word;
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
+  /* Allow the Tags cell to wrap (chips can stack) */
+  .ls-table td:has(.ls-tags) { white-space: normal; }
+  /* Width hints — fixed sizes mean every data column is equal */
+  .ls-table thead th:not([style*="width"]),
+  .ls-table tbody td:not([style*="width"]) { width: 160px; min-width: 160px; }
   .ls-table thead th {
     background: var(--ki-body-bg, #f9fafb);
     font-weight: 600;
@@ -553,7 +575,8 @@
   (function() {
     const csrftoken = document.cookie.match(/csrftoken=([^;]+)/);
     const CSRF = csrftoken ? csrftoken[1] : '';
-    const updateUrlBase = "{% url 'clients:lead_sheet_record_update' sheet.id 0 %}".slice(0, -2);
+    // Use placeholder ID 999999 + replace — robust against pattern changes.
+    const updateUrlTpl = "{% url 'clients:lead_sheet_record_update' sheet.id 999999 %}";
 
     function startEdit(cell) {
       if (cell.querySelector('input,select')) return;
@@ -624,7 +647,7 @@
     function save(cell, value, type) {
       cell.classList.add('saving');
       const recordId = cell.closest('tr').dataset.recordId;
-      const url = updateUrlBase + recordId + '/update/';
+      const url = updateUrlTpl.replace('999999', recordId);
       const body = new URLSearchParams();
       body.set('field_key', cell.dataset.field);
       body.set('value', value);
@@ -667,8 +690,8 @@
   (function() {
     const csrfMatch = document.cookie.match(/csrftoken=([^;]+)/);
     const CSRF = csrfMatch ? csrfMatch[1] : '';
-    const addUrlBase = "{% url 'clients:lead_sheet_record_tag_add' sheet.id 0 %}".slice(0, -5);
-    const removeUrlBase = "{% url 'clients:lead_sheet_record_tag_remove' sheet.id 0 %}".slice(0, -8);
+    const addUrlTpl = "{% url 'clients:lead_sheet_record_tag_add' sheet.id 999999 %}";
+    const removeUrlTpl = "{% url 'clients:lead_sheet_record_tag_remove' sheet.id 999999 %}";
 
     function colorClassFor(tag) {
       // Same-tag-same-color: simple string hash mod 6
@@ -708,7 +731,7 @@
       if (cell.querySelector(`.ls-tag[data-tag="${CSS.escape(tag)}"]`)) return;
       const body = new URLSearchParams(); body.set('tag', tag);
       try {
-        const res = await fetch(addUrlBase + recordId + '/tags/add/', {
+        const res = await fetch(addUrlTpl.replace('999999', recordId), {
           method: 'POST',
           headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
           body: body.toString(),
@@ -736,7 +759,7 @@
       const tag = chip.dataset.tag;
       const body = new URLSearchParams(); body.set('tag', tag);
       try {
-        const res = await fetch(removeUrlBase + recordId + '/tags/remove/', {
+        const res = await fetch(removeUrlTpl.replace('999999', recordId), {
           method: 'POST',
           headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
           body: body.toString(),
