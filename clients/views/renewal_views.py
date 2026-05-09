@@ -154,7 +154,7 @@ def all_renewals(request):
 		)
 	if product_ref:
 		renewals_qs = renewals_qs.filter(product_ref_id=product_ref)
-	if frequency in [Renewal.FREQUENCY_MONTHLY, Renewal.FREQUENCY_YEARLY]:
+	if frequency in dict(Renewal.FREQUENCY_CHOICES):
 		renewals_qs = renewals_qs.filter(frequency=frequency)
 	if employee:
 		renewals_qs = renewals_qs.filter(
