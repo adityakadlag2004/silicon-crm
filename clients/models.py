@@ -231,9 +231,13 @@ class Renewal(models.Model):
     ]
 
     FREQUENCY_MONTHLY = "monthly"
+    FREQUENCY_QUARTERLY = "quarterly"
+    FREQUENCY_HALF_YEARLY = "half_yearly"
     FREQUENCY_YEARLY = "yearly"
     FREQUENCY_CHOICES = [
         (FREQUENCY_MONTHLY, "Monthly"),
+        (FREQUENCY_QUARTERLY, "Quarterly"),
+        (FREQUENCY_HALF_YEARLY, "Half-yearly"),
         (FREQUENCY_YEARLY, "Yearly"),
     ]
 
@@ -248,7 +252,7 @@ class Renewal(models.Model):
     )
     renewal_date = models.DateField()
     renewal_end_date = models.DateField(null=True, blank=True, db_index=True)
-    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES)
+    frequency = models.CharField(max_length=15, choices=FREQUENCY_CHOICES)
     employee = models.ForeignKey("Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="renewals")
     premium_amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(0)], default=0)
     premium_collected_on = models.DateField(default=timezone.localdate, db_index=True)

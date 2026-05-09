@@ -53,8 +53,10 @@
       <label class="form-label">Frequency</label>
       <select name="frequency" class="form-select">
         <option value="">All</option>
-        <option value="monthly" {% if request.GET.frequency == "monthly" %}selected{% endif %}>Monthly</option>
-        <option value="yearly" {% if request.GET.frequency == "yearly" %}selected{% endif %}>Yearly</option>
+        <option value="monthly"     {% if request.GET.frequency == "monthly" %}selected{% endif %}>Monthly</option>
+        <option value="quarterly"   {% if request.GET.frequency == "quarterly" %}selected{% endif %}>Quarterly</option>
+        <option value="half_yearly" {% if request.GET.frequency == "half_yearly" %}selected{% endif %}>Half-yearly</option>
+        <option value="yearly"      {% if request.GET.frequency == "yearly" %}selected{% endif %}>Yearly</option>
       </select>
     </div>
     {% if not is_employee %}

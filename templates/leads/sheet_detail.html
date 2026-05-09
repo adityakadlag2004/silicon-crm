@@ -216,8 +216,8 @@
         {% for col in columns %}
           <th>{{ col.name }}</th>
         {% endfor %}
-        <th style="width:1%;white-space:nowrap;">Tags</th>
-        <th style="width:1%;white-space:nowrap;text-align:right;">Actions</th>
+        <th style="width:200px;min-width:200px;white-space:nowrap;">Tags</th>
+        <th style="width:180px;min-width:180px;white-space:nowrap;text-align:right;">Actions</th>
       </tr>
     </thead>
     <tbody>
@@ -263,7 +263,7 @@
               {% endif %}
             </div>
           </td>
-          <td style="width:1%;white-space:nowrap;">
+          <td style="width:180px;min-width:180px;white-space:nowrap;">
             <div class="ls-row-actions">
               <a href="{% url 'clients:lead_sheet_record_detail' sheet.id record.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="View profile + follow-ups"><i class="bi bi-eye"></i></a>
               {% if can_edit %}
