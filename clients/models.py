@@ -942,6 +942,12 @@ class LeadSheetRecord(models.Model):
     # Free-form short labels (e.g. "hot", "callback", "vip"). Each sheet's tag set
     # is the union of tags across its records — no separate tag table needed.
     tags = models.JSONField(default=list, blank=True)
+    # Auto-assigned (round-robin) when the sheet is shared with multiple employees.
+    # Null for firm-wide / private sheets unless explicitly set.
+    assigned_to = models.ForeignKey(
+        "Employee", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="assigned_lead_records", db_index=True,
+    )
     converted_client = models.ForeignKey(
         "Client", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="originating_lead_records",

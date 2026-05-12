@@ -203,10 +203,29 @@
   {% else %}
     <span class="sheet-pill firm"><i class="bi bi-building"></i> Firm-wide</span>
   {% endif %}
-  <span class="sheet-pill"><i class="bi bi-table"></i> {{ records|length }} row{{ records|length|pluralize }}</span>
+  <span class="sheet-pill"><i class="bi bi-table"></i> {{ records|length }} row{{ records|length|pluralize }}{% if scope %} (filtered){% endif %}</span>
   <span class="sheet-pill"><i class="bi bi-layout-three-columns"></i> {{ columns|length }} column{{ columns|length|pluralize }}</span>
   {% if sheet.archived %}<span class="sheet-pill" style="background:#e5e7eb;">Archived</span>{% endif %}
 </div>
+
+{# Scope tabs + per-employee distribution #}
+{% if share_counts or unassigned_count %}
+  <div class="ki-card mb-3" style="padding:0.7rem 0.9rem;">
+    <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+      <a href="?" class="ki-btn ki-btn-sm {% if not scope %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">All rows</a>
+      <a href="?scope=mine" class="ki-btn ki-btn-sm {% if scope == 'mine' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">My records</a>
+      {% if unassigned_count %}
+        <a href="?scope=unassigned" class="ki-btn ki-btn-sm {% if scope == 'unassigned' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Unassigned ({{ unassigned_count }})</a>
+      {% endif %}
+      <span style="color:var(--ki-text-muted);font-size:0.78rem;margin-left:auto;">Distribution:</span>
+      {% for sc in share_counts %}
+        <span class="sheet-pill" style="background:#f1f5f9;color:#475569;font-size:0.74rem;">
+          <i class="bi bi-person"></i> {{ sc.emp.user.username }} · {{ sc.count }}
+        </span>
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
 
 {% if columns %}
 <div class="ls-table-wrap">
@@ -217,6 +236,7 @@
           <th>{{ col.name }}</th>
         {% endfor %}
         <th style="width:200px;min-width:200px;white-space:nowrap;">Tags</th>
+        <th style="width:140px;min-width:140px;white-space:nowrap;">Assigned</th>
         <th style="width:180px;min-width:180px;white-space:nowrap;text-align:right;">Actions</th>
       </tr>
     </thead>
@@ -262,6 +282,13 @@
                 </button>
               {% endif %}
             </div>
+          </td>
+          <td style="width:140px;min-width:140px;white-space:nowrap;">
+            {% if record.assigned_to %}
+              <span class="sheet-pill" style="background:#ede9fe;color:#5b21b6;"><i class="bi bi-person-fill"></i> {{ record.assigned_to.user.username }}</span>
+            {% else %}
+              <span style="color:#cbd5e1;font-size:0.8rem;">—</span>
+            {% endif %}
           </td>
           <td style="width:180px;min-width:180px;white-space:nowrap;">
             <div class="ls-row-actions">
@@ -654,7 +681,7 @@
       fetch(url, {
         method: 'POST',
         headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
-        body: body.toString(),
+        body: body,   // pass URLSearchParams directly so fetch sets Content-Type
         credentials: 'same-origin',
       }).then(r => r.json()).then(data => {
         cell.classList.remove('saving');
@@ -734,7 +761,7 @@
         const res = await fetch(addUrlTpl.replace('999999', recordId), {
           method: 'POST',
           headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
-          body: body.toString(),
+          body: body,   // pass URLSearchParams directly so fetch sets Content-Type
           credentials: 'same-origin',
         });
         const data = await res.json();
@@ -762,7 +789,7 @@
         const res = await fetch(removeUrlTpl.replace('999999', recordId), {
           method: 'POST',
           headers: {'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest'},
-          body: body.toString(),
+          body: body,   // pass URLSearchParams directly so fetch sets Content-Type
           credentials: 'same-origin',
         });
         const data = await res.json();
