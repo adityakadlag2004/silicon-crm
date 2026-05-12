@@ -29,6 +29,9 @@ from ..models import (
     NetSipEntry,
     Notification,
     LeadFollowUp,
+    LeadSheet,
+    LeadSheetRecord,
+    LeadSheetFollowUp,
     ManagerAccessConfig,
     FirmSettings,
 )
@@ -695,6 +698,31 @@ def employee_dashboard(request):
             for product in products
         ]
 
+    # ── My Lead Records widget ──
+    # Sheets where this employee is in shared_with (or is owner) AND not archived.
+    my_lead_sheets_qs = (
+        LeadSheet.objects.filter(archived=False)
+        .filter(Q(owner=emp) | Q(shared_with=emp))
+        .distinct()
+        .order_by("-updated_at")[:5]
+    )
+    my_lead_sheets = []
+    for s in my_lead_sheets_qs:
+        my_count = LeadSheetRecord.objects.filter(sheet=s, assigned_to=emp).count()
+        total_count = LeadSheetRecord.objects.filter(sheet=s).count()
+        my_lead_sheets.append({"sheet": s, "my_count": my_count, "total_count": total_count})
+
+    # Pending lead-record follow-ups for this employee, in either:
+    #  (a) records assigned to them, OR
+    #  (b) follow-ups they personally created
+    pending_lead_followups = list(
+        LeadSheetFollowUp.objects.filter(completed=False)
+        .filter(Q(record__assigned_to=emp) | Q(created_by=request.user))
+        .select_related("record__sheet")
+        .order_by("scheduled_at")[:8]
+    )
+    overdue_lead_followups = [f for f in pending_lead_followups if f.scheduled_at < now_ts]
+
     context = {
         "total_sales": total_sales,
         "total_points": total_points,
@@ -733,6 +761,10 @@ def employee_dashboard(request):
         "is_admin": is_admin,
         "month_start": month_start,
         "month_end": month_end,
+        "my_lead_sheets": my_lead_sheets,
+        "pending_lead_followups": pending_lead_followups,
+        "overdue_lead_followups": overdue_lead_followups,
+        "now_ts": now_ts,
     }
     return render(request, "dashboards/employee_dashboard.html", context)
 
