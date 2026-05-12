@@ -211,6 +211,78 @@
   </a>
 </div>
 
+<!-- ── My Lead Records ── -->
+{% if my_lead_sheets or pending_lead_followups %}
+<h3 class="ki-section-title">
+  My Lead Records
+  {% if overdue_lead_followups %}
+    <span style="background:#fee2e2;color:#b91c1c;font-size:0.7rem;padding:0.15rem 0.55rem;border-radius:10px;margin-left:0.4rem;font-weight:600;">
+      {{ overdue_lead_followups|length }} overdue
+    </span>
+  {% endif %}
+</h3>
+<div class="ki-grid-2" style="gap:1rem;">
+
+  <!-- Sheets shared with me -->
+  <div class="ki-card">
+    <div style="font-weight:600;color:var(--ki-text-secondary);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem;">
+      My Sheets
+    </div>
+    {% for entry in my_lead_sheets %}
+      <a href="{% url 'clients:lead_sheet_detail' entry.sheet.id %}?scope=mine"
+         style="display:flex;justify-content:space-between;align-items:center;padding:0.55rem 0.7rem;border-radius:8px;text-decoration:none;color:inherit;border-bottom:1px solid var(--ki-card-border, #e5e7eb);">
+        <span>
+          <i class="bi bi-table" style="color:var(--ki-primary);"></i>
+          <strong>{{ entry.sheet.name }}</strong>
+          {% if entry.sheet.product %}<span style="color:var(--ki-text-muted);font-size:0.78rem;"> · {{ entry.sheet.product.name }}</span>{% endif %}
+        </span>
+        <span style="display:inline-flex;gap:0.4rem;align-items:center;">
+          <span style="background:#ede9fe;color:#5b21b6;font-size:0.74rem;font-weight:600;padding:0.15rem 0.55rem;border-radius:10px;">
+            mine: {{ entry.my_count }}
+          </span>
+          <span style="background:#f1f5f9;color:#475569;font-size:0.74rem;font-weight:600;padding:0.15rem 0.55rem;border-radius:10px;">
+            total: {{ entry.total_count }}
+          </span>
+        </span>
+      </a>
+    {% empty %}
+      <p class="text-muted mb-0" style="font-size:0.85rem;">No sheets shared with you yet.</p>
+    {% endfor %}
+    <div style="margin-top:0.6rem;text-align:right;">
+      <a href="{% url 'clients:lead_sheets' %}" class="ki-btn ki-btn-sm ki-btn-secondary">
+        <i class="bi bi-arrow-right"></i> All sheets
+      </a>
+    </div>
+  </div>
+
+  <!-- Pending follow-ups on lead-records -->
+  <div class="ki-card">
+    <div style="font-weight:600;color:var(--ki-text-secondary);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem;">
+      My Lead Follow-ups
+    </div>
+    {% for fu in pending_lead_followups %}
+      <a href="{% url 'clients:lead_sheet_record_detail' fu.record.sheet.id fu.record.id %}"
+         style="display:block;padding:0.5rem 0.7rem;border-radius:8px;text-decoration:none;color:inherit;border-bottom:1px solid var(--ki-card-border, #e5e7eb);{% if fu.scheduled_at < now_ts %}background:#fef2f2;{% endif %}">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <strong style="font-size:0.88rem;">
+            {% if fu.scheduled_at < now_ts %}
+              <i class="bi bi-exclamation-triangle-fill" style="color:#ef4444;"></i>
+            {% else %}
+              <i class="bi bi-clock" style="color:var(--ki-text-muted);"></i>
+            {% endif %}
+            {{ fu.scheduled_at|date:"d M, H:i" }}
+          </strong>
+          <span style="font-size:0.76rem;color:var(--ki-text-muted);">{{ fu.record.sheet.name }}</span>
+        </div>
+        {% if fu.note %}<div style="font-size:0.8rem;color:var(--ki-text-secondary);margin-top:0.15rem;">{{ fu.note|truncatechars:80 }}</div>{% endif %}
+      </a>
+    {% empty %}
+      <p class="text-muted mb-0" style="font-size:0.85rem;">No pending follow-ups on lead records.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <!-- Today's Work -->
 <h3 class="ki-section-title">Today's Work</h3>
 <div class="ki-card">

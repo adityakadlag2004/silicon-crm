@@ -61,20 +61,17 @@ def _accessible_sheets(request):
 def _assignment_pool(sheet: LeadSheet):
     """Employees who should receive new rows in round-robin order.
 
+    Only the explicitly chosen sheet members participate in distribution —
+    the owner and admins still see everything but don't get rows assigned
+    unless they're also in shared_with.
+
     - Firm-wide (not private, no shared_with) → no auto-assign (returns []).
-    - Private sheet → owner gets everything.
-    - Shared with employees → pool = owner + shared_with (deduped).
+    - Private sheet → no auto-assign (owner sees all rows directly).
+    - Shared with employees → pool = shared_with members ONLY.
     """
-    if not sheet.is_private:
-        shared = list(sheet.shared_with.all())
-        if not shared:
-            return []  # firm-wide: don't auto-assign
-        pool = list(shared)
-        if sheet.owner and sheet.owner not in pool:
-            pool.append(sheet.owner)
-        return pool
-    # private: owner only
-    return [sheet.owner] if sheet.owner else []
+    if sheet.is_private:
+        return []
+    return list(sheet.shared_with.all())
 
 
 def _round_robin(sheet: LeadSheet, n: int):
