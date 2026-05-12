@@ -58,6 +58,47 @@ def _accessible_sheets(request):
     ).distinct()
 
 
+def _assignment_pool(sheet: LeadSheet):
+    """Employees who should receive new rows in round-robin order.
+
+    - Firm-wide (not private, no shared_with) → no auto-assign (returns []).
+    - Private sheet → owner gets everything.
+    - Shared with employees → pool = owner + shared_with (deduped).
+    """
+    if not sheet.is_private:
+        shared = list(sheet.shared_with.all())
+        if not shared:
+            return []  # firm-wide: don't auto-assign
+        pool = list(shared)
+        if sheet.owner and sheet.owner not in pool:
+            pool.append(sheet.owner)
+        return pool
+    # private: owner only
+    return [sheet.owner] if sheet.owner else []
+
+
+def _round_robin(sheet: LeadSheet, n: int):
+    """Yield N assignees, picking the employee with the fewest current
+    assignments at each step (so re-importing tops up the lighter loads)."""
+    pool = _assignment_pool(sheet)
+    if not pool:
+        for _ in range(n):
+            yield None
+        return
+    counts = {emp.id: 0 for emp in pool}
+    rows = (
+        LeadSheetRecord.objects.filter(sheet=sheet, assigned_to__in=pool)
+        .values("assigned_to_id")
+        .annotate(c=Count("id"))
+    )
+    for r in rows:
+        counts[r["assigned_to_id"]] = r["c"]
+    for _ in range(n):
+        pick = min(pool, key=lambda e: (counts[e.id], e.id))
+        yield pick
+        counts[pick.id] += 1
+
+
 def _unique_field_key(sheet: LeadSheet, base: str) -> str:
     """Derive a unique slug for a column on this sheet."""
     base = slugify(base) or "col"
@@ -207,7 +248,17 @@ def lead_sheet_detail(request, sheet_id):
         return HttpResponseForbidden("You don't have access to this sheet.")
 
     columns = list(sheet.columns.all())
-    records = list(sheet.records.select_related("converted_client").order_by("-created_at", "-id"))
+    base_qs = sheet.records.select_related("converted_client", "assigned_to__user")
+
+    # "Mine" / "Unassigned" filters
+    scope = (request.GET.get("scope") or "").strip()
+    user_emp = _user_emp(request)
+    if scope == "mine" and user_emp:
+        base_qs = base_qs.filter(assigned_to=user_emp)
+    elif scope == "unassigned":
+        base_qs = base_qs.filter(assigned_to__isnull=True)
+
+    records = list(base_qs.order_by("-created_at", "-id"))
     # Pre-compute each record's per-column value so the template can iterate
     # cleanly without needing a custom dict-lookup filter.
     for r in records:
@@ -219,20 +270,38 @@ def lead_sheet_detail(request, sheet_id):
     has_email_col = any(c.type == LeadSheetColumn.TYPE_EMAIL for c in columns)
 
     # Distinct set of tags currently in this sheet (for autosuggest datalist)
-    available_tags = sorted({t for r in records for t in (r.tags or [])})
+    # Use a fresh queryset (unfiltered) so suggestions stay stable across filters.
+    all_tags_rows = sheet.records.values_list("tags", flat=True)
+    available_tags = sorted({t for tag_list in all_tags_rows for t in (tag_list or [])})
+
+    # Per-employee record counts (for the "shared with N" summary)
+    if not sheet.is_private:
+        from collections import Counter
+        rows = sheet.records.values_list("assigned_to_id", flat=True)
+        cnt = Counter(rows)
+        share_counts = []
+        for emp in _assignment_pool(sheet):
+            share_counts.append({"emp": emp, "count": cnt.get(emp.id, 0)})
+        unassigned_count = cnt.get(None, 0)
+    else:
+        share_counts = []
+        unassigned_count = 0
 
     return render(request, "leads/sheet_detail.html", {
         "sheet": sheet,
         "columns": columns,
         "records": records,
         "can_edit": sheet.can_edit(request.user),
-        "is_owner": sheet.owner_id == (_user_emp(request).id if _user_emp(request) else None),
+        "is_owner": sheet.owner_id == (user_emp.id if user_emp else None),
         "is_admin": _is_admin(request),
         "employees": employees,
         "column_types": LeadSheetColumn.TYPE_CHOICES,
         "has_phone_col": has_phone_col,
         "has_email_col": has_email_col,
         "available_tags": available_tags,
+        "scope": scope,
+        "share_counts": share_counts,
+        "unassigned_count": unassigned_count,
     })
 
 
@@ -317,11 +386,17 @@ def lead_sheet_record_add(request, sheet_id):
         raw = request.POST.get(f"col_{col.field_key}", "")
         values[col.field_key] = _sanitize_value(col, raw)
 
+    assignee = next(_round_robin(sheet, 1), None)
     LeadSheetRecord.objects.create(
-        sheet=sheet, values=values, created_by=request.user, updated_by=request.user,
+        sheet=sheet, values=values,
+        created_by=request.user, updated_by=request.user,
+        assigned_to=assignee,
     )
     sheet.save(update_fields=["updated_at"])  # bump timestamp
-    messages.success(request, "Row added.")
+    msg = "Row added"
+    if assignee:
+        msg += f" — assigned to {assignee.user.username}"
+    messages.success(request, msg + ".")
     return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
 
 
@@ -472,6 +547,11 @@ def lead_sheet_import_csv(request, sheet_id):
                 created_by=request.user, updated_by=request.user,
             ))
 
+        # Round-robin auto-assign across the share pool BEFORE saving.
+        assignees = list(_round_robin(sheet, len(rows_to_create)))
+        for row, who in zip(rows_to_create, assignees):
+            row.assigned_to = who
+
         with transaction.atomic():
             previous_count = sheet.records.count()
             LeadSheetRecord.objects.bulk_create(rows_to_create)
@@ -487,6 +567,12 @@ def lead_sheet_import_csv(request, sheet_id):
             parts.append(f"· skipped {skipped_dupe} duplicate{'s' if skipped_dupe != 1 else ''}")
         if skipped_blank:
             parts.append(f"· skipped {skipped_blank} blank")
+        # Summarize assignment
+        from collections import Counter
+        assigned_counts = Counter(a.user.username for a in assignees if a is not None)
+        if assigned_counts:
+            dist = ", ".join(f"{u}:{c}" for u, c in sorted(assigned_counts.items()))
+            parts.append(f"· distributed → {dist}")
         messages.success(request, " ".join(parts) + ".")
     except Exception as e:
         messages.error(request, f"Import failed: {e}")
