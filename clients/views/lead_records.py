@@ -18,6 +18,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponseForbidden, JsonResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_POST
@@ -890,6 +891,84 @@ def lead_sheet_followup_delete(request, sheet_id, record_id, followup_id):
     fu.delete()
     messages.success(request, "Follow-up removed.")
     return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record_id)
+
+
+# ── Bulk actions ─────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def lead_sheet_bulk(request, sheet_id):
+    """Apply a bulk action to selected records.
+
+    POST params:
+      action       — 'tag-add' | 'tag-remove' | 'assign' | 'unassign' | 'delete'
+      record_ids[] — list of record IDs to act on
+      tag          — for tag-* actions
+      employee_id  — for assign action
+    """
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_edit(request.user):
+        return HttpResponseForbidden("No edit permission.")
+
+    action = (request.POST.get("action") or "").strip()
+    ids = request.POST.getlist("record_ids")
+    if not ids:
+        messages.warning(request, "No rows selected.")
+        return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+    qs = sheet.records.filter(id__in=ids)
+    n = qs.count()
+    if n == 0:
+        messages.warning(request, "No matching rows found.")
+        return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+    if action == "delete":
+        qs.delete()
+        messages.success(request, f"Deleted {n} row{'s' if n != 1 else ''}.")
+    elif action == "tag-add":
+        tag = _normalize_tag(request.POST.get("tag", ""))
+        if not tag:
+            messages.error(request, "Tag is empty after normalization.")
+            return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+        with transaction.atomic():
+            for r in qs:
+                tags = list(r.tags or [])
+                if tag not in tags and len(tags) < 12:
+                    tags.append(tag)
+                    r.tags = tags
+                    r.updated_by = request.user
+                    r.save(update_fields=["tags", "updated_by", "updated_at"])
+        messages.success(request, f"Added tag '{tag}' to {n} row{'s' if n != 1 else ''}.")
+    elif action == "tag-remove":
+        tag = _normalize_tag(request.POST.get("tag", ""))
+        with transaction.atomic():
+            for r in qs:
+                tags = [t for t in (r.tags or []) if t != tag]
+                if tags != (r.tags or []):
+                    r.tags = tags
+                    r.updated_by = request.user
+                    r.save(update_fields=["tags", "updated_by", "updated_at"])
+        messages.success(request, f"Removed tag '{tag}' from {n} row{'s' if n != 1 else ''}.")
+    elif action == "assign":
+        emp_id = request.POST.get("employee_id", "").strip()
+        if not emp_id:
+            messages.error(request, "Pick an employee.")
+            return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+        try:
+            emp = Employee.objects.get(pk=int(emp_id))
+        except (Employee.DoesNotExist, ValueError):
+            messages.error(request, "Invalid employee.")
+            return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+        qs.update(assigned_to=emp, updated_by=request.user, updated_at=timezone.now())
+        messages.success(request, f"Assigned {n} row{'s' if n != 1 else ''} to {emp.user.username}.")
+    elif action == "unassign":
+        qs.update(assigned_to=None, updated_by=request.user, updated_at=timezone.now())
+        messages.success(request, f"Unassigned {n} row{'s' if n != 1 else ''}.")
+    else:
+        messages.error(request, f"Unknown bulk action: {action}")
+
+    sheet.save(update_fields=["updated_at"])
+    return redirect(request.META.get("HTTP_REFERER") or reverse("clients:lead_sheet_detail", args=[sheet.id]))
 
 
 # ── Manual assign + redistribute ─────────────────────────────────────────────

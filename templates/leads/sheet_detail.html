@@ -291,6 +291,7 @@
   <table class="ls-table" id="lsTable">
     <thead>
       <tr>
+        {% if can_edit %}<th style="width:32px;text-align:center;"><input type="checkbox" id="lsBulkAll" title="Select all rows"></th>{% endif %}
         {% for col in columns %}
           <th>
             <a href="?sort={% if sort_param == 'col_'|add:col.field_key %}-col_{{ col.field_key }}{% else %}col_{{ col.field_key }}{% endif %}{% if scope %}&scope={{ scope }}{% endif %}"
@@ -317,6 +318,7 @@
     <tbody>
       {% for record in records %}
         <tr data-record-id="{{ record.id }}">
+          {% if can_edit %}<td style="width:32px;text-align:center;"><input type="checkbox" class="ls-bulk-cb" value="{{ record.id }}"></td>{% endif %}
           {% for col, val in record.cells %}
             <td>
               {% if col.type == 'status' %}
@@ -415,6 +417,118 @@
   <strong>No columns yet.</strong>
   <div style="margin-top:0.4rem;">Click "Columns" above to add some, or import a CSV — it'll create columns from the headers.</div>
 </div>
+{% endif %}
+
+{# ── Bulk action bar (appears when rows are selected) ── #}
+{% if can_edit %}
+<form method="post" action="{% url 'clients:lead_sheet_bulk' sheet.id %}" id="lsBulkForm" style="display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:1050;background:#1f2937;color:#fff;padding:0.7rem 1rem;border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,0.25);align-items:center;gap:0.65rem;flex-wrap:wrap;">
+  {% csrf_token %}
+  <input type="hidden" name="action" id="lsBulkAction">
+  <input type="hidden" name="tag" id="lsBulkTag">
+  <input type="hidden" name="employee_id" id="lsBulkEmpId">
+  <span id="lsBulkCount" style="font-weight:600;">0 selected</span>
+  <span style="opacity:0.4;">·</span>
+  <button type="button" class="ki-btn ki-btn-sm" style="background:#374151;color:#fff;border-color:#374151;" data-bs-toggle="modal" data-bs-target="#bulkTagModal"><i class="bi bi-tag-fill"></i> Tag</button>
+  <button type="button" class="ki-btn ki-btn-sm" style="background:#374151;color:#fff;border-color:#374151;" data-bs-toggle="modal" data-bs-target="#bulkAssignModal"><i class="bi bi-person-fill"></i> Assign</button>
+  <button type="submit" class="ki-btn ki-btn-sm" style="background:#374151;color:#fff;border-color:#374151;" onclick="document.getElementById('lsBulkAction').value='unassign';return confirm('Unassign selected rows?');"><i class="bi bi-person-x"></i> Unassign</button>
+  <button type="submit" class="ki-btn ki-btn-sm" style="background:#dc2626;color:#fff;border-color:#dc2626;" onclick="document.getElementById('lsBulkAction').value='delete';return confirm('Delete selected rows? This cannot be undone.');"><i class="bi bi-trash"></i> Delete</button>
+  <button type="button" class="ki-btn ki-btn-sm" style="background:transparent;color:#9ca3af;border-color:#374151;" id="lsBulkCancel">Clear</button>
+</form>
+
+<!-- Bulk Tag modal -->
+<div class="modal fade" id="bulkTagModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Tag selected rows</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <label class="form-label">Tag name</label>
+        <input type="text" id="bulkTagInput" class="form-control" list="tagSuggestions" placeholder="e.g. hot">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="ki-btn ki-btn-primary" id="bulkTagApply"><i class="bi bi-tag-fill"></i> Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Assign modal -->
+<div class="modal fade" id="bulkAssignModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Assign selected rows</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <label class="form-label">Assign to</label>
+        <select id="bulkAssignSelect" class="form-select">
+          {% if share_counts %}
+            <optgroup label="Sheet members">
+              {% for sc in share_counts %}<option value="{{ sc.emp.id }}">{{ sc.emp.user.username }}</option>{% endfor %}
+            </optgroup>
+          {% endif %}
+          <optgroup label="All employees">
+            {% for e in employees %}<option value="{{ e.id }}">{{ e.user.username }}</option>{% endfor %}
+          </optgroup>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="ki-btn ki-btn-primary" id="bulkAssignApply"><i class="bi bi-person-fill"></i> Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const all = document.getElementById('lsBulkAll');
+  const cbs = () => Array.from(document.querySelectorAll('.ls-bulk-cb'));
+  const bar = document.getElementById('lsBulkForm');
+  const cnt = document.getElementById('lsBulkCount');
+  const form = bar;
+
+  function refresh() {
+    const checked = cbs().filter(c => c.checked);
+    if (checked.length) {
+      bar.style.display = 'flex';
+      cnt.textContent = checked.length + ' selected';
+      // Update hidden record_ids inputs (rebuild on each change)
+      [...bar.querySelectorAll('input[name="record_ids"]')].forEach(n => n.remove());
+      checked.forEach(c => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = 'record_ids'; inp.value = c.value;
+        bar.appendChild(inp);
+      });
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  if (all) all.addEventListener('change', () => {
+    cbs().forEach(c => c.checked = all.checked);
+    refresh();
+  });
+  cbs().forEach(c => c.addEventListener('change', refresh));
+
+  document.getElementById('lsBulkCancel').addEventListener('click', () => {
+    cbs().forEach(c => c.checked = false);
+    if (all) all.checked = false;
+    refresh();
+  });
+
+  document.getElementById('bulkTagApply').addEventListener('click', () => {
+    const v = (document.getElementById('bulkTagInput').value || '').trim();
+    if (!v) return alert('Enter a tag name.');
+    document.getElementById('lsBulkAction').value = 'tag-add';
+    document.getElementById('lsBulkTag').value = v;
+    form.submit();
+  });
+  document.getElementById('bulkAssignApply').addEventListener('click', () => {
+    document.getElementById('lsBulkAction').value = 'assign';
+    document.getElementById('lsBulkEmpId').value = document.getElementById('bulkAssignSelect').value;
+    form.submit();
+  });
+})();
+</script>
 {% endif %}
 
 {# ── Per-row "Assign to" modals ── #}
