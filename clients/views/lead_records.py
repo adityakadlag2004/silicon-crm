@@ -238,6 +238,63 @@ def lead_sheet_create(request):
 
 # ── Detail / table view ──────────────────────────────────────────────────────
 
+def _apply_filters_sort(qs, request, columns):
+    """Apply filter + sort query params to a record queryset.
+    Returns (filtered_qs, applied_filter_summary)."""
+    summary = {}
+
+    # Tag filter (any of)
+    tag_filters = [t for t in request.GET.getlist("tag") if t.strip()]
+    if tag_filters:
+        # JSONField contains: at least one matching tag
+        from django.db.models import Q as _Q
+        tag_q = _Q()
+        for t in tag_filters:
+            tag_q |= _Q(tags__contains=[t])
+        qs = qs.filter(tag_q)
+        summary["tags"] = tag_filters
+
+    # Status filter (any column of type=status that has the value)
+    status_filter = (request.GET.get("status") or "").strip()
+    if status_filter:
+        status_cols = [c for c in columns if c.type == "status"]
+        if status_cols:
+            from django.db.models import Q as _Q
+            q = _Q()
+            for c in status_cols:
+                q |= _Q(values__contains={c.field_key: status_filter})
+            qs = qs.filter(q)
+            summary["status"] = status_filter
+
+    # Assignee filter
+    assignee_filter = (request.GET.get("assignee") or "").strip()
+    if assignee_filter:
+        try:
+            qs = qs.filter(assigned_to_id=int(assignee_filter))
+            summary["assignee"] = int(assignee_filter)
+        except ValueError:
+            pass
+
+    # Sorting. sort=col_<field_key> or -col_<field_key> for value columns;
+    # sort=created / -created / assigned / -assigned for fixed columns.
+    sort = (request.GET.get("sort") or "-created").strip()
+    if sort.lstrip("-") == "created":
+        qs = qs.order_by(("-" if sort.startswith("-") else "") + "created_at", "-id")
+    elif sort.lstrip("-") == "assigned":
+        qs = qs.order_by(("-" if sort.startswith("-") else "") + "assigned_to__user__username", "-id")
+    elif sort.startswith("col_") or sort.startswith("-col_"):
+        desc = sort.startswith("-")
+        key = sort.lstrip("-")[len("col_"):]
+        # Use raw JSONB key path for ordering
+        from django.db.models.expressions import RawSQL
+        qs = qs.annotate(_sort_v=RawSQL("(values ->> %s)", (key,)))
+        qs = qs.order_by(("-" if desc else "") + "_sort_v", "-id")
+    else:
+        qs = qs.order_by("-created_at", "-id")
+    summary["sort"] = sort
+    return qs, summary
+
+
 @login_required
 def lead_sheet_detail(request, sheet_id):
     sheet = get_object_or_404(LeadSheet, id=sheet_id)
@@ -255,7 +312,8 @@ def lead_sheet_detail(request, sheet_id):
     elif scope == "unassigned":
         base_qs = base_qs.filter(assigned_to__isnull=True)
 
-    records = list(base_qs.order_by("-created_at", "-id"))
+    base_qs, applied_filters = _apply_filters_sort(base_qs, request, columns)
+    records = list(base_qs)
     # Pre-compute each record's per-column value so the template can iterate
     # cleanly without needing a custom dict-lookup filter.
     for r in records:
@@ -284,6 +342,15 @@ def lead_sheet_detail(request, sheet_id):
         share_counts = []
         unassigned_count = 0
 
+    # Status options across the sheet (for the status filter dropdown)
+    status_options = []
+    for col in columns:
+        if col.type == "status":
+            status_options.extend(col.options or [])
+    status_options = sorted(set(status_options))
+
+    sort_param = (request.GET.get("sort") or "-created").strip()
+
     return render(request, "leads/sheet_detail.html", {
         "sheet": sheet,
         "columns": columns,
@@ -299,6 +366,12 @@ def lead_sheet_detail(request, sheet_id):
         "scope": scope,
         "share_counts": share_counts,
         "unassigned_count": unassigned_count,
+        "status_options": status_options,
+        "sort_param": sort_param,
+        "applied_filters": applied_filters,
+        "active_filter_tags": request.GET.getlist("tag"),
+        "active_filter_status": request.GET.get("status", ""),
+        "active_filter_assignee": request.GET.get("assignee", ""),
     })
 
 
@@ -433,6 +506,55 @@ def lead_sheet_record_delete(request, sheet_id, record_id):
     sheet.save(update_fields=["updated_at"])
     messages.success(request, "Row deleted.")
     return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+
+# ── CSV export (current view, with filters applied) ──────────────────────────
+
+@login_required
+def lead_sheet_export_csv(request, sheet_id):
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_view(request.user):
+        return HttpResponseForbidden("No access.")
+
+    columns = list(sheet.columns.all())
+    qs = sheet.records.select_related("assigned_to__user")
+
+    # Honor the same filters as the detail view
+    scope = (request.GET.get("scope") or "").strip()
+    user_emp = _user_emp(request)
+    if scope == "mine" and user_emp:
+        qs = qs.filter(assigned_to=user_emp)
+    elif scope == "unassigned":
+        qs = qs.filter(assigned_to__isnull=True)
+    qs, _ = _apply_filters_sort(qs, request, columns)
+
+    # Stream CSV (handles large sheets without buffering the whole thing)
+    from django.http import StreamingHttpResponse
+
+    class _Echo:
+        def write(self, value):
+            return value
+
+    pseudo = csv.writer(_Echo())
+
+    def rows():
+        # Header
+        header = [c.name for c in columns] + ["Tags", "Assigned To", "Status", "Converted Client ID", "Created At"]
+        yield pseudo.writerow(header)
+        for r in qs.iterator(chunk_size=200):
+            vals = r.values or {}
+            row = [vals.get(c.field_key, "") for c in columns]
+            row.append(", ".join(r.tags or []))
+            row.append(r.assigned_to.user.username if r.assigned_to else "")
+            row.append("converted" if r.converted_client_id else "")
+            row.append(r.converted_client_id or "")
+            row.append(r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "")
+            yield pseudo.writerow(row)
+
+    filename = f"{sheet.name.lower().replace(' ', '_')}-{timezone.now().strftime('%Y%m%d')}.csv"
+    response = StreamingHttpResponse(rows(), content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 # ── CSV bulk import ──────────────────────────────────────────────────────────
