@@ -770,6 +770,69 @@ def lead_sheet_followup_delete(request, sheet_id, record_id, followup_id):
     return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record_id)
 
 
+# ── Manual assign + redistribute ─────────────────────────────────────────────
+
+@login_required
+@require_POST
+def lead_sheet_record_assign(request, sheet_id, record_id):
+    """Manually set the assignee of one row. POST employee_id, or empty to unassign."""
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_edit(request.user):
+        return HttpResponseForbidden("No edit permission.")
+    record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+
+    raw = (request.POST.get("employee_id") or "").strip()
+    if not raw:
+        record.assigned_to = None
+    else:
+        try:
+            emp = Employee.objects.get(pk=int(raw))
+        except (Employee.DoesNotExist, ValueError):
+            messages.error(request, "Invalid employee.")
+            return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+        record.assigned_to = emp
+    record.updated_by = request.user
+    record.save(update_fields=["assigned_to", "updated_by", "updated_at"])
+    sheet.save(update_fields=["updated_at"])
+    name = record.assigned_to.user.username if record.assigned_to else "—"
+    messages.success(request, f"Row #{record.id} assigned to {name}.")
+    return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+
+@login_required
+@require_POST
+def lead_sheet_distribute(request, sheet_id):
+    """Round-robin all UNASSIGNED rows across the share pool. Owner/admin only."""
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    user_emp = _user_emp(request)
+    if not (request.user.is_superuser or (user_emp and (sheet.owner_id == user_emp.id or user_emp.role == "admin"))):
+        return HttpResponseForbidden("Only the sheet owner or an admin can redistribute.")
+
+    pool = _assignment_pool(sheet)
+    if not pool:
+        messages.warning(request, "No share pool to distribute to. Share the sheet with employees first.")
+        return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+    unassigned = list(sheet.records.filter(assigned_to__isnull=True).order_by("id"))
+    if not unassigned:
+        messages.info(request, "No unassigned rows to distribute.")
+        return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+    assignees = list(_round_robin(sheet, len(unassigned)))
+    with transaction.atomic():
+        for r, who in zip(unassigned, assignees):
+            r.assigned_to = who
+            r.updated_by = request.user
+        LeadSheetRecord.objects.bulk_update(unassigned, ["assigned_to", "updated_by", "updated_at"])
+        sheet.save(update_fields=["updated_at"])
+
+    from collections import Counter
+    cnt = Counter(a.user.username for a in assignees if a)
+    summary = ", ".join(f"{u}:{c}" for u, c in sorted(cnt.items()))
+    messages.success(request, f"Distributed {len(unassigned)} unassigned row{'s' if len(unassigned) != 1 else ''} → {summary}")
+    return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+
 # ── Archive / unarchive sheet ────────────────────────────────────────────────
 
 @login_required

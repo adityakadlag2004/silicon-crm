@@ -217,6 +217,15 @@
       {% if unassigned_count %}
         <a href="?scope=unassigned" class="ki-btn ki-btn-sm {% if scope == 'unassigned' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Unassigned ({{ unassigned_count }})</a>
       {% endif %}
+      {% if (is_owner or is_admin) and unassigned_count and share_counts %}
+        <form method="post" action="{% url 'clients:lead_sheet_distribute' sheet.id %}" style="display:inline;"
+              onsubmit="return confirm('Distribute {{ unassigned_count }} unassigned row{{ unassigned_count|pluralize }} evenly across the {{ share_counts|length }} shared employee{{ share_counts|length|pluralize }}?');">
+          {% csrf_token %}
+          <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary">
+            <i class="bi bi-shuffle"></i> Distribute unassigned ({{ unassigned_count }})
+          </button>
+        </form>
+      {% endif %}
       <span style="color:var(--ki-text-muted);font-size:0.78rem;margin-left:auto;">Distribution:</span>
       {% for sc in share_counts %}
         <span class="sheet-pill" style="background:#f1f5f9;color:#475569;font-size:0.74rem;">
@@ -284,10 +293,17 @@
             </div>
           </td>
           <td style="width:140px;min-width:140px;white-space:nowrap;">
-            {% if record.assigned_to %}
-              <span class="sheet-pill" style="background:#ede9fe;color:#5b21b6;"><i class="bi bi-person-fill"></i> {{ record.assigned_to.user.username }}</span>
+            {% if can_edit %}
+              <button type="button" class="sheet-pill" data-bs-toggle="modal" data-bs-target="#assignModal_{{ record.id }}"
+                      style="background:{% if record.assigned_to %}#ede9fe;color:#5b21b6{% else %}#fef3c7;color:#92400e{% endif %};border:0;cursor:pointer;font:inherit;font-weight:600;font-size:0.78rem;">
+                <i class="bi bi-person-fill"></i> {% if record.assigned_to %}{{ record.assigned_to.user.username }}{% else %}Assign…{% endif %}
+              </button>
             {% else %}
-              <span style="color:#cbd5e1;font-size:0.8rem;">—</span>
+              {% if record.assigned_to %}
+                <span class="sheet-pill" style="background:#ede9fe;color:#5b21b6;"><i class="bi bi-person-fill"></i> {{ record.assigned_to.user.username }}</span>
+              {% else %}
+                <span style="color:#cbd5e1;font-size:0.8rem;">—</span>
+              {% endif %}
             {% endif %}
           </td>
           <td style="width:180px;min-width:180px;white-space:nowrap;">
@@ -334,6 +350,53 @@
   <strong>No columns yet.</strong>
   <div style="margin-top:0.4rem;">Click "Columns" above to add some, or import a CSV — it'll create columns from the headers.</div>
 </div>
+{% endif %}
+
+{# ── Per-row "Assign to" modals ── #}
+{% if can_edit %}
+  {% for record in records %}
+    <div class="modal fade" id="assignModal_{{ record.id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+          <form method="post" action="{% url 'clients:lead_sheet_record_assign' sheet.id record.id %}">
+            {% csrf_token %}
+            <div class="modal-header">
+              <h5 class="modal-title">Assign row #{{ record.id }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+              <label class="form-label">Assign to</label>
+              <select name="employee_id" class="form-select">
+                <option value="">— Unassigned —</option>
+                {% if share_counts %}
+                  <optgroup label="Sheet members">
+                    {% for sc in share_counts %}
+                      <option value="{{ sc.emp.id }}" {% if record.assigned_to_id == sc.emp.id %}selected{% endif %}>{{ sc.emp.user.username }}</option>
+                    {% endfor %}
+                  </optgroup>
+                {% endif %}
+                <optgroup label="All employees">
+                  {% for e in employees %}
+                    <option value="{{ e.id }}" {% if record.assigned_to_id == e.id %}selected{% endif %}>{{ e.user.username }}</option>
+                  {% endfor %}
+                </optgroup>
+              </select>
+              {% if not share_counts %}
+                <div style="background:#fef3c7;border-radius:6px;padding:0.5rem 0.7rem;font-size:0.8rem;color:#92400e;margin-top:0.6rem;">
+                  <i class="bi bi-info-circle"></i>
+                  This sheet isn't shared with anyone yet — you can still assign to any employee, but distribution won't auto-balance until the sheet is shared.
+                </div>
+              {% endif %}
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="submit" class="ki-btn ki-btn-primary">Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
 {% endif %}
 
 {# ── Per-row "Add follow-up" modals ── #}
