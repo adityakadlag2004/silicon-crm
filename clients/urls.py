@@ -95,6 +95,7 @@ urlpatterns = [
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/assign/", views.lead_sheet_record_assign, name="lead_sheet_record_assign"),
     path("leads/sheets/<int:sheet_id>/distribute/", views.lead_sheet_distribute, name="lead_sheet_distribute"),
     path("leads/sheets/<int:sheet_id>/import-csv/", views.lead_sheet_import_csv, name="lead_sheet_import_csv"),
+    path("leads/sheets/<int:sheet_id>/export-csv/", views.lead_sheet_export_csv, name="lead_sheet_export_csv"),
   # Employee performance
   path("sales/performance/", views.employee_performance, name="employee_performance"),
   path("dashboard/net-business/", views.net_business, name="net_business"),

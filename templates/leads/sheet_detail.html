@@ -208,6 +208,56 @@
   {% if sheet.archived %}<span class="sheet-pill" style="background:#e5e7eb;">Archived</span>{% endif %}
 </div>
 
+{# Filter + sort bar #}
+{% if columns %}
+<div class="ki-card mb-2" style="padding:0.65rem 0.85rem;">
+  <form method="get" id="lsFilterForm" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:end;">
+    {% if scope %}<input type="hidden" name="scope" value="{{ scope }}">{% endif %}
+    <input type="hidden" name="sort" id="lsSortInput" value="{{ sort_param }}">
+
+    <div style="flex:1 1 180px;min-width:140px;">
+      <label class="form-label" style="font-size:0.78rem;margin-bottom:0.15rem;">Tag</label>
+      <select name="tag" class="form-select form-select-sm" multiple size="1">
+        {% for t in available_tags %}
+          <option value="{{ t }}" {% if t in active_filter_tags %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {% if status_options %}
+    <div style="flex:1 1 140px;min-width:120px;">
+      <label class="form-label" style="font-size:0.78rem;margin-bottom:0.15rem;">Status</label>
+      <select name="status" class="form-select form-select-sm">
+        <option value="">— Any —</option>
+        {% for s in status_options %}
+          <option value="{{ s }}" {% if s == active_filter_status %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div style="flex:1 1 140px;min-width:120px;">
+      <label class="form-label" style="font-size:0.78rem;margin-bottom:0.15rem;">Assigned to</label>
+      <select name="assignee" class="form-select form-select-sm">
+        <option value="">— Anyone —</option>
+        {% for e in employees %}
+          <option value="{{ e.id }}" {% if active_filter_assignee == e.id|stringformat:'s' %}selected{% endif %}>{{ e.user.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel-fill"></i> Filter</button>
+    {% if active_filter_tags or active_filter_status or active_filter_assignee %}
+      <a href="?{% if scope %}scope={{ scope }}{% endif %}" class="ki-btn ki-btn-secondary ki-btn-sm">Clear</a>
+    {% endif %}
+    <a href="{% url 'clients:lead_sheet_export_csv' sheet.id %}?{{ request.GET.urlencode }}"
+       class="ki-btn ki-btn-secondary ki-btn-sm" title="Export current view as CSV">
+      <i class="bi bi-download"></i> Export CSV
+    </a>
+  </form>
+</div>
+{% endif %}
+
 {# Scope tabs + per-employee distribution #}
 {% if share_counts or unassigned_count %}
   <div class="ki-card mb-3" style="padding:0.7rem 0.9rem;">
@@ -217,7 +267,7 @@
       {% if unassigned_count %}
         <a href="?scope=unassigned" class="ki-btn ki-btn-sm {% if scope == 'unassigned' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Unassigned ({{ unassigned_count }})</a>
       {% endif %}
-      {% if (is_owner or is_admin) and unassigned_count and share_counts %}
+      {% if is_owner or is_admin %}{% if unassigned_count and share_counts %}
         <form method="post" action="{% url 'clients:lead_sheet_distribute' sheet.id %}" style="display:inline;"
               onsubmit="return confirm('Distribute {{ unassigned_count }} unassigned row{{ unassigned_count|pluralize }} evenly across the {{ share_counts|length }} shared employee{{ share_counts|length|pluralize }}?');">
           {% csrf_token %}
@@ -225,7 +275,7 @@
             <i class="bi bi-shuffle"></i> Distribute unassigned ({{ unassigned_count }})
           </button>
         </form>
-      {% endif %}
+      {% endif %}{% endif %}
       <span style="color:var(--ki-text-muted);font-size:0.78rem;margin-left:auto;">Distribution:</span>
       {% for sc in share_counts %}
         <span class="sheet-pill" style="background:#f1f5f9;color:#475569;font-size:0.74rem;">
@@ -242,10 +292,25 @@
     <thead>
       <tr>
         {% for col in columns %}
-          <th>{{ col.name }}</th>
+          <th>
+            <a href="?sort={% if sort_param == 'col_'|add:col.field_key %}-col_{{ col.field_key }}{% else %}col_{{ col.field_key }}{% endif %}{% if scope %}&scope={{ scope }}{% endif %}"
+               style="color:inherit;text-decoration:none;display:inline-flex;align-items:center;gap:0.25rem;">
+              {{ col.name }}
+              {% if sort_param == 'col_'|add:col.field_key %}<i class="bi bi-arrow-up" style="font-size:0.7rem;color:var(--ki-primary);"></i>
+              {% elif sort_param == '-col_'|add:col.field_key %}<i class="bi bi-arrow-down" style="font-size:0.7rem;color:var(--ki-primary);"></i>
+              {% else %}<i class="bi bi-arrow-down-up" style="font-size:0.65rem;opacity:0.3;"></i>{% endif %}
+            </a>
+          </th>
         {% endfor %}
         <th style="width:200px;min-width:200px;white-space:nowrap;">Tags</th>
-        <th style="width:140px;min-width:140px;white-space:nowrap;">Assigned</th>
+        <th style="width:140px;min-width:140px;white-space:nowrap;">
+          <a href="?sort={% if sort_param == 'assigned' %}-assigned{% else %}assigned{% endif %}{% if scope %}&scope={{ scope }}{% endif %}"
+             style="color:inherit;text-decoration:none;">Assigned
+            {% if sort_param == 'assigned' %}<i class="bi bi-arrow-up" style="font-size:0.7rem;color:var(--ki-primary);"></i>
+            {% elif sort_param == '-assigned' %}<i class="bi bi-arrow-down" style="font-size:0.7rem;color:var(--ki-primary);"></i>
+            {% endif %}
+          </a>
+        </th>
         <th style="width:180px;min-width:180px;white-space:nowrap;text-align:right;">Actions</th>
       </tr>
     </thead>
