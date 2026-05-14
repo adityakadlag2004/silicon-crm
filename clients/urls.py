@@ -92,6 +92,8 @@ urlpatterns = [
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/followups/<int:followup_id>/delete/", views.lead_sheet_followup_delete, name="lead_sheet_followup_delete"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/tags/add/", views.lead_sheet_record_tag_add, name="lead_sheet_record_tag_add"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/tags/remove/", views.lead_sheet_record_tag_remove, name="lead_sheet_record_tag_remove"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/assign/", views.lead_sheet_record_assign, name="lead_sheet_record_assign"),
+    path("leads/sheets/<int:sheet_id>/distribute/", views.lead_sheet_distribute, name="lead_sheet_distribute"),
     path("leads/sheets/<int:sheet_id>/import-csv/", views.lead_sheet_import_csv, name="lead_sheet_import_csv"),
   # Employee performance
   path("sales/performance/", views.employee_performance, name="employee_performance"),
