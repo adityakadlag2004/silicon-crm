@@ -53,9 +53,14 @@
     <h2 class="ki-section-title" style="margin:0;">Lead Records</h2>
     <div class="text-muted" style="font-size:0.85rem;">Create sheets per product or campaign. Add columns, import CSVs, share with your team.</div>
   </div>
-  <button type="button" class="ki-btn ki-btn-primary" data-bs-toggle="modal" data-bs-target="#newSheetModal">
-    <i class="bi bi-plus-lg"></i> New Sheet
-  </button>
+  <div style="display:flex;gap:0.5rem;">
+    <a href="{% url 'clients:lead_records_search' %}" class="ki-btn ki-btn-secondary">
+      <i class="bi bi-search"></i> Search all records
+    </a>
+    <button type="button" class="ki-btn ki-btn-primary" data-bs-toggle="modal" data-bs-target="#newSheetModal">
+      <i class="bi bi-plus-lg"></i> New Sheet
+    </button>
+  </div>
 </div>
 
 <div class="ki-card mb-3">

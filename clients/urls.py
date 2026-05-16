@@ -76,6 +76,7 @@ urlpatterns = [
 
     # Lead Records — spreadsheet-style lead tracking
     path("leads/sheets/", views.lead_sheets_list, name="lead_sheets"),
+    path("leads/sheets/search/", views.lead_records_search, name="lead_records_search"),
     path("leads/sheets/create/", views.lead_sheet_create, name="lead_sheet_create"),
     path("leads/sheets/<int:sheet_id>/", views.lead_sheet_detail, name="lead_sheet_detail"),
     path("leads/sheets/<int:sheet_id>/access/", views.lead_sheet_access, name="lead_sheet_access"),
@@ -86,6 +87,7 @@ urlpatterns = [
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/update/", views.lead_sheet_record_update, name="lead_sheet_record_update"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/delete/", views.lead_sheet_record_delete, name="lead_sheet_record_delete"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/convert/", views.lead_sheet_record_convert, name="lead_sheet_record_convert"),
+    path("leads/sheets/<int:sheet_id>/records/<int:record_id>/to-sale/", views.lead_sheet_record_to_sale, name="lead_sheet_record_to_sale"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/", views.lead_sheet_record_detail, name="lead_sheet_record_detail"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/followups/add/", views.lead_sheet_followup_add, name="lead_sheet_followup_add"),
     path("leads/sheets/<int:sheet_id>/records/<int:record_id>/followups/<int:followup_id>/done/", views.lead_sheet_followup_done, name="lead_sheet_followup_done"),
