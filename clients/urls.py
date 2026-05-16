@@ -99,6 +99,7 @@ urlpatterns = [
     path("leads/sheets/<int:sheet_id>/bulk/", views.lead_sheet_bulk, name="lead_sheet_bulk"),
     path("leads/sheets/<int:sheet_id>/import-csv/", views.lead_sheet_import_csv, name="lead_sheet_import_csv"),
     path("leads/sheets/<int:sheet_id>/export-csv/", views.lead_sheet_export_csv, name="lead_sheet_export_csv"),
+    path("leads/sheets/<int:sheet_id>/stats/", views.lead_sheet_stats, name="lead_sheet_stats"),
   # Employee performance
   path("sales/performance/", views.employee_performance, name="employee_performance"),
   path("dashboard/net-business/", views.net_business, name="net_business"),
