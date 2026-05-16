@@ -83,6 +83,39 @@ def _accessible_sheets(request):
     ).distinct()
 
 
+def _full_visibility(request, sheet) -> bool:
+    """True if the user may see ALL rows in the sheet (manage view).
+    Plain employees who are merely shared on the sheet only see their
+    own assigned rows."""
+    if request.user.is_superuser:
+        return True
+    emp = _user_emp(request)
+    if emp is None:
+        return False
+    if emp.role in ("admin", "manager"):
+        return True
+    return sheet.owner_id == emp.id
+
+
+def _visible_records(request, sheet):
+    """Base record queryset scoped to what this user may see."""
+    qs = sheet.records.all()
+    if _full_visibility(request, sheet):
+        return qs
+    emp = _user_emp(request)
+    if emp is None:
+        return qs.none()
+    return qs.filter(assigned_to=emp)
+
+
+def _can_touch_record(request, sheet, record) -> bool:
+    """Whether the user may view/edit a specific record."""
+    if _full_visibility(request, sheet):
+        return True
+    emp = _user_emp(request)
+    return bool(emp and record.assigned_to_id == emp.id)
+
+
 def _assignment_pool(sheet: LeadSheet):
     """Employees who should receive new rows in round-robin order.
 
@@ -327,15 +360,20 @@ def lead_sheet_detail(request, sheet_id):
         return HttpResponseForbidden("You don't have access to this sheet.")
 
     columns = list(sheet.columns.all())
-    base_qs = sheet.records.select_related("converted_client", "assigned_to__user")
+    full_view = _full_visibility(request, sheet)
+    base_qs = _visible_records(request, sheet).select_related("converted_client", "assigned_to__user")
 
-    # "Mine" / "Unassigned" filters
+    # "Mine" / "Unassigned" filters — only meaningful for full-visibility users;
+    # plain employees are already restricted to their own rows.
     scope = (request.GET.get("scope") or "").strip()
     user_emp = _user_emp(request)
-    if scope == "mine" and user_emp:
-        base_qs = base_qs.filter(assigned_to=user_emp)
-    elif scope == "unassigned":
-        base_qs = base_qs.filter(assigned_to__isnull=True)
+    if full_view:
+        if scope == "mine" and user_emp:
+            base_qs = base_qs.filter(assigned_to=user_emp)
+        elif scope == "unassigned":
+            base_qs = base_qs.filter(assigned_to__isnull=True)
+    else:
+        scope = ""  # ignore scope param for restricted users
 
     base_qs, applied_filters = _apply_filters_sort(base_qs, request, columns)
     records = list(base_qs)
@@ -354,8 +392,9 @@ def lead_sheet_detail(request, sheet_id):
     all_tags_rows = sheet.records.values_list("tags", flat=True)
     available_tags = sorted({t for tag_list in all_tags_rows for t in (tag_list or [])})
 
-    # Per-employee record counts (for the "shared with N" summary)
-    if not sheet.is_private:
+    # Per-employee record counts (owner/admin/manager only — the
+    # distribution overview is a management tool, not for plain employees).
+    if full_view and not sheet.is_private:
         from collections import Counter
         rows = sheet.records.values_list("assigned_to_id", flat=True)
         cnt = Counter(rows)
@@ -389,6 +428,7 @@ def lead_sheet_detail(request, sheet_id):
         "has_email_col": has_email_col,
         "available_tags": available_tags,
         "scope": scope,
+        "full_view": full_view,
         "share_counts": share_counts,
         "unassigned_count": unassigned_count,
         "status_options": status_options,
@@ -506,6 +546,8 @@ def lead_sheet_record_update(request, sheet_id, record_id):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
 
     record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    if not _can_touch_record(request, sheet, record):
+        return JsonResponse({"ok": False, "error": "not your row"}, status=403)
     field_key = (request.POST.get("field_key") or "").strip()
     if not field_key:
         return HttpResponseBadRequest("field_key required")
@@ -529,6 +571,8 @@ def lead_sheet_record_delete(request, sheet_id, record_id):
     if not sheet.can_edit(request.user):
         return HttpResponseForbidden("No edit permission.")
     record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    if not _can_touch_record(request, sheet, record):
+        return HttpResponseForbidden("This row isn't assigned to you.")
     record.delete()
     sheet.save(update_fields=["updated_at"])
     messages.success(request, "Row deleted.")
@@ -544,15 +588,16 @@ def lead_sheet_export_csv(request, sheet_id):
         return HttpResponseForbidden("No access.")
 
     columns = list(sheet.columns.all())
-    qs = sheet.records.select_related("assigned_to__user")
+    qs = _visible_records(request, sheet).select_related("assigned_to__user")
 
-    # Honor the same filters as the detail view
-    scope = (request.GET.get("scope") or "").strip()
-    user_emp = _user_emp(request)
-    if scope == "mine" and user_emp:
-        qs = qs.filter(assigned_to=user_emp)
-    elif scope == "unassigned":
-        qs = qs.filter(assigned_to__isnull=True)
+    # Honor the same filters as the detail view (scope only for full-view users)
+    if _full_visibility(request, sheet):
+        scope = (request.GET.get("scope") or "").strip()
+        user_emp = _user_emp(request)
+        if scope == "mine" and user_emp:
+            qs = qs.filter(assigned_to=user_emp)
+        elif scope == "unassigned":
+            qs = qs.filter(assigned_to__isnull=True)
     qs, _ = _apply_filters_sort(qs, request, columns)
 
     # Stream CSV (handles large sheets without buffering the whole thing)
@@ -740,6 +785,8 @@ def lead_sheet_record_convert(request, sheet_id, record_id):
     if not sheet.can_edit(request.user):
         return HttpResponseForbidden("No edit permission.")
     record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    if not _can_touch_record(request, sheet, record):
+        return HttpResponseForbidden("This row isn't assigned to you.")
 
     if record.converted_client_id:
         messages.info(request, "This row is already linked to a client.")
@@ -787,6 +834,8 @@ def lead_sheet_record_tag_add(request, sheet_id, record_id):
     if not sheet.can_edit(request.user):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
     record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    if not _can_touch_record(request, sheet, record):
+        return JsonResponse({"ok": False, "error": "not your row"}, status=403)
     tag = _normalize_tag(request.POST.get("tag", ""))
     if not tag:
         return JsonResponse({"ok": False, "error": "empty tag"}, status=400)
@@ -810,6 +859,8 @@ def lead_sheet_record_tag_remove(request, sheet_id, record_id):
     if not sheet.can_edit(request.user):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
     record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    if not _can_touch_record(request, sheet, record):
+        return JsonResponse({"ok": False, "error": "not your row"}, status=403)
     tag = _normalize_tag(request.POST.get("tag", ""))
     tags = [t for t in (record.tags or []) if t != tag]
     record.tags = tags
@@ -832,6 +883,8 @@ def lead_sheet_record_detail(request, sheet_id, record_id):
         LeadSheetRecord.objects.select_related("converted_client", "created_by", "updated_by"),
         id=record_id, sheet=sheet,
     )
+    if not _can_touch_record(request, sheet, record):
+        return HttpResponseForbidden("This row isn't assigned to you.")
     columns = list(sheet.columns.all())
     vals = record.values or {}
     cells = [(col, vals.get(col.field_key, "")) for col in columns]
@@ -861,6 +914,8 @@ def lead_sheet_followup_add(request, sheet_id, record_id):
     if not sheet.can_edit(request.user):
         return HttpResponseForbidden("No edit permission.")
     record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    if not _can_touch_record(request, sheet, record):
+        return HttpResponseForbidden("This row isn't assigned to you.")
 
     scheduled_raw = (request.POST.get("scheduled_at") or "").strip()
     note = (request.POST.get("note") or "").strip()
@@ -901,6 +956,8 @@ def lead_sheet_followup_done(request, sheet_id, record_id, followup_id):
     if not sheet.can_edit(request.user):
         return HttpResponseForbidden("No edit permission.")
     fu = get_object_or_404(LeadSheetFollowUp, id=followup_id, record_id=record_id, record__sheet=sheet)
+    if not _can_touch_record(request, sheet, fu.record):
+        return HttpResponseForbidden("This row isn't assigned to you.")
     fu.completed = True
     fu.completed_at = timezone.now()
     fu.completed_by = request.user
@@ -917,6 +974,8 @@ def lead_sheet_followup_delete(request, sheet_id, record_id, followup_id):
     if not sheet.can_edit(request.user):
         return HttpResponseForbidden("No edit permission.")
     fu = get_object_or_404(LeadSheetFollowUp, id=followup_id, record_id=record_id, record__sheet=sheet)
+    if not _can_touch_record(request, sheet, fu.record):
+        return HttpResponseForbidden("This row isn't assigned to you.")
     fu.delete()
     messages.success(request, "Follow-up removed.")
     return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record_id)
@@ -945,7 +1004,12 @@ def lead_sheet_bulk(request, sheet_id):
         messages.warning(request, "No rows selected.")
         return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
 
-    qs = sheet.records.filter(id__in=ids)
+    # Scope to rows the user may touch (employees: only their assigned rows)
+    # Assign / unassign are management actions — owner/admin/manager only.
+    if action in ("assign", "unassign") and not _full_visibility(request, sheet):
+        return HttpResponseForbidden("Only the sheet owner / admin / manager can (un)assign rows.")
+
+    qs = _visible_records(request, sheet).filter(id__in=ids)
     n = qs.count()
     if n == 0:
         messages.warning(request, "No matching rows found.")
@@ -1013,6 +1077,8 @@ def lead_sheet_record_assign(request, sheet_id, record_id):
     sheet = get_object_or_404(LeadSheet, id=sheet_id)
     if not sheet.can_edit(request.user):
         return HttpResponseForbidden("No edit permission.")
+    if not _full_visibility(request, sheet):
+        return HttpResponseForbidden("Only the sheet owner / admin / manager can reassign rows.")
     record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
 
     raw = (request.POST.get("employee_id") or "").strip()
@@ -1080,7 +1146,7 @@ def lead_sheet_stats(request, sheet_id):
     if not sheet.can_view(request.user):
         return HttpResponseForbidden("No access.")
 
-    records = list(sheet.records.select_related("assigned_to__user"))
+    records = list(_visible_records(request, sheet).select_related("assigned_to__user"))
     total = len(records)
     converted = sum(1 for r in records if r.converted_client_id)
     conv_rate = round((converted / total) * 100, 1) if total else 0
@@ -1146,6 +1212,8 @@ def lead_sheet_record_to_sale(request, sheet_id, record_id):
     if not sheet.can_edit(request.user):
         return HttpResponseForbidden("No edit permission.")
     record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+    if not _can_touch_record(request, sheet, record):
+        return HttpResponseForbidden("This row isn't assigned to you.")
 
     from decimal import Decimal, InvalidOperation
     try:
@@ -1223,8 +1291,17 @@ def lead_records_search(request):
             .annotate(_vtext=RawSQL("values::text", []))
             .filter(Q(_vtext__icontains=q) | Q(tags__icontains=q))
             .select_related("sheet", "assigned_to__user")
-            .order_by("-created_at")[:100]
+            .order_by("-created_at")
         )
+        # Restrict to rows the user may actually see: full-visibility on a
+        # sheet → all its rows; otherwise only rows assigned to them.
+        emp = _user_emp(request)
+        full_sheet_ids = {
+            s.id for s in sheets if _full_visibility(request, s)
+        }
+        if not (request.user.is_superuser or (emp and emp.role in ("admin", "manager"))):
+            qs = qs.filter(Q(sheet_id__in=full_sheet_ids) | Q(assigned_to=emp))
+        qs = qs[:100]
         for r in qs:
             vals = r.values or {}
             preview = " · ".join(
