@@ -333,6 +333,10 @@
                 <span class="ls-cell-edit" data-field="{{ col.field_key }}" data-type="date">{{ val }}</span>
               {% elif col.type == 'phone' and val %}
                 <span class="ls-cell-edit" data-field="{{ col.field_key }}" data-type="phone">{{ val }}</span>
+                <a href="https://wa.me/{{ val|cut:' '|cut:'-'|cut:'+' }}" target="_blank" rel="noopener" title="Open in WhatsApp"
+                   onclick="event.stopPropagation();" style="margin-left:0.3rem;color:#25D366;">
+                  <i class="bi bi-whatsapp"></i>
+                </a>
               {% elif col.type == 'email' and val %}
                 <span class="ls-cell-edit" data-field="{{ col.field_key }}" data-type="email">
                   <a href="mailto:{{ val }}" onclick="event.stopPropagation();" style="color:inherit;">{{ val }}</a>
