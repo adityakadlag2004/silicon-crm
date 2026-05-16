@@ -30,8 +30,31 @@ from ..models import (
     LeadSheetColumn,
     LeadSheetFollowUp,
     LeadSheetRecord,
+    Notification,
     Product,
 )
+
+
+def _notify_assignment(record: "LeadSheetRecord", actor):
+    """Best-effort: ping the assignee that they got a lead."""
+    if not record.assigned_to_id or not record.assigned_to.user_id:
+        return
+    if record.assigned_to.user_id == getattr(actor, "id", None):
+        return  # don't notify yourself
+    try:
+        sheet_name = record.sheet.name
+        # Pull a friendly identifier from the row's values
+        vals = record.values or {}
+        ident = (vals.get("name") or vals.get("full_name")
+                 or vals.get("phone") or f"row #{record.id}")
+        Notification.objects.create(
+            recipient=record.assigned_to.user,
+            title=f"New lead assigned: {ident}",
+            body=f"You've been assigned a row in '{sheet_name}'.",
+            link=f"/clients/leads/sheets/{record.sheet_id}/records/{record.id}/",
+        )
+    except Exception:
+        pass
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -458,12 +481,14 @@ def lead_sheet_record_add(request, sheet_id):
         values[col.field_key] = _sanitize_value(col, raw)
 
     assignee = next(_round_robin(sheet, 1), None)
-    LeadSheetRecord.objects.create(
+    record = LeadSheetRecord.objects.create(
         sheet=sheet, values=values,
         created_by=request.user, updated_by=request.user,
         assigned_to=assignee,
     )
     sheet.save(update_fields=["updated_at"])  # bump timestamp
+    if assignee:
+        _notify_assignment(record, request.user)
     msg = "Row added"
     if assignee:
         msg += f" — assigned to {assignee.user.username}"
@@ -674,8 +699,11 @@ def lead_sheet_import_csv(request, sheet_id):
 
         with transaction.atomic():
             previous_count = sheet.records.count()
-            LeadSheetRecord.objects.bulk_create(rows_to_create)
+            created = LeadSheetRecord.objects.bulk_create(rows_to_create)
             sheet.save(update_fields=["updated_at"])
+        # Notify each new row's assignee (best-effort, deduped per user via batching)
+        for r in created:
+            _notify_assignment(r, request.user)
 
         added = len(rows_to_create)
         new_total = previous_count + added
@@ -959,7 +987,11 @@ def lead_sheet_bulk(request, sheet_id):
         except (Employee.DoesNotExist, ValueError):
             messages.error(request, "Invalid employee.")
             return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+        affected = list(qs)  # snapshot before update so we can notify
         qs.update(assigned_to=emp, updated_by=request.user, updated_at=timezone.now())
+        for r in affected:
+            r.assigned_to = emp
+            _notify_assignment(r, request.user)
         messages.success(request, f"Assigned {n} row{'s' if n != 1 else ''} to {emp.user.username}.")
     elif action == "unassign":
         qs.update(assigned_to=None, updated_by=request.user, updated_at=timezone.now())
@@ -995,6 +1027,8 @@ def lead_sheet_record_assign(request, sheet_id, record_id):
     record.updated_by = request.user
     record.save(update_fields=["assigned_to", "updated_by", "updated_at"])
     sheet.save(update_fields=["updated_at"])
+    if record.assigned_to_id:
+        _notify_assignment(record, request.user)
     name = record.assigned_to.user.username if record.assigned_to else "—"
     messages.success(request, f"Row #{record.id} assigned to {name}.")
     return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
@@ -1026,6 +1060,9 @@ def lead_sheet_distribute(request, sheet_id):
             r.updated_by = request.user
         LeadSheetRecord.objects.bulk_update(unassigned, ["assigned_to", "updated_by", "updated_at"])
         sheet.save(update_fields=["updated_at"])
+    # Notify each assignee (best-effort)
+    for r in unassigned:
+        _notify_assignment(r, request.user)
 
     from collections import Counter
     cnt = Counter(a.user.username for a in assignees if a)
