@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Search Lead Records{% endblock %}
+{% block page_title %}Search Lead Records{% endblock %}
+
+{% block content %}
+<div class="ki-card mb-3">
+  <form method="get" style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+    <div style="flex:1;min-width:240px;position:relative;">
+      <i class="bi bi-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ki-text-muted);"></i>
+      <input type="text" name="q" value="{{ q }}" class="form-control" style="padding-left:2.2rem;"
+             placeholder="Search a phone, email, name, anything — across all your sheets" autofocus>
+    </div>
+    <button type="submit" class="ki-btn ki-btn-primary">Search</button>
+    <a href="{% url 'clients:lead_sheets' %}" class="ki-btn ki-btn-secondary">Back to sheets</a>
+  </form>
+</div>
+
+{% if q %}
+  <div class="text-muted mb-2" style="font-size:0.85rem;">
+    {{ results|length }} result{{ results|length|pluralize }}{% if results|length == 100 %}+ (showing first 100){% endif %} for "<strong>{{ q }}</strong>"
+  </div>
+
+  {% if results %}
+    <div class="ki-card ki-card-flush" style="overflow:hidden;">
+      <table class="ki-table" style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th>Sheet</th>
+            <th>Preview</th>
+            <th>Tags</th>
+            <th>Assigned</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in results %}
+            <tr>
+              <td><strong>{{ item.record.sheet.name }}</strong></td>
+              <td style="max-width:420px;">{{ item.preview|default:"—" }}</td>
+              <td>
+                {% for t in item.record.tags %}<span class="sheet-pill" style="background:#f1f5f9;color:#475569;font-size:0.72rem;margin-right:0.2rem;">{{ t }}</span>{% endfor %}
+              </td>
+              <td>{% if item.record.assigned_to %}{{ item.record.assigned_to.user.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              <td>
+                <a href="{% url 'clients:lead_sheet_record_detail' item.record.sheet_id item.record.id %}" class="ki-btn ki-btn-sm ki-btn-secondary">
+                  <i class="bi bi-eye"></i> Open
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="ki-card text-center text-muted" style="padding:2.5rem 1rem;">
+      <i class="bi bi-search" style="font-size:2rem;display:block;margin-bottom:0.5rem;"></i>
+      No records match "<strong>{{ q }}</strong>" in any sheet you can access.
+    </div>
+  {% endif %}
+{% else %}
+  <div class="ki-card text-center text-muted" style="padding:2.5rem 1rem;">
+    Type a name, phone, email or any value to search across every sheet you have access to.
+  </div>
+{% endif %}
+{% endblock %}

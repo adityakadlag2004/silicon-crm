@@ -32,6 +32,7 @@ from ..models import (
     LeadSheetRecord,
     Notification,
     Product,
+    Sale,
 )
 
 
@@ -1069,6 +1070,109 @@ def lead_sheet_distribute(request, sheet_id):
     summary = ", ".join(f"{u}:{c}" for u, c in sorted(cnt.items()))
     messages.success(request, f"Distributed {len(unassigned)} unassigned row{'s' if len(unassigned) != 1 else ''} → {summary}")
     return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+
+# ── Convert row → Sale ───────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def lead_sheet_record_to_sale(request, sheet_id, record_id):
+    """Create a pending Sale from this row. Reuses the linked Client if the
+    row was already converted, otherwise creates one from the row values."""
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_edit(request.user):
+        return HttpResponseForbidden("No edit permission.")
+    record = get_object_or_404(LeadSheetRecord, id=record_id, sheet=sheet)
+
+    from decimal import Decimal, InvalidOperation
+    try:
+        amount = Decimal(str(request.POST.get("amount") or "0"))
+    except (InvalidOperation, ValueError):
+        amount = Decimal("0")
+    if amount <= 0:
+        messages.error(request, "Enter a valid sale amount.")
+        return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record.id)
+
+    product_name = (request.POST.get("product") or "").strip()
+    if not product_name and sheet.product_id:
+        product_name = sheet.product.name
+    if not product_name:
+        messages.error(request, "Pick a product for the sale.")
+        return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record.id)
+
+    # Resolve / create the Client
+    client = record.converted_client
+    if client is None:
+        v = record.values or {}
+        name = (v.get("name") or v.get("full_name") or "").strip()
+        if not name:
+            messages.error(request, "Row needs a 'name' value to create the client+sale.")
+            return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record.id)
+        client = Client.objects.create(
+            name=name,
+            phone=(v.get("phone") or v.get("mobile") or "")[:15] or None,
+            email=(v.get("email") or "") or None,
+            pan=(v.get("pan") or "")[:20] or None,
+            address=v.get("address") or None,
+        )
+        record.converted_client = client
+
+    # Employee = the row's assignee, else the acting user's employee
+    emp = record.assigned_to or _user_emp(request)
+    if emp is None:
+        messages.error(request, "No employee to attribute the sale to (assign the row first).")
+        return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record.id)
+
+    product_ref = Product.objects.filter(name__iexact=product_name).first()
+    sale = Sale.objects.create(
+        client=client,
+        employee=emp,
+        product=product_name,
+        product_ref=product_ref,
+        amount=amount,
+        status=Sale.STATUS_PENDING,
+    )
+    record.updated_by = request.user
+    record.save(update_fields=["converted_client", "updated_by", "updated_at"])
+    messages.success(
+        request,
+        f"Created pending sale #{sale.id} (₹{amount:,.0f}) for {client.name}. "
+        f"It will appear in Approve Sales for review."
+    )
+    return redirect("clients:lead_sheet_record_detail", sheet_id=sheet.id, record_id=record.id)
+
+
+# ── Global search across all accessible sheets ───────────────────────────────
+
+@login_required
+def lead_records_search(request):
+    """Search every record (across all sheets the user can see) by value or tag."""
+    q = (request.GET.get("q") or "").strip()
+    results = []
+    if q:
+        sheets = _accessible_sheets(request).filter(archived=False)
+        sheet_ids = list(sheets.values_list("id", flat=True))
+        # icontains over the JSONB text + tags. Cast values to text for a
+        # cheap substring match; good enough for an operator-facing search.
+        from django.db.models.expressions import RawSQL
+        qs = (
+            LeadSheetRecord.objects.filter(sheet_id__in=sheet_ids)
+            .annotate(_vtext=RawSQL("values::text", []))
+            .filter(Q(_vtext__icontains=q) | Q(tags__icontains=q))
+            .select_related("sheet", "assigned_to__user")
+            .order_by("-created_at")[:100]
+        )
+        for r in qs:
+            vals = r.values or {}
+            preview = " · ".join(
+                f"{k}: {v}" for k, v in list(vals.items())[:4] if v
+            )
+            results.append({"record": r, "preview": preview})
+
+    return render(request, "leads/records_search.html", {
+        "q": q,
+        "results": results,
+    })
 
 
 # ── Archive / unarchive sheet ────────────────────────────────────────────────
