@@ -181,6 +181,9 @@
       <i class="bi bi-cloud-upload"></i> Import CSV
     </button>
   {% endif %}
+  <a href="{% url 'clients:lead_sheet_stats' sheet.id %}" class="ki-btn ki-btn-secondary ki-btn-sm">
+    <i class="bi bi-bar-chart-line"></i> Stats
+  </a>
   {% if is_owner or is_admin %}
     <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-bs-toggle="modal" data-bs-target="#accessModal">
       <i class="bi bi-people"></i> Access

@@ -1072,6 +1072,69 @@ def lead_sheet_distribute(request, sheet_id):
     return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
 
 
+# ── Sheet analytics ──────────────────────────────────────────────────────────
+
+@login_required
+def lead_sheet_stats(request, sheet_id):
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    if not sheet.can_view(request.user):
+        return HttpResponseForbidden("No access.")
+
+    records = list(sheet.records.select_related("assigned_to__user"))
+    total = len(records)
+    converted = sum(1 for r in records if r.converted_client_id)
+    conv_rate = round((converted / total) * 100, 1) if total else 0
+
+    # Status distribution (across all status columns)
+    status_cols = [c for c in sheet.columns.all() if c.type == "status"]
+    from collections import Counter
+    status_counter = Counter()
+    for r in records:
+        v = r.values or {}
+        for c in status_cols:
+            val = v.get(c.field_key)
+            if val:
+                status_counter[val] += 1
+    status_dist = sorted(status_counter.items(), key=lambda kv: -kv[1])
+
+    # Per-assignee counts
+    assignee_counter = Counter()
+    for r in records:
+        assignee_counter[r.assigned_to.user.username if r.assigned_to else "Unassigned"] += 1
+    assignee_dist = sorted(assignee_counter.items(), key=lambda kv: -kv[1])
+
+    # Tag distribution
+    tag_counter = Counter()
+    for r in records:
+        for t in (r.tags or []):
+            tag_counter[t] += 1
+    tag_dist = sorted(tag_counter.items(), key=lambda kv: -kv[1])[:15]
+
+    # Records added per day (last 30 days)
+    today = timezone.now().date()
+    day_counter = Counter()
+    for r in records:
+        if r.created_at:
+            day_counter[r.created_at.date()] += 1
+    timeline = []
+    for i in range(29, -1, -1):
+        d = today - __import__("datetime").timedelta(days=i)
+        timeline.append({"label": d.strftime("%d %b"), "count": day_counter.get(d, 0)})
+
+    import json as _json
+    return render(request, "leads/sheet_stats.html", {
+        "sheet": sheet,
+        "total": total,
+        "converted": converted,
+        "conv_rate": conv_rate,
+        "status_dist": status_dist,
+        "assignee_dist": assignee_dist,
+        "tag_dist": tag_dist,
+        "timeline_labels_json": _json.dumps([t["label"] for t in timeline]),
+        "timeline_counts_json": _json.dumps([t["count"] for t in timeline]),
+    })
+
+
 # ── Convert row → Sale ───────────────────────────────────────────────────────
 
 @login_required
