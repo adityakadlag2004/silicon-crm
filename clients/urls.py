@@ -153,6 +153,7 @@ urlpatterns = [
 
     # reports
     path("reports/monthly-business/", views.monthly_business_report, name="monthly_business_report"),
+    path("reports/business-analytics/", views.business_analytics, name="business_analytics"),
 
     # financial planner
     path("sales/financial-planner/", views.financial_planner, name="financial_planner"),

@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% block title %}Business Analytics{% endblock %}
+{% block page_title %}Business Analytics{% endblock %}
+
+{% block extra_css %}
+<style>
+  .report-table th, .report-table td { text-align: right; vertical-align: middle; white-space: nowrap; font-size: .85rem; }
+  .report-table th:first-child, .report-table td:first-child,
+  .report-table th:nth-child(2), .report-table td:nth-child(2) { text-align: left; }
+  .report-table tfoot td { font-weight: 700; background: var(--ki-body); }
+  .zero { color: #bbb; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+  .kpi { background: var(--ki-body); border-radius: 10px; padding: 14px 16px; }
+  .kpi .kpi-label { font-size: .78rem; color: var(--ki-muted, #6b7280); }
+  .kpi .kpi-value { font-size: 1.35rem; font-weight: 700; }
+  .view-tabs { display: inline-flex; gap: 6px; }
+  .view-tabs a { font-size: .85rem; padding: 6px 14px; border-radius: 999px; text-decoration: none; border: 1px solid var(--ki-border, #e5e7eb); color: inherit; }
+  .view-tabs a.active { background: var(--ki-primary, #2563eb); color: #fff; border-color: transparent; }
+
+  @media print {
+    @page { size: landscape; margin: 1cm; }
+    nav, .no-print, footer, .ki-sidebar, .ki-topbar { display: none !important; }
+    .ki-main { margin-left: 0 !important; padding: 0 !important; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .report-table { font-size: 10pt; }
+    .ki-card { border: none !important; box-shadow: none !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h4 class="ki-section-title mb-0"><i class="bi bi-percent"></i> Business Analytics — Margin</h4>
+    <button class="ki-btn ki-btn-sm ki-btn-secondary" onclick="window.print()">
+      <i class="bi bi-printer"></i> Print / PDF
+    </button>
+  </div>
+
+  <div class="mb-3 no-print view-tabs">
+    <a href="?view=monthly" class="{% if view_mode == 'monthly' %}active{% endif %}">Monthly</a>
+    <a href="?view=annual" class="{% if view_mode == 'annual' %}active{% endif %}">Annual (FY)</a>
+  </div>
+
+{% if view_mode == 'monthly' %}
+  <form method="get" class="row g-2 align-items-end mb-4 no-print">
+    <input type="hidden" name="view" value="monthly">
+    <div class="col-auto">
+      <label class="form-label mb-0 small">Month</label>
+      <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for num, name in months %}
+          <option value="{{ num }}" {% if num == sel_month %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-0 small">Year</label>
+      <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for y in years %}
+          <option value="{{ y }}" {% if y == sel_year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">Total Revenue</div>
+      <div class="kpi-value">₹{{ totals.revenue|floatformat:0 }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total Margin</div>
+      <div class="kpi-value">₹{{ totals.margin_amount|floatformat:0 }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Blended Margin %</div>
+      <div class="kpi-value">{{ totals.blended_percent }}%</div>
+    </div>
+  </div>
+
+  <div class="ki-card">
+    <div class="ki-card-label">
+      <i class="bi bi-calendar-month"></i> {{ month_name }} {{ sel_year }} — Margin by Product
+    </div>
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Product</th>
+            <th>Type</th>
+            <th>Revenue (₹)</th>
+            <th>Margin %</th>
+            <th>Margin (₹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ r.product }}</td>
+            <td>{{ r.policy|default:"—" }}</td>
+            <td>{{ r.revenue|floatformat:0 }}</td>
+            <td>{{ r.margin_percent }}%</td>
+            <td>{{ r.margin_amount|floatformat:0 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-3">No approved sales for this month.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if rows %}
+        <tfoot>
+          <tr>
+            <td></td>
+            <td>Grand Total</td>
+            <td></td>
+            <td>{{ totals.revenue|floatformat:0 }}</td>
+            <td>{{ totals.blended_percent }}%</td>
+            <td>{{ totals.margin_amount|floatformat:0 }}</td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
+{% else %}
+  <form method="get" class="row g-2 align-items-end mb-4 no-print">
+    <input type="hidden" name="view" value="annual">
+    <div class="col-auto">
+      <label class="form-label mb-0 small">Financial Year</label>
+      <select name="fy" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for y in fy_years %}
+          <option value="{{ y }}" {% if y == fy_start %}selected{% endif %}>FY {{ y }}-{{ y|add:1 }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-label">{{ fy_label }} Revenue</div>
+      <div class="kpi-value">₹{{ fy_totals.revenue|floatformat:0 }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">{{ fy_label }} Margin</div>
+      <div class="kpi-value">₹{{ fy_totals.margin_amount|floatformat:0 }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Blended Margin %</div>
+      <div class="kpi-value">{{ fy_totals.blended_percent }}%</div>
+    </div>
+  </div>
+
+  <div class="ki-card mb-4">
+    <div class="ki-card-label">
+      <i class="bi bi-calendar3"></i> {{ fy_label }} — Month-by-Month (Apr → Mar)
+    </div>
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th>Revenue (₹)</th>
+            <th>Margin (₹)</th>
+            <th>Margin %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in month_summary %}
+          <tr>
+            <td>{{ m.label }}</td>
+            <td>{% if m.revenue %}{{ m.revenue|floatformat:0 }}{% else %}<span class="zero">–</span>{% endif %}</td>
+            <td>{% if m.margin_amount %}{{ m.margin_amount|floatformat:0 }}{% else %}<span class="zero">–</span>{% endif %}</td>
+            <td>{{ m.blended_percent }}%</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Total</td>
+            <td>{{ fy_totals.revenue|floatformat:0 }}</td>
+            <td>{{ fy_totals.margin_amount|floatformat:0 }}</td>
+            <td>{{ fy_totals.blended_percent }}%</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="ki-card">
+    <div class="ki-card-label">
+      <i class="bi bi-box-seam"></i> {{ fy_label }} — Margin by Product
+    </div>
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Product</th>
+            <th>Type</th>
+            <th>Revenue (₹)</th>
+            <th>Margin (₹)</th>
+            <th>Eff. Margin %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in product_rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ r.product }}</td>
+            <td>{{ r.policy|default:"—" }}</td>
+            <td>{{ r.revenue|floatformat:0 }}</td>
+            <td>{{ r.margin_amount|floatformat:0 }}</td>
+            <td>{{ r.effective_percent }}%</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted py-3">No approved sales in this financial year.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if product_rows %}
+        <tfoot>
+          <tr>
+            <td></td>
+            <td>Grand Total</td>
+            <td></td>
+            <td>{{ fy_totals.revenue|floatformat:0 }}</td>
+            <td>{{ fy_totals.margin_amount|floatformat:0 }}</td>
+            <td>{{ fy_totals.blended_percent }}%</td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+{% endif %}
+
+  <!-- ===================== NET MARGIN ===================== -->
+  <div class="d-flex align-items-center justify-content-between mt-4 mb-2">
+    <h4 class="ki-section-title mb-0"><i class="bi bi-wallet2"></i> Net Margin
+      {% if view_mode == 'annual' %}({{ fy_label }}){% else %}({{ month_name }} {{ sel_year }}){% endif %}
+    </h4>
+    <div class="view-tabs no-print">
+      <span class="text-muted small me-1">Salaries:</span>
+      <a href="?{{ ba_qs_nosal }}&salaries=1" class="{% if include_salaries %}active{% endif %}">Included</a>
+      <a href="?{{ ba_qs_nosal }}&salaries=0" class="{% if not include_salaries %}active{% endif %}">Excluded</a>
+    </div>
+  </div>
+
+  <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
+    <div class="kpi">
+      <div class="kpi-label">Gross Margin</div>
+      <div class="kpi-value">₹{{ gross_margin|floatformat:0 }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">− Expenses</div>
+      <div class="kpi-value">₹{{ expense_total|floatformat:0 }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">− Salaries {% if not include_salaries %}<span class="zero">(excluded)</span>{% endif %}</div>
+      <div class="kpi-value">₹{{ salary_applied|floatformat:0 }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">= Net Margin</div>
+      <div class="kpi-value" style="color: {% if net_margin < 0 %}#b91c1c{% else %}#166534{% endif %};">₹{{ net_margin|floatformat:0 }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Net Margin %</div>
+      <div class="kpi-value">{{ net_margin_percent }}%</div>
+    </div>
+  </div>
+
+  <div class="ki-card mb-4">
+    <div class="ki-card-label"><i class="bi bi-receipt-cutoff"></i> Expense Breakdown — this {% if view_mode == 'annual' %}financial year{% else %}month{% endif %}</div>
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead><tr><th>Category</th><th>Amount (₹)</th></tr></thead>
+        <tbody>
+          {% for e in expense_rows %}
+          <tr><td>{{ e.category }}</td><td>{{ e.amount|floatformat:0 }}</td></tr>
+          {% empty %}
+          <tr><td colspan="2" class="text-center text-muted py-2">No expenses recorded for this period.</td></tr>
+          {% endfor %}
+          {% if include_salaries and salary_applied %}
+          <tr><td>Salaries <span class="text-muted small">(from employee records)</span></td><td>{{ salary_applied|floatformat:0 }}</td></tr>
+          {% endif %}
+        </tbody>
+        <tfoot>
+          <tr><td>Total Costs</td><td>{{ total_costs|floatformat:0 }}</td></tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===================== EXPENSE MANAGEMENT ===================== -->
+  <div class="ki-card mb-4 no-print">
+    <div class="ki-card-label"><i class="bi bi-plus-square"></i> Add Expense</div>
+    <form method="post" action="{% url 'clients:business_analytics' %}?{{ ba_qs }}" class="row g-2 align-items-end" style="padding: 4px 4px 10px;">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_expense">
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Category</label>
+        <select name="category_id" class="form-select form-select-sm" required>
+          {% for c in active_expense_categories %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+          {% empty %}
+            <option value="" disabled>No active categories</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-0">Type</label>
+        <select name="expense_type" class="form-select form-select-sm" id="exp_type" required>
+          {% for val, label in expense_type_choices %}
+            <option value="{{ val }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-0">Amount ₹</label>
+        <input type="number" step="0.01" min="0" name="amount" class="form-control form-control-sm" required>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small mb-0" id="spent_lbl">Date</label>
+        <input type="date" name="spent_on" class="form-control form-control-sm" value="{{ today_iso }}" required>
+      </div>
+      <div class="col-md-2" id="end_on_wrap" style="display:none;">
+        <label class="form-label small mb-0">End month <span class="text-muted">(blank = ongoing)</span></label>
+        <input type="date" name="end_on" class="form-control form-control-sm">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Note</label>
+        <input type="text" name="note" class="form-control form-control-sm" maxlength="255" placeholder="Optional">
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="ki-btn ki-btn-primary w-100" style="font-size:.82rem;"><i class="bi bi-plus-lg"></i> Add</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="ki-card mb-4 no-print">
+    <div class="ki-card-label"><i class="bi bi-list-ul"></i> All Expenses</div>
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead>
+          <tr><th>Category</th><th>Type</th><th>Amount (₹)</th><th>From / Date</th><th>Until</th><th>Note</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for x in all_expenses %}
+          <tr>
+            <td>{{ x.category.name }}</td>
+            <td>{{ x.get_expense_type_display }}</td>
+            <td>{{ x.amount|floatformat:0 }}</td>
+            <td>{{ x.spent_on|date:"d M Y" }}</td>
+            <td>{% if x.expense_type == 'recurring' %}{% if x.end_on %}{{ x.end_on|date:"d M Y" }}{% else %}<span class="text-muted">Ongoing</span>{% endif %}{% else %}—{% endif %}</td>
+            <td>{{ x.note|default:"—" }}</td>
+            <td>
+              <form method="post" action="{% url 'clients:business_analytics' %}?{{ ba_qs }}" class="d-inline" onsubmit="return confirm('Delete this expense?');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete_expense">
+                <input type="hidden" name="expense_id" value="{{ x.id }}">
+                <button type="submit" class="ki-btn" style="padding:3px 7px;font-size:.78rem;background:#fee2e2;color:#b91c1c;"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-center text-muted py-2">No expenses yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ki-card no-print">
+    <div class="ki-card-label"><i class="bi bi-tags"></i> Expense Categories</div>
+    <div style="padding: 4px;">
+      <form method="post" action="{% url 'clients:business_analytics' %}?{{ ba_qs }}" class="row g-2 align-items-end mb-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_expense_category">
+        <div class="col-md-4">
+          <label class="form-label small mb-0">New category</label>
+          <input type="text" name="name" class="form-control form-control-sm" maxlength="100" placeholder="e.g. Rent" required>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="ki-btn ki-btn-secondary w-100" style="font-size:.82rem;"><i class="bi bi-plus-lg"></i> Add</button>
+        </div>
+      </form>
+      <div class="ki-table-wrap">
+        <table class="ki-table report-table">
+          <thead><tr><th>Category</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            {% for c in expense_categories %}
+            <tr>
+              <td>{{ c.name }}</td>
+              <td>{% if c.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-secondary">Archived</span>{% endif %}</td>
+              <td>
+                <form method="post" action="{% url 'clients:business_analytics' %}?{{ ba_qs }}" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="toggle_expense_category">
+                  <input type="hidden" name="category_id" value="{{ c.id }}">
+                  <button type="submit" class="ki-btn ki-btn-secondary" style="padding:3px 9px;font-size:.78rem;">
+                    {% if c.is_active %}Archive{% else %}Restore{% endif %}
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-muted py-2">No categories.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var typeSel = document.getElementById('exp_type');
+  var endWrap = document.getElementById('end_on_wrap');
+  var spentLbl = document.getElementById('spent_lbl');
+  function sync() {
+    var recurring = typeSel && typeSel.value === 'recurring';
+    if (endWrap) endWrap.style.display = recurring ? '' : 'none';
+    if (spentLbl) spentLbl.textContent = recurring ? 'Start month' : 'Date';
+  }
+  if (typeSel) { typeSel.addEventListener('change', sync); sync(); }
+})();
+</script>
+{% endblock %}

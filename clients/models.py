@@ -1,6 +1,7 @@
 import logging
 import re
 
+from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
@@ -42,6 +43,13 @@ class Product(models.Model):
     code = models.CharField(max_length=30, unique=True)
     domain = models.CharField(max_length=20, choices=DOMAIN_CHOICES, default=DOMAIN_BOTH)
     display_order = models.IntegerField(default=0)
+    margin_percent = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(0)],
+        help_text="Default business margin % on this product's revenue, used when no margin slab matches.",
+    )
     is_active = models.BooleanField(default=True)
     archived_at = models.DateTimeField(null=True, blank=True)
     archived_reason = models.CharField(max_length=255, blank=True)
@@ -61,6 +69,154 @@ class Product(models.Model):
         self.archived_reason = (reason or "").strip()
         self.save(update_fields=["is_active", "archived_at", "archived_reason", "updated_at"])
 
+    @property
+    def is_health(self):
+        """Health-insurance products carry Fresh/Port margin distinctions."""
+        return self.code == "HEALTH_INS" or (self.name or "").strip().lower() == "health insurance"
+
+    def margin_for(self, amount, policy_type=""):
+        """Resolve the margin % for a given cumulative revenue amount.
+
+        For health products, `policy_type` selects the Fresh/Port slab set.
+        Falls back to the product's default `margin_percent` if no slab matches.
+        """
+        amount = Decimal(str(amount or 0))
+        pt = (policy_type or "").strip() if self.is_health else ""
+        for slab in self.margin_slabs.filter(policy_type=pt):
+            if amount < slab.min_amount:
+                continue
+            if slab.max_amount is not None and amount > slab.max_amount:
+                continue
+            return slab.margin_percent
+        return self.margin_percent
+
+
+class ProductMarginSlab(models.Model):
+    """Revenue-band margin override for a product.
+
+    The slab is matched against the cumulative monthly revenue of the product
+    (per policy type, for health insurance). The top slab can leave
+    `max_amount` blank to mean "and above".
+    """
+
+    POLICY_TYPE_CHOICES = [
+        ("", "All / Not applicable"),
+        ("fresh", "Fresh"),
+        ("port", "Port"),
+    ]
+
+    product = models.ForeignKey("Product", on_delete=models.CASCADE, related_name="margin_slabs")
+    policy_type = models.CharField(
+        max_length=10,
+        choices=POLICY_TYPE_CHOICES,
+        blank=True,
+        default="",
+        help_text="Fresh / Port for Health Insurance; leave blank for other products.",
+    )
+    min_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, validators=[MinValueValidator(0)],
+        help_text="Lower bound of cumulative monthly revenue (inclusive).",
+    )
+    max_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Upper bound (inclusive). Leave blank for the top 'and above' slab.",
+    )
+    margin_percent = models.DecimalField(
+        max_digits=6, decimal_places=2, validators=[MinValueValidator(0)],
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Product Margin Slab"
+        verbose_name_plural = "Product Margin Slabs"
+        ordering = ["product", "policy_type", "min_amount"]
+
+    def __str__(self):
+        ceiling = f"{self.max_amount}" if self.max_amount is not None else "∞"
+        pt = f" [{self.get_policy_type_display()}]" if self.policy_type else ""
+        return f"{self.product.name}{pt}: ₹{self.min_amount}–{ceiling} → {self.margin_percent}%"
+
+
+class ExpenseCategory(models.Model):
+    """Office running-expense bucket (e.g. Electricity, Material, Marketing).
+
+    Salaries are NOT a category — they are computed from Employee records.
+    """
+
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    display_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Expense Category"
+        verbose_name_plural = "Expense Categories"
+        ordering = ["display_order", "name"]
+
+    def __str__(self):
+        return self.name if self.is_active else f"{self.name} (archived)"
+
+
+class Expense(models.Model):
+    """An office running expense, either one-time or monthly-recurring.
+
+    For RECURRING, `amount` is the per-month cost, `spent_on` is the first
+    month it applies, and `end_on` (optional) is the last month (inclusive);
+    a blank `end_on` means it is still ongoing.
+    """
+
+    TYPE_ONE_TIME = "one_time"
+    TYPE_RECURRING = "recurring"
+    TYPE_CHOICES = [
+        (TYPE_ONE_TIME, "One-time"),
+        (TYPE_RECURRING, "Recurring (monthly)"),
+    ]
+
+    category = models.ForeignKey(
+        "ExpenseCategory", on_delete=models.PROTECT, related_name="expenses"
+    )
+    expense_type = models.CharField(max_length=12, choices=TYPE_CHOICES, default=TYPE_ONE_TIME)
+    amount = models.DecimalField(
+        max_digits=14, decimal_places=2, validators=[MinValueValidator(0)]
+    )
+    spent_on = models.DateField(
+        default=timezone.localdate,
+        help_text="One-time: date incurred. Recurring: first month it applies.",
+    )
+    end_on = models.DateField(
+        null=True, blank=True,
+        help_text="Recurring only: last month it applies (inclusive). Blank = ongoing.",
+    )
+    note = models.CharField(max_length=255, blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-spent_on", "-created_at"]
+        indexes = [
+            models.Index(fields=["expense_type", "spent_on"], name="expense_type_date_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.category.name} · {self.get_expense_type_display()} · ₹{self.amount}"
+
+    def applies_to_month(self, year, month):
+        """True if this expense contributes cost to the given year/month."""
+        if self.expense_type == self.TYPE_ONE_TIME:
+            return self.spent_on.year == year and self.spent_on.month == month
+        # Recurring: active if it started on/before this month and has not ended before it.
+        from calendar import monthrange
+
+        month_start = date(year, month, 1)
+        month_end = date(year, month, monthrange(year, month)[1])
+        if self.spent_on > month_end:
+            return False
+        if self.end_on is not None and self.end_on < month_start:
+            return False
+        return True
 
 
 class Client(models.Model):

@@ -1,16 +1,20 @@
 """Reports views: past performance, monthly business report."""
 import json
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from calendar import month_name
+from urllib.parse import urlencode
 
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
-from django.db.models import Sum
+from django.db.models import Sum, Q
 from django.utils.timezone import now
 
-from ..models import Sale, Employee, MonthlyTargetHistory, Product
+from ..models import (
+    Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
+)
 from .helpers import get_manager_access, _last_n_months
 
 
@@ -446,3 +450,337 @@ def monthly_business_report(request):
         "month_name": month_name[sel_month],
     }
     return render(request, "reports/monthly_business_report.html", context)
+
+
+# ---------------- Business Analytics (margin) ----------------
+
+def _fy_months(fy_start_year):
+    """Indian financial year months: Apr(start) → Mar(start+1)."""
+    months = [(fy_start_year, m) for m in range(4, 13)]
+    months += [(fy_start_year + 1, m) for m in range(1, 4)]
+    return months
+
+
+def _month_margin_breakdown(year, month):
+    """Per-product (and Fresh/Port for health) margin for one month.
+
+    Slabs match against the product's cumulative monthly revenue, so the
+    revenue is aggregated per product/bucket first, then the margin % resolved.
+    Returns (rows, totals) where each row has product, policy label, revenue,
+    margin_percent and margin_amount.
+    """
+    approved = Sale.objects.filter(status="approved", date__year=year, date__month=month)
+    products = list(Product.objects.all().order_by("display_order", "name"))
+
+    rows = []
+    total_rev = Decimal("0")
+    total_margin = Decimal("0")
+    matched_pks = []
+
+    for p in products:
+        base = approved.filter(
+            Q(product_ref=p) | (Q(product_ref__isnull=True) & Q(product=p.name))
+        )
+        matched_pks.append(p.pk)
+
+        if p.is_health:
+            buckets = [("fresh", "Fresh"), ("port", "Port")]
+            seen_codes = []
+            for code, label in buckets:
+                seen_codes.append(code)
+                rev = base.filter(policy_type=code).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+                if rev <= 0:
+                    continue
+                pct = p.margin_for(rev, code)
+                amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
+                rows.append({"product": p.name, "policy": label, "revenue": rev,
+                             "margin_percent": pct, "margin_amount": amt})
+                total_rev += rev
+                total_margin += amt
+            rev_unset = base.exclude(policy_type__in=seen_codes).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            if rev_unset > 0:
+                pct = p.margin_for(rev_unset, "")
+                amt = (rev_unset * pct / Decimal("100")).quantize(Decimal("0.01"))
+                rows.append({"product": p.name, "policy": "Unspecified", "revenue": rev_unset,
+                             "margin_percent": pct, "margin_amount": amt})
+                total_rev += rev_unset
+                total_margin += amt
+        else:
+            rev = base.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            if rev <= 0:
+                continue
+            pct = p.margin_for(rev, "")
+            amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
+            rows.append({"product": p.name, "policy": "", "revenue": rev,
+                         "margin_percent": pct, "margin_amount": amt})
+            total_rev += rev
+            total_margin += amt
+
+    # Approved sales not mapped to any known product → 0% margin, kept so totals reconcile.
+    product_names = [p.name for p in products]
+    leftover = approved.filter(product_ref__isnull=True).exclude(product__in=product_names)
+    leftover_rev = leftover.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+    if leftover_rev > 0:
+        rows.append({"product": "Other / Unmapped", "policy": "", "revenue": leftover_rev,
+                     "margin_percent": Decimal("0.00"), "margin_amount": Decimal("0.00")})
+        total_rev += leftover_rev
+
+    blended = (total_margin / total_rev * Decimal("100")).quantize(Decimal("0.01")) if total_rev else Decimal("0.00")
+    totals = {"revenue": total_rev, "margin_amount": total_margin, "blended_percent": blended}
+    return rows, totals
+
+
+def _monthly_salary_total():
+    """Current total monthly salary across active employees."""
+    return Employee.objects.filter(active=True).aggregate(t=Sum("salary"))["t"] or Decimal("0")
+
+
+def _period_expense_breakdown(months):
+    """months: list of (year, month). Returns (category_rows, total).
+
+    One-time expenses count in the month they were incurred; recurring
+    expenses count their per-month amount for each active month.
+    """
+    expenses = list(Expense.objects.select_related("category").all())
+    cat_totals = {}
+    total = Decimal("0")
+    for (y, m) in months:
+        for e in expenses:
+            if e.applies_to_month(y, m):
+                cat_totals[e.category.name] = cat_totals.get(e.category.name, Decimal("0")) + e.amount
+                total += e.amount
+    rows = [{"category": k, "amount": v} for k, v in sorted(cat_totals.items())]
+    return rows, total
+
+
+def _parse_expense_post(request):
+    """Validate add-expense form fields. Returns (kwargs, error)."""
+    try:
+        category = ExpenseCategory.objects.get(pk=request.POST.get("category_id"))
+    except (ExpenseCategory.DoesNotExist, ValueError, TypeError):
+        return None, "Pick a valid expense category."
+
+    expense_type = request.POST.get("expense_type")
+    if expense_type not in (Expense.TYPE_ONE_TIME, Expense.TYPE_RECURRING):
+        return None, "Choose One-time or Recurring."
+
+    try:
+        amount = Decimal(str(request.POST.get("amount", "")).strip())
+    except (InvalidOperation, TypeError):
+        return None, "Enter a valid amount."
+    if amount < 0:
+        return None, "Amount cannot be negative."
+
+    def _date(field):
+        raw = (request.POST.get(field) or "").strip()
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(raw)
+        except ValueError:
+            return False
+
+    spent_on = _date("spent_on")
+    if spent_on in (None, False):
+        return None, "Enter a valid date."
+    end_on = _date("end_on")
+    if end_on is False:
+        return None, "Enter a valid end date or leave it blank."
+    if expense_type == Expense.TYPE_ONE_TIME:
+        end_on = None
+    elif end_on is not None and end_on < spent_on:
+        return None, "Recurring end month cannot be before the start month."
+
+    return {
+        "category": category,
+        "expense_type": expense_type,
+        "amount": amount,
+        "spent_on": spent_on,
+        "end_on": end_on,
+        "note": (request.POST.get("note") or "").strip()[:255],
+    }, None
+
+
+def _is_ba_manager(request):
+    if request.user.is_superuser:
+        return True
+    emp = getattr(request.user, "employee", None)
+    return bool(emp and emp.role in ("admin", "manager"))
+
+
+@login_required
+def business_analytics(request):
+    if not _is_ba_manager(request):
+        return HttpResponseForbidden("Access denied")
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+
+        if action == "add_expense":
+            kwargs, err = _parse_expense_post(request)
+            if err:
+                messages.error(request, err)
+            else:
+                Expense.objects.create(created_by=request.user, **kwargs)
+                messages.success(request, "Expense added.")
+
+        elif action == "delete_expense":
+            try:
+                Expense.objects.filter(pk=request.POST.get("expense_id")).delete()
+                messages.success(request, "Expense removed.")
+            except (ValueError, TypeError):
+                messages.error(request, "Invalid expense.")
+
+        elif action == "add_expense_category":
+            name = (request.POST.get("name") or "").strip()
+            if not name:
+                messages.error(request, "Category name is required.")
+            elif ExpenseCategory.objects.filter(name__iexact=name).exists():
+                messages.error(request, f"Category '{name}' already exists.")
+            else:
+                ExpenseCategory.objects.create(name=name)
+                messages.success(request, f"Category '{name}' added.")
+
+        elif action == "toggle_expense_category":
+            cat = ExpenseCategory.objects.filter(pk=request.POST.get("category_id")).first()
+            if cat:
+                cat.is_active = not cat.is_active
+                cat.save(update_fields=["is_active"])
+                messages.success(
+                    request,
+                    f"Category '{cat.name}' {'restored' if cat.is_active else 'archived'}.",
+                )
+            else:
+                messages.error(request, "Invalid category.")
+        else:
+            messages.error(request, "Unsupported action.")
+
+        return redirect(request.get_full_path())
+
+    today = date.today()
+    view_mode = request.GET.get("view", "monthly")
+    if view_mode not in ("monthly", "annual"):
+        view_mode = "monthly"
+    include_salaries = request.GET.get("salaries", "1") != "0"
+
+    # Financial year that contains `today` (Apr–Mar).
+    current_fy_start = today.year if today.month >= 4 else today.year - 1
+    fy_years = list(range(current_fy_start - 4, current_fy_start + 1))
+    months = [(i, month_name[i]) for i in range(1, 13)]
+    years = list(range(today.year - 4, today.year + 1))
+
+    context = {
+        "view_mode": view_mode,
+        "months": months,
+        "years": years,
+        "fy_years": fy_years,
+    }
+
+    if view_mode == "annual":
+        try:
+            fy_start = int(request.GET.get("fy", current_fy_start))
+        except (TypeError, ValueError):
+            fy_start = current_fy_start
+
+        month_summary = []
+        product_agg = {}  # key -> {product, policy, revenue, margin_amount}
+        fy_rev = Decimal("0")
+        fy_margin = Decimal("0")
+
+        for (y, m) in _fy_months(fy_start):
+            rows, totals = _month_margin_breakdown(y, m)
+            month_summary.append({
+                "year": y, "month": m, "label": f"{month_name[m][:3]} {y}",
+                "revenue": totals["revenue"], "margin_amount": totals["margin_amount"],
+                "blended_percent": totals["blended_percent"],
+            })
+            fy_rev += totals["revenue"]
+            fy_margin += totals["margin_amount"]
+            for r in rows:
+                key = (r["product"], r["policy"])
+                agg = product_agg.setdefault(key, {
+                    "product": r["product"], "policy": r["policy"],
+                    "revenue": Decimal("0"), "margin_amount": Decimal("0"),
+                })
+                agg["revenue"] += r["revenue"]
+                agg["margin_amount"] += r["margin_amount"]
+
+        product_rows = []
+        for agg in product_agg.values():
+            eff = (agg["margin_amount"] / agg["revenue"] * Decimal("100")).quantize(Decimal("0.01")) if agg["revenue"] else Decimal("0.00")
+            product_rows.append({**agg, "effective_percent": eff})
+        product_rows.sort(key=lambda x: x["margin_amount"], reverse=True)
+
+        fy_blended = (fy_margin / fy_rev * Decimal("100")).quantize(Decimal("0.01")) if fy_rev else Decimal("0.00")
+        period_months = _fy_months(fy_start)
+        period_revenue = fy_rev
+        gross_margin = fy_margin
+        context.update({
+            "fy_start": fy_start,
+            "fy_label": f"FY {fy_start}-{str(fy_start + 1)[-2:]}",
+            "month_summary": month_summary,
+            "product_rows": product_rows,
+            "fy_totals": {"revenue": fy_rev, "margin_amount": fy_margin, "blended_percent": fy_blended},
+        })
+    else:
+        try:
+            sel_month = int(request.GET.get("month", today.month))
+            sel_year = int(request.GET.get("year", today.year))
+        except (TypeError, ValueError):
+            sel_month, sel_year = today.month, today.year
+
+        rows, totals = _month_margin_breakdown(sel_year, sel_month)
+        rows.sort(key=lambda x: x["margin_amount"], reverse=True)
+        period_months = [(sel_year, sel_month)]
+        period_revenue = totals["revenue"]
+        gross_margin = totals["margin_amount"]
+        context.update({
+            "sel_month": sel_month,
+            "sel_year": sel_year,
+            "month_name": month_name[sel_month],
+            "rows": rows,
+            "totals": totals,
+        })
+
+    # ---- Expenses + Net Margin (shared by both views) ----
+    expense_rows, expense_total = _period_expense_breakdown(period_months)
+    monthly_salary = _monthly_salary_total()
+    salary_total = monthly_salary * len(period_months)
+    salary_applied = salary_total if include_salaries else Decimal("0")
+    net_margin = gross_margin - expense_total - salary_applied
+    net_margin_percent = (
+        (net_margin / period_revenue * Decimal("100")).quantize(Decimal("0.01"))
+        if period_revenue else Decimal("0.00")
+    )
+
+    # Query string used by management forms so a POST redirects back to the
+    # same view/period the user is looking at.
+    qs_params = {"view": view_mode}
+    if view_mode == "annual":
+        qs_params["fy"] = context["fy_start"]
+    else:
+        qs_params["month"] = context["sel_month"]
+        qs_params["year"] = context["sel_year"]
+    qs_nosal = urlencode(qs_params)  # period only, no salaries flag
+    qs_params = {**qs_params, "salaries": "1" if include_salaries else "0"}
+
+    context.update({
+        "include_salaries": include_salaries,
+        "expense_rows": expense_rows,
+        "expense_total": expense_total,
+        "monthly_salary": monthly_salary,
+        "salary_total": salary_total,
+        "salary_applied": salary_applied,
+        "total_costs": expense_total + salary_applied,
+        "gross_margin": gross_margin,
+        "net_margin": net_margin,
+        "net_margin_percent": net_margin_percent,
+        "expense_categories": ExpenseCategory.objects.all().order_by("display_order", "name"),
+        "active_expense_categories": ExpenseCategory.objects.filter(is_active=True).order_by("display_order", "name"),
+        "all_expenses": Expense.objects.select_related("category").all()[:200],
+        "expense_type_choices": Expense.TYPE_CHOICES,
+        "ba_qs": urlencode(qs_params),
+        "ba_qs_nosal": qs_nosal,
+        "today_iso": today.isoformat(),
+    })
+    return render(request, "reports/business_analytics.html", context)
