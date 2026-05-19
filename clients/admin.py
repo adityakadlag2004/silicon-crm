@@ -17,6 +17,9 @@ from .models import (
     MessageTemplate,
     Renewal,
     Product,
+    ProductMarginSlab,
+    ExpenseCategory,
+    Expense,
 )
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
@@ -270,6 +273,31 @@ class ProductAdmin(admin.ModelAdmin):
     @admin.action(description="Restore selected products")
     def restore_products(self, request, queryset):
         queryset.update(is_active=True, archived_at=None, archived_reason="")
+
+
+@admin.register(ProductMarginSlab)
+class ProductMarginSlabAdmin(admin.ModelAdmin):
+    list_display = ("product", "policy_type", "min_amount", "max_amount", "margin_percent")
+    list_filter = ("policy_type", "product")
+    search_fields = ("product__name",)
+    ordering = ("product", "policy_type", "min_amount")
+
+
+@admin.register(ExpenseCategory)
+class ExpenseCategoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "is_active", "display_order")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+    ordering = ("display_order", "name")
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    list_display = ("category", "expense_type", "amount", "spent_on", "end_on", "created_at")
+    list_filter = ("expense_type", "category")
+    search_fields = ("category__name", "note")
+    date_hierarchy = "spent_on"
+    ordering = ("-spent_on",)
 
 
 

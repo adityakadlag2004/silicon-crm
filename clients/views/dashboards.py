@@ -21,6 +21,7 @@ from ..models import (
     Client,
     Sale,
     Product,
+    ProductMarginSlab,
     Employee,
     Target,
     MonthlyTargetHistory,
@@ -63,6 +64,29 @@ def _normalize_product_code(raw_code):
         if ch.isalnum() or ch == "_":
             normalized += ch
     return normalized[:30]
+
+
+def _parse_margin(raw, default=Decimal("0.00")):
+    """Parse a percentage field, clamped to a sensible non-negative value."""
+    if raw in (None, ""):
+        return default
+    try:
+        val = Decimal(str(raw).strip())
+    except Exception:
+        return default
+    if val < 0:
+        return Decimal("0.00")
+    return val
+
+
+def _parse_amount(raw, default=None):
+    if raw in (None, ""):
+        return default
+    try:
+        val = Decimal(str(raw).strip())
+    except Exception:
+        return default
+    return val if val >= 0 else default
 
 
 def _is_admin_user(user):
@@ -853,6 +877,7 @@ def product_management_page(request):
                 code=code,
                 domain=domain,
                 display_order=display_order_val,
+                margin_percent=_parse_margin(request.POST.get("margin_percent")),
                 is_active=True,
             )
             messages.success(request, f"Product '{name}' added.")
@@ -892,7 +917,8 @@ def product_management_page(request):
             product.code = code
             product.domain = domain
             product.display_order = display_order_val
-            product.save(update_fields=["name", "code", "domain", "display_order", "updated_at"])
+            product.margin_percent = _parse_margin(request.POST.get("margin_percent"), product.margin_percent)
+            product.save(update_fields=["name", "code", "domain", "display_order", "margin_percent", "updated_at"])
             messages.success(request, f"Product '{name}' updated.")
             return redirect("clients:product_management")
 
@@ -914,10 +940,62 @@ def product_management_page(request):
             messages.success(request, f"Product '{product.name}' restored.")
             return redirect("clients:product_management")
 
+        if action == "add_margin_slab":
+            product = get_object_or_404(Product, pk=request.POST.get("product_id"))
+            policy_type = (request.POST.get("policy_type") or "").strip()
+            if not product.is_health:
+                policy_type = ""
+            elif policy_type not in {"fresh", "port"}:
+                messages.error(request, "Select Fresh or Port for Health Insurance margin slabs.")
+                return redirect("clients:product_management")
+
+            min_amount = _parse_amount(request.POST.get("min_amount"), default=None)
+            max_amount = _parse_amount(request.POST.get("max_amount"), default=None)
+            margin_percent = _parse_margin(request.POST.get("margin_percent"), default=None)
+
+            if min_amount is None or margin_percent is None:
+                messages.error(request, "Min amount and margin % are required for a slab.")
+                return redirect("clients:product_management")
+            if max_amount is not None and max_amount < min_amount:
+                messages.error(request, "Max amount cannot be less than min amount.")
+                return redirect("clients:product_management")
+
+            overlap = ProductMarginSlab.objects.filter(
+                product=product, policy_type=policy_type
+            ).filter(
+                Q(max_amount__isnull=True) | Q(max_amount__gte=min_amount)
+            ).filter(
+                Q(min_amount__lte=max_amount) if max_amount is not None else Q()
+            )
+            if overlap.exists():
+                messages.error(request, "This revenue range overlaps an existing slab for the same type.")
+                return redirect("clients:product_management")
+
+            ProductMarginSlab.objects.create(
+                product=product,
+                policy_type=policy_type,
+                min_amount=min_amount,
+                max_amount=max_amount,
+                margin_percent=margin_percent,
+            )
+            messages.success(request, f"Margin slab added for '{product.name}'.")
+            return redirect("clients:product_management")
+
+        if action == "delete_margin_slab":
+            slab = get_object_or_404(ProductMarginSlab, pk=request.POST.get("slab_id"))
+            pname = slab.product.name
+            slab.delete()
+            messages.success(request, f"Margin slab removed from '{pname}'.")
+            return redirect("clients:product_management")
+
         messages.error(request, "Unsupported action.")
         return redirect("clients:product_management")
 
-    products = Product.objects.all().order_by("display_order", "name")
+    products = (
+        Product.objects.all()
+        .order_by("display_order", "name")
+        .prefetch_related("margin_slabs")
+    )
     return render(
         request,
         "settings/product_management.html",

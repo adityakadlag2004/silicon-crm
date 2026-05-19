@@ -20,6 +20,8 @@
           <th>Name</th>
           <th>Code</th>
           <th>Renewal Tracked</th>
+          <th>Margin %</th>
+          <th>Margin Slabs</th>
           <th>Order</th>
           <th>Status</th>
           <th>Archived Reason</th>
@@ -32,6 +34,17 @@
           <td>{{ product.name }}</td>
           <td>{{ product.code }}</td>
           <td>{% if product.domain == "both" or product.domain == "renewal" %}Yes{% else %}No{% endif %}</td>
+          <td>{{ product.margin_percent }}%</td>
+          <td>
+            <button
+              class="ki-btn ki-btn-secondary"
+              style="padding:4px 8px;font-size:.8rem;"
+              data-bs-toggle="modal"
+              data-bs-target="#marginSlabModal{{ product.id }}"
+            >
+              <i class="bi bi-bar-chart-steps"></i> {{ product.margin_slabs.all|length }}
+            </button>
+          </td>
           <td>{{ product.display_order }}</td>
           <td>
             {% if product.archived_at %}
@@ -55,6 +68,7 @@
                 data-code="{{ product.code }}"
                 data-domain="{{ product.domain }}"
                 data-renewal-tracked="{% if product.domain == "both" or product.domain == "renewal" %}yes{% else %}no{% endif %}"
+                data-margin-percent="{{ product.margin_percent }}"
                 data-display-order="{{ product.display_order }}"
               >
                 <i class="bi bi-pencil"></i>
@@ -86,7 +100,7 @@
         </tr>
       {% empty %}
         <tr>
-          <td colspan="7" class="text-center text-muted py-3">No products found.</td>
+          <td colspan="9" class="text-center text-muted py-3">No products found.</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -119,6 +133,11 @@
               <option value="no" selected>No</option>
               <option value="yes">Yes</option>
             </select>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Default Margin %</label>
+            <input type="number" step="0.01" min="0" class="form-control" name="margin_percent" value="0">
+            <small class="text-muted">Used when no revenue slab matches. Add slabs after saving.</small>
           </div>
           <div>
             <label class="form-label">Display Order</label>
@@ -161,6 +180,11 @@
               <option value="yes">Yes</option>
             </select>
           </div>
+          <div class="mb-2">
+            <label class="form-label">Default Margin %</label>
+            <input type="number" step="0.01" min="0" class="form-control" name="margin_percent" id="edit_margin_percent">
+            <small class="text-muted">Used when no revenue slab matches.</small>
+          </div>
           <div>
             <label class="form-label">Display Order</label>
             <input type="number" class="form-control" name="display_order" id="edit_display_order">
@@ -200,6 +224,102 @@
   </div>
 </div>
 
+{% for product in products %}
+<div class="modal fade" id="marginSlabModal{{ product.id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Margin Slabs — {{ product.name }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="font-size:.85rem;">
+          Slabs are matched against the product's <strong>cumulative monthly revenue</strong>.
+          Leave the max blank for the top “and above” slab.
+          {% if product.is_health %}Health Insurance uses separate Fresh / Port slab sets.{% endif %}
+          When no slab matches, the default margin ({{ product.margin_percent }}%) applies.
+        </p>
+
+        <div class="ki-table-wrap mb-3">
+          <table class="ki-table">
+            <thead>
+              <tr>
+                {% if product.is_health %}<th>Type</th>{% endif %}
+                <th>Min ₹</th>
+                <th>Max ₹</th>
+                <th>Margin %</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for slab in product.margin_slabs.all %}
+              <tr>
+                {% if product.is_health %}<td>{{ slab.get_policy_type_display }}</td>{% endif %}
+                <td>{{ slab.min_amount }}</td>
+                <td>{% if slab.max_amount %}{{ slab.max_amount }}{% else %}<span class="text-muted">& above</span>{% endif %}</td>
+                <td>{{ slab.margin_percent }}%</td>
+                <td>
+                  <form method="post" class="d-inline" onsubmit="return confirm('Delete this slab?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_margin_slab">
+                    <input type="hidden" name="slab_id" value="{{ slab.id }}">
+                    <button type="submit" class="ki-btn" style="padding:3px 7px;font-size:.78rem;background:#fee2e2;color:#b91c1c;">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="{% if product.is_health %}5{% else %}4{% endif %}" class="text-center text-muted py-2">
+                  No slabs — default margin {{ product.margin_percent }}% applies.
+                </td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <form method="post" class="row g-2 align-items-end">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_margin_slab">
+          <input type="hidden" name="product_id" value="{{ product.id }}">
+          {% if product.is_health %}
+          <div class="col-md-3">
+            <label class="form-label" style="font-size:.8rem;">Type</label>
+            <select class="form-select form-select-sm" name="policy_type" required>
+              <option value="fresh">Fresh</option>
+              <option value="port">Port</option>
+            </select>
+          </div>
+          {% endif %}
+          <div class="{% if product.is_health %}col-md-2{% else %}col-md-3{% endif %}">
+            <label class="form-label" style="font-size:.8rem;">Min ₹</label>
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="min_amount" required>
+          </div>
+          <div class="{% if product.is_health %}col-md-2{% else %}col-md-3{% endif %}">
+            <label class="form-label" style="font-size:.8rem;">Max ₹ <span class="text-muted">(blank = ∞)</span></label>
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="max_amount">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label" style="font-size:.8rem;">Margin %</label>
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="margin_percent" required>
+          </div>
+          <div class="col-md-2">
+            <button type="submit" class="ki-btn ki-btn-primary w-100" style="font-size:.82rem;">
+              <i class="bi bi-plus-lg"></i> Add
+            </button>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endfor %}
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const editModal = document.getElementById('editProductModal');
@@ -209,6 +329,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('edit_name').value = btn.getAttribute('data-name') || '';
     document.getElementById('edit_code').value = btn.getAttribute('data-code') || '';
     document.getElementById('edit_renewal_tracked').value = btn.getAttribute('data-renewal-tracked') || 'no';
+    document.getElementById('edit_margin_percent').value = btn.getAttribute('data-margin-percent') || '0';
     document.getElementById('edit_display_order').value = btn.getAttribute('data-display-order') || '0';
   });
 
