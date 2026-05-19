@@ -654,16 +654,17 @@ def _parse_expense_post(request):
     }, None
 
 
-def _is_ba_manager(request):
+def _is_ba_admin(request):
+    """Analytics pages (Business Analytics, MF Revenue Engine) are admin-only."""
     if request.user.is_superuser:
         return True
     emp = getattr(request.user, "employee", None)
-    return bool(emp and emp.role in ("admin", "manager"))
+    return bool(emp and emp.role == "admin")
 
 
 @login_required
 def business_analytics(request):
-    if not _is_ba_manager(request):
+    if not _is_ba_admin(request):
         return HttpResponseForbidden("Access denied")
 
     if request.method == "POST":
@@ -890,7 +891,7 @@ def _dec(raw, default=Decimal("0")):
 
 @login_required
 def mf_revenue_engine(request):
-    if not _is_ba_manager(request):
+    if not _is_ba_admin(request):
         return HttpResponseForbidden("Access denied")
 
     if request.method == "POST":
