@@ -20,6 +20,7 @@ from .models import (
     ProductMarginSlab,
     ExpenseCategory,
     Expense,
+    MFMonthlySnapshot,
 )
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
@@ -298,6 +299,13 @@ class ExpenseAdmin(admin.ModelAdmin):
     search_fields = ("category__name", "note")
     date_hierarchy = "spent_on"
     ordering = ("-spent_on",)
+
+
+@admin.register(MFMonthlySnapshot)
+class MFMonthlySnapshotAdmin(admin.ModelAdmin):
+    list_display = ("year", "month", "total_aum", "monthly_trail", "new_sip", "new_lumpsum", "sip_book")
+    list_filter = ("year",)
+    ordering = ("-year", "-month")
 
 
 

@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}MF Revenue Engine{% endblock %}
+{% block page_title %}MF Revenue Engine{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mf-grid { display: grid; gap: 12px; }
+  .kpi-grid { display: grid; gap: 12px; margin-bottom: 18px; }
+  .kpi { background: var(--ki-body); border-radius: 10px; padding: 14px 16px; }
+  .kpi .kpi-label { font-size: .76rem; color: var(--ki-muted, #6b7280); }
+  .kpi .kpi-value { font-size: 1.3rem; font-weight: 700; }
+  .kpi .kpi-sub { font-size: .72rem; color: var(--ki-muted, #6b7280); }
+  .report-table th, .report-table td { font-size: .85rem; text-align: right; white-space: nowrap; }
+  .report-table th:first-child, .report-table td:first-child { text-align: left; }
+  .report-table tfoot td { font-weight: 700; background: var(--ki-body); }
+  .chart-box { position: relative; width: 100%; height: 300px; }
+  .field-group { border: 1px solid var(--ki-border, #e5e7eb); border-radius: 10px; padding: 12px; }
+  .field-group > .fg-title { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--ki-muted,#6b7280); margin-bottom: 8px; }
+  @media (min-width: 992px) { .kpi-grid.cols-5 { grid-template-columns: repeat(5,1fr);} .kpi-grid.cols-4 { grid-template-columns: repeat(4,1fr);} .kpi-grid.cols-3 { grid-template-columns: repeat(3,1fr);} .mf-grid.two { grid-template-columns: 1fr 1fr; } }
+  @media print { nav,.no-print,.ki-sidebar,.ki-topbar { display:none!important;} .ki-main{margin-left:0!important;} }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="ki-section-title mb-0"><i class="bi bi-graph-up"></i> Mutual Fund Revenue Engine</h4>
+  {% if has_data %}<button class="ki-btn ki-btn-sm ki-btn-secondary no-print" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>{% endif %}
+</div>
+<p class="text-muted" style="font-size:.86rem;max-width:760px;">
+  Manual monthly-actuals ledger with a 120-month compounding projection. This is a business-intelligence
+  &amp; forecasting tool — it shows how today's SIP mobilisation becomes recurring trail income in future years.
+  Not a broker-reconciliation system.
+</p>
+
+{% if not has_data %}
+<div class="ki-card mb-4">
+  <div class="ki-card-label"><i class="bi bi-info-circle"></i> Get started</div>
+  <p class="text-muted mb-0" style="font-size:.88rem;">Add your first monthly snapshot below — current AUM split, trail rates, this month's mobilisation, and your forward assumptions. The dashboard and projections appear once a snapshot exists.</p>
+</div>
+{% endif %}
+
+<!-- ============ KPI DASHBOARD ============ -->
+{% if has_data %}
+{% with d=dash %}
+<div class="kpi-grid cols-5">
+  <div class="kpi"><div class="kpi-label">Current Total AUM</div><div class="kpi-value">₹{{ d.realized.total_aum|floatformat:0 }}</div><div class="kpi-sub">{{ selected.year }}-{{ selected.month }}</div></div>
+  <div class="kpi"><div class="kpi-label">Monthly Trail Income</div><div class="kpi-value">₹{{ d.realized.monthly_trail|floatformat:0 }}</div><div class="kpi-sub">realised this month</div></div>
+  <div class="kpi"><div class="kpi-label">Annualised Trail</div><div class="kpi-value">₹{{ d.realized.annualized_trail|floatformat:0 }}</div><div class="kpi-sub">monthly × 12</div></div>
+  <div class="kpi"><div class="kpi-label">Monthly SIP Mobilised</div><div class="kpi-value">₹{{ d.realized.new_sip|floatformat:0 }}</div><div class="kpi-sub">SIP book ₹{{ d.realized.sip_book|floatformat:0 }}</div></div>
+  <div class="kpi"><div class="kpi-label">Monthly Lump Sum</div><div class="kpi-value">₹{{ d.realized.new_lumpsum|floatformat:0 }}</div><div class="kpi-sub">this month</div></div>
+</div>
+
+<div class="kpi-grid cols-4">
+  <div class="kpi"><div class="kpi-label">Embedded Future Revenue · 1Y</div><div class="kpi-value">₹{{ d.embedded_future.y1|floatformat:0 }}</div><div class="kpi-sub">trail from today's book, no new sales</div></div>
+  <div class="kpi"><div class="kpi-label">Embedded Future · 3Y</div><div class="kpi-value">₹{{ d.embedded_future.y3|floatformat:0 }}</div><div class="kpi-sub">cumulative trail</div></div>
+  <div class="kpi"><div class="kpi-label">Embedded Future · 5Y</div><div class="kpi-value">₹{{ d.embedded_future.y5|floatformat:0 }}</div><div class="kpi-sub">cumulative trail</div></div>
+  <div class="kpi"><div class="kpi-label">Total Business Revenue (annual)</div><div class="kpi-value">₹{{ d.total_business_revenue_annual|floatformat:0 }}</div><div class="kpi-sub">current run-rate</div></div>
+</div>
+
+<div class="ki-card mb-4">
+  <div class="ki-card-label"><i class="bi bi-rocket-takeoff"></i> Projected Growth (with continued mobilisation)</div>
+  <div class="ki-table-wrap">
+    <table class="ki-table report-table">
+      <thead><tr><th>Horizon</th><th>Projected AUM (₹)</th><th>Projected Monthly Revenue (₹)</th><th>Projected Annual Revenue (₹)</th></tr></thead>
+      <tbody>
+        {% for r in d.milestone_rows %}
+        <tr>
+          <td>{{ r.label }}</td>
+          <td>{{ r.p.total_aum|floatformat:0 }}</td>
+          <td>{{ r.p.monthly_trail|floatformat:0 }}</td>
+          <td>{{ r.p.annual_trail|floatformat:0 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>Now</td>
+          <td>{{ d.realized.total_aum|floatformat:0 }}</td>
+          <td>{{ d.realized.monthly_trail|floatformat:0 }}</td>
+          <td>{{ d.realized.annualized_trail|floatformat:0 }}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<div class="kpi-grid cols-3">
+  <div class="kpi"><div class="kpi-label">Recurring Revenue (monthly)</div><div class="kpi-value">₹{{ d.recurring_vs_upfront.recurring_monthly|floatformat:0 }}</div><div class="kpi-sub">trail income</div></div>
+  <div class="kpi"><div class="kpi-label">Upfront Revenue (monthly)</div><div class="kpi-value">₹{{ d.recurring_vs_upfront.upfront_monthly|floatformat:0 }}</div><div class="kpi-sub">not modelled in Phase 1 (pure trail)</div></div>
+  <div class="kpi"><div class="kpi-label">Projected 10Y Monthly Revenue</div><div class="kpi-value">₹{{ d.projections.y10.monthly_trail|floatformat:0 }}</div><div class="kpi-sub">vs ₹{{ d.realized.monthly_trail|floatformat:0 }} today</div></div>
+</div>
+
+<!-- ============ CHARTS ============ -->
+<div class="mf-grid two mb-3">
+  <div class="ki-card"><div class="ki-card-label"><i class="bi bi-graph-up-arrow"></i> AUM Growth Over Time</div><div class="chart-box"><canvas id="aumChart"></canvas></div></div>
+  <div class="ki-card"><div class="ki-card-label"><i class="bi bi-cash-coin"></i> Monthly Revenue Growth</div><div class="chart-box"><canvas id="revChart"></canvas></div></div>
+</div>
+<div class="mf-grid two mb-3">
+  <div class="ki-card"><div class="ki-card-label"><i class="bi bi-arrow-repeat"></i> SIP Book Growth</div><div class="chart-box"><canvas id="sipChart"></canvas></div></div>
+  <div class="ki-card"><div class="ki-card-label"><i class="bi bi-stack"></i> Recurring Revenue Curve (cumulative)</div><div class="chart-box"><canvas id="cumChart"></canvas></div></div>
+</div>
+<div class="ki-card mb-4">
+  <div class="ki-card-label"><i class="bi bi-pie-chart"></i> Current Revenue Breakdown by Product Type</div>
+  <div class="chart-box" style="height:280px;"><canvas id="breakdownChart"></canvas></div>
+</div>
+{% endwith %}
+{% endif %}
+
+<!-- ============ HISTORY ============ -->
+{% if history_rows %}
+<div class="ki-card mb-4 no-print">
+  <div class="ki-card-label"><i class="bi bi-clock-history"></i> Monthly Actuals Ledger</div>
+  <div class="ki-table-wrap">
+    <table class="ki-table report-table">
+      <thead><tr><th>Month</th><th>Total AUM (₹)</th><th>Monthly Trail (₹)</th><th>New SIP (₹)</th><th>Lump Sum (₹)</th><th>SIP Book (₹)</th><th></th></tr></thead>
+      <tbody>
+        {% for h in history_rows %}
+        <tr style="{% if h.is_selected %}background:var(--ki-body);{% endif %}">
+          <td>{{ h.label }}{% if h.is_selected %} <span class="badge bg-primary">viewing</span>{% endif %}</td>
+          <td>{{ h.total_aum|floatformat:0 }}</td>
+          <td>{{ h.monthly_trail|floatformat:0 }}</td>
+          <td>{{ h.new_sip|floatformat:0 }}</td>
+          <td>{{ h.new_lumpsum|floatformat:0 }}</td>
+          <td>{{ h.sip_book|floatformat:0 }}</td>
+          <td>
+            <a href="?snap={{ h.pk }}" class="ki-btn ki-btn-secondary" style="padding:3px 8px;font-size:.76rem;">View</a>
+            <form method="post" class="d-inline" onsubmit="return confirm('Delete this snapshot?');">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete_snapshot">
+              <input type="hidden" name="snapshot_id" value="{{ h.pk }}">
+              <button class="ki-btn" style="padding:3px 8px;font-size:.76rem;background:#fee2e2;color:#b91c1c;"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ============ SNAPSHOT ENTRY FORM ============ -->
+<div class="ki-card no-print">
+  <div class="ki-card-label"><i class="bi bi-pencil-square"></i> Add / Update Monthly Snapshot</div>
+  <p class="text-muted" style="font-size:.82rem;">Saving an existing month overwrites it. The latest month drives the projection.</p>
+  <form method="post" class="mf-grid" style="gap:14px;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_snapshot">
+
+    <div class="row g-2">
+      <div class="col-md-2">
+        <label class="form-label small mb-0">Year</label>
+        <select name="year" class="form-select form-select-sm" required>
+          {% for y in years %}<option value="{{ y }}" {% if selected and selected.year == y %}selected{% elif not selected and y == default_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small mb-0">Month</label>
+        <select name="month" class="form-select form-select-sm" required>
+          {% for num, name in months %}<option value="{{ num }}" {% if selected and selected.month == num %}selected{% elif not selected and num == default_month %}selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="fg-title">Existing AUM (₹, at month-end)</div>
+      <div class="row g-2">
+        <div class="col-md-4"><label class="form-label small mb-0">Equity AUM</label><input type="number" step="0.01" min="0" name="equity_aum" class="form-control form-control-sm" value="{{ selected.equity_aum|default:0 }}"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Debt AUM</label><input type="number" step="0.01" min="0" name="debt_aum" class="form-control form-control-sm" value="{{ selected.debt_aum|default:0 }}"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Hybrid AUM</label><input type="number" step="0.01" min="0" name="hybrid_aum" class="form-control form-control-sm" value="{{ selected.hybrid_aum|default:0 }}"></div>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="fg-title">Annual Trail % by type</div>
+      <div class="row g-2">
+        <div class="col-md-4"><label class="form-label small mb-0">Equity trail %</label><input type="number" step="0.001" min="0" name="equity_trail_pct" class="form-control form-control-sm" value="{{ selected.equity_trail_pct|default:0 }}"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Debt trail %</label><input type="number" step="0.001" min="0" name="debt_trail_pct" class="form-control form-control-sm" value="{{ selected.debt_trail_pct|default:0 }}"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Hybrid trail %</label><input type="number" step="0.001" min="0" name="hybrid_trail_pct" class="form-control form-control-sm" value="{{ selected.hybrid_trail_pct|default:0 }}"></div>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="fg-title">This month's flows (₹)</div>
+      <div class="row g-2">
+        <div class="col-md-3"><label class="form-label small mb-0">New SIP mobilised</label><input type="number" step="0.01" min="0" name="new_sip" class="form-control form-control-sm" value="{{ selected.new_sip|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">New lump sum</label><input type="number" step="0.01" min="0" name="new_lumpsum" class="form-control form-control-sm" value="{{ selected.new_lumpsum|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Redemptions</label><input type="number" step="0.01" min="0" name="redemptions" class="form-control form-control-sm" value="{{ selected.redemptions|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">SIP stopped</label><input type="number" step="0.01" min="0" name="sip_stopped" class="form-control form-control-sm" value="{{ selected.sip_stopped|default:0 }}"></div>
+      </div>
+      <div class="row g-2 mt-1">
+        <div class="col-md-3"><label class="form-label small mb-0">Active SIP book (₹/mo)</label><input type="number" step="0.01" min="0" name="sip_book" class="form-control form-control-sm" value="{{ selected.sip_book|default:0 }}"></div>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <div class="fg-title">Forward projection assumptions (annual %)</div>
+      <div class="row g-2">
+        <div class="col-md-3"><label class="form-label small mb-0">Market growth %</label><input type="number" step="0.01" name="annual_market_growth_pct" class="form-control form-control-sm" value="{{ selected.annual_market_growth_pct|default:12 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Redemption rate %</label><input type="number" step="0.01" min="0" name="redemption_rate_pct" class="form-control form-control-sm" value="{{ selected.redemption_rate_pct|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">SIP stoppage rate %</label><input type="number" step="0.01" min="0" name="sip_stoppage_rate_pct" class="form-control form-control-sm" value="{{ selected.sip_stoppage_rate_pct|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Projection trail %</label><input type="number" step="0.001" min="0" name="projection_trail_pct" class="form-control form-control-sm" value="{{ selected.projection_trail_pct|default:0.75 }}"></div>
+      </div>
+    </div>
+
+    <div class="row g-2">
+      <div class="col-md-9"><label class="form-label small mb-0">Notes</label><input type="text" name="notes" maxlength="255" class="form-control form-control-sm" value="{{ selected.notes|default:'' }}"></div>
+      <div class="col-md-3 d-flex align-items-end"><button type="submit" class="ki-btn ki-btn-primary w-100"><i class="bi bi-save"></i> Save Snapshot</button></div>
+    </div>
+  </form>
+</div>
+
+{% if has_data %}
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+<script>
+(function () {
+  var data = JSON.parse("{{ charts_json|escapejs }}");
+  var INR = function (v) { return '₹' + Number(v).toLocaleString('en-IN'); };
+  var common = { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { ticks: { maxTicksLimit: 12, autoSkip: true } },
+              y: { ticks: { callback: function (v) { return INR(v); } } } } };
+  function line(id, label, series, color) {
+    var el = document.getElementById(id); if (!el) return;
+    new Chart(el, { type: 'line',
+      data: { labels: data.labels, datasets: [{ label: label, data: series,
+        borderColor: color, backgroundColor: color + '22', fill: true,
+        tension: 0.25, pointRadius: 0, borderWidth: 2 }] },
+      options: common });
+  }
+  line('aumChart', 'Total AUM', data.aum, '#2563eb');
+  line('revChart', 'Monthly Revenue', data.monthly_revenue, '#16a34a');
+  line('sipChart', 'SIP Book (₹/mo)', data.sip_book, '#9333ea');
+  line('cumChart', 'Cumulative Revenue', data.cumulative_revenue, '#ea580c');
+
+  var bEl = document.getElementById('breakdownChart');
+  if (bEl) {
+    new Chart(bEl, { type: 'doughnut',
+      data: { labels: data.breakdown.labels,
+        datasets: [{ data: data.breakdown.values,
+          backgroundColor: ['#2563eb', '#16a34a', '#9333ea', '#ea580c'] }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'right' },
+          tooltip: { callbacks: { label: function (c) { return c.label + ': ' + INR(c.parsed); } } } } } });
+  }
+})();
+</script>
+{% endif %}
+{% endblock %}

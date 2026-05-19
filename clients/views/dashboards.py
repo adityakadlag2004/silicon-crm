@@ -878,6 +878,7 @@ def product_management_page(request):
                 domain=domain,
                 display_order=display_order_val,
                 margin_percent=_parse_margin(request.POST.get("margin_percent")),
+                renewal_margin_percent=_parse_margin(request.POST.get("renewal_margin_percent")),
                 is_active=True,
             )
             messages.success(request, f"Product '{name}' added.")
@@ -918,7 +919,13 @@ def product_management_page(request):
             product.domain = domain
             product.display_order = display_order_val
             product.margin_percent = _parse_margin(request.POST.get("margin_percent"), product.margin_percent)
-            product.save(update_fields=["name", "code", "domain", "display_order", "margin_percent", "updated_at"])
+            product.renewal_margin_percent = _parse_margin(
+                request.POST.get("renewal_margin_percent"), product.renewal_margin_percent
+            )
+            product.save(update_fields=[
+                "name", "code", "domain", "display_order",
+                "margin_percent", "renewal_margin_percent", "updated_at",
+            ])
             messages.success(request, f"Product '{name}' updated.")
             return redirect("clients:product_management")
 
