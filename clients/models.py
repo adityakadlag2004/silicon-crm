@@ -48,7 +48,14 @@ class Product(models.Model):
         decimal_places=2,
         default=Decimal("0.00"),
         validators=[MinValueValidator(0)],
-        help_text="Default business margin % on this product's revenue, used when no margin slab matches.",
+        help_text="Default business margin % on this product's sale revenue, used when no margin slab matches.",
+    )
+    renewal_margin_percent = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal("0.00"),
+        validators=[MinValueValidator(0)],
+        help_text="Business margin % applied to this product's renewal premium (only used for renewal-tracked products).",
     )
     is_active = models.BooleanField(default=True)
     archived_at = models.DateTimeField(null=True, blank=True)
@@ -73,6 +80,10 @@ class Product(models.Model):
     def is_health(self):
         """Health-insurance products carry Fresh/Port margin distinctions."""
         return self.code == "HEALTH_INS" or (self.name or "").strip().lower() == "health insurance"
+
+    @property
+    def tracks_renewals(self):
+        return self.domain in (self.DOMAIN_RENEWAL, self.DOMAIN_BOTH)
 
     def margin_for(self, amount, policy_type=""):
         """Resolve the margin % for a given cumulative revenue amount.
@@ -217,6 +228,101 @@ class Expense(models.Model):
         if self.end_on is not None and self.end_on < month_start:
             return False
         return True
+
+
+class MFMonthlySnapshot(models.Model):
+    """Manual monthly actuals for the Mutual Fund Distributor revenue engine.
+
+    One row per (year, month). Stores the *state* of the MF book at month
+    end (AUM split + active monthly SIP book) and the *flows* during the
+    month (new mobilisation, redemptions, SIP stoppage), plus the forward
+    projection assumptions. The latest snapshot drives the 120-month
+    projection — see clients.services.mf_engine.
+    """
+
+    year = models.IntegerField()
+    month = models.IntegerField()
+
+    # --- Layer 1: existing AUM state at month-end, by product type ---
+    equity_aum = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0.00"),
+                                     validators=[MinValueValidator(0)])
+    debt_aum = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0.00"),
+                                   validators=[MinValueValidator(0)])
+    hybrid_aum = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0.00"),
+                                     validators=[MinValueValidator(0)])
+
+    # Annual trail commission % by type (e.g. 0.75 means 0.75%/yr).
+    equity_trail_pct = models.DecimalField(max_digits=6, decimal_places=3, default=Decimal("0.000"),
+                                           validators=[MinValueValidator(0)])
+    debt_trail_pct = models.DecimalField(max_digits=6, decimal_places=3, default=Decimal("0.000"),
+                                         validators=[MinValueValidator(0)])
+    hybrid_trail_pct = models.DecimalField(max_digits=6, decimal_places=3, default=Decimal("0.000"),
+                                           validators=[MinValueValidator(0)])
+
+    # --- Layer 2: flows during this month ---
+    new_sip = models.DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"),
+                                  validators=[MinValueValidator(0)],
+                                  help_text="New monthly SIP mobilised this month (adds to the SIP book).")
+    new_lumpsum = models.DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"),
+                                      validators=[MinValueValidator(0)],
+                                      help_text="Lump sum mobilised this month.")
+    redemptions = models.DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"),
+                                      validators=[MinValueValidator(0)],
+                                      help_text="AUM redeemed this month.")
+    sip_stopped = models.DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"),
+                                      validators=[MinValueValidator(0)],
+                                      help_text="Monthly SIP value stopped this month (reduces SIP book).")
+
+    sip_book = models.DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"),
+                                   validators=[MinValueValidator(0)],
+                                   help_text="Total active monthly SIP inflow as at month-end.")
+
+    # --- Forward projection assumptions (annual %) ---
+    annual_market_growth_pct = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("12.00"),
+                                                   help_text="Assumed annual market growth %.")
+    redemption_rate_pct = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"),
+                                              validators=[MinValueValidator(0)],
+                                              help_text="Assumed annual redemption % of AUM.")
+    sip_stoppage_rate_pct = models.DecimalField(max_digits=6, decimal_places=2, default=Decimal("0.00"),
+                                                validators=[MinValueValidator(0)],
+                                                help_text="Assumed annual SIP-stoppage % of the SIP book.")
+    projection_trail_pct = models.DecimalField(max_digits=6, decimal_places=3, default=Decimal("0.750"),
+                                               validators=[MinValueValidator(0)],
+                                               help_text="Blended annual trail % applied to new (projected) business.")
+
+    notes = models.CharField(max_length=255, blank=True, default="")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "MF Monthly Snapshot"
+        verbose_name_plural = "MF Monthly Snapshots"
+        unique_together = ("year", "month")
+        ordering = ["-year", "-month"]
+
+    def __str__(self):
+        return f"MF {self.year}-{str(self.month).zfill(2)} · AUM ₹{self.total_aum}"
+
+    @property
+    def total_aum(self):
+        return (self.equity_aum or 0) + (self.debt_aum or 0) + (self.hybrid_aum or 0)
+
+    @property
+    def monthly_trail(self):
+        """Realised trail income for this month from current AUM."""
+        def _m(aum, pct):
+            return (Decimal(str(aum or 0)) * Decimal(str(pct or 0)) / Decimal("100")) / Decimal("12")
+        return (
+            _m(self.equity_aum, self.equity_trail_pct)
+            + _m(self.debt_aum, self.debt_trail_pct)
+            + _m(self.hybrid_aum, self.hybrid_trail_pct)
+        ).quantize(Decimal("0.01"))
+
+    @property
+    def annualized_trail(self):
+        return (self.monthly_trail * 12).quantize(Decimal("0.01"))
 
 
 class Client(models.Model):

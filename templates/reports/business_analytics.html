@@ -123,6 +123,42 @@
     </div>
   </div>
 
+  <div class="ki-card mt-4">
+    <div class="ki-card-label">
+      <i class="bi bi-arrow-repeat"></i> {{ month_name }} {{ sel_year }} — Renewal Margin by Product
+    </div>
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead>
+          <tr><th>#</th><th>Product</th><th>Premium (₹)</th><th>Margin %</th><th>Margin (₹)</th></tr>
+        </thead>
+        <tbody>
+          {% for r in renewal_rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ r.product }}</td>
+            <td>{{ r.revenue|floatformat:0 }}</td>
+            <td>{{ r.margin_percent }}%</td>
+            <td>{{ r.margin_amount|floatformat:0 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-3">No renewal premium collected this month.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if renewal_rows %}
+        <tfoot>
+          <tr>
+            <td></td><td>Grand Total</td>
+            <td>{{ renewal_totals.revenue|floatformat:0 }}</td>
+            <td>{{ renewal_totals.blended_percent }}%</td>
+            <td>{{ renewal_totals.margin_amount|floatformat:0 }}</td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+
 {% else %}
   <form method="get" class="row g-2 align-items-end mb-4 no-print">
     <input type="hidden" name="view" value="annual">
@@ -232,6 +268,42 @@
       </table>
     </div>
   </div>
+
+  <div class="ki-card mt-4">
+    <div class="ki-card-label">
+      <i class="bi bi-arrow-repeat"></i> {{ fy_label }} — Renewal Margin by Product
+    </div>
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead>
+          <tr><th>#</th><th>Product</th><th>Premium (₹)</th><th>Margin (₹)</th><th>Eff. Margin %</th></tr>
+        </thead>
+        <tbody>
+          {% for r in renewal_rows %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ r.product }}</td>
+            <td>{{ r.revenue|floatformat:0 }}</td>
+            <td>{{ r.margin_amount|floatformat:0 }}</td>
+            <td>{{ r.effective_percent }}%</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted py-3">No renewal premium collected this financial year.</td></tr>
+          {% endfor %}
+        </tbody>
+        {% if renewal_rows %}
+        <tfoot>
+          <tr>
+            <td></td><td>Grand Total</td>
+            <td>{{ renewal_totals.revenue|floatformat:0 }}</td>
+            <td>{{ renewal_totals.margin_amount|floatformat:0 }}</td>
+            <td>{{ renewal_totals.blended_percent }}%</td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
 {% endif %}
 
   <!-- ===================== NET MARGIN ===================== -->
@@ -248,8 +320,9 @@
 
   <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
     <div class="kpi">
-      <div class="kpi-label">Gross Margin</div>
+      <div class="kpi-label">Gross Margin <span class="text-muted">(sales + renewals)</span></div>
       <div class="kpi-value">₹{{ gross_margin|floatformat:0 }}</div>
+      <div class="kpi-label">incl. ₹{{ renewal_totals.margin_amount|floatformat:0 }} renewals</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">− Expenses</div>

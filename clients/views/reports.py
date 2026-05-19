@@ -14,7 +14,9 @@ from django.utils.timezone import now
 
 from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
+    Renewal, MFMonthlySnapshot,
 )
+from ..services.mf_engine import build_dashboard
 from .helpers import get_manager_access, _last_n_months
 
 
@@ -530,6 +532,57 @@ def _month_margin_breakdown(year, month):
     return rows, totals
 
 
+def _month_renewal_breakdown(year, month):
+    """Per-product renewal margin for one month, by premium collected.
+
+    Renewal premium is attributed to the month it was collected, grouped by
+    the linked Product and valued at that product's flat renewal margin %.
+    Renewals not linked to a Product are kept as a 0%-margin row so the
+    revenue totals reconcile.
+    """
+    qs = Renewal.objects.filter(
+        premium_collected_on__year=year, premium_collected_on__month=month
+    )
+
+    rows = []
+    total_rev = Decimal("0")
+    total_margin = Decimal("0")
+
+    per_product = (
+        qs.filter(product_ref__isnull=False)
+        .values("product_ref")
+        .annotate(total=Sum("premium_amount"))
+    )
+    products = {p.pk: p for p in Product.objects.filter(
+        pk__in=[r["product_ref"] for r in per_product]
+    )}
+    for r in per_product:
+        rev = r["total"] or Decimal("0")
+        if rev <= 0:
+            continue
+        p = products.get(r["product_ref"])
+        pct = p.renewal_margin_percent if p else Decimal("0.00")
+        amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
+        rows.append({"product": p.name if p else "—", "revenue": rev,
+                     "margin_percent": pct, "margin_amount": amt})
+        total_rev += rev
+        total_margin += amt
+
+    unmapped_rev = (
+        qs.filter(product_ref__isnull=True).aggregate(t=Sum("premium_amount"))["t"]
+        or Decimal("0")
+    )
+    if unmapped_rev > 0:
+        rows.append({"product": "Other / Unmapped (Renewal)", "revenue": unmapped_rev,
+                     "margin_percent": Decimal("0.00"), "margin_amount": Decimal("0.00")})
+        total_rev += unmapped_rev
+
+    blended = (total_margin / total_rev * Decimal("100")).quantize(Decimal("0.01")) if total_rev else Decimal("0.00")
+    rows.sort(key=lambda x: x["margin_amount"], reverse=True)
+    totals = {"revenue": total_rev, "margin_amount": total_margin, "blended_percent": blended}
+    return rows, totals
+
+
 def _monthly_salary_total():
     """Current total monthly salary across active employees."""
     return Employee.objects.filter(active=True).aggregate(t=Sum("salary"))["t"] or Decimal("0")
@@ -687,19 +740,35 @@ def business_analytics(request):
         fy_rev = Decimal("0")
         fy_margin = Decimal("0")
 
+        renewal_agg = {}
+        fy_renew_rev = Decimal("0")
+        fy_renew_margin = Decimal("0")
+
         for (y, m) in _fy_months(fy_start):
             rows, totals = _month_margin_breakdown(y, m)
+            r_rows, r_totals = _month_renewal_breakdown(y, m)
             month_summary.append({
                 "year": y, "month": m, "label": f"{month_name[m][:3]} {y}",
                 "revenue": totals["revenue"], "margin_amount": totals["margin_amount"],
                 "blended_percent": totals["blended_percent"],
+                "renewal_revenue": r_totals["revenue"],
+                "renewal_margin": r_totals["margin_amount"],
             })
             fy_rev += totals["revenue"]
             fy_margin += totals["margin_amount"]
+            fy_renew_rev += r_totals["revenue"]
+            fy_renew_margin += r_totals["margin_amount"]
             for r in rows:
                 key = (r["product"], r["policy"])
                 agg = product_agg.setdefault(key, {
                     "product": r["product"], "policy": r["policy"],
+                    "revenue": Decimal("0"), "margin_amount": Decimal("0"),
+                })
+                agg["revenue"] += r["revenue"]
+                agg["margin_amount"] += r["margin_amount"]
+            for r in r_rows:
+                agg = renewal_agg.setdefault(r["product"], {
+                    "product": r["product"],
                     "revenue": Decimal("0"), "margin_amount": Decimal("0"),
                 })
                 agg["revenue"] += r["revenue"]
@@ -711,16 +780,25 @@ def business_analytics(request):
             product_rows.append({**agg, "effective_percent": eff})
         product_rows.sort(key=lambda x: x["margin_amount"], reverse=True)
 
+        renewal_rows = []
+        for agg in renewal_agg.values():
+            eff = (agg["margin_amount"] / agg["revenue"] * Decimal("100")).quantize(Decimal("0.01")) if agg["revenue"] else Decimal("0.00")
+            renewal_rows.append({**agg, "effective_percent": eff})
+        renewal_rows.sort(key=lambda x: x["margin_amount"], reverse=True)
+
         fy_blended = (fy_margin / fy_rev * Decimal("100")).quantize(Decimal("0.01")) if fy_rev else Decimal("0.00")
+        renew_blended = (fy_renew_margin / fy_renew_rev * Decimal("100")).quantize(Decimal("0.01")) if fy_renew_rev else Decimal("0.00")
         period_months = _fy_months(fy_start)
-        period_revenue = fy_rev
-        gross_margin = fy_margin
+        period_revenue = fy_rev + fy_renew_rev
+        gross_margin = fy_margin + fy_renew_margin
         context.update({
             "fy_start": fy_start,
             "fy_label": f"FY {fy_start}-{str(fy_start + 1)[-2:]}",
             "month_summary": month_summary,
             "product_rows": product_rows,
             "fy_totals": {"revenue": fy_rev, "margin_amount": fy_margin, "blended_percent": fy_blended},
+            "renewal_rows": renewal_rows,
+            "renewal_totals": {"revenue": fy_renew_rev, "margin_amount": fy_renew_margin, "blended_percent": renew_blended},
         })
     else:
         try:
@@ -731,15 +809,18 @@ def business_analytics(request):
 
         rows, totals = _month_margin_breakdown(sel_year, sel_month)
         rows.sort(key=lambda x: x["margin_amount"], reverse=True)
+        renewal_rows, renewal_totals = _month_renewal_breakdown(sel_year, sel_month)
         period_months = [(sel_year, sel_month)]
-        period_revenue = totals["revenue"]
-        gross_margin = totals["margin_amount"]
+        period_revenue = totals["revenue"] + renewal_totals["revenue"]
+        gross_margin = totals["margin_amount"] + renewal_totals["margin_amount"]
         context.update({
             "sel_month": sel_month,
             "sel_year": sel_year,
             "month_name": month_name[sel_month],
             "rows": rows,
             "totals": totals,
+            "renewal_rows": renewal_rows,
+            "renewal_totals": renewal_totals,
         })
 
     # ---- Expenses + Net Margin (shared by both views) ----
@@ -784,3 +865,108 @@ def business_analytics(request):
         "today_iso": today.isoformat(),
     })
     return render(request, "reports/business_analytics.html", context)
+
+
+# ---------------- MF Revenue Engine (MFD module, Phase 1) ----------------
+
+_MF_DECIMAL_FIELDS = [
+    "equity_aum", "debt_aum", "hybrid_aum",
+    "equity_trail_pct", "debt_trail_pct", "hybrid_trail_pct",
+    "new_sip", "new_lumpsum", "redemptions", "sip_stopped", "sip_book",
+    "annual_market_growth_pct", "redemption_rate_pct",
+    "sip_stoppage_rate_pct", "projection_trail_pct",
+]
+
+
+def _dec(raw, default=Decimal("0")):
+    if raw in (None, ""):
+        return default
+    try:
+        return Decimal(str(raw).strip())
+    except (InvalidOperation, TypeError):
+        return default
+
+
+@login_required
+def mf_revenue_engine(request):
+    if not _is_ba_manager(request):
+        return HttpResponseForbidden("Access denied")
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+
+        if action == "save_snapshot":
+            try:
+                year = int(request.POST.get("year"))
+                month = int(request.POST.get("month"))
+            except (TypeError, ValueError):
+                messages.error(request, "Valid year and month are required.")
+                return redirect("clients:mf_revenue_engine")
+            if not (1 <= month <= 12):
+                messages.error(request, "Month must be 1–12.")
+                return redirect("clients:mf_revenue_engine")
+
+            values = {f: _dec(request.POST.get(f)) for f in _MF_DECIMAL_FIELDS}
+            if any(v < 0 for v in values.values()):
+                messages.error(request, "Values cannot be negative.")
+                return redirect("clients:mf_revenue_engine")
+            values["notes"] = (request.POST.get("notes") or "").strip()[:255]
+
+            snap, created = MFMonthlySnapshot.objects.update_or_create(
+                year=year, month=month,
+                defaults={**values, "created_by": request.user},
+            )
+            messages.success(
+                request,
+                f"Snapshot for {month_name[month]} {year} {'created' if created else 'updated'}.",
+            )
+            return redirect(f"{request.path}?snap={snap.pk}")
+
+        if action == "delete_snapshot":
+            MFMonthlySnapshot.objects.filter(pk=request.POST.get("snapshot_id")).delete()
+            messages.success(request, "Snapshot deleted.")
+            return redirect("clients:mf_revenue_engine")
+
+        messages.error(request, "Unsupported action.")
+        return redirect("clients:mf_revenue_engine")
+
+    snapshots = list(MFMonthlySnapshot.objects.all())  # ordered -year,-month
+    today = date.today()
+
+    selected = None
+    snap_id = request.GET.get("snap")
+    if snap_id:
+        selected = next((s for s in snapshots if str(s.pk) == str(snap_id)), None)
+    if selected is None and snapshots:
+        selected = snapshots[0]  # latest
+
+    # History (oldest → newest) actuals for the trend table.
+    history = sorted(snapshots, key=lambda s: (s.year, s.month))
+    history_rows = [{
+        "label": f"{month_name[s.month][:3]} {s.year}",
+        "total_aum": s.total_aum,
+        "monthly_trail": s.monthly_trail,
+        "new_sip": s.new_sip,
+        "new_lumpsum": s.new_lumpsum,
+        "sip_book": s.sip_book,
+        "pk": s.pk,
+        "is_selected": selected is not None and s.pk == selected.pk,
+    } for s in history]
+
+    context = {
+        "snapshots": snapshots,
+        "selected": selected,
+        "history_rows": history_rows,
+        "months": [(i, month_name[i]) for i in range(1, 13)],
+        "years": list(range(today.year - 3, today.year + 2)),
+        "default_year": today.year,
+        "default_month": today.month,
+        "has_data": bool(selected),
+    }
+
+    if selected:
+        dash = build_dashboard(selected, horizon_months=120)
+        context["dash"] = dash
+        context["charts_json"] = json.dumps(dash["charts"])
+
+    return render(request, "reports/mf_revenue_engine.html", context)
