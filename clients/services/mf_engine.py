@@ -33,6 +33,10 @@ def _q(x) -> Decimal:
     return Decimal(str(round(_f(x), 2)))
 
 
+def _pct(x) -> Decimal:
+    return Decimal(str(round(_f(x), 2)))
+
+
 def realized_metrics(snapshot):
     """Current (this-month) realised position from the latest snapshot."""
     return {
@@ -40,8 +44,11 @@ def realized_metrics(snapshot):
         "equity_aum": _q(snapshot.equity_aum),
         "debt_aum": _q(snapshot.debt_aum),
         "hybrid_aum": _q(snapshot.hybrid_aum),
-        "monthly_trail": _q(snapshot.monthly_trail),
+        "monthly_trail": _q(snapshot.effective_monthly_trail),
+        "estimated_monthly_trail": _q(snapshot.monthly_trail),
         "annualized_trail": _q(snapshot.annualized_trail),
+        "actual_insurance_revenue": _q(snapshot.actual_insurance_revenue),
+        "trail_is_actual": snapshot.actual_trail_income is not None,
         "new_sip": _q(snapshot.new_sip),
         "new_lumpsum": _q(snapshot.new_lumpsum),
         "sip_book": _q(snapshot.sip_book),
@@ -124,6 +131,65 @@ def project(snapshot, months: int = 120, include_new_business: bool = True):
         })
 
     return series
+
+
+def reconcile(curr, prev):
+    """Decompose this month's AUM change into operational vs market.
+
+    Opening AUM = the previous month's closing AUM (source-of-truth chain).
+    Operational growth = net of SIP + lump sum − redemptions.
+    Market movement = actual closing − (opening + operational); this is the
+    NAV/volatility residual, recorded as market impact, not an operational
+    miss. Also compares last month's 1-month forecast to this actual.
+    """
+    closing = _f(curr.total_aum)
+    operational = _f(curr.new_sip) + _f(curr.new_lumpsum) - _f(curr.redemptions)
+
+    out = {
+        "has_prev": prev is not None,
+        "opening_aum": _q(prev.total_aum) if prev else None,
+        "closing_aum": _q(closing),
+        "operational_growth": _q(operational),
+    }
+    if prev is None:
+        out.update({k: None for k in (
+            "expected_operational_aum", "market_movement_impact", "net_aum_growth",
+            "market_movement_pct", "revenue_impact_from_market",
+            "projected_aum", "projection_accuracy", "projection_variance",
+        )})
+        return out
+
+    opening = _f(prev.total_aum)
+    expected = opening + operational            # before any market move
+    market_impact = closing - expected
+    net_growth = closing - opening
+    market_pct = (market_impact / expected * 100.0) if expected else 0.0
+
+    # Blended effective annual trail on the actual book → ₹ trail gained/lost
+    # purely because of the market move this month.
+    blended_annual = (
+        _f(curr.annualized_trail) / closing * 100.0
+        if closing else _f(curr.projection_trail_pct)
+    )
+    rev_impact = market_impact * blended_annual / 100.0 / 12.0
+
+    # Forecast made last month for this month (prev's 1-month projection).
+    projected = _f(project(prev, months=1)[0]["total_aum"])
+    variance = closing - projected
+    accuracy = 100.0 - (abs(variance) / closing * 100.0) if closing else 0.0
+    accuracy = max(accuracy, 0.0)
+
+    out.update({
+        "expected_operational_aum": _q(expected),
+        "market_movement_impact": _q(market_impact),
+        "net_aum_growth": _q(net_growth),
+        "market_movement_pct": _pct(market_pct),
+        "revenue_impact_from_market": _q(rev_impact),
+        "projected_aum": _q(projected),
+        "projection_variance": _q(variance),
+        "projection_accuracy": _pct(accuracy),
+    })
+    return out
 
 
 def _at(series, idx):

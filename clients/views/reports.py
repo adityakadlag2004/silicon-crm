@@ -16,7 +16,7 @@ from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
     Renewal, MFMonthlySnapshot,
 )
-from ..services.mf_engine import build_dashboard
+from ..services.mf_engine import build_dashboard, reconcile
 from .helpers import get_manager_access, _last_n_months
 
 
@@ -875,6 +875,7 @@ _MF_DECIMAL_FIELDS = [
     "new_sip", "new_lumpsum", "redemptions", "sip_stopped", "sip_book",
     "annual_market_growth_pct", "redemption_rate_pct",
     "sip_stoppage_rate_pct", "projection_trail_pct",
+    "actual_insurance_revenue",
 ]
 
 
@@ -910,6 +911,16 @@ def mf_revenue_engine(request):
             if any(v < 0 for v in values.values()):
                 messages.error(request, "Values cannot be negative.")
                 return redirect("clients:mf_revenue_engine")
+            # Optional actual trail: blank = use the AUM×trail estimate.
+            raw_trail = (request.POST.get("actual_trail_income") or "").strip()
+            if raw_trail == "":
+                values["actual_trail_income"] = None
+            else:
+                t = _dec(raw_trail, default=None)
+                if t is None or t < 0:
+                    messages.error(request, "Actual trail income must be a non-negative number or blank.")
+                    return redirect("clients:mf_revenue_engine")
+                values["actual_trail_income"] = t
             values["notes"] = (request.POST.get("notes") or "").strip()[:255]
 
             snap, created = MFMonthlySnapshot.objects.update_or_create(
@@ -940,18 +951,33 @@ def mf_revenue_engine(request):
     if selected is None and snapshots:
         selected = snapshots[0]  # latest
 
-    # History (oldest → newest) actuals for the trend table.
+    # History (oldest → newest); each month reconciles against the prior one.
     history = sorted(snapshots, key=lambda s: (s.year, s.month))
-    history_rows = [{
-        "label": f"{month_name[s.month][:3]} {s.year}",
-        "total_aum": s.total_aum,
-        "monthly_trail": s.monthly_trail,
-        "new_sip": s.new_sip,
-        "new_lumpsum": s.new_lumpsum,
-        "sip_book": s.sip_book,
-        "pk": s.pk,
-        "is_selected": selected is not None and s.pk == selected.pk,
-    } for s in history]
+    prev_by_pk = {}
+    for i, s in enumerate(history):
+        prev_by_pk[s.pk] = history[i - 1] if i > 0 else None
+
+    history_rows = []
+    recon_chart = {"labels": [], "operational": [], "market": []}
+    for s in history:
+        rec = reconcile(s, prev_by_pk[s.pk])
+        history_rows.append({
+            "label": f"{month_name[s.month][:3]} {s.year}",
+            "total_aum": s.total_aum,
+            "monthly_trail": s.effective_monthly_trail,
+            "new_sip": s.new_sip,
+            "new_lumpsum": s.new_lumpsum,
+            "sip_book": s.sip_book,
+            "operational_growth": rec["operational_growth"],
+            "market_movement_impact": rec["market_movement_impact"],
+            "net_aum_growth": rec["net_aum_growth"],
+            "projection_accuracy": rec["projection_accuracy"],
+            "pk": s.pk,
+            "is_selected": selected is not None and s.pk == selected.pk,
+        })
+        recon_chart["labels"].append(f"{month_name[s.month][:3]} {s.year}")
+        recon_chart["operational"].append(float(rec["operational_growth"] or 0))
+        recon_chart["market"].append(float(rec["market_movement_impact"] or 0))
 
     context = {
         "snapshots": snapshots,
@@ -968,5 +994,7 @@ def mf_revenue_engine(request):
         dash = build_dashboard(selected, horizon_months=120)
         context["dash"] = dash
         context["charts_json"] = json.dumps(dash["charts"])
+        context["recon"] = reconcile(selected, prev_by_pk.get(selected.pk))
+        context["recon_chart_json"] = json.dumps(recon_chart)
 
     return render(request, "reports/mf_revenue_engine.html", context)

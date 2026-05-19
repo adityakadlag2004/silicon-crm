@@ -290,6 +290,14 @@ class MFMonthlySnapshot(models.Model):
                                                validators=[MinValueValidator(0)],
                                                help_text="Blended annual trail % applied to new (projected) business.")
 
+    # --- Month-end reconciliation: manually entered actuals (source of truth) ---
+    actual_trail_income = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True,
+                                              validators=[MinValueValidator(0)],
+                                              help_text="Optional: actual trail received this month. Overrides the AUM×trail estimate.")
+    actual_insurance_revenue = models.DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"),
+                                                   validators=[MinValueValidator(0)],
+                                                   help_text="Optional: actual recurring insurance revenue this month (recurring base).")
+
     notes = models.CharField(max_length=255, blank=True, default="")
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    on_delete=models.SET_NULL)
@@ -321,8 +329,15 @@ class MFMonthlySnapshot(models.Model):
         ).quantize(Decimal("0.01"))
 
     @property
+    def effective_monthly_trail(self):
+        """Manually entered actual trail wins over the AUM×trail estimate."""
+        if self.actual_trail_income is not None:
+            return Decimal(str(self.actual_trail_income)).quantize(Decimal("0.01"))
+        return self.monthly_trail
+
+    @property
     def annualized_trail(self):
-        return (self.monthly_trail * 12).quantize(Decimal("0.01"))
+        return (self.effective_monthly_trail * 12).quantize(Decimal("0.01"))
 
 
 class Client(models.Model):

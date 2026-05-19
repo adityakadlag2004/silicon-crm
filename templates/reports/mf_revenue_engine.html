@@ -55,7 +55,23 @@
   <div class="kpi"><div class="kpi-label">Embedded Future Revenue · 1Y</div><div class="kpi-value">₹{{ d.embedded_future.y1|floatformat:0 }}</div><div class="kpi-sub">trail from today's book, no new sales</div></div>
   <div class="kpi"><div class="kpi-label">Embedded Future · 3Y</div><div class="kpi-value">₹{{ d.embedded_future.y3|floatformat:0 }}</div><div class="kpi-sub">cumulative trail</div></div>
   <div class="kpi"><div class="kpi-label">Embedded Future · 5Y</div><div class="kpi-value">₹{{ d.embedded_future.y5|floatformat:0 }}</div><div class="kpi-sub">cumulative trail</div></div>
-  <div class="kpi"><div class="kpi-label">Total Business Revenue (annual)</div><div class="kpi-value">₹{{ d.total_business_revenue_annual|floatformat:0 }}</div><div class="kpi-sub">current run-rate</div></div>
+  <div class="kpi"><div class="kpi-label">Total Business Revenue (annual)</div><div class="kpi-value">₹{{ d.total_business_revenue_annual|floatformat:0 }}</div><div class="kpi-sub">{% if d.realized.trail_is_actual %}actual trail entered{% else %}AUM×trail estimate{% endif %}{% if d.realized.actual_insurance_revenue %} · +₹{{ d.realized.actual_insurance_revenue|floatformat:0 }}/mo insurance{% endif %}</div></div>
+</div>
+
+<div class="ki-card mb-4">
+  <div class="ki-card-label"><i class="bi bi-arrow-left-right"></i> AUM Reconciliation — {{ selected.year }}-{{ selected.month }} (actual is source of truth)</div>
+  {% if recon.has_prev %}
+  <div class="kpi-grid cols-3" style="margin-bottom:0;">
+    <div class="kpi"><div class="kpi-label">Opening AUM (prev close)</div><div class="kpi-value">₹{{ recon.opening_aum|floatformat:0 }}</div></div>
+    <div class="kpi"><div class="kpi-label">Operational AUM Growth</div><div class="kpi-value" style="color:#166534;">₹{{ recon.operational_growth|floatformat:0 }}</div><div class="kpi-sub">SIP + lump sum − redemptions</div></div>
+    <div class="kpi"><div class="kpi-label">Market-Driven AUM Change</div><div class="kpi-value" style="color:{% if recon.market_movement_impact < 0 %}#b91c1c{% else %}#166534{% endif %};">₹{{ recon.market_movement_impact|floatformat:0 }}</div><div class="kpi-sub">{{ recon.market_movement_pct }}% · NAV/volatility, not an operational miss</div></div>
+    <div class="kpi"><div class="kpi-label">Net AUM Growth</div><div class="kpi-value">₹{{ recon.net_aum_growth|floatformat:0 }}</div><div class="kpi-sub">actual close − opening</div></div>
+    <div class="kpi"><div class="kpi-label">Projected vs Actual AUM</div><div class="kpi-value">₹{{ recon.projected_aum|floatformat:0 }} → ₹{{ recon.closing_aum|floatformat:0 }}</div><div class="kpi-sub">variance ₹{{ recon.projection_variance|floatformat:0 }}</div></div>
+    <div class="kpi"><div class="kpi-label">Projection Accuracy</div><div class="kpi-value">{{ recon.projection_accuracy }}%</div><div class="kpi-sub">Revenue impact from market: ₹{{ recon.revenue_impact_from_market|floatformat:0 }}/mo</div></div>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0" style="font-size:.86rem;">No prior month on record — add the previous month's snapshot to unlock operational-vs-market decomposition and projection accuracy. (This month's net operational flow: ₹{{ recon.operational_growth|floatformat:0 }}.)</p>
+  {% endif %}
 </div>
 
 <div class="ki-card mb-4">
@@ -107,22 +123,32 @@
 {% endwith %}
 {% endif %}
 
+{% if has_data %}
+<div class="ki-card mb-4">
+  <div class="ki-card-label"><i class="bi bi-bar-chart-steps"></i> Operational vs Market AUM Change (by month)</div>
+  <div class="chart-box"><canvas id="reconChart"></canvas></div>
+</div>
+{% endif %}
+
 <!-- ============ HISTORY ============ -->
 {% if history_rows %}
 <div class="ki-card mb-4 no-print">
-  <div class="ki-card-label"><i class="bi bi-clock-history"></i> Monthly Actuals Ledger</div>
+  <div class="ki-card-label"><i class="bi bi-clock-history"></i> Monthly Actuals Ledger &amp; Reconciliation</div>
   <div class="ki-table-wrap">
     <table class="ki-table report-table">
-      <thead><tr><th>Month</th><th>Total AUM (₹)</th><th>Monthly Trail (₹)</th><th>New SIP (₹)</th><th>Lump Sum (₹)</th><th>SIP Book (₹)</th><th></th></tr></thead>
+      <thead><tr><th>Month</th><th>Total AUM (₹)</th><th>Monthly Trail (₹)</th><th>Operational Δ (₹)</th><th>Market Δ (₹)</th><th>Net Δ (₹)</th><th>Proj. Acc.</th><th>New SIP (₹)</th><th>Lump Sum (₹)</th><th></th></tr></thead>
       <tbody>
         {% for h in history_rows %}
         <tr style="{% if h.is_selected %}background:var(--ki-body);{% endif %}">
           <td>{{ h.label }}{% if h.is_selected %} <span class="badge bg-primary">viewing</span>{% endif %}</td>
           <td>{{ h.total_aum|floatformat:0 }}</td>
           <td>{{ h.monthly_trail|floatformat:0 }}</td>
+          <td>{% if h.operational_growth != None %}{{ h.operational_growth|floatformat:0 }}{% else %}—{% endif %}</td>
+          <td style="color:{% if h.market_movement_impact and h.market_movement_impact < 0 %}#b91c1c{% elif h.market_movement_impact %}#166534{% endif %};">{% if h.market_movement_impact != None %}{{ h.market_movement_impact|floatformat:0 }}{% else %}—{% endif %}</td>
+          <td>{% if h.net_aum_growth != None %}{{ h.net_aum_growth|floatformat:0 }}{% else %}—{% endif %}</td>
+          <td>{% if h.projection_accuracy != None %}{{ h.projection_accuracy }}%{% else %}—{% endif %}</td>
           <td>{{ h.new_sip|floatformat:0 }}</td>
           <td>{{ h.new_lumpsum|floatformat:0 }}</td>
-          <td>{{ h.sip_book|floatformat:0 }}</td>
           <td>
             <a href="?snap={{ h.pk }}" class="ki-btn ki-btn-secondary" style="padding:3px 8px;font-size:.76rem;">View</a>
             <form method="post" class="d-inline" onsubmit="return confirm('Delete this snapshot?');">
@@ -204,6 +230,15 @@
       </div>
     </div>
 
+    <div class="field-group">
+      <div class="fg-title">Month-end reconciliation (optional, source of truth)</div>
+      <div class="row g-2">
+        <div class="col-md-4"><label class="form-label small mb-0">Actual trail income ₹</label><input type="number" step="0.01" min="0" name="actual_trail_income" class="form-control form-control-sm" placeholder="blank = use estimate" value="{{ selected.actual_trail_income|default_if_none:'' }}"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Actual insurance revenue ₹</label><input type="number" step="0.01" min="0" name="actual_insurance_revenue" class="form-control form-control-sm" value="{{ selected.actual_insurance_revenue|default:0 }}"></div>
+      </div>
+      <small class="text-muted">Enter the actual <strong>closing</strong> AUM above (Equity/Debt/Hybrid). The market-vs-operational split is derived from the previous month's closing AUM automatically.</small>
+    </div>
+
     <div class="row g-2">
       <div class="col-md-9"><label class="form-label small mb-0">Notes</label><input type="text" name="notes" maxlength="255" class="form-control form-control-sm" value="{{ selected.notes|default:'' }}"></div>
       <div class="col-md-3 d-flex align-items-end"><button type="submit" class="ki-btn ki-btn-primary w-100"><i class="bi bi-save"></i> Save Snapshot</button></div>
@@ -243,6 +278,19 @@
       options: { responsive: true, maintainAspectRatio: false,
         plugins: { legend: { position: 'right' },
           tooltip: { callbacks: { label: function (c) { return c.label + ': ' + INR(c.parsed); } } } } } });
+  }
+
+  var rEl = document.getElementById('reconChart');
+  if (rEl) {
+    var rc = JSON.parse("{{ recon_chart_json|escapejs }}");
+    new Chart(rEl, { type: 'bar',
+      data: { labels: rc.labels, datasets: [
+        { label: 'Operational Δ', data: rc.operational, backgroundColor: '#16a34a' },
+        { label: 'Market Δ', data: rc.market, backgroundColor: '#2563eb' } ] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'top' },
+          tooltip: { callbacks: { label: function (c) { return c.dataset.label + ': ' + INR(c.parsed.y); } } } },
+        scales: { y: { ticks: { callback: function (v) { return INR(v); } } } } } });
   }
 })();
 </script>
