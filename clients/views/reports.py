@@ -14,9 +14,11 @@ from django.utils.timezone import now
 
 from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
-    Renewal, MFMonthlySnapshot,
+    Renewal, MFSnapshot, MFProjectionSettings,
 )
-from ..services.mf_engine import build_dashboard, reconcile
+from ..services.mf_engine import (
+    build_dashboard, reconcile, historical_analytics,
+)
 from .helpers import get_manager_access, _last_n_months
 
 
@@ -871,12 +873,14 @@ def business_analytics(request):
 # ---------------- MF Revenue Engine (MFD module, Phase 1) ----------------
 
 _MF_DECIMAL_FIELDS = [
-    "equity_aum", "debt_aum", "hybrid_aum",
-    "equity_trail_pct", "debt_trail_pct", "hybrid_trail_pct",
-    "new_sip", "new_lumpsum", "redemptions", "sip_stopped", "sip_book",
+    "opening_aum", "closing_aum",
+    "gross_sip_registered", "active_sip_book", "stopped_sip_amount",
+    "new_lumpsum", "redemptions", "trail_income",
+    "insurance_new_business", "insurance_renewals",
+]
+_MF_SETTINGS_FIELDS = [
     "annual_market_growth_pct", "redemption_rate_pct",
     "sip_stoppage_rate_pct", "projection_trail_pct",
-    "actual_insurance_revenue",
 ]
 
 
@@ -889,6 +893,16 @@ def _dec(raw, default=Decimal("0")):
         return default
 
 
+def _parse_date(raw):
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return False  # sentinel: present but invalid
+
+
 @login_required
 def mf_revenue_engine(request):
     if not _is_ba_admin(request):
@@ -898,51 +912,68 @@ def mf_revenue_engine(request):
         action = (request.POST.get("action") or "").strip()
 
         if action == "save_snapshot":
-            try:
-                year = int(request.POST.get("year"))
-                month = int(request.POST.get("month"))
-            except (TypeError, ValueError):
-                messages.error(request, "Valid year and month are required.")
+            start = _parse_date(request.POST.get("start_date"))
+            end = _parse_date(request.POST.get("end_date"))
+            if start in (None, False) or end in (None, False):
+                messages.error(request, "Both a valid start date and end date are required.")
                 return redirect("clients:mf_revenue_engine")
-            if not (1 <= month <= 12):
-                messages.error(request, "Month must be 1–12.")
+            if end < start:
+                messages.error(request, "End date must be on or after start date.")
                 return redirect("clients:mf_revenue_engine")
 
             values = {f: _dec(request.POST.get(f)) for f in _MF_DECIMAL_FIELDS}
             if any(v < 0 for v in values.values()):
                 messages.error(request, "Values cannot be negative.")
                 return redirect("clients:mf_revenue_engine")
-            # Optional actual trail: blank = use the AUM×trail estimate.
-            raw_trail = (request.POST.get("actual_trail_income") or "").strip()
-            if raw_trail == "":
-                values["actual_trail_income"] = None
-            else:
-                t = _dec(raw_trail, default=None)
-                if t is None or t < 0:
-                    messages.error(request, "Actual trail income must be a non-negative number or blank.")
-                    return redirect("clients:mf_revenue_engine")
-                values["actual_trail_income"] = t
             values["notes"] = (request.POST.get("notes") or "").strip()[:255]
 
-            snap, created = MFMonthlySnapshot.objects.update_or_create(
-                year=year, month=month,
-                defaults={**values, "created_by": request.user},
-            )
-            messages.success(
-                request,
-                f"Snapshot for {month_name[month]} {year} {'created' if created else 'updated'}.",
-            )
+            snap_id = request.POST.get("snapshot_id")
+            if snap_id:
+                snap = MFSnapshot.objects.filter(pk=snap_id).first()
+                if not snap:
+                    messages.error(request, "Snapshot not found.")
+                    return redirect("clients:mf_revenue_engine")
+                # Prevent collision with another row on the same exact range.
+                dup = MFSnapshot.objects.exclude(pk=snap.pk).filter(
+                    start_date=start, end_date=end).exists()
+                if dup:
+                    messages.error(request, "Another snapshot already covers that exact range.")
+                    return redirect("clients:mf_revenue_engine")
+                snap.start_date = start; snap.end_date = end
+                for f, v in values.items():
+                    setattr(snap, f, v)
+                snap.save()
+                messages.success(request, "Snapshot updated.")
+            else:
+                if MFSnapshot.objects.filter(start_date=start, end_date=end).exists():
+                    messages.error(request, "A snapshot for that exact range already exists — edit it instead.")
+                    return redirect("clients:mf_revenue_engine")
+                snap = MFSnapshot.objects.create(
+                    start_date=start, end_date=end,
+                    created_by=request.user, **values,
+                )
+                messages.success(request, "Snapshot added.")
             return redirect(f"{request.path}?snap={snap.pk}")
 
         if action == "delete_snapshot":
-            MFMonthlySnapshot.objects.filter(pk=request.POST.get("snapshot_id")).delete()
+            MFSnapshot.objects.filter(pk=request.POST.get("snapshot_id")).delete()
             messages.success(request, "Snapshot deleted.")
+            return redirect("clients:mf_revenue_engine")
+
+        if action == "save_settings":
+            ps = MFProjectionSettings.current()
+            for f in _MF_SETTINGS_FIELDS:
+                setattr(ps, f, _dec(request.POST.get(f), default=getattr(ps, f)))
+            ps.updated_by = request.user
+            ps.save()
+            messages.success(request, "Projection settings saved.")
             return redirect("clients:mf_revenue_engine")
 
         messages.error(request, "Unsupported action.")
         return redirect("clients:mf_revenue_engine")
 
-    snapshots = list(MFMonthlySnapshot.objects.all())  # ordered -year,-month
+    snapshots = list(MFSnapshot.objects.all())  # newest first
+    settings_obj = MFProjectionSettings.current()
     today = date.today()
 
     selected = None
@@ -950,10 +981,10 @@ def mf_revenue_engine(request):
     if snap_id:
         selected = next((s for s in snapshots if str(s.pk) == str(snap_id)), None)
     if selected is None and snapshots:
-        selected = snapshots[0]  # latest
+        selected = snapshots[0]
 
-    # History (oldest → newest); each month reconciles against the prior one.
-    history = sorted(snapshots, key=lambda s: (s.year, s.month))
+    # History oldest → newest; reconcile each against its prior (by end_date).
+    history = sorted(snapshots, key=lambda s: (s.start_date, s.end_date))
     prev_by_pk = {}
     for i, s in enumerate(history):
         prev_by_pk[s.pk] = history[i - 1] if i > 0 else None
@@ -962,13 +993,13 @@ def mf_revenue_engine(request):
     recon_chart = {"labels": [], "operational": [], "market": []}
     for s in history:
         rec = reconcile(s, prev_by_pk[s.pk])
+        label = f"{s.start_date:%d-%b-%y} → {s.end_date:%d-%b-%y}"
         history_rows.append({
-            "label": f"{month_name[s.month][:3]} {s.year}",
-            "total_aum": s.total_aum,
-            "monthly_trail": s.effective_monthly_trail,
-            "new_sip": s.new_sip,
-            "new_lumpsum": s.new_lumpsum,
-            "sip_book": s.sip_book,
+            "label": label,
+            "opening_aum": s.opening_aum,
+            "closing_aum": s.closing_aum,
+            "active_sip_book": s.active_sip_book,
+            "trail_income": s.trail_income,
             "operational_growth": rec["operational_growth"],
             "market_movement_impact": rec["market_movement_impact"],
             "net_aum_growth": rec["net_aum_growth"],
@@ -976,26 +1007,35 @@ def mf_revenue_engine(request):
             "pk": s.pk,
             "is_selected": selected is not None and s.pk == selected.pk,
         })
-        recon_chart["labels"].append(f"{month_name[s.month][:3]} {s.year}")
+        recon_chart["labels"].append(label)
         recon_chart["operational"].append(float(rec["operational_growth"] or 0))
         recon_chart["market"].append(float(rec["market_movement_impact"] or 0))
+
+    analytics = historical_analytics(history)
 
     context = {
         "snapshots": snapshots,
         "selected": selected,
+        "settings_obj": settings_obj,
         "history_rows": history_rows,
-        "months": [(i, month_name[i]) for i in range(1, 13)],
-        "years": list(range(today.year - 3, today.year + 2)),
-        "default_year": today.year,
-        "default_month": today.month,
+        "analytics": analytics,
+        "today_iso": today.isoformat(),
         "has_data": bool(selected),
     }
 
     if selected:
-        dash = build_dashboard(selected, horizon_months=120)
+        dash = build_dashboard(selected, settings_obj, horizon_months=120)
         context["dash"] = dash
         context["charts_json"] = json.dumps(dash["charts"])
         context["recon"] = reconcile(selected, prev_by_pk.get(selected.pk))
         context["recon_chart_json"] = json.dumps(recon_chart)
+        # AUM / SIP / trail trajectory across history (oldest → newest).
+        history_chart = {
+            "labels": [h["label"] for h in history_rows],
+            "aum": [float(h["closing_aum"]) for h in history_rows],
+            "sip_book": [float(h["active_sip_book"]) for h in history_rows],
+            "trail": [float(h["trail_income"]) for h in history_rows],
+        }
+        context["history_chart_json"] = json.dumps(history_chart)
 
     return render(request, "reports/mf_revenue_engine.html", context)
