@@ -129,22 +129,22 @@
     <span class="text-muted" style="font-weight:normal;font-size:.78rem;">· {{ analytics.period_count }} periods · {{ analytics.first|date:"M Y" }} → {{ analytics.last|date:"M Y" }} ({{ analytics.years_covered }} yrs)</span>
   </div>
   <div class="kpi-grid cols-4" style="margin-bottom:0;">
-    <div class="kpi"><div class="kpi-label">SIP Persistency Rate</div><div class="kpi-value">{% if analytics.sip_persistency_pct != None %}{{ analytics.sip_persistency_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">active SIP book / (opening + gross registered)</div></div>
-    <div class="kpi"><div class="kpi-label">SIP Stoppage Rate</div><div class="kpi-value">{% if analytics.sip_stoppage_pct != None %}{{ analytics.sip_stoppage_pct }}%{% else %}—{% endif %}</div></div>
+    <div class="kpi"><div class="kpi-label">SIP Persistency Rate</div><div class="kpi-value">{% if analytics.sip_persistency_pct != None %}{{ analytics.sip_persistency_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">avg per period · weighted by months</div></div>
+    <div class="kpi"><div class="kpi-label">SIP Stoppage Rate</div><div class="kpi-value">{% if analytics.sip_stoppage_pct != None %}{{ analytics.sip_stoppage_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">avg per period</div></div>
     <div class="kpi"><div class="kpi-label">Net SIP Growth</div><div class="kpi-value">₹{{ analytics.net_sip_growth|indian_number:0 }}</div><div class="kpi-sub">end book − start book</div></div>
     <div class="kpi"><div class="kpi-label">Gross SIP Mobilisation</div><div class="kpi-value">₹{{ analytics.gross_sip_mobilisation|indian_number:0 }}</div></div>
 
-    <div class="kpi"><div class="kpi-label">Redemption Ratio</div><div class="kpi-value">{% if analytics.redemption_ratio_pct != None %}{{ analytics.redemption_ratio_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">redemptions / gross inflows</div></div>
+    <div class="kpi"><div class="kpi-label">Redemption Ratio</div><div class="kpi-value">{% if analytics.redemption_ratio_pct != None %}{{ analytics.redemption_ratio_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">avg per period · redemptions / inflows</div></div>
     <div class="kpi"><div class="kpi-label">Net Inflow</div><div class="kpi-value">₹{{ analytics.net_inflow|indian_number:0 }}</div></div>
-    <div class="kpi"><div class="kpi-label">AUM Retention</div><div class="kpi-value">{% if analytics.aum_retention_pct != None %}{{ analytics.aum_retention_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">closing / (opening + operational)</div></div>
-    <div class="kpi"><div class="kpi-label">Revenue Growth</div><div class="kpi-value">{% if analytics.revenue_growth_pct != None %}{{ analytics.revenue_growth_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">latest vs first period (per month)</div></div>
+    <div class="kpi"><div class="kpi-label">AUM Retention</div><div class="kpi-value">{% if analytics.aum_retention_pct != None %}{{ analytics.aum_retention_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">avg per period · closing / (opening + ops)</div></div>
+    <div class="kpi"><div class="kpi-label">Revenue Growth</div><div class="kpi-value">{% if analytics.revenue_growth_pct != None %}{{ analytics.revenue_growth_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">avg period-over-period trail/mo Δ</div></div>
 
     <div class="kpi"><div class="kpi-label">Trail Revenue Stability</div><div class="kpi-value">{% if analytics.trail_stability_pct != None %}{{ analytics.trail_stability_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">100 − coefficient of variation</div></div>
     <div class="kpi"><div class="kpi-label">Operational vs Market (cum.)</div><div class="kpi-value">₹{{ analytics.operational_vs_market.operational|indian_number:0 }} / ₹{{ analytics.operational_vs_market.market|indian_number:0 }}</div></div>
     <div class="kpi"><div class="kpi-label">Historical CAGR</div><div class="kpi-value">{% if analytics.historical_cagr_pct != None %}{{ analytics.historical_cagr_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">closing / opening over {{ analytics.years_covered }} yrs</div></div>
     <div class="kpi"><div class="kpi-label">AUM Volatility</div><div class="kpi-value">{% if analytics.aum_volatility_pct != None %}{{ analytics.aum_volatility_pct }}%{% else %}—{% endif %}</div><div class="kpi-sub">stddev of period-to-period AUM Δ</div></div>
   </div>
-  <p class="text-muted mt-3 mb-0" style="font-size:.78rem;">Note: client-count retention isn't tracked yet (only ₹-weighted SIP persistency). Add more periods for sharper estimates — these metrics improve with backfilled history.</p>
+  <p class="text-muted mt-3 mb-0" style="font-size:.78rem;">Rate metrics (persistency, stoppage, redemption, retention, growth) are <strong>time-weighted averages across periods</strong> — each period contributes proportionally to its month count, so a yearly back-fill counts more than a single month. Absolute metrics (gross SIP, net inflow, CAGR, op vs market) are totals/end-to-end. Client-count retention isn't tracked yet (only ₹-weighted SIP persistency).</p>
 </div>
 {% endif %}
 
@@ -169,7 +169,7 @@
           <td>{{ h.trail_income|indian_number:0 }}</td>
           <td>
             <a href="?snap={{ h.pk }}" class="ki-btn ki-btn-secondary" style="padding:3px 8px;font-size:.76rem;">View</a>
-            <a href="?snap={{ h.pk }}#snapshot-form" class="ki-btn ki-btn-secondary" style="padding:3px 8px;font-size:.76rem;">Edit</a>
+            <a href="?snap={{ h.pk }}&amp;edit={{ h.pk }}#snapshot-form" class="ki-btn ki-btn-secondary" style="padding:3px 8px;font-size:.76rem;">Edit</a>
             <form method="post" class="d-inline" onsubmit="return confirm('Delete this snapshot?');">
               {% csrf_token %}
               <input type="hidden" name="action" value="delete_snapshot">
@@ -187,57 +187,67 @@
 
 <!-- ============ ADD / EDIT SNAPSHOT ============ -->
 <div class="ki-card mb-4 no-print" id="snapshot-form">
-  <div class="ki-card-label"><i class="bi bi-pencil-square"></i> {% if selected %}Edit / Add{% else %}Add{% endif %} Snapshot</div>
-  <p class="text-muted" style="font-size:.82rem;">Pick any date range — monthly, quarterly, or a back-filled year. To edit the selected period below, keep the same dates and update values. To add a new period, change the dates.</p>
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="ki-card-label mb-0">
+      <i class="bi bi-pencil-square"></i>
+      {% if editing %}Editing snapshot · {{ editing.start_date|date:'d-M-Y' }} → {{ editing.end_date|date:'d-M-Y' }}{% else %}Add new snapshot{% endif %}
+    </div>
+    {% if editing %}<a href="?" class="ki-btn ki-btn-sm ki-btn-secondary"><i class="bi bi-plus-lg"></i> Add another instead</a>{% endif %}
+  </div>
+  <p class="text-muted" style="font-size:.82rem;">
+    {% if editing %}Editing the period above — change values and save to update it.
+    {% else %}Form is in <strong>add</strong> mode: this saves a new period. To change an existing row, click <em>Edit</em> on its ledger entry below.
+    {% endif %}
+  </p>
   <form method="post" class="mf-grid" style="gap:14px;">
     {% csrf_token %}
     <input type="hidden" name="action" value="save_snapshot">
-    {% if selected %}<input type="hidden" name="snapshot_id" value="{{ selected.pk }}">{% endif %}
+    {% if editing %}<input type="hidden" name="snapshot_id" value="{{ editing.pk }}">{% endif %}
 
     <div class="row g-2">
       <div class="col-md-3">
         <label class="form-label small mb-0">Start date</label>
-        <input type="date" name="start_date" class="form-control form-control-sm" required value="{{ selected.start_date|date:'Y-m-d' }}">
+        <input type="date" name="start_date" class="form-control form-control-sm" required value="{{ editing.start_date|date:'Y-m-d' }}">
       </div>
       <div class="col-md-3">
         <label class="form-label small mb-0">End date</label>
-        <input type="date" name="end_date" class="form-control form-control-sm" required value="{{ selected.end_date|date:'Y-m-d' }}">
+        <input type="date" name="end_date" class="form-control form-control-sm" required value="{{ editing.end_date|date:'Y-m-d' }}">
       </div>
     </div>
 
     <div class="field-group">
       <div class="fg-title">AUM (₹) — optional for historical backfill</div>
       <div class="row g-2">
-        <div class="col-md-6"><label class="form-label small mb-0">Opening AUM</label><input type="number" step="0.01" min="0" name="opening_aum" class="form-control form-control-sm" placeholder="blank = unknown" value="{{ selected.opening_aum|default_if_none:'' }}"></div>
-        <div class="col-md-6"><label class="form-label small mb-0">Closing AUM</label><input type="number" step="0.01" min="0" name="closing_aum" class="form-control form-control-sm" placeholder="blank = unknown" value="{{ selected.closing_aum|default_if_none:'' }}"></div>
+        <div class="col-md-6"><label class="form-label small mb-0">Opening AUM</label><input type="number" step="0.01" min="0" name="opening_aum" class="form-control form-control-sm" placeholder="blank = unknown" value="{{ editing.opening_aum|default_if_none:'' }}"></div>
+        <div class="col-md-6"><label class="form-label small mb-0">Closing AUM</label><input type="number" step="0.01" min="0" name="closing_aum" class="form-control form-control-sm" placeholder="blank = unknown" value="{{ editing.closing_aum|default_if_none:'' }}"></div>
       </div>
-      <small class="text-muted">If you don't have AUM for an old period, leave both blank — flow-based analytics (SIP persistency, mobilisation, redemption, trail) still work. AUM-based metrics (CAGR, retention, market split, projection accuracy) will skip blanks.</small>
+      <small class="text-muted">If you don't have AUM for an old period, leave both blank — flow-based analytics still work. AUM-based metrics skip blanks.</small>
     </div>
 
     <div class="field-group">
       <div class="fg-title">SIP (₹)</div>
       <div class="row g-2">
-        <div class="col-md-4"><label class="form-label small mb-0">Gross SIP registered</label><input type="number" step="0.01" min="0" name="gross_sip_registered" class="form-control form-control-sm" value="{{ selected.gross_sip_registered|default:0 }}"></div>
-        <div class="col-md-4"><label class="form-label small mb-0">Active SIP book (₹/mo at end)</label><input type="number" step="0.01" min="0" name="active_sip_book" class="form-control form-control-sm" value="{{ selected.active_sip_book|default:0 }}"></div>
-        <div class="col-md-4"><label class="form-label small mb-0">Stopped SIP amount</label><input type="number" step="0.01" min="0" name="stopped_sip_amount" class="form-control form-control-sm" value="{{ selected.stopped_sip_amount|default:0 }}"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Gross SIP registered</label><input type="number" step="0.01" min="0" name="gross_sip_registered" class="form-control form-control-sm" value="{{ editing.gross_sip_registered|default:0 }}"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Active SIP book (₹/mo at end)</label><input type="number" step="0.01" min="0" name="active_sip_book" class="form-control form-control-sm" value="{{ editing.active_sip_book|default:0 }}"></div>
+        <div class="col-md-4"><label class="form-label small mb-0">Stopped SIP amount</label><input type="number" step="0.01" min="0" name="stopped_sip_amount" class="form-control form-control-sm" value="{{ editing.stopped_sip_amount|default:0 }}"></div>
       </div>
     </div>
 
     <div class="field-group">
       <div class="fg-title">Other flows &amp; revenue (₹)</div>
       <div class="row g-2">
-        <div class="col-md-3"><label class="form-label small mb-0">New lump sum</label><input type="number" step="0.01" min="0" name="new_lumpsum" class="form-control form-control-sm" value="{{ selected.new_lumpsum|default:0 }}"></div>
-        <div class="col-md-3"><label class="form-label small mb-0">Redemptions</label><input type="number" step="0.01" min="0" name="redemptions" class="form-control form-control-sm" value="{{ selected.redemptions|default:0 }}"></div>
-        <div class="col-md-3"><label class="form-label small mb-0">Trail income (period)</label><input type="number" step="0.01" min="0" name="trail_income" class="form-control form-control-sm" value="{{ selected.trail_income|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">New lump sum</label><input type="number" step="0.01" min="0" name="new_lumpsum" class="form-control form-control-sm" value="{{ editing.new_lumpsum|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Redemptions</label><input type="number" step="0.01" min="0" name="redemptions" class="form-control form-control-sm" value="{{ editing.redemptions|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Trail income (period)</label><input type="number" step="0.01" min="0" name="trail_income" class="form-control form-control-sm" value="{{ editing.trail_income|default:0 }}"></div>
         <div class="col-md-3"></div>
-        <div class="col-md-3"><label class="form-label small mb-0">Insurance new business</label><input type="number" step="0.01" min="0" name="insurance_new_business" class="form-control form-control-sm" value="{{ selected.insurance_new_business|default:0 }}"></div>
-        <div class="col-md-3"><label class="form-label small mb-0">Insurance renewals</label><input type="number" step="0.01" min="0" name="insurance_renewals" class="form-control form-control-sm" value="{{ selected.insurance_renewals|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Insurance new business</label><input type="number" step="0.01" min="0" name="insurance_new_business" class="form-control form-control-sm" value="{{ editing.insurance_new_business|default:0 }}"></div>
+        <div class="col-md-3"><label class="form-label small mb-0">Insurance renewals</label><input type="number" step="0.01" min="0" name="insurance_renewals" class="form-control form-control-sm" value="{{ editing.insurance_renewals|default:0 }}"></div>
       </div>
     </div>
 
     <div class="row g-2">
-      <div class="col-md-9"><label class="form-label small mb-0">Notes</label><input type="text" name="notes" maxlength="255" class="form-control form-control-sm" value="{{ selected.notes|default:'' }}"></div>
-      <div class="col-md-3 d-flex align-items-end"><button type="submit" class="ki-btn ki-btn-primary w-100"><i class="bi bi-save"></i> Save Snapshot</button></div>
+      <div class="col-md-9"><label class="form-label small mb-0">Notes</label><input type="text" name="notes" maxlength="255" class="form-control form-control-sm" value="{{ editing.notes|default:'' }}"></div>
+      <div class="col-md-3 d-flex align-items-end"><button type="submit" class="ki-btn ki-btn-primary w-100"><i class="bi bi-save"></i> {% if editing %}Save changes{% else %}Add snapshot{% endif %}</button></div>
     </div>
   </form>
 </div>
