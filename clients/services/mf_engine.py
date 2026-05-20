@@ -38,6 +38,11 @@ def _q(x) -> Decimal:
     return Decimal(str(round(_f(x), 2)))
 
 
+def _qn(x):
+    """Quantize but preserve None — used wherever 'unknown' is meaningful."""
+    return None if x is None else _q(x)
+
+
 def _pct(x) -> Decimal:
     return Decimal(str(round(_f(x), 2)))
 
@@ -62,8 +67,8 @@ def realized_metrics(snap):
         "label": f"{snap.start_date:%d-%b-%Y} → {snap.end_date:%d-%b-%Y}",
         "days": int(_f(snap.days_in_period)),
         "months": _q(months),
-        "opening_aum": _q(snap.opening_aum),
-        "closing_aum": _q(snap.closing_aum),
+        "opening_aum": _qn(snap.opening_aum),
+        "closing_aum": _qn(snap.closing_aum),
         "active_sip_book": _q(snap.active_sip_book),
         "gross_sip_registered": _q(snap.gross_sip_registered),
         "stopped_sip_amount": _q(snap.stopped_sip_amount),
@@ -78,9 +83,10 @@ def realized_metrics(snap):
         "total_recurring_revenue": _q(snap.total_recurring_revenue),
         "sip_collected": _q(snap.sip_collected),
         "operational_inflow": _q(snap.operational_inflow),
-        "expected_operational_aum": _q(snap.expected_operational_aum),
-        "market_impact": _q(snap.market_impact),
-        "net_aum_growth": _q(snap.net_aum_growth),
+        "expected_operational_aum": _qn(snap.expected_operational_aum),
+        "market_impact": _qn(snap.market_impact),
+        "net_aum_growth": _qn(snap.net_aum_growth),
+        "has_aum": snap.opening_aum is not None and snap.closing_aum is not None,
     }
 
 
@@ -89,13 +95,33 @@ def realized_metrics(snap):
 def reconcile(curr, prev):
     """Decompose this snapshot's AUM change into operational vs market.
 
-    For a snapshot, opening_aum is the user-entered opening (which should
-    match the prior snapshot's closing). The decomposition is intrinsic
-    to the current snapshot; `prev` is used only for projection accuracy.
+    Operational growth is always computable (it's just flows). The
+    market/net/accuracy decomposition needs opening + closing AUM; if
+    either is missing, those keys return None and the operational figure
+    still surfaces.
     """
+    operational = _f(curr.operational_inflow)
+    has_aum = curr.opening_aum is not None and curr.closing_aum is not None
+
+    out = {
+        "has_prev": prev is not None,
+        "has_aum": has_aum,
+        "opening_aum": _qn(curr.opening_aum),
+        "closing_aum": _qn(curr.closing_aum),
+        "operational_growth": _q(operational),
+    }
+
+    if not has_aum:
+        out.update({k: None for k in (
+            "expected_operational_aum", "market_movement_impact",
+            "market_movement_pct", "net_aum_growth",
+            "revenue_impact_from_market",
+            "projected_aum", "projection_variance", "projection_accuracy",
+        )})
+        return out
+
     closing = _f(curr.closing_aum)
     opening = _f(curr.opening_aum)
-    operational = _f(curr.operational_inflow)
     expected = opening + operational
     market_impact = closing - expected
     net_growth = closing - opening
@@ -108,19 +134,15 @@ def reconcile(curr, prev):
     )
     rev_impact = market_impact * blended_annual / 100.0 / 12.0 * months
 
-    out = {
-        "has_prev": prev is not None,
-        "opening_aum": _q(opening),
-        "closing_aum": _q(closing),
-        "operational_growth": _q(operational),
+    out.update({
         "expected_operational_aum": _q(expected),
         "market_movement_impact": _q(market_impact),
         "market_movement_pct": _pct(market_pct),
         "net_aum_growth": _q(net_growth),
         "revenue_impact_from_market": _q(rev_impact),
-    }
+    })
 
-    if prev is None:
+    if prev is None or prev.closing_aum is None:
         out.update(projected_aum=None, projection_variance=None,
                    projection_accuracy=None)
         return out
@@ -208,10 +230,37 @@ def _at(series, idx):
     return series[min(idx, len(series)) - 1]
 
 
-def build_dashboard(snap, settings, horizon_months: int = 120):
+def build_dashboard(snap, settings, horizon_months: int = 120, projection_anchor=None):
+    """Realised metrics come from `snap`; the 120-month projection runs from
+    `projection_anchor` (defaults to `snap`). If the anchor has no closing
+    AUM, projection blocks are returned empty and the template hides them.
+    """
     realized = realized_metrics(snap)
-    full = project(snap, settings, months=horizon_months, include_new_business=True)
-    embedded = project(snap, settings, months=horizon_months, include_new_business=False)
+    anchor = projection_anchor or snap
+    has_anchor_aum = anchor is not None and anchor.closing_aum is not None
+
+    months = _f(snap.months_in_period) or 1.0
+    trail_per_month = _f(snap.trail_income) / months
+    out = {
+        "realized": realized,
+        "recurring_vs_upfront": {
+            "recurring_monthly": _q(trail_per_month + _f(snap.insurance_renewals) / months),
+            "upfront_monthly": _q(_f(snap.insurance_new_business) / months),
+        },
+        "total_business_revenue_annual": _q((trail_per_month + _f(snap.insurance_renewals) / months) * 12),
+        "has_anchor_aum": has_anchor_aum,
+        "anchor_label": (f"{anchor.start_date:%d-%b-%Y} → {anchor.end_date:%d-%b-%Y}" if anchor else None),
+    }
+
+    if not has_anchor_aum:
+        out.update({
+            "projections": None, "embedded_future": None,
+            "charts": None, "milestone_rows": [],
+        })
+        return out
+
+    full = project(anchor, settings, months=horizon_months, include_new_business=True)
+    embedded = project(anchor, settings, months=horizon_months, include_new_business=False)
 
     def milestone(series, idx):
         p = _at(series, idx)
@@ -221,43 +270,28 @@ def build_dashboard(snap, settings, horizon_months: int = 120):
             "annual_trail": p["annual_trail"] if p else Decimal("0.00"),
         }
 
-    projections = {k: milestone(full, n) for k, n in
-                   (("y1", 12), ("y3", 36), ("y5", 60), ("y10", 120))}
-    embedded_future = {
+    out["projections"] = {k: milestone(full, n) for k, n in
+                          (("y1", 12), ("y3", 36), ("y5", 60), ("y10", 120))}
+    out["embedded_future"] = {
         "y1": _at(embedded, 12)["cumulative_trail"] if _at(embedded, 12) else Decimal("0.00"),
         "y3": _at(embedded, 36)["cumulative_trail"] if _at(embedded, 36) else Decimal("0.00"),
         "y5": _at(embedded, 60)["cumulative_trail"] if _at(embedded, 60) else Decimal("0.00"),
     }
-
-    labels = [p["label"] for p in full]
-    charts = {
-        "labels": labels,
+    out["charts"] = {
+        "labels": [p["label"] for p in full],
         "aum": [float(p["total_aum"]) for p in full],
         "monthly_revenue": [float(p["monthly_trail"]) for p in full],
         "sip_book": [float(p["sip_book"]) for p in full],
         "cumulative_revenue": [float(p["cumulative_trail"]) for p in full],
         "embedded_cumulative": [float(p["cumulative_trail"]) for p in embedded],
     }
-
-    months = _f(snap.months_in_period) or 1.0
-    trail_per_month = _f(snap.trail_income) / months
-    return {
-        "realized": realized,
-        "projections": projections,
-        "embedded_future": embedded_future,
-        "recurring_vs_upfront": {
-            "recurring_monthly": _q(trail_per_month + _f(snap.insurance_renewals) / months),
-            "upfront_monthly": _q(_f(snap.insurance_new_business) / months),
-        },
-        "total_business_revenue_annual": _q((trail_per_month + _f(snap.insurance_renewals) / months) * 12),
-        "charts": charts,
-        "milestone_rows": [
-            {"label": "1 Year", "p": _at(full, 12)},
-            {"label": "3 Years", "p": _at(full, 36)},
-            {"label": "5 Years", "p": _at(full, 60)},
-            {"label": "10 Years", "p": _at(full, 120)},
-        ],
-    }
+    out["milestone_rows"] = [
+        {"label": "1 Year", "p": _at(full, 12)},
+        {"label": "3 Years", "p": _at(full, 36)},
+        {"label": "5 Years", "p": _at(full, 60)},
+        {"label": "10 Years", "p": _at(full, 120)},
+    ]
+    return out
 
 
 # ---------------- historical analytics across all snapshots ----------------
@@ -307,8 +341,16 @@ def historical_analytics(snapshots):
     redemption_ratio = (redemptions / gross_inflows * 100.0) if gross_inflows else None
     net_inflow = gross_inflows - redemptions
 
-    expected_aum = _f(first.opening_aum) + sum(operational_inflows)
-    aum_retention = (_f(last.closing_aum) / expected_aum * 100.0) if expected_aum else None
+    # AUM-dependent metrics only use snapshots where both opening + closing are known.
+    aum_snaps = [s for s in snaps if s.opening_aum is not None and s.closing_aum is not None]
+    aum_first = aum_snaps[0] if aum_snaps else None
+    aum_last = aum_snaps[-1] if aum_snaps else None
+    aum_operational = [_f(s.operational_inflow) for s in aum_snaps]
+    expected_aum = (_f(aum_first.opening_aum) + sum(aum_operational)) if aum_first else 0
+    aum_retention = (
+        _f(aum_last.closing_aum) / expected_aum * 100.0
+        if aum_last and expected_aum else None
+    )
 
     # Revenue growth rate: latest period trail vs first period trail, per-month normalised.
     rev_growth = None
@@ -327,17 +369,21 @@ def historical_analytics(snapshots):
         if trail_mean > 0 else None
     )
 
-    op_total = sum(operational_inflows)
-    market_total = sum(market_impacts)
+    # Op vs market totals only count periods where market impact is computable.
+    op_total = sum(aum_operational)
+    market_total = sum(_f(s.market_impact) for s in aum_snaps)
     op_vs_market = {"operational": _q(op_total), "market": _q(market_total)}
 
     cagr = None
-    if _f(first.opening_aum) > 0 and _f(last.closing_aum) > 0 and years > 0:
-        cagr = ((_f(last.closing_aum) / _f(first.opening_aum)) ** (1.0 / years) - 1.0) * 100.0
+    if aum_first and aum_last and _f(aum_first.opening_aum) > 0 and _f(aum_last.closing_aum) > 0:
+        span_days = (aum_last.end_date - aum_first.start_date).days + 1
+        span_years = span_days / 365.25
+        if span_years > 0:
+            cagr = ((_f(aum_last.closing_aum) / _f(aum_first.opening_aum)) ** (1.0 / span_years) - 1.0) * 100.0
 
-    # Volatility = stddev of period-on-period closing AUM % change.
+    # Volatility = stddev of period-on-period closing AUM % change (AUM-aware snaps only).
     aum_changes = []
-    for a, b in zip(snaps, snaps[1:]):
+    for a, b in zip(aum_snaps, aum_snaps[1:]):
         if _f(a.closing_aum):
             aum_changes.append((_f(b.closing_aum) - _f(a.closing_aum)) / _f(a.closing_aum) * 100.0)
     volatility = _stddev(aum_changes) if aum_changes else None

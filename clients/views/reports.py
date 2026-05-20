@@ -873,11 +873,11 @@ def business_analytics(request):
 # ---------------- MF Revenue Engine (MFD module, Phase 1) ----------------
 
 _MF_DECIMAL_FIELDS = [
-    "opening_aum", "closing_aum",
     "gross_sip_registered", "active_sip_book", "stopped_sip_amount",
     "new_lumpsum", "redemptions", "trail_income",
     "insurance_new_business", "insurance_renewals",
 ]
+_MF_NULLABLE_AUM_FIELDS = ["opening_aum", "closing_aum"]
 _MF_SETTINGS_FIELDS = [
     "annual_market_growth_pct", "redemption_rate_pct",
     "sip_stoppage_rate_pct", "projection_trail_pct",
@@ -925,6 +925,17 @@ def mf_revenue_engine(request):
             if any(v < 0 for v in values.values()):
                 messages.error(request, "Values cannot be negative.")
                 return redirect("clients:mf_revenue_engine")
+            # AUM is optional — blank means 'not known for this period'.
+            for f in _MF_NULLABLE_AUM_FIELDS:
+                raw = (request.POST.get(f) or "").strip()
+                if raw == "":
+                    values[f] = None
+                else:
+                    v = _dec(raw, default=None)
+                    if v is None or v < 0:
+                        messages.error(request, f"{f.replace('_', ' ').title()} must be a non-negative number or blank.")
+                        return redirect("clients:mf_revenue_engine")
+                    values[f] = v
             values["notes"] = (request.POST.get("notes") or "").strip()[:255]
 
             snap_id = request.POST.get("snapshot_id")
@@ -1007,9 +1018,11 @@ def mf_revenue_engine(request):
             "pk": s.pk,
             "is_selected": selected is not None and s.pk == selected.pk,
         })
-        recon_chart["labels"].append(label)
-        recon_chart["operational"].append(float(rec["operational_growth"] or 0))
-        recon_chart["market"].append(float(rec["market_movement_impact"] or 0))
+        # Only chart periods that actually have a market decomposition.
+        if rec["market_movement_impact"] is not None:
+            recon_chart["labels"].append(label)
+            recon_chart["operational"].append(float(rec["operational_growth"] or 0))
+            recon_chart["market"].append(float(rec["market_movement_impact"] or 0))
 
     analytics = historical_analytics(history)
 
@@ -1024,17 +1037,25 @@ def mf_revenue_engine(request):
     }
 
     if selected:
-        dash = build_dashboard(selected, settings_obj, horizon_months=120)
+        # Projection always anchors on the latest snapshot that has a closing AUM —
+        # even if the user is viewing a historical period without AUM.
+        projection_anchor = next(
+            (s for s in history[::-1] if s.closing_aum is not None), None
+        )
+        dash = build_dashboard(
+            selected, settings_obj, horizon_months=120,
+            projection_anchor=projection_anchor,
+        )
         context["dash"] = dash
-        context["charts_json"] = json.dumps(dash["charts"])
+        context["charts_json"] = json.dumps(dash["charts"]) if dash["charts"] else "null"
         context["recon"] = reconcile(selected, prev_by_pk.get(selected.pk))
         context["recon_chart_json"] = json.dumps(recon_chart)
-        # AUM / SIP / trail trajectory across history (oldest → newest).
+        # Historical trajectory: skip periods missing closing AUM so the chart isn't broken.
         history_chart = {
-            "labels": [h["label"] for h in history_rows],
-            "aum": [float(h["closing_aum"]) for h in history_rows],
-            "sip_book": [float(h["active_sip_book"]) for h in history_rows],
-            "trail": [float(h["trail_income"]) for h in history_rows],
+            "labels": [h["label"] for h in history_rows if h["closing_aum"] is not None],
+            "aum": [float(h["closing_aum"]) for h in history_rows if h["closing_aum"] is not None],
+            "sip_book": [float(h["active_sip_book"]) for h in history_rows if h["closing_aum"] is not None],
+            "trail": [float(h["trail_income"]) for h in history_rows if h["closing_aum"] is not None],
         }
         context["history_chart_json"] = json.dumps(history_chart)
 

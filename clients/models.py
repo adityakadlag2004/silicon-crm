@@ -277,10 +277,12 @@ class MFSnapshot(models.Model):
     start_date = models.DateField(db_index=True)
     end_date = models.DateField(db_index=True)
 
-    opening_aum = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0.00"),
-                                      validators=[MinValueValidator(0)])
-    closing_aum = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal("0.00"),
-                                      validators=[MinValueValidator(0)])
+    opening_aum = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True,
+                                      validators=[MinValueValidator(0)],
+                                      help_text="Leave blank if unknown for old periods — AUM-based metrics skip blanks gracefully.")
+    closing_aum = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True,
+                                      validators=[MinValueValidator(0)],
+                                      help_text="Leave blank if unknown — projection uses the latest snapshot that does have a closing AUM.")
 
     gross_sip_registered = models.DecimalField(max_digits=16, decimal_places=2,
                                                default=Decimal("0.00"),
@@ -353,14 +355,20 @@ class MFSnapshot(models.Model):
 
     @property
     def expected_operational_aum(self):
+        if self.opening_aum is None:
+            return None
         return (self.opening_aum + self.operational_inflow).quantize(Decimal("0.01"))
 
     @property
     def market_impact(self):
+        if self.opening_aum is None or self.closing_aum is None:
+            return None
         return (self.closing_aum - self.expected_operational_aum).quantize(Decimal("0.01"))
 
     @property
     def net_aum_growth(self):
+        if self.opening_aum is None or self.closing_aum is None:
+            return None
         return (self.closing_aum - self.opening_aum).quantize(Decimal("0.01"))
 
     @property
