@@ -994,6 +994,15 @@ def mf_revenue_engine(request):
     if selected is None and snapshots:
         selected = snapshots[0]
 
+    # ?edit=ID puts the form in edit mode. Viewing a snapshot via ?snap=ID
+    # does NOT pre-fill the form — the form is always 'Add new' unless the
+    # user explicitly clicked Edit. This is what makes saving the form
+    # always create a new row by default.
+    editing = None
+    edit_id = request.GET.get("edit")
+    if edit_id:
+        editing = next((s for s in snapshots if str(s.pk) == str(edit_id)), None)
+
     # History oldest → newest; reconcile each against its prior (by end_date).
     history = sorted(snapshots, key=lambda s: (s.start_date, s.end_date))
     prev_by_pk = {}
@@ -1029,6 +1038,7 @@ def mf_revenue_engine(request):
     context = {
         "snapshots": snapshots,
         "selected": selected,
+        "editing": editing,
         "settings_obj": settings_obj,
         "history_rows": history_rows,
         "analytics": analytics,

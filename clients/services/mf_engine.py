@@ -333,32 +333,61 @@ def historical_analytics(snapshots):
     market_impacts = [_f(s.market_impact) for s in snaps]
     operational_inflows = [_f(s.operational_inflow) for s in snaps]
 
-    sip_denom = _f(first.active_sip_book) + gross_sip
-    persistency = (_f(last.active_sip_book) / sip_denom * 100.0) if sip_denom else None
-    stoppage = (stopped / sip_denom * 100.0) if sip_denom else None
+    # ---- per-period rates, then a time-weighted average across snapshots ----
+    # Each rate is computed *within* a period and weighted by months_in_period
+    # so a 12-month snapshot counts more than a 1-month one.
+    def _wmean(samples):
+        """samples = list of (rate, weight). Returns weighted mean or None."""
+        total_w = sum(w for _, w in samples)
+        if not samples or total_w <= 0:
+            return None
+        return sum(r * w for r, w in samples) / total_w
+
+    persistency_samples = []      # active_sip_book / (opening_book + gross)
+    stoppage_samples = []         # stopped / (opening_book + gross)
+    redemption_samples = []       # redemptions / (sip_collected + lumpsum)
+    aum_retention_samples = []    # closing / (opening + operational)
+    rev_per_month_growth_samples = []  # period-over-period trail/mo growth
+
+    prev_sip_book = None
+    prev_trail_per_month = None
+    for s in snaps:
+        months = max(_f(s.months_in_period), 0.0)
+        if months <= 0:
+            continue
+
+        opening_book = prev_sip_book if prev_sip_book is not None else (
+            _f(s.active_sip_book) - (_f(s.gross_sip_registered) - _f(s.stopped_sip_amount))
+        )
+        opening_book = max(opening_book, 0.0)
+        sip_base = opening_book + _f(s.gross_sip_registered)
+        if sip_base > 0:
+            persistency_samples.append((_f(s.active_sip_book) / sip_base * 100.0, months))
+            stoppage_samples.append((_f(s.stopped_sip_amount) / sip_base * 100.0, months))
+
+        period_inflows = _f(s.sip_collected) + _f(s.new_lumpsum)
+        if period_inflows > 0:
+            redemption_samples.append((_f(s.redemptions) / period_inflows * 100.0, months))
+
+        if s.opening_aum is not None and s.closing_aum is not None:
+            expected = _f(s.opening_aum) + _f(s.operational_inflow)
+            if expected > 0:
+                aum_retention_samples.append((_f(s.closing_aum) / expected * 100.0, months))
+
+        per_month = _f(s.trail_income) / months
+        if prev_trail_per_month is not None and prev_trail_per_month > 0:
+            growth = (per_month - prev_trail_per_month) / prev_trail_per_month * 100.0
+            rev_per_month_growth_samples.append((growth, months))
+        prev_trail_per_month = per_month
+        prev_sip_book = _f(s.active_sip_book)
+
+    persistency = _wmean(persistency_samples)
+    stoppage = _wmean(stoppage_samples)
+    redemption_ratio = _wmean(redemption_samples)
+    aum_retention = _wmean(aum_retention_samples)
+    rev_growth = _wmean(rev_per_month_growth_samples)
     net_sip_growth = _f(last.active_sip_book) - _f(first.active_sip_book)
-    gross_inflows = sip_collected + lumpsum
-    redemption_ratio = (redemptions / gross_inflows * 100.0) if gross_inflows else None
-    net_inflow = gross_inflows - redemptions
-
-    # AUM-dependent metrics only use snapshots where both opening + closing are known.
-    aum_snaps = [s for s in snaps if s.opening_aum is not None and s.closing_aum is not None]
-    aum_first = aum_snaps[0] if aum_snaps else None
-    aum_last = aum_snaps[-1] if aum_snaps else None
-    aum_operational = [_f(s.operational_inflow) for s in aum_snaps]
-    expected_aum = (_f(aum_first.opening_aum) + sum(aum_operational)) if aum_first else 0
-    aum_retention = (
-        _f(aum_last.closing_aum) / expected_aum * 100.0
-        if aum_last and expected_aum else None
-    )
-
-    # Revenue growth rate: latest period trail vs first period trail, per-month normalised.
-    rev_growth = None
-    if _f(first.trail_income) > 0 and _f(first.months_in_period) > 0:
-        first_per_month = _f(first.trail_income) / _f(first.months_in_period)
-        last_per_month = _f(last.trail_income) / max(_f(last.months_in_period), 1.0)
-        if first_per_month > 0:
-            rev_growth = (last_per_month - first_per_month) / first_per_month * 100.0
+    net_inflow = sip_collected + lumpsum - redemptions
 
     per_month_trails = [
         _f(s.trail_income) / max(_f(s.months_in_period), 1.0) for s in snaps
@@ -368,6 +397,12 @@ def historical_analytics(snapshots):
         100.0 - (_stddev(per_month_trails) / trail_mean * 100.0)
         if trail_mean > 0 else None
     )
+
+    # AUM-dependent snapshot subset (still needed for op vs market totals + CAGR).
+    aum_snaps = [s for s in snaps if s.opening_aum is not None and s.closing_aum is not None]
+    aum_first = aum_snaps[0] if aum_snaps else None
+    aum_last = aum_snaps[-1] if aum_snaps else None
+    aum_operational = [_f(s.operational_inflow) for s in aum_snaps]
 
     # Op vs market totals only count periods where market impact is computable.
     op_total = sum(aum_operational)
