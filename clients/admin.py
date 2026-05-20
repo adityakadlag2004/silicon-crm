@@ -20,7 +20,8 @@ from .models import (
     ProductMarginSlab,
     ExpenseCategory,
     Expense,
-    MFMonthlySnapshot,
+    MFSnapshot,
+    MFProjectionSettings,
 )
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
@@ -301,11 +302,19 @@ class ExpenseAdmin(admin.ModelAdmin):
     ordering = ("-spent_on",)
 
 
-@admin.register(MFMonthlySnapshot)
-class MFMonthlySnapshotAdmin(admin.ModelAdmin):
-    list_display = ("year", "month", "total_aum", "monthly_trail", "new_sip", "new_lumpsum", "sip_book")
-    list_filter = ("year",)
-    ordering = ("-year", "-month")
+@admin.register(MFSnapshot)
+class MFSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("start_date", "end_date", "opening_aum", "closing_aum",
+                    "active_sip_book", "trail_income")
+    list_filter = ("start_date",)
+    date_hierarchy = "start_date"
+    ordering = ("-start_date",)
+
+
+@admin.register(MFProjectionSettings)
+class MFProjectionSettingsAdmin(admin.ModelAdmin):
+    list_display = ("annual_market_growth_pct", "redemption_rate_pct",
+                    "sip_stoppage_rate_pct", "projection_trail_pct", "updated_at")
 
 
 

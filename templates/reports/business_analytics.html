@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}Business Analytics{% endblock %}
 {% block page_title %}Business Analytics{% endblock %}
 
@@ -65,11 +66,11 @@
   <div class="kpi-grid">
     <div class="kpi">
       <div class="kpi-label">Total Revenue</div>
-      <div class="kpi-value">₹{{ totals.revenue|floatformat:0 }}</div>
+      <div class="kpi-value">₹{{ totals.revenue|indian_number:0 }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Total Margin</div>
-      <div class="kpi-value">₹{{ totals.margin_amount|floatformat:0 }}</div>
+      <div class="kpi-value">₹{{ totals.margin_amount|indian_number:0 }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Blended Margin %</div>
@@ -99,9 +100,9 @@
             <td>{{ forloop.counter }}</td>
             <td>{{ r.product }}</td>
             <td>{{ r.policy|default:"—" }}</td>
-            <td>{{ r.revenue|floatformat:0 }}</td>
+            <td>{{ r.revenue|indian_number:0 }}</td>
             <td>{{ r.margin_percent }}%</td>
-            <td>{{ r.margin_amount|floatformat:0 }}</td>
+            <td>{{ r.margin_amount|indian_number:0 }}</td>
           </tr>
           {% empty %}
           <tr><td colspan="6" class="text-center text-muted py-3">No approved sales for this month.</td></tr>
@@ -113,9 +114,9 @@
             <td></td>
             <td>Grand Total</td>
             <td></td>
-            <td>{{ totals.revenue|floatformat:0 }}</td>
+            <td>{{ totals.revenue|indian_number:0 }}</td>
             <td>{{ totals.blended_percent }}%</td>
-            <td>{{ totals.margin_amount|floatformat:0 }}</td>
+            <td>{{ totals.margin_amount|indian_number:0 }}</td>
           </tr>
         </tfoot>
         {% endif %}
@@ -137,9 +138,9 @@
           <tr>
             <td>{{ forloop.counter }}</td>
             <td>{{ r.product }}</td>
-            <td>{{ r.revenue|floatformat:0 }}</td>
+            <td>{{ r.revenue|indian_number:0 }}</td>
             <td>{{ r.margin_percent }}%</td>
-            <td>{{ r.margin_amount|floatformat:0 }}</td>
+            <td>{{ r.margin_amount|indian_number:0 }}</td>
           </tr>
           {% empty %}
           <tr><td colspan="5" class="text-center text-muted py-3">No renewal premium collected this month.</td></tr>
@@ -149,9 +150,9 @@
         <tfoot>
           <tr>
             <td></td><td>Grand Total</td>
-            <td>{{ renewal_totals.revenue|floatformat:0 }}</td>
+            <td>{{ renewal_totals.revenue|indian_number:0 }}</td>
             <td>{{ renewal_totals.blended_percent }}%</td>
-            <td>{{ renewal_totals.margin_amount|floatformat:0 }}</td>
+            <td>{{ renewal_totals.margin_amount|indian_number:0 }}</td>
           </tr>
         </tfoot>
         {% endif %}
@@ -175,11 +176,11 @@
   <div class="kpi-grid">
     <div class="kpi">
       <div class="kpi-label">{{ fy_label }} Revenue</div>
-      <div class="kpi-value">₹{{ fy_totals.revenue|floatformat:0 }}</div>
+      <div class="kpi-value">₹{{ fy_totals.revenue|indian_number:0 }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">{{ fy_label }} Margin</div>
-      <div class="kpi-value">₹{{ fy_totals.margin_amount|floatformat:0 }}</div>
+      <div class="kpi-value">₹{{ fy_totals.margin_amount|indian_number:0 }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Blended Margin %</div>
@@ -205,8 +206,8 @@
           {% for m in month_summary %}
           <tr>
             <td>{{ m.label }}</td>
-            <td>{% if m.revenue %}{{ m.revenue|floatformat:0 }}{% else %}<span class="zero">–</span>{% endif %}</td>
-            <td>{% if m.margin_amount %}{{ m.margin_amount|floatformat:0 }}{% else %}<span class="zero">–</span>{% endif %}</td>
+            <td>{% if m.revenue %}{{ m.revenue|indian_number:0 }}{% else %}<span class="zero">–</span>{% endif %}</td>
+            <td>{% if m.margin_amount %}{{ m.margin_amount|indian_number:0 }}{% else %}<span class="zero">–</span>{% endif %}</td>
             <td>{{ m.blended_percent }}%</td>
           </tr>
           {% endfor %}
@@ -214,8 +215,8 @@
         <tfoot>
           <tr>
             <td>Total</td>
-            <td>{{ fy_totals.revenue|floatformat:0 }}</td>
-            <td>{{ fy_totals.margin_amount|floatformat:0 }}</td>
+            <td>{{ fy_totals.revenue|indian_number:0 }}</td>
+            <td>{{ fy_totals.margin_amount|indian_number:0 }}</td>
             <td>{{ fy_totals.blended_percent }}%</td>
           </tr>
         </tfoot>
@@ -245,8 +246,8 @@
             <td>{{ forloop.counter }}</td>
             <td>{{ r.product }}</td>
             <td>{{ r.policy|default:"—" }}</td>
-            <td>{{ r.revenue|floatformat:0 }}</td>
-            <td>{{ r.margin_amount|floatformat:0 }}</td>
+            <td>{{ r.revenue|indian_number:0 }}</td>
+            <td>{{ r.margin_amount|indian_number:0 }}</td>
             <td>{{ r.effective_percent }}%</td>
           </tr>
           {% empty %}
@@ -259,8 +260,8 @@
             <td></td>
             <td>Grand Total</td>
             <td></td>
-            <td>{{ fy_totals.revenue|floatformat:0 }}</td>
-            <td>{{ fy_totals.margin_amount|floatformat:0 }}</td>
+            <td>{{ fy_totals.revenue|indian_number:0 }}</td>
+            <td>{{ fy_totals.margin_amount|indian_number:0 }}</td>
             <td>{{ fy_totals.blended_percent }}%</td>
           </tr>
         </tfoot>
@@ -283,8 +284,8 @@
           <tr>
             <td>{{ forloop.counter }}</td>
             <td>{{ r.product }}</td>
-            <td>{{ r.revenue|floatformat:0 }}</td>
-            <td>{{ r.margin_amount|floatformat:0 }}</td>
+            <td>{{ r.revenue|indian_number:0 }}</td>
+            <td>{{ r.margin_amount|indian_number:0 }}</td>
             <td>{{ r.effective_percent }}%</td>
           </tr>
           {% empty %}
@@ -295,8 +296,8 @@
         <tfoot>
           <tr>
             <td></td><td>Grand Total</td>
-            <td>{{ renewal_totals.revenue|floatformat:0 }}</td>
-            <td>{{ renewal_totals.margin_amount|floatformat:0 }}</td>
+            <td>{{ renewal_totals.revenue|indian_number:0 }}</td>
+            <td>{{ renewal_totals.margin_amount|indian_number:0 }}</td>
             <td>{{ renewal_totals.blended_percent }}%</td>
           </tr>
         </tfoot>
@@ -321,20 +322,20 @@
   <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
     <div class="kpi">
       <div class="kpi-label">Gross Margin <span class="text-muted">(sales + renewals)</span></div>
-      <div class="kpi-value">₹{{ gross_margin|floatformat:0 }}</div>
-      <div class="kpi-label">incl. ₹{{ renewal_totals.margin_amount|floatformat:0 }} renewals</div>
+      <div class="kpi-value">₹{{ gross_margin|indian_number:0 }}</div>
+      <div class="kpi-label">incl. ₹{{ renewal_totals.margin_amount|indian_number:0 }} renewals</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">− Expenses</div>
-      <div class="kpi-value">₹{{ expense_total|floatformat:0 }}</div>
+      <div class="kpi-value">₹{{ expense_total|indian_number:0 }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">− Salaries {% if not include_salaries %}<span class="zero">(excluded)</span>{% endif %}</div>
-      <div class="kpi-value">₹{{ salary_applied|floatformat:0 }}</div>
+      <div class="kpi-value">₹{{ salary_applied|indian_number:0 }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">= Net Margin</div>
-      <div class="kpi-value" style="color: {% if net_margin < 0 %}#b91c1c{% else %}#166534{% endif %};">₹{{ net_margin|floatformat:0 }}</div>
+      <div class="kpi-value" style="color: {% if net_margin < 0 %}#b91c1c{% else %}#166534{% endif %};">₹{{ net_margin|indian_number:0 }}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Net Margin %</div>
@@ -349,16 +350,16 @@
         <thead><tr><th>Category</th><th>Amount (₹)</th></tr></thead>
         <tbody>
           {% for e in expense_rows %}
-          <tr><td>{{ e.category }}</td><td>{{ e.amount|floatformat:0 }}</td></tr>
+          <tr><td>{{ e.category }}</td><td>{{ e.amount|indian_number:0 }}</td></tr>
           {% empty %}
           <tr><td colspan="2" class="text-center text-muted py-2">No expenses recorded for this period.</td></tr>
           {% endfor %}
           {% if include_salaries and salary_applied %}
-          <tr><td>Salaries <span class="text-muted small">(from employee records)</span></td><td>{{ salary_applied|floatformat:0 }}</td></tr>
+          <tr><td>Salaries <span class="text-muted small">(from employee records)</span></td><td>{{ salary_applied|indian_number:0 }}</td></tr>
           {% endif %}
         </tbody>
         <tfoot>
-          <tr><td>Total Costs</td><td>{{ total_costs|floatformat:0 }}</td></tr>
+          <tr><td>Total Costs</td><td>{{ total_costs|indian_number:0 }}</td></tr>
         </tfoot>
       </table>
     </div>
@@ -422,7 +423,7 @@
           <tr>
             <td>{{ x.category.name }}</td>
             <td>{{ x.get_expense_type_display }}</td>
-            <td>{{ x.amount|floatformat:0 }}</td>
+            <td>{{ x.amount|indian_number:0 }}</td>
             <td>{{ x.spent_on|date:"d M Y" }}</td>
             <td>{% if x.expense_type == 'recurring' %}{% if x.end_on %}{{ x.end_on|date:"d M Y" }}{% else %}<span class="text-muted">Ongoing</span>{% endif %}{% else %}—{% endif %}</td>
             <td>{{ x.note|default:"—" }}</td>
