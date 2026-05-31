@@ -26,6 +26,7 @@ from django.views.decorators.http import require_POST
 from ..models import (
     Client,
     Employee,
+    FirmSettings,
     LeadSheet,
     LeadSheetColumn,
     LeadSheetFollowUp,
@@ -1352,13 +1353,14 @@ def lead_sheet_public_form(request, token):
         sheet.columns.filter(show_on_public_form=True).order_by("display_order", "id")
     )
 
+    firm = FirmSettings.get_settings()
+    base_ctx = {"sheet": sheet, "columns": columns, "firm": firm}
+
     if request.method == "POST":
         # Honeypot: bots tend to fill every input. Humans never see this one.
         if (request.POST.get("website") or "").strip():
-            return render(request, "leads/public_form.html", {
-                "sheet": sheet, "columns": columns,
-                "success": True, "honeypot_triggered": True,
-            })
+            return render(request, "leads/public_form.html",
+                          {**base_ctx, "success": True, "honeypot_triggered": True})
 
         values = {}
         errors = {}
@@ -1370,27 +1372,19 @@ def lead_sheet_public_form(request, token):
             values[col.field_key] = clean
 
         if errors:
-            return render(request, "leads/public_form.html", {
-                "sheet": sheet, "columns": columns,
-                "errors": errors, "submitted": values,
-            })
+            return render(request, "leads/public_form.html",
+                          {**base_ctx, "errors": errors, "submitted": values})
 
         assignee = next(_round_robin(sheet, 1), None)
         record = LeadSheetRecord.objects.create(
-            sheet=sheet, values=values,
-            assigned_to=assignee,
+            sheet=sheet, values=values, assigned_to=assignee,
         )
         sheet.save(update_fields=["updated_at"])
         if assignee:
             _notify_assignment(record, actor=None)
-        return render(request, "leads/public_form.html", {
-            "sheet": sheet, "columns": columns,
-            "success": True,
-        })
+        return render(request, "leads/public_form.html", {**base_ctx, "success": True})
 
-    return render(request, "leads/public_form.html", {
-        "sheet": sheet, "columns": columns,
-    })
+    return render(request, "leads/public_form.html", base_ctx)
 
 
 @login_required
