@@ -1,5 +1,6 @@
 import logging
 import re
+import uuid
 
 from datetime import date
 from decimal import Decimal
@@ -1184,6 +1185,26 @@ class LeadSheet(models.Model):
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # ---- Public lead-capture form ----
+    # The form lives at /clients/leads/public/<public_token>/ and never
+    # requires login. The link is constant for the life of the token; the
+    # form is rebuilt from the sheet's columns on every render, so column
+    # changes flow through automatically.
+    public_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    public_form_enabled = models.BooleanField(default=False, db_index=True)
+    public_form_title = models.CharField(
+        max_length=200, blank=True, default="",
+        help_text="Heading shown on the public form. Defaults to the sheet name.",
+    )
+    public_form_intro = models.TextField(
+        blank=True, default="",
+        help_text="Optional short message shown above the form (e.g. 'We'll get back to you within 24h').",
+    )
+    public_form_success_message = models.CharField(
+        max_length=400, blank=True, default="",
+        help_text="Message shown after a successful submission. Defaults to a generic thank-you.",
+    )
+
     class Meta:
         ordering = ["-updated_at", "-created_at"]
         indexes = [
@@ -1242,6 +1263,10 @@ class LeadSheetColumn(models.Model):
         help_text="For 'select' or 'status' types: list of allowed values.",
     )
     required = models.BooleanField(default=False)
+    show_on_public_form = models.BooleanField(
+        default=False,
+        help_text="Expose this column on the sheet's public lead-capture form.",
+    )
     display_order = models.PositiveIntegerField(default=0, db_index=True)
     created_at = models.DateTimeField(default=timezone.now)
 

@@ -188,6 +188,9 @@
     <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-bs-toggle="modal" data-bs-target="#accessModal">
       <i class="bi bi-people"></i> Access
     </button>
+    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-bs-toggle="modal" data-bs-target="#publicFormModal">
+      <i class="bi bi-link-45deg"></i> Public Form{% if sheet.public_form_enabled %} <span class="badge bg-success">live</span>{% endif %}
+    </button>
     <form method="post" action="{% url 'clients:lead_sheet_archive' sheet.id %}" style="display:inline;" onsubmit="return confirm('{% if sheet.archived %}Unarchive{% else %}Archive{% endif %} this sheet?');">
       {% csrf_token %}
       <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm">
@@ -722,7 +725,17 @@
               <label class="form-label">Options (for Dropdown / Status)</label>
               <input type="text" name="options" class="form-control" placeholder="comma,separated,values">
             </div>
-            <div class="col-12 text-end">
+            <div class="col-md-6 d-flex align-items-end gap-3" style="padding-top:8px;">
+              <div class="form-check">
+                <input type="checkbox" id="col_required" name="required" class="form-check-input">
+                <label class="form-check-label small" for="col_required">Required</label>
+              </div>
+              <div class="form-check">
+                <input type="checkbox" id="col_public" name="show_on_public_form" class="form-check-input">
+                <label class="form-check-label small" for="col_public">Show on public form</label>
+              </div>
+            </div>
+            <div class="col-md-6 text-end">
               <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-plus-lg"></i> Add column</button>
             </div>
           </div>
@@ -843,6 +856,80 @@
     if (cb && box) cb.addEventListener('change', () => box.style.display = cb.checked ? 'none' : 'block');
   })();
 </script>
+
+{# ── Public form modal ── #}
+<div class="modal fade" id="publicFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <form method="post" action="{% url 'clients:lead_sheet_public_settings' sheet.id %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title">Public lead-capture form</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Generate a public link that anyone (no login) can use to submit a lead. Submissions land in this sheet and round-robin to the employees in the sheet's <em>shared with</em> list. The link is constant — column changes update the form automatically.</p>
+
+          <div class="mb-3 p-3" style="background:#f9fafb; border-radius:8px;">
+            <label class="form-label small fw-bold mb-1">Public form URL</label>
+            <div class="input-group input-group-sm">
+              <input type="text" class="form-control" readonly id="publicFormUrl"
+                     value="{{ request.scheme }}://{{ request.get_host }}{% url 'clients:lead_sheet_public_form' sheet.public_token %}">
+              <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('publicFormUrl').value);this.textContent='Copied!';setTimeout(()=>this.innerHTML='<i class=&quot;bi bi-clipboard&quot;></i> Copy',1200);"><i class="bi bi-clipboard"></i> Copy</button>
+              <a class="ki-btn ki-btn-secondary ki-btn-sm" target="_blank" href="{% url 'clients:lead_sheet_public_form' sheet.public_token %}"><i class="bi bi-box-arrow-up-right"></i> Open</a>
+            </div>
+            <div class="form-text">Status: {% if sheet.public_form_enabled %}<span class="text-success fw-bold">LIVE</span>{% else %}<span class="text-muted">Disabled — turn on below to start collecting</span>{% endif %}</div>
+          </div>
+
+          <div class="form-check mb-3">
+            <input type="checkbox" id="pf_enabled" name="public_form_enabled" class="form-check-input" {% if sheet.public_form_enabled %}checked{% endif %}>
+            <label for="pf_enabled" class="form-check-label"><strong>Enable public form</strong></label>
+            {% if not sheet.shared_with.all %}<div class="form-text text-warning"><i class="bi bi-exclamation-triangle"></i> No employees in the sheet's <em>shared with</em> list — submissions will arrive unassigned. Set this up via the Access button.</div>{% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small">Form title <span class="text-muted">(blank uses the sheet name)</span></label>
+            <input type="text" name="public_form_title" class="form-control form-control-sm" maxlength="200" value="{{ sheet.public_form_title }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Intro text shown above the form</label>
+            <textarea name="public_form_intro" class="form-control form-control-sm" rows="2" placeholder="e.g. We'll get back to you within 24 hours.">{{ sheet.public_form_intro }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Thank-you message after submission</label>
+            <input type="text" name="public_form_success_message" class="form-control form-control-sm" maxlength="400" value="{{ sheet.public_form_success_message }}" placeholder="We've received your details and will get in touch shortly.">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-bold">Columns visible on the public form</label>
+            <div class="form-text mb-2">Internal columns (status, assignee, notes) should stay off. Tick only the fields you want the public to fill.</div>
+            <div style="max-height:220px; overflow:auto; border:1px solid #e5e7eb; border-radius:6px; padding:8px 12px;">
+              {% for col in columns %}
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="pc_{{ col.id }}" name="public_columns" value="{{ col.id }}" {% if col.show_on_public_form %}checked{% endif %}>
+                  <label class="form-check-label" for="pc_{{ col.id }}">
+                    {{ col.name }} <span class="text-muted small">({{ col.get_type_display }}{% if col.required %} · required{% endif %})</span>
+                  </label>
+                </div>
+              {% empty %}
+                <div class="text-muted small">No columns yet — add some via Columns first.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" formaction="{% url 'clients:lead_sheet_public_settings' sheet.id %}" name="action" value="regenerate_token"
+                  class="ki-btn me-auto" style="background:#fef3c7;color:#92400e;"
+                  onclick="return confirm('Regenerate the link? The current public URL will stop working immediately.');">
+            <i class="bi bi-arrow-clockwise"></i> Regenerate link
+          </button>
+          <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="ki-btn ki-btn-primary">Save settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 {% endif %}
 
 {# ── Inline-edit JS ── #}

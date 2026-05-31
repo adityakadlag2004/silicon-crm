@@ -488,6 +488,8 @@ def lead_sheet_column_add(request, sheet_id):
         field_key=_unique_field_key(sheet, name),
         type=col_type,
         options=options,
+        required=request.POST.get("required") == "on",
+        show_on_public_form=request.POST.get("show_on_public_form") == "on",
         display_order=next_order,
     )
     messages.success(request, f"Column '{name}' added.")
@@ -1328,3 +1330,102 @@ def lead_sheet_archive(request, sheet_id):
     sheet.save(update_fields=["archived", "updated_at"])
     messages.success(request, "Sheet archived." if sheet.archived else "Sheet unarchived.")
     return redirect("clients:lead_sheets")
+
+
+
+# ── Public lead-capture form ─────────────────────────────────────────────────
+#
+# The form lives at /clients/leads/public/<uuid:token>/ and is open to the
+# internet (no @login_required, deliberately). Only columns flagged
+# `show_on_public_form` are rendered. Submissions create a row in the sheet
+# and round-robin assign to one of `sheet.shared_with` employees.
+
+def lead_sheet_public_form(request, token):
+    """Open lead-capture form keyed by sheet.public_token."""
+    sheet = get_object_or_404(LeadSheet, public_token=token)
+    if not sheet.public_form_enabled or sheet.archived:
+        # Don't disclose whether the sheet exists — 404.
+        from django.http import Http404
+        raise Http404("Not found.")
+
+    columns = list(
+        sheet.columns.filter(show_on_public_form=True).order_by("display_order", "id")
+    )
+
+    if request.method == "POST":
+        # Honeypot: bots tend to fill every input. Humans never see this one.
+        if (request.POST.get("website") or "").strip():
+            return render(request, "leads/public_form.html", {
+                "sheet": sheet, "columns": columns,
+                "success": True, "honeypot_triggered": True,
+            })
+
+        values = {}
+        errors = {}
+        for col in columns:
+            raw = request.POST.get(f"col_{col.field_key}", "")
+            clean = _sanitize_value(col, raw)
+            if col.required and not clean:
+                errors[col.field_key] = "This field is required."
+            values[col.field_key] = clean
+
+        if errors:
+            return render(request, "leads/public_form.html", {
+                "sheet": sheet, "columns": columns,
+                "errors": errors, "submitted": values,
+            })
+
+        assignee = next(_round_robin(sheet, 1), None)
+        record = LeadSheetRecord.objects.create(
+            sheet=sheet, values=values,
+            assigned_to=assignee,
+        )
+        sheet.save(update_fields=["updated_at"])
+        if assignee:
+            _notify_assignment(record, actor=None)
+        return render(request, "leads/public_form.html", {
+            "sheet": sheet, "columns": columns,
+            "success": True,
+        })
+
+    return render(request, "leads/public_form.html", {
+        "sheet": sheet, "columns": columns,
+    })
+
+
+@login_required
+@require_POST
+def lead_sheet_public_settings(request, sheet_id):
+    """Owner / admin updates the public-form configuration for a sheet."""
+    sheet = get_object_or_404(LeadSheet, id=sheet_id)
+    emp = _user_emp(request)
+    if not (request.user.is_superuser or (emp and (sheet.owner_id == emp.id or emp.role == "admin"))):
+        return HttpResponseForbidden("Only the sheet owner or an admin can change this.")
+
+    action = (request.POST.get("action") or "").strip()
+    if action == "regenerate_token":
+        import uuid as _uuid
+        sheet.public_token = _uuid.uuid4()
+        sheet.save(update_fields=["public_token", "updated_at"])
+        messages.success(request, "Public form link regenerated — old link is now dead.")
+        return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
+
+    sheet.public_form_enabled = request.POST.get("public_form_enabled") == "on"
+    sheet.public_form_title = (request.POST.get("public_form_title") or "").strip()[:200]
+    sheet.public_form_intro = (request.POST.get("public_form_intro") or "").strip()
+    sheet.public_form_success_message = (request.POST.get("public_form_success_message") or "").strip()[:400]
+    sheet.save(update_fields=[
+        "public_form_enabled", "public_form_title", "public_form_intro",
+        "public_form_success_message", "updated_at",
+    ])
+
+    # Per-column visibility toggle bundle.
+    visible_ids = set(request.POST.getlist("public_columns"))
+    for col in sheet.columns.all():
+        new_val = str(col.id) in visible_ids
+        if col.show_on_public_form != new_val:
+            col.show_on_public_form = new_val
+            col.save(update_fields=["show_on_public_form"])
+
+    messages.success(request, "Public form settings saved.")
+    return redirect("clients:lead_sheet_detail", sheet_id=sheet.id)
