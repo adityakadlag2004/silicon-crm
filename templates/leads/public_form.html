@@ -1,0 +1,121 @@
+{% load static custom_filters %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>{{ sheet.public_form_title|default:sheet.name }}</title>
+  <style>
+    *,*::before,*::after { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(180deg, #f4f6fb 0%, #e8ecf5 100%);
+      color: #1f2937;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 24px 16px 80px;
+    }
+    .card {
+      width: 100%; max-width: 560px;
+      background: #fff; border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(15, 23, 42, .08);
+      padding: 28px;
+    }
+    .card h1 { font-size: 1.45rem; margin: 0 0 6px; }
+    .intro { color: #6b7280; font-size: .92rem; margin: 0 0 22px; white-space: pre-wrap; }
+    .field { display: block; margin-bottom: 14px; }
+    .field label {
+      display: block; font-size: .82rem; font-weight: 600;
+      color: #374151; margin-bottom: 4px;
+    }
+    .field .req { color: #b91c1c; }
+    .field input, .field select, .field textarea {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid #d1d5db; border-radius: 8px;
+      font-size: 1rem; font-family: inherit; background: #fff;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus {
+      outline: none; border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .15);
+    }
+    .field .err { color: #b91c1c; font-size: .82rem; margin-top: 4px; }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+    button[type="submit"] {
+      width: 100%; padding: 12px 16px; margin-top: 6px;
+      background: #2563eb; color: #fff; border: 0; border-radius: 8px;
+      font-size: 1rem; font-weight: 600; cursor: pointer;
+      transition: background .15s, transform .04s;
+    }
+    button[type="submit"]:hover { background: #1d4ed8; }
+    button[type="submit"]:active { transform: translateY(1px); }
+    .success {
+      text-align: center; padding: 16px 8px;
+    }
+    .success .check {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: #dcfce7; color: #166534;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 36px; margin-bottom: 14px;
+    }
+    .success h2 { margin: 0 0 6px; }
+    .success p { margin: 0; color: #6b7280; }
+    .foot {
+      margin-top: 18px; text-align: center;
+      font-size: .72rem; color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    {% if success %}
+      <div class="success">
+        <div class="check">✓</div>
+        <h2>Thank you!</h2>
+        <p>{{ sheet.public_form_success_message|default:"We've received your details and will get in touch shortly." }}</p>
+      </div>
+    {% else %}
+      <h1>{{ sheet.public_form_title|default:sheet.name }}</h1>
+      {% if sheet.public_form_intro %}<p class="intro">{{ sheet.public_form_intro }}</p>{% endif %}
+      {% if not columns %}
+        <p class="intro" style="color:#b91c1c;">This form is not yet configured. Please come back later.</p>
+      {% else %}
+      <form method="post" novalidate autocomplete="on">
+        {% csrf_token %}
+        <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+
+        {% for col in columns %}
+          <div class="field">
+            <label for="f_{{ col.field_key }}">
+              {{ col.name }}{% if col.required %} <span class="req">*</span>{% endif %}
+            </label>
+            {% if col.type == "select" or col.type == "status" %}
+              <select id="f_{{ col.field_key }}" name="col_{{ col.field_key }}" {% if col.required %}required{% endif %}>
+                <option value="">— select —</option>
+                {% for opt in col.options %}
+                  <option value="{{ opt }}" {% if submitted|default_if_none:''|default:'' and submitted|get_item:col.field_key == opt %}selected{% endif %}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+            {% elif col.type == "date" %}
+              <input id="f_{{ col.field_key }}" type="date" name="col_{{ col.field_key }}" value="{{ submitted|get_item:col.field_key|default:'' }}" {% if col.required %}required{% endif %}>
+            {% elif col.type == "number" %}
+              <input id="f_{{ col.field_key }}" type="number" step="any" name="col_{{ col.field_key }}" value="{{ submitted|get_item:col.field_key|default:'' }}" {% if col.required %}required{% endif %}>
+            {% elif col.type == "phone" %}
+              <input id="f_{{ col.field_key }}" type="tel" name="col_{{ col.field_key }}" value="{{ submitted|get_item:col.field_key|default:'' }}" inputmode="tel" {% if col.required %}required{% endif %}>
+            {% elif col.type == "email" %}
+              <input id="f_{{ col.field_key }}" type="email" name="col_{{ col.field_key }}" value="{{ submitted|get_item:col.field_key|default:'' }}" {% if col.required %}required{% endif %}>
+            {% else %}
+              <input id="f_{{ col.field_key }}" type="text" name="col_{{ col.field_key }}" value="{{ submitted|get_item:col.field_key|default:'' }}" {% if col.required %}required{% endif %}>
+            {% endif %}
+            {% if errors|get_item:col.field_key %}<div class="err">{{ errors|get_item:col.field_key }}</div>{% endif %}
+          </div>
+        {% endfor %}
+
+        <button type="submit">Submit</button>
+      </form>
+      {% endif %}
+    {% endif %}
+    <div class="foot">Your details are private.</div>
+  </main>
+</body>
+</html>
