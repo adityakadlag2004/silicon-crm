@@ -67,8 +67,8 @@
     {% endif %}
     <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date|default:'' }}"></div>
     <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date|default:'' }}"></div>
-    <div><label class="form-label">Payment Start</label><input type="date" name="payment_start" class="form-control" value="{{ request.GET.payment_start|default:'' }}"></div>
-    <div><label class="form-label">Payment End</label><input type="date" name="payment_end" class="form-control" value="{{ request.GET.payment_end|default:'' }}"></div>
+    <div><label class="form-label">Payment Start</label><input type="date" name="payment_start" class="form-control" value="{{ filter_payment_start|default:'' }}"></div>
+    <div><label class="form-label">Payment End</label><input type="date" name="payment_end" class="form-control" value="{{ filter_payment_end|default:'' }}"></div>
     <div style="display:flex;gap:0.7rem;margin-top:0.5rem;flex-wrap:wrap;">
       <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-search"></i> Search</button>
       <a href="{% url 'clients:all_renewals' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>

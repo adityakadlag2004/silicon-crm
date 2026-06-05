@@ -1,3 +1,4 @@
+import calendar
 import json
 from datetime import date
 
@@ -144,6 +145,15 @@ def all_renewals(request):
 	payment_start = (request.GET.get("payment_start") or "").strip()
 	payment_end = (request.GET.get("payment_end") or "").strip()
 
+	# Default to the current month's renewal business when no filters are applied.
+	today = date.today()
+	any_filter = bool(
+		q or product_ref or frequency or employee or start_date or end_date or payment_start or payment_end
+	)
+	if not any_filter:
+		payment_start = today.replace(day=1).isoformat()
+		payment_end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).isoformat()
+
 	if q:
 		renewals_qs = renewals_qs.filter(
 			Q(client__name__icontains=q)
@@ -167,10 +177,6 @@ def all_renewals(request):
 	if payment_start and payment_end:
 		renewals_qs = renewals_qs.filter(premium_collected_on__range=[payment_start, payment_end])
 
-	if not (q or product_ref or frequency or employee or start_date or end_date or payment_start or payment_end):
-		renewals_qs = renewals_qs.filter(premium_collected_on=date.today())
-
-	today = date.today()
 	today_qs = scoped_qs.filter(premium_collected_on=today)
 	today_submission_total = today_qs.aggregate(total=Sum("premium_amount"))["total"] or 0
 	today_submission_count = today_qs.count()
@@ -204,6 +210,8 @@ def all_renewals(request):
 		"month_submission_count": month_submission_count,
 		"month_label": month_label,
 		"filtered_total_premium": filtered_total_premium,
+		"filter_payment_start": payment_start,
+		"filter_payment_end": payment_end,
 		"product_options": Product.objects.filter(domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
 	}
 	return render(request, "renewals/all_renewals.html", context)
