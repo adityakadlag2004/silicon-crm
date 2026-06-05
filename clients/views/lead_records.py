@@ -423,6 +423,8 @@ def lead_sheet_detail(request, sheet_id):
         "can_edit": sheet.can_edit(request.user),
         "is_owner": sheet.owner_id == (user_emp.id if user_emp else None),
         "is_admin": _is_admin(request),
+        # Shared (non-admin) members may copy/open the public link but not edit settings.
+        "is_shared_member": bool(user_emp and sheet.shared_with.filter(id=user_emp.id).exists()),
         "employees": employees,
         "column_types": LeadSheetColumn.TYPE_CHOICES,
         "has_phone_col": has_phone_col,

@@ -197,6 +197,10 @@
         <i class="bi bi-archive"></i> {% if sheet.archived %}Unarchive{% else %}Archive{% endif %}
       </button>
     </form>
+  {% elif is_shared_member and sheet.public_form_enabled %}
+    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-bs-toggle="modal" data-bs-target="#sharedLinkModal">
+      <i class="bi bi-link-45deg"></i> Public Form link
+    </button>
   {% endif %}
 </div>
 
@@ -927,6 +931,36 @@
           <button type="submit" class="ki-btn ki-btn-primary">Save settings</button>
         </div>
       </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── Read-only public link modal (shared members) ── #}
+{% if is_shared_member and sheet.public_form_enabled and not is_owner and not is_admin %}
+<div class="modal fade" id="sharedLinkModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Public lead-capture link</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Share this link with anyone (no login needed) to collect leads into this sheet. Submissions round-robin to the employees this sheet is shared with.</p>
+        <div class="mb-2 p-3" style="background:#f9fafb; border-radius:8px;">
+          <label class="form-label small fw-bold mb-1">Public form URL</label>
+          <div class="input-group input-group-sm">
+            <input type="text" class="form-control" readonly id="sharedFormUrl"
+                   value="{{ request.scheme }}://{{ request.get_host }}{% url 'clients:lead_sheet_public_form' sheet.public_token %}">
+            <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('sharedFormUrl').value);this.textContent='Copied!';setTimeout(()=>this.innerHTML='<i class=&quot;bi bi-clipboard&quot;></i> Copy',1200);"><i class="bi bi-clipboard"></i> Copy</button>
+            <a class="ki-btn ki-btn-secondary ki-btn-sm" target="_blank" href="{% url 'clients:lead_sheet_public_form' sheet.public_token %}"><i class="bi bi-box-arrow-up-right"></i> Open</a>
+          </div>
+          <div class="form-text">Status: <span class="text-success fw-bold">LIVE</span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
     </div>
   </div>
 </div>
