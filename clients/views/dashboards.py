@@ -35,6 +35,8 @@ from ..models import (
     LeadSheetFollowUp,
     ManagerAccessConfig,
     FirmSettings,
+    Campaign,
+    CampaignProduct,
 )
 from ..forms import (
     EmployeeCreateForm,
@@ -747,6 +749,73 @@ def employee_dashboard(request):
     )
     overdue_lead_followups = [f for f in pending_lead_followups if f.scheduled_at < now_ts]
 
+    # ── Gamified Campaign Challenges ──
+    # For every campaign currently live, show this employee's progress on each
+    # campaign product: boosted-rate earnings (unit) or slab-target progress.
+    campaign_challenges = []
+    active_campaigns = (
+        Campaign.objects.filter(is_active=True, start_date__lte=today, end_date__gte=today)
+        .prefetch_related("products__slabs", "products__product_ref")
+        .order_by("end_date")
+    )
+    for camp in active_campaigns:
+        days_left = (camp.end_date - today).days
+        for cp in camp.products.all():
+            win_sales = Sale.objects.filter(
+                employee=emp,
+                product_ref=cp.product_ref,
+                date__range=[camp.start_date, camp.end_date],
+            )
+            approved_win = win_sales.filter(status=Sale.STATUS_APPROVED)
+            cumulative = approved_win.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            earned = approved_win.aggregate(t=Sum("points"))["t"] or Decimal("0")
+            pending_pts = win_sales.filter(status=Sale.STATUS_PENDING).aggregate(t=Sum("points"))["t"] or Decimal("0")
+
+            challenge = {
+                "campaign": camp.name,
+                "end_date": camp.end_date,
+                "days_left": days_left,
+                "product": cp.product_ref.name,
+                "benefit_type": cp.benefit_type,
+                "earned_points": earned,
+                "pending_points": pending_pts,
+                "cumulative": cumulative,
+            }
+
+            if cp.benefit_type == CampaignProduct.BENEFIT_UNIT:
+                challenge["unit_amount"] = cp.unit_amount or Decimal("0")
+                challenge["points_per_unit"] = cp.points_per_unit or Decimal("0")
+            else:
+                slabs = sorted(cp.slabs.all(), key=lambda s: s.threshold)
+                current_payout = Decimal("0")
+                next_threshold = None
+                next_payout = None
+                for s in slabs:
+                    if cumulative >= s.threshold:
+                        current_payout = s.payout
+                    else:
+                        next_threshold = s.threshold
+                        next_payout = s.payout
+                        break
+                if next_threshold is not None and next_threshold > 0:
+                    progress = min(cumulative / next_threshold * Decimal("100"), Decimal("100"))
+                    amount_to_next = next_threshold - cumulative
+                    top_reached = False
+                else:
+                    progress = Decimal("100")
+                    amount_to_next = Decimal("0")
+                    top_reached = True
+                challenge.update({
+                    "current_payout": current_payout,
+                    "next_threshold": next_threshold,
+                    "next_payout": next_payout,
+                    "progress": progress,
+                    "amount_to_next": amount_to_next,
+                    "top_reached": top_reached,
+                    "max_payout": slabs[-1].payout if slabs else Decimal("0"),
+                })
+            campaign_challenges.append(challenge)
+
     context = {
         "total_sales": total_sales,
         "total_points": total_points,
@@ -789,6 +858,7 @@ def employee_dashboard(request):
         "pending_lead_followups": pending_lead_followups,
         "overdue_lead_followups": overdue_lead_followups,
         "now_ts": now_ts,
+        "campaign_challenges": campaign_challenges,
     }
     return render(request, "dashboards/employee_dashboard.html", context)
 

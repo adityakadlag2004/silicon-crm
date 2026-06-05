@@ -22,6 +22,9 @@ from .models import (
     Expense,
     MFSnapshot,
     MFProjectionSettings,
+    Campaign,
+    CampaignProduct,
+    CampaignSlab,
 )
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
@@ -316,6 +319,35 @@ class MFProjectionSettingsAdmin(admin.ModelAdmin):
     list_display = ("annual_market_growth_pct", "redemption_rate_pct",
                     "sip_stoppage_rate_pct", "projection_trail_pct", "updated_at")
 
+
+
+class CampaignSlabInline(admin.TabularInline):
+    model = CampaignSlab
+    extra = 0
+
+
+class CampaignProductInline(admin.TabularInline):
+    model = CampaignProduct
+    extra = 0
+    autocomplete_fields = ("product_ref",)
+
+
+@admin.register(Campaign)
+class CampaignAdmin(admin.ModelAdmin):
+    list_display = ("name", "start_date", "end_date", "is_active", "created_by", "created_at")
+    list_filter = ("is_active", "start_date", "end_date")
+    search_fields = ("name", "description")
+    date_hierarchy = "start_date"
+    inlines = [CampaignProductInline]
+
+
+@admin.register(CampaignProduct)
+class CampaignProductAdmin(admin.ModelAdmin):
+    list_display = ("campaign", "product_ref", "benefit_type", "unit_amount", "points_per_unit")
+    list_filter = ("benefit_type", "campaign")
+    search_fields = ("campaign__name", "product_ref__name")
+    autocomplete_fields = ("product_ref",)
+    inlines = [CampaignSlabInline]
 
 
 def incentive_report_view(request):

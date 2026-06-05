@@ -123,6 +123,18 @@ urlpatterns = [
     path("incentives/rule/<int:rule_id>/slab/add/", views.add_incentive_slab, name="add_incentive_slab"),
     path("incentives/slab/<int:slab_id>/update/", views.update_incentive_slab, name="update_incentive_slab"),
     path("incentives/slab/<int:slab_id>/delete/", views.delete_incentive_slab, name="delete_incentive_slab"),
+
+    # Target & Special Campaigns
+    path("campaigns/manage/", views.manage_campaigns, name="manage_campaigns"),
+    path("campaigns/add/", views.add_campaign, name="add_campaign"),
+    path("campaigns/<int:campaign_id>/update/", views.update_campaign, name="update_campaign"),
+    path("campaigns/<int:campaign_id>/delete/", views.delete_campaign, name="delete_campaign"),
+    path("campaigns/<int:campaign_id>/product/add/", views.add_campaign_product, name="add_campaign_product"),
+    path("campaigns/product/<int:product_id>/update/", views.update_campaign_product, name="update_campaign_product"),
+    path("campaigns/product/<int:product_id>/delete/", views.delete_campaign_product, name="delete_campaign_product"),
+    path("campaigns/product/<int:product_id>/slab/add/", views.add_campaign_slab, name="add_campaign_slab"),
+    path("campaigns/slab/<int:slab_id>/update/", views.update_campaign_slab, name="update_campaign_slab"),
+    path("campaigns/slab/<int:slab_id>/delete/", views.delete_campaign_slab, name="delete_campaign_slab"),
     
     
     path("past-performance/", views.employee_past_performance, name="employee_past_performance"),

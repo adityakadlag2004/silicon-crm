@@ -1,4 +1,5 @@
 Django==5.2.9
+gunicorn==23.0.0
 asgiref==3.11.0
 diff-match-patch==20241021
 django-appconf==1.2.0

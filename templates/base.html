@@ -350,6 +350,7 @@
                 <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
                 <li><div class="kn-menu-divider"></div></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:manage_campaigns' %}"><i class="bi bi-megaphone-fill"></i> Campaigns</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:recalc_points' %}"><i class="bi bi-calculator-fill"></i> Recalculate Points</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
@@ -433,6 +434,7 @@
                 <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
                 {% if manager_access.allow_manage_incentives or manager_access.allow_recalc_points or manager_access.allow_client_analysis %}<li><div class="kn-menu-divider"></div></li>{% endif %}
                 {% if manager_access.allow_manage_incentives %}<li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>{% endif %}
+                {% if manager_access.allow_manage_incentives %}<li><a class="kn-menu-item" href="{% url 'clients:manage_campaigns' %}"><i class="bi bi-megaphone-fill"></i> Campaigns</a></li>{% endif %}
                 {% if manager_access.allow_recalc_points %}<li><a class="kn-menu-item" href="{% url 'clients:recalc_points' %}"><i class="bi bi-calculator-fill"></i> Recalculate Points</a></li>{% endif %}
                 {% if manager_access.allow_client_analysis %}<li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>{% endif %}
                 <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>

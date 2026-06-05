@@ -643,6 +643,100 @@ class IncentiveSlab(models.Model):
         return f"{self.rule.product} – ₹{self.threshold} → {self.payout} pts"
 
 
+# ---------- Target & Special Campaigns (time-bound, product-wise) ----------
+class Campaign(models.Model):
+    """A time-bound promotion. Sales of the campaign's products, dated within
+    [start_date, end_date], earn the campaign benefit instead of the regular
+    IncentiveRule. Outside the window (or when inactive) sales fall back to the
+    regular mechanism automatically — the check is against the sale's date."""
+
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Manual kill switch. A campaign only applies when active AND the sale date is within the window.",
+    )
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-start_date", "-end_date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.start_date}–{self.end_date})"
+
+
+class CampaignProduct(models.Model):
+    """Per-product benefit configuration inside a campaign."""
+
+    BENEFIT_UNIT = "unit"
+    BENEFIT_TARGET = "target"
+    BENEFIT_CHOICES = [
+        (BENEFIT_UNIT, "Custom points per unit"),
+        (BENEFIT_TARGET, "One-time target payout"),
+    ]
+
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="products")
+    product_ref = models.ForeignKey("Product", on_delete=models.CASCADE, related_name="campaign_products")
+    benefit_type = models.CharField(max_length=10, choices=BENEFIT_CHOICES, default=BENEFIT_UNIT)
+    unit_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.01"))],
+        help_text="Base unit (e.g., 1000). Used for the 'Custom points per unit' benefit.",
+    )
+    points_per_unit = models.DecimalField(
+        max_digits=12, decimal_places=3, null=True, blank=True,
+        help_text="Points awarded per unit_amount. Used for the 'Custom points per unit' benefit.",
+    )
+
+    class Meta:
+        unique_together = [("campaign", "product_ref")]
+
+    def __str__(self):
+        return f"{self.campaign.name} – {self.product_ref.name} ({self.get_benefit_type_display()})"
+
+
+class CampaignSlab(models.Model):
+    """Campaign-scoped slab for the 'One-time target payout' benefit. When the
+    employee's cumulative amount for this product WITHIN the campaign window
+    reaches `threshold`, the `payout` is awarded (delta-protected)."""
+
+    campaign_product = models.ForeignKey(CampaignProduct, on_delete=models.CASCADE, related_name="slabs")
+    threshold = models.DecimalField(
+        max_digits=14, decimal_places=2,
+        help_text="Cumulative amount threshold within the campaign window.",
+    )
+    payout = models.DecimalField(
+        max_digits=14, decimal_places=2,
+        help_text="Points/payout awarded when the threshold is reached.",
+    )
+    label = models.CharField(max_length=100, blank=True, help_text="Optional label, e.g. 'Gold Slab'")
+
+    class Meta:
+        ordering = ["-threshold"]  # highest first for slab matching
+        unique_together = [("campaign_product", "threshold")]
+
+    def __str__(self):
+        return f"{self.campaign_product.product_ref.name} – ₹{self.threshold} → {self.payout} pts"
+
+
+def campaign_product_overlaps(product_ref, start_date, end_date, exclude_campaign_id=None):
+    """True if `product_ref` is already covered by another campaign whose date
+    window intersects [start_date, end_date]. Two ranges overlap when each
+    starts on or before the other ends."""
+    if not product_ref or not start_date or not end_date:
+        return False
+    qs = CampaignProduct.objects.filter(
+        product_ref=product_ref,
+        campaign__start_date__lte=end_date,
+        campaign__end_date__gte=start_date,
+    )
+    if exclude_campaign_id is not None:
+        qs = qs.exclude(campaign_id=exclude_campaign_id)
+    return qs.exists()
+
 
 class Sale(models.Model):
     STATUS_PENDING = "pending"
@@ -693,6 +787,8 @@ class Sale(models.Model):
     date = models.DateField(default=timezone.now, db_index=True)   # not auto_now_add
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     incentive_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
+    # Records which campaign (if any) awarded the points on this sale; null = regular mechanism.
+    campaign = models.ForeignKey("Campaign", null=True, blank=True, on_delete=models.SET_NULL, related_name="sales")
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -713,6 +809,71 @@ class Sale(models.Model):
             return self.product_ref.name
         return self.product
 
+    def _active_campaign_product(self):
+        """Return the single CampaignProduct covering this sale's product on its
+        date, or None. Overlap prevention guarantees at most one match."""
+        from .models import CampaignProduct  # avoid circular import
+
+        sale_date = self.date or timezone.localdate()
+        qs = CampaignProduct.objects.select_related("campaign").filter(
+            campaign__is_active=True,
+            campaign__start_date__lte=sale_date,
+            campaign__end_date__gte=sale_date,
+        )
+        if self.product_ref_id:
+            qs = qs.filter(product_ref_id=self.product_ref_id)
+        else:
+            qs = qs.filter(product_ref__name=self._effective_product_label())
+        return qs.first()
+
+    def _compute_campaign_points(self, cp):
+        """Compute points from a CampaignProduct benefit (replaces regular)."""
+        from .models import CampaignSlab  # avoid circular import
+
+        if cp.benefit_type == cp.BENEFIT_UNIT:
+            unit = cp.unit_amount or Decimal("0")
+            if unit > 0:
+                self.points = (self.amount / unit) * (cp.points_per_unit or Decimal("0"))
+                self.incentive_amount = self.points
+            else:
+                self.points = Decimal("0.000")
+                self.incentive_amount = Decimal("0.00")
+            return
+
+        # One-time target payout: slab-delta over the campaign window.
+        slab_qs = CampaignSlab.objects.filter(campaign_product=cp).order_by("-threshold")
+        if not slab_qs.exists():
+            self.points = Decimal("0.000")
+            self.incentive_amount = Decimal("0.00")
+            return
+
+        campaign = cp.campaign
+        premium = self.amount or Decimal("0")
+        qs = Sale.objects.filter(
+            employee=self.employee,
+            date__range=[campaign.start_date, campaign.end_date],
+        )
+        if self.product_ref_id:
+            qs = qs.filter(product_ref_id=self.product_ref_id)
+        else:
+            qs = qs.filter(product=self._effective_product_label())
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        cumulative_amount = (qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")) + premium
+
+        payout = Decimal("0.00")
+        for slab in slab_qs:
+            if cumulative_amount >= slab.threshold:
+                payout = slab.payout
+                break
+
+        already_awarded = qs.aggregate(total=Sum("points"))["total"] or Decimal("0.00")
+        delta = payout - already_awarded
+        if delta < 0:
+            delta = Decimal("0.00")
+        self.points = delta
+        self.incentive_amount = delta
+
     def compute_points(self):
         """Compute points based on IncentiveRule + IncentiveSlab in DB"""
         from .models import IncentiveRule, IncentiveSlab  # avoid circular import
@@ -720,9 +881,18 @@ class Sale(models.Model):
         product_label = self._effective_product_label()
 
         if self._is_health_product() and self.policy_type == self.POLICY_TYPE_PORT:
+            self.campaign = None
             self.points = Decimal("0.000")
             self.incentive_amount = Decimal("0.00")
             return
+
+        # Time-bound campaign takes precedence and fully replaces regular points.
+        cp = self._active_campaign_product()
+        if cp is not None:
+            self.campaign = cp.campaign
+            self._compute_campaign_points(cp)
+            return
+        self.campaign = None
 
         try:
             rule_qs = IncentiveRule.objects.filter(active=True)
