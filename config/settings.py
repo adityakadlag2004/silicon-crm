@@ -186,20 +186,11 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 if DEBUG:
     STATIC_ROOT = BASE_DIR / 'staticfiles'
     MEDIA_ROOT = BASE_DIR / 'media'
-    _staticfiles_backend = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 else:
     STATIC_ROOT = os.environ.get('STATIC_ROOT', str(BASE_DIR / 'staticfiles'))
     MEDIA_ROOT = os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media'))
-    # WhiteNoise: gzip/brotli-compress assets and emit hashed, cache-busted
-    # filenames via a manifest for far-future caching in production.
-    _staticfiles_backend = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
-# Django 5.1+ removed STATICFILES_STORAGE/DEFAULT_FILE_STORAGE — the storage
-# backends must be configured through the STORAGES setting instead.
-STORAGES = {
-    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-    'staticfiles': {'BACKEND': _staticfiles_backend},
-}
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 
