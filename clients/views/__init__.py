@@ -11,6 +11,7 @@ from .leads import *  # noqa: F401,F403
 from .dashboards import *  # noqa: F401,F403
 from .clients_views import *  # noqa: F401,F403
 from .sales import *  # noqa: F401,F403
+from .campaigns import *  # noqa: F401,F403
 from .reports import *  # noqa: F401,F403
 from .calendar_views import *  # noqa: F401,F403
 from .messaging import *  # noqa: F401,F403

@@ -31,6 +31,125 @@
   </div>
 </div>
 
+<!-- 🎯 Active Campaign Challenges (gamified) -->
+{% if campaign_challenges %}
+<div class="campaign-arena mb-3">
+  <div class="campaign-arena-head">
+    <div class="campaign-arena-title">
+      <span class="campaign-spark">🎯</span>
+      <span>Live Campaign Challenges</span>
+    </div>
+    <span class="campaign-arena-sub">Boosted rewards — sell now before they end!</span>
+  </div>
+
+  <div class="ki-grid-2">
+    {% for c in campaign_challenges %}
+    <div class="challenge-card {% if c.benefit_type == 'target' and c.top_reached %}challenge-maxed{% endif %}">
+      <!-- Header row -->
+      <div class="challenge-top">
+        <div>
+          <div class="challenge-product"><i class="bi bi-tag-fill"></i> {{ c.product }}</div>
+          <div class="challenge-campaign">{{ c.campaign }}</div>
+        </div>
+        <div class="challenge-countdown {% if c.days_left <= 2 %}is-urgent{% endif %}">
+          <i class="bi bi-clock-history"></i>
+          {% if c.days_left == 0 %}Ends today{% elif c.days_left == 1 %}1 day left{% else %}{{ c.days_left }} days left{% endif %}
+        </div>
+      </div>
+
+      {% if c.benefit_type == 'unit' %}
+        <!-- Boosted-rate challenge -->
+        <div class="challenge-boost-badge">⚡ {{ c.points_per_unit|floatformat:"-2" }} pts / ₹{{ c.unit_amount|floatformat:0 }} — boosted rate!</div>
+        <div class="challenge-earned">
+          <span class="challenge-earned-num" data-countup="{{ c.earned_points|floatformat:2 }}">0</span>
+          <span class="challenge-earned-lbl">pts earned</span>
+        </div>
+        <div class="challenge-meta">
+          <span><i class="bi bi-cash-stack"></i> ₹{{ c.cumulative|floatformat:0 }} sold this campaign</span>
+          {% if c.pending_points %}<span class="challenge-pending">+{{ c.pending_points|floatformat:0 }} pending</span>{% endif %}
+        </div>
+      {% else %}
+        <!-- Target-slab challenge -->
+        {% if c.top_reached %}
+          <div class="challenge-boost-badge challenge-trophy">🏆 Top slab unlocked — {{ c.max_payout|floatformat:0 }} pts!</div>
+        {% else %}
+          <div class="challenge-boost-badge">🎁 ₹{{ c.amount_to_next|floatformat:0 }} more → unlock {{ c.next_payout|floatformat:0 }} pts</div>
+        {% endif %}
+        <div class="challenge-progress-wrap">
+          <div class="challenge-progress-bar">
+            <div class="challenge-progress-fill" style="width:{{ c.progress|floatformat:0 }}%;"></div>
+          </div>
+          <div class="challenge-progress-labels">
+            <span>₹{{ c.cumulative|floatformat:0 }}</span>
+            {% if not c.top_reached %}<span>Goal: ₹{{ c.next_threshold|floatformat:0 }}</span>{% else %}<span>Maxed out</span>{% endif %}
+          </div>
+        </div>
+        <div class="challenge-meta">
+          <span><i class="bi bi-trophy-fill"></i> {{ c.earned_points|floatformat:0 }} pts secured</span>
+          {% if c.pending_points %}<span class="challenge-pending">+{{ c.pending_points|floatformat:0 }} pending</span>{% endif %}
+        </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<style>
+.campaign-arena {
+  background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 55%, #7c3aed 100%);
+  border-radius: 16px; padding: 1.1rem 1.1rem 1.25rem;
+  box-shadow: 0 10px 30px rgba(67,56,202,.28); color: #fff;
+}
+.campaign-arena-head { display:flex; flex-direction:column; margin-bottom:.9rem; }
+.campaign-arena-title { font-size:1.18rem; font-weight:800; display:flex; align-items:center; gap:.5rem; letter-spacing:.2px; }
+.campaign-spark { font-size:1.3rem; animation: spark-pulse 1.8s ease-in-out infinite; }
+@keyframes spark-pulse { 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.25); } }
+.campaign-arena-sub { font-size:.85rem; opacity:.82; margin-top:.15rem; }
+.challenge-card {
+  background: rgba(255,255,255,.10); backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,.18); border-radius: 13px; padding: .9rem 1rem;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.challenge-card:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgba(0,0,0,.25); }
+.challenge-maxed { border-color: #fbbf24; box-shadow: 0 0 0 1px #fbbf24 inset, 0 8px 22px rgba(251,191,36,.25); }
+.challenge-top { display:flex; justify-content:space-between; align-items:flex-start; gap:.5rem; margin-bottom:.6rem; }
+.challenge-product { font-weight:800; font-size:1.02rem; }
+.challenge-campaign { font-size:.8rem; opacity:.8; }
+.challenge-countdown { font-size:.74rem; font-weight:700; background:rgba(255,255,255,.16); padding:.2rem .55rem; border-radius:999px; white-space:nowrap; }
+.challenge-countdown.is-urgent { background:#ef4444; animation: urgent-blink 1.1s steps(2,start) infinite; }
+@keyframes urgent-blink { 50% { opacity:.55; } }
+.challenge-boost-badge { display:inline-block; font-size:.78rem; font-weight:700; background:rgba(253,224,71,.18); color:#fde047; border:1px solid rgba(253,224,71,.4); padding:.25rem .55rem; border-radius:8px; margin-bottom:.6rem; }
+.challenge-trophy { background:rgba(251,191,36,.22); color:#fcd34d; border-color:#fbbf24; }
+.challenge-earned { display:flex; align-items:baseline; gap:.4rem; margin:.2rem 0 .5rem; }
+.challenge-earned-num { font-size:1.9rem; font-weight:900; color:#a7f3d0; line-height:1; }
+.challenge-earned-lbl { font-size:.8rem; opacity:.85; }
+.challenge-progress-wrap { margin:.35rem 0 .55rem; }
+.challenge-progress-bar { height:11px; background:rgba(255,255,255,.16); border-radius:999px; overflow:hidden; }
+.challenge-progress-fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#34d399,#fbbf24); transition: width 1.1s cubic-bezier(.22,1,.36,1); box-shadow:0 0 10px rgba(251,191,36,.5); }
+.challenge-progress-labels { display:flex; justify-content:space-between; font-size:.74rem; opacity:.85; margin-top:.3rem; }
+.challenge-meta { display:flex; justify-content:space-between; align-items:center; font-size:.8rem; opacity:.92; }
+.challenge-pending { font-size:.72rem; background:rgba(255,255,255,.15); padding:.12rem .45rem; border-radius:999px; }
+</style>
+
+<script>
+(function () {
+  // Count-up animation for boosted-rate earned points.
+  document.querySelectorAll('.challenge-earned-num[data-countup]').forEach(function (el) {
+    var target = parseFloat(el.getAttribute('data-countup')) || 0;
+    if (target <= 0) { el.textContent = '0'; return; }
+    var start = null, dur = 900;
+    function step(ts) {
+      if (!start) start = ts;
+      var p = Math.min((ts - start) / dur, 1);
+      el.textContent = (target * p).toFixed(target % 1 ? 2 : 0);
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  });
+})();
+</script>
+{% endif %}
+
 <!-- Follow-up Calendar -->
 <div class="ki-card mb-3" style="text-align:left;">
   {% include "dashboards/_followup_calendar.html" %}
