@@ -85,8 +85,14 @@ def close_month_targets(year: int, month: int, *, dry_run=False):
     Close the month for year/month by storing employee performance vs target.
     Called by the 'close_month' management command via cron (see CRONJOBS in settings).
     """
+    from .targets import baseline_monthly_map, employee_target_map, resolve_monthly_target
+
     monthly_targets = Target.objects.filter(target_type="monthly")
+    products = [t.product for t in monthly_targets]
     employees = Employee.objects.all()
+
+    baseline_map = baseline_monthly_map()
+    emp_map = employee_target_map()
 
     for emp in employees:
         month_sales = (
@@ -95,15 +101,22 @@ def close_month_targets(year: int, month: int, *, dry_run=False):
         )
         month_sales_dict = {s["product"]: s["total"] for s in month_sales}
 
-        for target in monthly_targets:
-            achieved = month_sales_dict.get(target.product, 0) or 0
+        # Union of baseline products and any product this employee has an
+        # explicit target for, so per-employee overrides are always recorded.
+        emp_products = set(products) | {
+            prod for (eid, prod) in emp_map if eid == emp.id
+        }
+
+        for product in emp_products:
+            achieved = month_sales_dict.get(product, 0) or 0
+            target_value = resolve_monthly_target(emp.id, product, emp_map=emp_map, baseline_map=baseline_map)
             MonthlyTargetHistory.objects.update_or_create(
                 employee=emp,
-                product=target.product,
+                product=product,
                 year=year,
                 month=month,
                 defaults={
-                    "target_value": target.target_value,
+                    "target_value": target_value,
                     "achieved_value": achieved,
                 },
             )

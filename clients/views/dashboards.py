@@ -24,6 +24,7 @@ from ..models import (
     ProductMarginSlab,
     Employee,
     Target,
+    EmployeeTarget,
     MonthlyTargetHistory,
     CalendarEvent,
     NetBusinessEntry,
@@ -44,6 +45,14 @@ from ..forms import (
     FirmSettingsForm,
 )
 from .helpers import get_manager_access
+from ..targets import (
+    target_employees,
+    working_days_in_month,
+    baseline_monthly_map,
+    employee_target_map,
+    resolve_monthly_target,
+    resolve_daily_target,
+)
 
 
 def _ordered_product_names(extra_names=None):
@@ -201,11 +210,13 @@ def admin_dashboard(request):
     motor_sales = overall_sales_map.get("Motor Insurance", Decimal("0"))
     pms_sales = overall_sales_map.get("PMS", Decimal("0"))
 
-    daily_targets = Target.objects.filter(target_type="daily")
-    monthly_targets = Target.objects.filter(target_type="monthly")
-    daily_target_map = {t.product: t.target_value for t in daily_targets}
-    monthly_target_map = {t.product: t.target_value for t in monthly_targets}
-    active_employee_count = Employee.objects.filter(role="employee", active=True).count()
+    # Per-employee targets: each employee may carry a different monthly target
+    # by competency/level (EmployeeTarget); otherwise fall back to the product
+    # baseline (Target). Daily targets are derived as monthly / working days.
+    working_days = working_days_in_month(year, month)
+    baseline_map = baseline_monthly_map()
+    emp_map = employee_target_map()
+    target_employee_ids = list(target_employees().values_list("id", flat=True))
 
     admin_daily_targets_display = []
     admin_monthly_targets_display = []
@@ -216,7 +227,7 @@ def admin_dashboard(request):
         admin_month_map = {s["product"]: s["total"] for s in admin_month_sales}
 
         for product in products:
-            target_val = daily_target_map.get(product, Decimal("0"))
+            target_val = resolve_daily_target(admin_emp.id, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
             achieved = admin_today_map.get(product, Decimal("0"))
             progress = (achieved / target_val * 100) if target_val else 0
             admin_daily_targets_display.append({
@@ -227,7 +238,7 @@ def admin_dashboard(request):
             })
 
         for product in products:
-            target_val = monthly_target_map.get(product, Decimal("0"))
+            target_val = resolve_monthly_target(admin_emp.id, product, emp_map=emp_map, baseline_map=baseline_map)
             achieved = admin_month_map.get(product, Decimal("0"))
             progress = (achieved / target_val * 100) if target_val else 0
             admin_monthly_targets_display.append({
@@ -260,9 +271,15 @@ def admin_dashboard(request):
                                     .annotate(total=Sum("amount"))
     }
 
+    # Org-wide targets are the sum of each active employee's resolved target
+    # (per-head model), not a single baseline multiplied by headcount.
     overall_daily_progress = []
     for product in products:
-        target_value = daily_target_map.get(product, Decimal("0")) * (active_employee_count or 0)
+        target_value = sum(
+            (resolve_daily_target(eid, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
+             for eid in target_employee_ids),
+            Decimal("0"),
+        )
         achieved = today_by_product.get(product, Decimal("0"))
         progress = (achieved / target_value * 100) if target_value else 0
         overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
@@ -270,8 +287,11 @@ def admin_dashboard(request):
     overall_monthly_progress = []
     for product in products:
         achieved = month_by_product.get(product, Decimal("0"))
-        target_base = monthly_target_map.get(product, Decimal("0"))
-        target_value = (target_base or 0) * (active_employee_count or 0)
+        target_value = sum(
+            (resolve_monthly_target(eid, product, emp_map=emp_map, baseline_map=baseline_map)
+             for eid in target_employee_ids),
+            Decimal("0"),
+        )
         progress = (achieved / target_value * 100) if target_value else 0
         overall_monthly_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
@@ -285,7 +305,7 @@ def admin_dashboard(request):
         }
         for product in products:
             achieved = today_by_emp_product.get((emp_obj.id, product), Decimal("0"))
-            target = daily_target_map.get(product, 0)
+            target = resolve_daily_target(emp_obj.id, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
             progress = (achieved / target * 100) if target else 0
             emp_entry["products"].append({
                 "product": product,
@@ -303,7 +323,7 @@ def admin_dashboard(request):
         }
         for product in products:
             achieved = month_by_emp_product.get((emp_obj.id, product), Decimal("0"))
-            target = monthly_target_map.get(product, 0)
+            target = resolve_monthly_target(emp_obj.id, product, emp_map=emp_map, baseline_map=baseline_map)
             progress = (achieved / target * 100) if target else 0
             emp_entry["products"].append({
                 "product": product,
@@ -596,14 +616,15 @@ def employee_dashboard(request):
         for product in products
     ]
 
-    daily_targets = Target.objects.filter(target_type="daily")
-    monthly_targets = Target.objects.filter(target_type="monthly")
-    daily_target_map = {t.product: t.target_value for t in daily_targets}
-    monthly_target_map = {t.product: t.target_value for t in monthly_targets}
+    # Per-employee targets resolved against this employee's competency-based
+    # EmployeeTarget rows, falling back to the product baseline.
+    working_days = working_days_in_month(today.year, today.month)
+    baseline_map = baseline_monthly_map()
+    emp_map = employee_target_map()
 
     daily_targets_display = []
     for product in products:
-        target_value = daily_target_map.get(product, Decimal("0"))
+        target_value = resolve_daily_target(emp.id, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
         achieved = today_sales_dict.get(product, Decimal("0"))
         progress = (achieved / target_value * 100) if target_value else 0
         daily_targets_display.append({
@@ -615,7 +636,7 @@ def employee_dashboard(request):
 
     monthly_targets_display = []
     for product in products:
-        target_value = monthly_target_map.get(product, Decimal("0"))
+        target_value = resolve_monthly_target(emp.id, product, emp_map=emp_map, baseline_map=baseline_map)
         achieved = month_sales_dict.get(product, Decimal("0"))
         progress = (achieved / target_value * 100) if target_value else 0
         monthly_targets_display.append({
@@ -644,18 +665,26 @@ def employee_dashboard(request):
     if allow_company_sections:
         approved_sales_all = Sale.objects.filter(status=Sale.STATUS_APPROVED)
         monthly_sales_qs = approved_sales_all.filter(date__year=today.year, date__month=today.month)
-        active_employee_count = Employee.objects.filter(role="employee", active=True).count()
+        target_employee_ids = list(target_employees().values_list("id", flat=True))
 
         for product in products:
-            target_value = daily_target_map.get(product, Decimal("0")) * (active_employee_count or 0)
+            # Per-head model: org target = sum of each active employee's target.
+            target_value = sum(
+                (resolve_daily_target(eid, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
+                 for eid in target_employee_ids),
+                Decimal("0"),
+            )
             achieved = approved_sales_all.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
             progress = (achieved / target_value * 100) if target_value else 0
             overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
         for product in products:
             achieved = monthly_sales_qs.filter(product=product).aggregate(total=Sum("amount"))['total'] or 0
-            target_base = monthly_target_map.get(product, Decimal("0"))
-            target_value = (target_base or 0) * (active_employee_count or 0)
+            target_value = sum(
+                (resolve_monthly_target(eid, product, emp_map=emp_map, baseline_map=baseline_map)
+                 for eid in target_employee_ids),
+                Decimal("0"),
+            )
             progress = (achieved / target_value * 100) if target_value else 0
             overall_monthly_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
@@ -667,7 +696,7 @@ def employee_dashboard(request):
             }
             for product in products:
                 achieved = approved_sales_all.filter(employee=e, product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
-                target = daily_target_map.get(product, 0)
+                target = resolve_daily_target(e.id, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
                 progress = (achieved / target * 100) if target else 0
                 emp_entry_daily["products"].append({
                     "product": product,
@@ -689,7 +718,7 @@ def employee_dashboard(request):
                     date__year=today.year,
                     date__month=today.month,
                 ).aggregate(total=Sum("amount"))['total'] or 0
-                target = monthly_target_map.get(product, 0)
+                target = resolve_monthly_target(e.id, product, emp_map=emp_map, baseline_map=baseline_map)
                 progress = (achieved / target * 100) if target else 0
                 emp_entry_monthly["products"].append({
                     "product": product,
@@ -1078,6 +1107,147 @@ def product_management_page(request):
         "settings/product_management.html",
         {
             "products": products,
+        },
+    )
+
+
+@login_required
+def target_management(request):
+    """Admin page to set each employee's personal monthly target per product.
+
+    Targets are personal (not a shared pool split across the team). The page
+    shows, per product, the sum of every active employee's monthly target and
+    how much each employee has achieved this month.
+    """
+    admin_emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (admin_emp and admin_emp.role == "admin")):
+        return HttpResponseForbidden("Admins only.")
+
+    employees = list(target_employees())
+    active_products = list(Product.objects.filter(is_active=True).order_by("display_order", "name"))
+
+    if request.method == "POST":
+        emp_by_id = {e.id: e for e in employees}
+        prod_by_id = {p.id: p for p in active_products}
+        saved = 0
+        cleared = 0
+        for key, raw in request.POST.items():
+            if not key.startswith("tv-"):
+                continue
+            try:
+                _, emp_id, prod_id = key.split("-")
+                emp_id, prod_id = int(emp_id), int(prod_id)
+            except (ValueError, TypeError):
+                continue
+            emp = emp_by_id.get(emp_id)
+            product = prod_by_id.get(prod_id)
+            if not emp or not product:
+                continue
+
+            value = _parse_amount(raw, default=None)
+            if value is None or value <= 0:
+                # Blank / zero clears the personal target (falls back to baseline).
+                deleted, _ = EmployeeTarget.objects.filter(employee=emp, product=product.name).delete()
+                if deleted:
+                    cleared += 1
+                continue
+
+            EmployeeTarget.objects.update_or_create(
+                employee=emp,
+                product=product.name,
+                defaults={"target_value": value, "product_ref": product},
+            )
+            saved += 1
+
+        parts = []
+        if saved:
+            parts.append(f"{saved} target(s) saved")
+        if cleared:
+            parts.append(f"{cleared} cleared")
+        messages.success(request, ", ".join(parts) + "." if parts else "No changes.")
+        return redirect("clients:target_management")
+
+    # ── Build the grid (rows = employees, columns = products) ──────────────
+    today = timezone.now().date()
+    year, month = today.year, today.month
+
+    baseline_map = baseline_monthly_map()
+    emp_map = employee_target_map(employees)
+
+    month_sales = (
+        Sale.objects.filter(status=Sale.STATUS_APPROVED, date__year=year, date__month=month)
+        .values("employee_id", "product")
+        .annotate(total=Sum("amount"))
+    )
+    achieved_map = {(r["employee_id"], r["product"]): (r["total"] or Decimal("0")) for r in month_sales}
+
+    product_names = [p.name for p in active_products]
+    col_target_totals = {p.name: Decimal("0") for p in active_products}
+    col_achieved_totals = {p.name: Decimal("0") for p in active_products}
+
+    rows = []
+    for emp in employees:
+        cells = []
+        row_target_total = Decimal("0")
+        row_achieved_total = Decimal("0")
+        for product in active_products:
+            pname = product.name
+            explicit = emp_map.get((emp.id, pname))  # None if not set
+            effective = explicit if explicit is not None else baseline_map.get(pname, Decimal("0"))
+            achieved = achieved_map.get((emp.id, pname), Decimal("0"))
+            progress = (achieved / effective * 100) if effective else 0
+
+            cells.append({
+                "product_id": product.id,
+                "product": pname,
+                "input_value": explicit if explicit is not None else "",
+                "is_baseline": explicit is None,
+                "baseline": baseline_map.get(pname, Decimal("0")),
+                "effective": effective,
+                "achieved": achieved,
+                "progress": progress,
+            })
+            col_target_totals[pname] += effective
+            col_achieved_totals[pname] += achieved
+            row_target_total += effective
+            row_achieved_total += achieved
+
+        rows.append({
+            "employee": emp,
+            "name": emp.user.username if hasattr(emp, "user") else getattr(emp, "name", ""),
+            "cells": cells,
+            "target_total": row_target_total,
+            "achieved_total": row_achieved_total,
+        })
+
+    column_totals = []
+    grand_target = Decimal("0")
+    grand_achieved = Decimal("0")
+    for product in active_products:
+        tt = col_target_totals[product.name]
+        at = col_achieved_totals[product.name]
+        column_totals.append({
+            "product": product.name,
+            "target_total": tt,
+            "achieved_total": at,
+            "progress": (at / tt * 100) if tt else 0,
+        })
+        grand_target += tt
+        grand_achieved += at
+
+    return render(
+        request,
+        "settings/target_management.html",
+        {
+            "products": active_products,
+            "product_names": product_names,
+            "rows": rows,
+            "column_totals": column_totals,
+            "grand_target": grand_target,
+            "grand_achieved": grand_achieved,
+            "grand_progress": (grand_achieved / grand_target * 100) if grand_target else 0,
+            "month_label": today.strftime("%B %Y"),
+            "employee_count": len(employees),
         },
     )
 

@@ -38,16 +38,18 @@ def login_view(request):
             login(request, user)
 
             # Redirect based on role
-            if hasattr(user, "employee"):
-                role = user.employee.role.lower()
-                if role == "admin":
-                    return redirect("clients:admin_dashboard")
-                elif role == "manager":
-                    return redirect("clients:employee_dashboard")
-                elif role == "employee":
-                    return redirect("clients:employee_dashboard")
+            emp = getattr(user, "employee", None)
+            role = emp.role.lower() if emp and emp.role else None
+            if role == "admin":
+                return redirect("clients:admin_dashboard")
+            elif role in ("manager", "employee"):
+                return redirect("clients:employee_dashboard")
+            elif user.is_superuser or user.is_staff:
+                # Superusers/staff created via createsuperuser have no Employee
+                # record but must still be able to log in.
+                return redirect("clients:admin_dashboard")
             else:
-                messages.error(request, "No employee role mapped.")
+                messages.error(request, "No employee role mapped. Contact an administrator.")
         else:
             cache.set(throttle_key, failed_attempts + 1, LOGIN_LOCKOUT_SECONDS)
             messages.error(request, "Invalid username or password")

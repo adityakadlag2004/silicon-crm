@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Target Management{% endblock %}
+{% block page_title %}Target Management{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+  <h2 class="ki-section-title mb-0"><i class="bi bi-bullseye"></i> Target Management</h2>
+  <span class="text-muted" style="font-size:.85rem;">Monthly targets &middot; {{ month_label }}</span>
+</div>
+
+<p class="text-muted mb-3">
+  Set each employee's <strong>personal monthly target</strong> for every product. Targets are individual
+  (not a shared pool split across the team). The <em>Team Total</em> row sums everyone's monthly targets per
+  product, alongside how much has been achieved this month. Leave a cell blank to fall back to the product baseline.
+</p>
+
+{% if not products %}
+  <div class="ki-card"><p class="text-muted m-0">No active products. Add products first under Settings &rarr; Products.</p></div>
+{% elif not rows %}
+  <div class="ki-card"><p class="text-muted m-0">No active employees to assign targets to.</p></div>
+{% else %}
+<form method="post" action="{% url 'clients:target_management' %}">
+  {% csrf_token %}
+
+  <div class="ki-card">
+    <div class="ki-table-wrap" style="overflow-x:auto;">
+      <table class="ki-table" style="min-width:720px;">
+        <thead>
+          <tr>
+            <th style="position:sticky;left:0;background:var(--ki-card-bg,#fff);z-index:2;">Employee</th>
+            {% for p in products %}<th class="text-center">{{ p.name }}</th>{% endfor %}
+            <th class="text-center">Row Total</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+          <tr>
+            <td style="position:sticky;left:0;background:var(--ki-card-bg,#fff);z-index:1;font-weight:600;">{{ row.name }}</td>
+            {% for cell in row.cells %}
+              <td style="min-width:130px;">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  name="tv-{{ row.employee.id }}-{{ cell.product_id }}"
+                  value="{{ cell.input_value }}"
+                  placeholder="{% if cell.baseline %}base {{ cell.baseline|floatformat:0 }}{% else %}0{% endif %}"
+                  class="ki-input"
+                  style="width:100%;padding:4px 6px;font-size:.85rem;"
+                >
+                <div class="ki-progress mt-1" title="Achieved {{ cell.achieved|floatformat:0 }} of {{ cell.effective|floatformat:0 }}">
+                  <div class="ki-bar-green" data-progress="{{ cell.progress|floatformat:0 }}">{{ cell.progress|floatformat:0 }}%</div>
+                </div>
+                <div class="text-muted" style="font-size:.72rem;">
+                  <i class="bi bi-check2-circle"></i> {{ cell.achieved|floatformat:0 }}
+                  {% if cell.is_baseline and cell.baseline %}<span title="Using product baseline">&middot; base</span>{% endif %}
+                </div>
+              </td>
+            {% endfor %}
+            <td class="text-center" style="font-weight:600;">{{ row.target_total|floatformat:0 }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--ki-border,#e5e7eb);font-weight:700;">
+            <td style="position:sticky;left:0;background:var(--ki-card-bg,#fff);z-index:1;">Team Total</td>
+            {% for col in column_totals %}
+              <td class="text-center">
+                <div>{{ col.target_total|floatformat:0 }}</div>
+                <div class="ki-progress mt-1">
+                  <div class="ki-bar-blue" data-progress="{{ col.progress|floatformat:0 }}">{{ col.progress|floatformat:0 }}%</div>
+                </div>
+                <div class="text-muted" style="font-size:.72rem;font-weight:500;">
+                  <i class="bi bi-check2-circle"></i> {{ col.achieved_total|floatformat:0 }}
+                </div>
+              </td>
+            {% endfor %}
+            <td class="text-center">
+              <div>{{ grand_target|floatformat:0 }}</div>
+              <div class="text-muted" style="font-size:.72rem;font-weight:500;">
+                <i class="bi bi-check2-circle"></i> {{ grand_achieved|floatformat:0 }}
+              </div>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="d-flex align-items-center gap-2 mt-3">
+    <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-save"></i> Save All Targets</button>
+    <span class="text-muted" style="font-size:.82rem;">{{ employee_count }} employee(s) &middot; {{ products|length }} product(s)</span>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

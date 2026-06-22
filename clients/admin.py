@@ -14,6 +14,7 @@ from import_export.admin import ImportExportModelAdmin
 
 from .models import (
     Client, Employee, Sale, IncentiveRule, MonthlyIncentive, Target,
+    EmployeeTarget,
     MessageTemplate,
     Renewal,
     Product,
@@ -114,6 +115,16 @@ class TargetAdmin(admin.ModelAdmin):
             return False
         return True
 
+
+
+@admin.register(EmployeeTarget)
+class EmployeeTargetAdmin(admin.ModelAdmin):
+    list_display = ("employee", "product", "target_value", "updated_at")
+    list_editable = ("target_value",)
+    list_filter = ("product", "employee")
+    search_fields = ("employee__user__username", "product")
+    autocomplete_fields = ("employee",)
+    fields = ("employee", "product", "product_ref", "target_value")
 
 
 @admin.register(Sale)

@@ -310,7 +310,7 @@
         <i class="bi bi-list"></i>
       </button>
 
-      <a class="kn-brand" href="{% if request.user.is_authenticated %}{% if request.user.employee.role == 'admin' %}{% url 'clients:admin_dashboard' %}{% else %}{% url 'clients:employee_dashboard' %}{% endif %}{% else %}/{% endif %}">
+      <a class="kn-brand" href="{% if request.user.is_authenticated %}{% if request.user.employee.role == 'admin' or request.user.is_superuser %}{% url 'clients:admin_dashboard' %}{% else %}{% url 'clients:employee_dashboard' %}{% endif %}{% else %}/{% endif %}">
         <span class="kn-brand-logo">KI</span>
         <span class="kn-brand-title">Kadlag Investment</span>
       </a>
@@ -320,7 +320,7 @@
         {% if request.user.is_authenticated %}
 
           {# ─── ADMIN ─── #}
-          {% if request.user.employee.role == "admin" %}
+          {% if request.user.employee.role == "admin" or request.user.is_superuser %}
 
             <a class="kn-link" href="{% url 'clients:admin_dashboard' %}">
               <i class="bi bi-grid-1x2-fill"></i> Dashboard
@@ -389,6 +389,7 @@
               <ul class="kn-menu">
                 <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:product_management' %}"><i class="bi bi-box-seam"></i> Products</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:target_management' %}"><i class="bi bi-bullseye"></i> Targets</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:audit_log' %}"><i class="bi bi-journal-text"></i> Audit Log</a></li>
               </ul>
             </div>
@@ -520,7 +521,7 @@
 
       <div class="kn-right">
         {% if request.user.is_authenticated %}
-          {% if request.user.employee.role == "admin" %}
+          {% if request.user.employee.role == "admin" or request.user.is_superuser %}
           <button class="kn-icon-btn" type="button" data-bs-toggle="modal" data-bs-target="#notificationsModal" title="Notifications">
             <i class="bi bi-bell-fill"></i>
             <span class="kn-badge" id="nav-unread">0</span>
@@ -728,7 +729,7 @@
       }
 
       document.addEventListener('DOMContentLoaded', () => {
-        {% if request.user.is_authenticated and request.user.employee.role == "admin" %}
+        {% if request.user.is_authenticated and request.user.employee.role == "admin" or request.user.is_superuser %}
         loadNotifications();
         const modal = document.getElementById('notificationsModal');
         modal && modal.addEventListener('show.bs.modal', loadNotifications);
