@@ -19,6 +19,23 @@ from ..forms import AdminSaleForm, EditSaleForm, SaleForm
 from .helpers import get_manager_access
 
 
+def _recompute_sibling_sales(sale):
+    """Re-run points on sales that share this sale's slab pool (same employee +
+    product within the slab month, or the campaign window). Needed after a
+    status change or delete so slab-delta payouts stay consistent."""
+    qs = Sale.objects.filter(employee=sale.employee).exclude(pk=sale.pk)
+    if sale.campaign_id:
+        qs = qs.filter(date__range=[sale.campaign.start_date, sale.campaign.end_date])
+    elif sale.date:
+        qs = qs.filter(date__year=sale.date.year, date__month=sale.date.month)
+    if sale.product_ref_id:
+        qs = qs.filter(product_ref_id=sale.product_ref_id)
+    else:
+        qs = qs.filter(product=sale.product)
+    for sibling in qs.order_by("date", "id"):
+        sibling.save()  # save() recomputes points
+
+
 def _sale_product_meta():
     products = list(Product.objects.filter(domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]))
     health = next((p for p in products if p.code == "HEALTH_INS"), None)
@@ -39,20 +56,36 @@ def _sale_product_meta():
 @login_required
 def add_sale(request):
     product_meta = _sale_product_meta()
+    is_admin_user = request.user.is_superuser or (
+        hasattr(request.user, "employee")
+        and getattr(request.user.employee, "role", "") == "admin"
+    )
     if request.method == "POST":
         form = AdminSaleForm(request.POST)
         if form.is_valid():
             sale = form.save(commit=False)
-            is_admin_user = request.user.is_superuser or (
-                hasattr(request.user, "employee")
-                and getattr(request.user.employee, "role", "") == "admin"
-            )
 
+            # Only admins may attribute a sale to someone else; everyone else
+            # always logs sales under their own employee record.
             chosen_emp = form.cleaned_data.get("employee")
-            if chosen_emp:
+            if is_admin_user and chosen_emp:
                 sale.employee = chosen_emp
             else:
                 sale.employee = getattr(request.user, "employee", None)
+
+            if sale.employee is None:
+                messages.error(request, "Your account is not mapped to an employee. Contact an administrator.")
+                return render(
+                    request,
+                    "sales/add_sale.html",
+                    {
+                        "form": form,
+                        "employees": Employee.objects.select_related("user").all(),
+                        "current_employee_id": None,
+                        "can_pick_employee": is_admin_user,
+                        **product_meta,
+                    },
+                )
 
             if not sale.client:
                 client_id = request.POST.get("client")
@@ -67,6 +100,7 @@ def add_sale(request):
                             "current_employee_id": getattr(request.user, "employee").id
                             if hasattr(request.user, "employee")
                             else None,
+                            "can_pick_employee": is_admin_user,
                             **product_meta,
                         },
                     )
@@ -83,6 +117,7 @@ def add_sale(request):
                             "current_employee_id": getattr(request.user, "employee").id
                             if hasattr(request.user, "employee")
                             else None,
+                            "can_pick_employee": is_admin_user,
                             **product_meta,
                         },
                     )
@@ -120,7 +155,13 @@ def add_sale(request):
     return render(
         request,
         "sales/add_sale.html",
-        {"form": form, "employees": employees_qs, "current_employee_id": current_emp_id, **product_meta},
+        {
+            "form": form,
+            "employees": employees_qs,
+            "current_employee_id": current_emp_id,
+            "can_pick_employee": is_admin_user,
+            **product_meta,
+        },
     )
 
 
@@ -250,6 +291,7 @@ def approve_sales(request):
             sale.rejection_reason = ""
             sale._audit_actor = request.user   # picked up by AuditLog signal
             sale.save()
+            _recompute_sibling_sales(sale)
             messages.success(request, f"Approved sale #{sale.id}.")
         elif action == "reject":
             sale.status = Sale.STATUS_REJECTED
@@ -258,6 +300,7 @@ def approve_sales(request):
             sale.rejection_reason = reason
             sale._audit_actor = request.user   # picked up by AuditLog signal
             sale.save()
+            _recompute_sibling_sales(sale)
             messages.info(request, f"Rejected sale #{sale.id}.")
         return redirect("clients:approve_sales")
 
@@ -506,27 +549,26 @@ def delete_incentive_slab(request, slab_id):
 
 
 @login_required
+@require_POST
 def recalc_points(request):
+    """Rebuild points on every sale using the current rules. Admin-level action
+    (retroactively changes payouts), so it is POST-only and never open to
+    plain employees."""
     user_emp = getattr(request.user, "employee", None)
-    if request.user.is_superuser or (user_emp and user_emp.role == "admin"):
-        sales = Sale.objects.all()
-    elif user_emp:
-        sales = Sale.objects.filter(employee=user_emp)
-    else:
-        messages.error(request, "You are not mapped to an employee.")
-        return redirect("clients:login")
+    is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    is_manager = bool(user_emp and user_emp.role == "manager")
+    manager_access = get_manager_access() if is_manager else None
+
+    if not (is_admin_user or (manager_access and manager_access.allow_recalc_points)):
+        return HttpResponseForbidden("You do not have permission to recalculate points.")
 
     count = 0
-    for s in sales:
-        s.compute_points()
-        s.save()
+    for s in Sale.objects.all().iterator():
+        s.save()  # save() recomputes points
         count += 1
 
     messages.success(request, f"Recalculated points for {count} sales.")
-    if request.user.employee.role == "admin":
-        return redirect("clients:all_sales")
-    else:
-        return redirect("clients:employee_dashboard")
+    return redirect("clients:all_sales")
 
 
 @login_required
@@ -549,8 +591,21 @@ def edit_sale(request, sale_id):
             updated = form.save(commit=False)
             if updated.product:
                 updated.product_ref = Product.objects.filter(name=updated.product).first()
+            # Edits by anyone other than an admin invalidate a prior approval:
+            # the sale goes back to pending so an admin re-reviews the new numbers.
+            needs_reapproval = not is_admin_user and updated.status != Sale.STATUS_PENDING
+            if needs_reapproval:
+                updated.status = Sale.STATUS_PENDING
+                updated.approved_by = None
+                updated.approved_at = None
+                updated.rejection_reason = ""
+            updated._audit_actor = request.user
             updated.save()
-            messages.success(request, "Sale updated successfully!")
+            _recompute_sibling_sales(updated)
+            if needs_reapproval:
+                messages.success(request, "Sale updated — it is pending approval again.")
+            else:
+                messages.success(request, "Sale updated successfully!")
             return redirect("clients:all_sales")
     else:
         form = EditSaleForm(instance=sale)
@@ -565,8 +620,14 @@ def delete_sale(request, sale_id):
     is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
     if not is_admin_user and (not user_emp or sale.employee != user_emp):
         return HttpResponseForbidden("You do not have permission to delete this sale.")
+    # Non-admins may only withdraw their own sales while still pending;
+    # once approved/rejected the record is part of the reviewed books.
+    if not is_admin_user and sale.status != Sale.STATUS_PENDING:
+        return HttpResponseForbidden("Only an admin can delete a sale that has already been reviewed.")
     if request.method == "POST":
+        sale._audit_actor = request.user
         sale.delete()
+        _recompute_sibling_sales(sale)
         messages.success(request, "Sale deleted successfully!")
         return redirect("clients:admin_dashboard")
     return render(request, "sales/delete_sale.html", {"sale": sale})

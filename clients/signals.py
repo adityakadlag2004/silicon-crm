@@ -8,7 +8,8 @@ from django.urls import reverse
 @receiver([post_save, post_delete], sender=Sale)
 def update_client_status(sender, instance, **kwargs):
     client = instance.client
-    sales = Sale.objects.filter(client=client)
+    # Only approved sales define what products a client actually holds.
+    sales = Sale.objects.filter(client=client, status=Sale.STATUS_APPROVED)
 
     code_to_name = {p.code: p.name for p in Product.objects.all().only("code", "name")}
 

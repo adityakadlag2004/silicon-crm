@@ -8,7 +8,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
-from django.db import models, transaction
+from django.db import connection, models, transaction
 from django.db.models import Max, Sum
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -438,21 +438,34 @@ class Client(models.Model):
     def __str__(self):
         return f"{self.id} - {self.name}"
 
+    # Arbitrary but stable key for the advisory lock serializing id allocation.
+    _ID_ALLOC_LOCK_KEY = 815001
+
     def save(self, *args, **kwargs):
-        # Auto-generate sequential id if not set
         is_new = self._state.adding
-        if self.id is None:
-            with transaction.atomic():
-                max_id = Client.objects.aggregate(max_id=Max('id'))['max_id'] or 0
-                self.id = max_id + 1
-        else:
-            # Ensure edited_at is set at least once after the first edit so
-            # the "Show Edited" filter can surface historical edits.
-            if self.edited_at is None and not is_new:
-                self.edited_at = timezone.now()
         # Normalize lumsum investment to 0 if missing
         if self.lumsum_investment is None:
             self.lumsum_investment = Decimal("0.00")
+
+        if self.id is None:
+            # Auto-generate sequential id. Max()+1 alone races under concurrency,
+            # and a duplicate id would make Django silently UPDATE the other
+            # client's row — so serialize allocation with a Postgres advisory
+            # lock (released on commit) and force an INSERT so a collision can
+            # only ever fail loudly, never overwrite.
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT pg_advisory_xact_lock(%s)", [self._ID_ALLOC_LOCK_KEY])
+                max_id = Client.objects.aggregate(max_id=Max('id'))['max_id'] or 0
+                self.id = max_id + 1
+                kwargs["force_insert"] = True
+                super().save(*args, **kwargs)
+            return
+
+        # Ensure edited_at is set at least once after the first edit so
+        # the "Show Edited" filter can surface historical edits.
+        if self.edited_at is None and not is_new:
+            self.edited_at = timezone.now()
         super().save(*args, **kwargs)
     
     def reassign_to(self, new_employee, changed_by=None, note=''):
@@ -756,7 +769,9 @@ class Sale(models.Model):
     ]
 
     client = models.ForeignKey("Client", on_delete=models.CASCADE, related_name="sales")
-    employee = models.ForeignKey("Employee", on_delete=models.CASCADE, related_name="sales")
+    # PROTECT: sales are the firm's business records — deleting an employee
+    # must never silently erase their sales history (deactivate instead).
+    employee = models.ForeignKey("Employee", on_delete=models.PROTECT, related_name="sales")
     product = models.CharField(max_length=50)
     product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales")
     product_name_snapshot = models.CharField(max_length=100, blank=True, default="")
@@ -849,8 +864,11 @@ class Sale(models.Model):
 
         campaign = cp.campaign
         premium = self.amount or Decimal("0")
+        # Only approved sales count toward slab thresholds — a rejected sale
+        # must not push a colleague row over a payout boundary.
         qs = Sale.objects.filter(
             employee=self.employee,
+            status=Sale.STATUS_APPROVED,
             date__range=[campaign.start_date, campaign.end_date],
         )
         if self.product_ref_id:
@@ -879,6 +897,13 @@ class Sale(models.Model):
         from .models import IncentiveRule, IncentiveSlab  # avoid circular import
 
         product_label = self._effective_product_label()
+
+        # Rejected sales earn nothing.
+        if self.status == self.STATUS_REJECTED:
+            self.campaign = None
+            self.points = Decimal("0.000")
+            self.incentive_amount = Decimal("0.00")
+            return
 
         if self._is_health_product() and self.policy_type == self.POLICY_TYPE_PORT:
             self.campaign = None
@@ -916,7 +941,13 @@ class Sale(models.Model):
 
                 sale_month = self.date.month if self.date else timezone.now().month
                 sale_year = self.date.year if self.date else timezone.now().year
-                qs = Sale.objects.filter(employee=self.employee, date__year=sale_year, date__month=sale_month)
+                # Only approved sales count toward the monthly slab cumulative.
+                qs = Sale.objects.filter(
+                    employee=self.employee,
+                    status=Sale.STATUS_APPROVED,
+                    date__year=sale_year,
+                    date__month=sale_month,
+                )
                 if self.product_ref_id:
                     qs = qs.filter(product_ref=self.product_ref)
                 else:
@@ -1201,7 +1232,7 @@ class Lead(models.Model):
 
     assigned_to = models.ForeignKey(
         Employee,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="leads",
         help_text="Employee responsible for this lead",
     )

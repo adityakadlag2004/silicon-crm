@@ -1,5 +1,6 @@
 """Team views: list, add, edit, detail, delete, reset password for employees."""
 import json
+from decimal import Decimal, InvalidOperation
 from itertools import cycle
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -13,7 +14,7 @@ from django.db.models import Sum, Count, Q
 
 from django.db.models import Max
 
-from ..models import Client, Sale, Employee, ManagerAccessConfig
+from ..models import AuditLog, Client, Sale, Employee, ManagerAccessConfig
 from ..forms import EmployeeCreateForm, EmployeeDeactivateForm
 
 
@@ -188,16 +189,50 @@ def team_edit(request, employee_id):
     emp = get_object_or_404(Employee.objects.select_related("user"), id=employee_id)
 
     if request.method == "POST":
+        valid_roles = dict(Employee._meta.get_field("role").choices)
+        new_role = (request.POST.get("role") or emp.role).strip()
+        if new_role not in valid_roles:
+            messages.error(request, f"Invalid role '{new_role}'.")
+            return render(request, "team/team_edit.html", {"emp": emp})
+
+        raw_salary = (request.POST.get("salary") or "").strip()
+        if raw_salary:
+            try:
+                new_salary = Decimal(raw_salary)
+                if new_salary < 0:
+                    raise InvalidOperation
+            except InvalidOperation:
+                messages.error(request, "Salary must be a non-negative number.")
+                return render(request, "team/team_edit.html", {"emp": emp})
+        else:
+            new_salary = emp.salary
+
+        new_number = request.POST.get("employee_number", "").strip() or None
+        if new_number and Employee.objects.exclude(pk=emp.pk).filter(employee_number=new_number).exists():
+            messages.error(request, f"Employee number '{new_number}' is already in use.")
+            return render(request, "team/team_edit.html", {"emp": emp})
+
         user = emp.user
         user.first_name = request.POST.get("first_name", user.first_name)
         user.last_name = request.POST.get("last_name", user.last_name)
         user.email = request.POST.get("email", user.email)
         user.save(update_fields=["first_name", "last_name", "email"])
 
-        emp.role = request.POST.get("role", emp.role)
-        emp.salary = request.POST.get("salary", emp.salary)
-        emp.employee_number = request.POST.get("employee_number", "").strip() or None
+        old_role = emp.role
+        emp.role = new_role
+        emp.salary = new_salary
+        emp.employee_number = new_number
         emp.save(update_fields=["role", "salary", "employee_number"])
+
+        if old_role != new_role:
+            AuditLog.objects.create(
+                action=AuditLog.ACTION_EMPLOYEE_ROLE_CHANGED,
+                actor=request.user,
+                target_model="Employee",
+                target_id=emp.pk,
+                summary=f"Role of '{user.username}' changed: {old_role} → {new_role}",
+                details={"from": old_role, "to": new_role},
+            )
 
         messages.success(request, f"Updated {user.get_full_name() or user.username}.")
         return redirect("clients:team_detail", employee_id=emp.id)
@@ -270,6 +305,20 @@ def team_delete(request, employee_id):
     # Prevent deleting yourself
     if emp.user == request.user:
         msg = "You cannot delete your own account."
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"error": msg}, status=400)
+        messages.error(request, msg)
+        return redirect("clients:team_list")
+
+    # Employees with business history must be deactivated, not deleted —
+    # sales and leads are protected records (on_delete=PROTECT would 500 anyway).
+    sale_count = Sale.objects.filter(employee=emp).count()
+    lead_count = emp.leads.count()
+    if sale_count or lead_count:
+        msg = (
+            f"Cannot delete '{emp.user.username}': they have {sale_count} sale(s) "
+            f"and {lead_count} lead(s) on record. Deactivate the employee instead."
+        )
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({"error": msg}, status=400)
         messages.error(request, msg)
