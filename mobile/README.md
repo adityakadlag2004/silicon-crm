@@ -70,14 +70,33 @@ Capacitor (no assetlinks requirement — the app is a WebView shell, always
 fullscreen). The `/.well-known/assetlinks.json` endpoint can stay; it's
 harmless and keeps old TWA installs working until everyone upgrades.
 
-## Later: call tracking / recording
+## Call tracking & follow-ups (v2.1)
 
-- The shell is ready for Capacitor plugins (`@capacitor-community/*` or a
-  small custom plugin) to read call logs / phone state for **tracking**.
-  Note Google Play restricts `READ_CALL_LOG` — plan for internal/managed
-  distribution of that build, or scope tracking to calls initiated from the app.
-- **Recording** of SIM calls is blocked by Android 10+ for third-party apps.
-  The compliant route used by financial firms in India is cloud telephony
-  (Exotel / MyOperator / Tata Smartflo): employees dial through it, recordings
-  + metadata come back to the CRM via API/webhook. That integrates on the
-  Django side; no app changes needed.
+How it works, end to end:
+
+1. The app asks for **Phone** and **Call log** permissions at login, plus
+   "Display over other apps" (for the post-call popup; falls back to a
+   notification if declined).
+2. `CallTrackerReceiver` detects every call ending, reads the call-log entry
+   (number, direction, duration), and POSTs it to `/clients/api/calls/sync/`
+   using the logged-in session. Dedup is server-side.
+3. During office hours, `FollowupActivity` pops up: *15 min / 1 hour /
+   Tomorrow / Next week / No follow-up*. The choice is saved to the CRM.
+4. A per-minute cron (`send_followup_reminders`) creates a Notification when
+   a follow-up is due → mirrored as an FCM push → **tapping it dials the
+   number**. Follow-ups are also on the "Call Follow-ups" page (all roles).
+5. Admin → Reports → **Call Analytics**: per-employee dialed / connected /
+   received / missed / talk-time, date-filtered. The office-hours window
+   (default 10:00–18:00) is editable there; calls outside it are ignored
+   as personal and the popup stays silent after hours.
+
+**Distribution caveat:** `READ_CALL_LOG` is restricted on Google Play (only
+default dialer apps generally pass review). Distribute this build to the team
+**directly via APK** or through **managed Google Play** (free with a Google
+Workspace org). Everything else in the app is Play-compliant.
+
+**Recording** of SIM calls remains blocked by Android 10+ for third-party
+apps. The compliant route used by financial firms in India is cloud telephony
+(Exotel / MyOperator / Tata Smartflo): employees dial through it, recordings +
+metadata come back to the CRM via API/webhook — a Django-side integration,
+no app changes needed. Planned as the next phase.

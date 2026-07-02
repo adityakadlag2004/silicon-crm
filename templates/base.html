@@ -348,6 +348,7 @@
                 <li><div class="kn-menu-divider"></div></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
                 <li><div class="kn-menu-divider"></div></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:manage_campaigns' %}"><i class="bi bi-megaphone-fill"></i> Campaigns</a></li>
@@ -372,6 +373,7 @@
                 <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:business_analytics' %}"><i class="bi bi-percent"></i> Business Analytics</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:call_analytics' %}"><i class="bi bi-telephone-fill"></i> Call Analytics</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:mf_revenue_engine' %}"><i class="bi bi-graph-up"></i> MF Revenue Engine</a></li>
               </ul>
             </div>
@@ -438,6 +440,7 @@
                 <li><div class="kn-menu-divider"></div></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
                 {% if manager_access.allow_manage_incentives or manager_access.allow_recalc_points or manager_access.allow_client_analysis %}<li><div class="kn-menu-divider"></div></li>{% endif %}
                 {% if manager_access.allow_manage_incentives %}<li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>{% endif %}
                 {% if manager_access.allow_manage_incentives %}<li><a class="kn-menu-item" href="{% url 'clients:manage_campaigns' %}"><i class="bi bi-megaphone-fill"></i> Campaigns</a></li>{% endif %}
@@ -510,6 +513,7 @@
                 <li><div class="kn-menu-divider"></div></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
                 <li><div class="kn-menu-divider"></div></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
@@ -640,7 +644,9 @@
 
         Push.addListener('pushNotificationActionPerformed', function (action) {
           var link = action.notification && action.notification.data && action.notification.data.link;
-          if (link && link.indexOf('/') === 0) window.location.href = link;
+          if (!link) return;
+          if (link.indexOf('tel:') === 0) { window.location.href = link; return; }  // dial follow-up
+          if (link.indexOf('/') === 0) window.location.href = link;
         });
 
         Push.checkPermissions().then(function (res) {
@@ -649,6 +655,33 @@
             if (r.receive === 'granted') return Push.register();
           });
         }).catch(function () {});
+
+        // ── Call tracking setup ──
+        var CT = cap.Plugins && cap.Plugins.CallTracking;
+        if (CT) {
+          // Sync the admin-configured office hours to the device so the
+          // post-call popup stays silent outside working hours.
+          fetch('{% url "clients:call_config" %}', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (cfg) { return CT.configure(cfg); })
+            .catch(function () {});
+
+          CT.getStatus().then(function (s) {
+            if (!s.callsGranted) {
+              return CT.requestCallPermissions().then(function () { return CT.getStatus(); });
+            }
+            return s;
+          }).then(function (s) {
+            // Ask for the "display over other apps" permission once — needed
+            // for the popup right after a call; falls back to a notification.
+            if (s && !s.overlayGranted && !localStorage.getItem('ct_overlay_asked')) {
+              localStorage.setItem('ct_overlay_asked', '1');
+              if (confirm('To show the follow-up popup after calls, allow "Display over other apps" on the next screen.')) {
+                CT.openOverlaySettings();
+              }
+            }
+          }).catch(function () {});
+        }
       })();
     </script>
     {% endif %}

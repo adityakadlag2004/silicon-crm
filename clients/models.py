@@ -2,7 +2,7 @@ import logging
 import re
 import uuid
 
-from datetime import date
+from datetime import date, time as datetime_time
 from decimal import Decimal
 
 from django.conf import settings
@@ -1715,6 +1715,94 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.title} -> {self.recipient}"
+
+
+class CallTrackingSettings(models.Model):
+    """Singleton: admin-configured window of working hours. Calls outside the
+    window are personal — excluded from analytics and no follow-up popup."""
+
+    enabled = models.BooleanField(default=True)
+    work_start = models.TimeField(default=datetime_time(10, 0))
+    work_end = models.TimeField(default=datetime_time(18, 0))
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Call Tracking Settings"
+        verbose_name_plural = "Call Tracking Settings"
+
+    def __str__(self):
+        return f"Call tracking {self.work_start:%H:%M}–{self.work_end:%H:%M} ({'on' if self.enabled else 'off'})"
+
+    @classmethod
+    def current(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class CallLogEntry(models.Model):
+    """One phone call observed on an employee's device (synced by the app)."""
+
+    DIRECTION_INCOMING = "incoming"
+    DIRECTION_OUTGOING = "outgoing"
+    DIRECTION_CHOICES = [
+        (DIRECTION_INCOMING, "Incoming"),
+        (DIRECTION_OUTGOING, "Outgoing"),
+    ]
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="call_logs")
+    phone = models.CharField(max_length=32, db_index=True)
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES)
+    connected = models.BooleanField(default=False)
+    duration_seconds = models.PositiveIntegerField(default=0)
+    started_at = models.DateTimeField(db_index=True)
+    client = models.ForeignKey(
+        "Client", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="call_logs", help_text="Auto-matched by phone number.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Dedup: the app may re-sync the same call.
+        unique_together = [("employee", "phone", "started_at")]
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["employee", "-started_at"], name="call_emp_time_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.employee} {self.direction} {self.phone} ({self.duration_seconds}s)"
+
+
+class CallFollowUp(models.Model):
+    """Follow-up on a phone call, scheduled from the post-call popup.
+    A reminder push is sent at `scheduled_at`; tapping it dials the number."""
+
+    STATUS_PENDING = "pending"
+    STATUS_DONE = "done"
+    STATUS_DISMISSED = "dismissed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_DONE, "Done"),
+        (STATUS_DISMISSED, "Dismissed"),
+    ]
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="call_followups")
+    phone = models.CharField(max_length=32)
+    client = models.ForeignKey(
+        "Client", null=True, blank=True, on_delete=models.SET_NULL, related_name="call_followups"
+    )
+    scheduled_at = models.DateTimeField(db_index=True)
+    note = models.CharField(max_length=255, blank=True, default="")
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    reminded = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["status", "scheduled_at"]
+
+    def __str__(self):
+        return f"Follow-up {self.phone} @ {self.scheduled_at:%d-%b %H:%M} ({self.status})"
 
 
 class PushDevice(models.Model):

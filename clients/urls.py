@@ -39,6 +39,14 @@ urlpatterns = [
     path("api/push/register/", views.push_register, name="push_register"),
     path("api/push/unregister/", views.push_unregister, name="push_unregister"),
 
+    # Call tracking (Android app)
+    path("api/calls/config/", views.call_config, name="call_config"),
+    path("api/calls/sync/", views.calls_sync, name="calls_sync"),
+    path("api/calls/followup/", views.call_followup_create, name="call_followup_create"),
+    path("calls/followups/", views.my_call_followups, name="my_call_followups"),
+    path("calls/followups/<int:followup_id>/update/", views.call_followup_update, name="call_followup_update"),
+    path("calls/analytics/", views.call_analytics, name="call_analytics"),
+
 
     # New
     # sales CRUD

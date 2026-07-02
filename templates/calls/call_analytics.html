@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Call Analytics{% endblock %}
+{% block page_title %}Call Analytics{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+  <div class="col-lg-8">
+    <div class="ki-card h-100">
+      <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+        <div>
+          <label class="form-label fw-semibold mb-1">From</label>
+          <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control">
+        </div>
+        <div>
+          <label class="form-label fw-semibold mb-1">To</label>
+          <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control">
+        </div>
+        <button class="btn btn-primary">Apply</button>
+        <span class="text-muted ms-2" style="font-size:.85rem;">
+          Only calls between {{ cfg.work_start|time:"h:i A" }} and {{ cfg.work_end|time:"h:i A" }} are counted — everything outside is treated as personal.
+        </span>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="ki-card h-100">
+      <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="form" value="settings">
+        <div>
+          <label class="form-label fw-semibold mb-1">Office start</label>
+          <input type="time" name="work_start" value="{{ cfg.work_start|time:'H:i' }}" class="form-control">
+        </div>
+        <div>
+          <label class="form-label fw-semibold mb-1">Office end</label>
+          <input type="time" name="work_end" value="{{ cfg.work_end|time:'H:i' }}" class="form-control">
+        </div>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="enabled" id="ct-enabled" {% if cfg.enabled %}checked{% endif %}>
+          <label class="form-check-label" for="ct-enabled">Tracking on</label>
+        </div>
+        <button class="btn btn-outline-primary">Save</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md"><div class="ki-card text-center"><div style="font-size:1.5rem;font-weight:800;">{{ totals.dialed }}</div><div class="text-muted">Dialed</div></div></div>
+  <div class="col-6 col-md"><div class="ki-card text-center"><div style="font-size:1.5rem;font-weight:800;color:#16a34a;">{{ totals.dialed_connected }}</div><div class="text-muted">Connected</div></div></div>
+  <div class="col-6 col-md"><div class="ki-card text-center"><div style="font-size:1.5rem;font-weight:800;">{{ totals.received }}</div><div class="text-muted">Received</div></div></div>
+  <div class="col-6 col-md"><div class="ki-card text-center"><div style="font-size:1.5rem;font-weight:800;color:#dc2626;">{{ totals.missed }}</div><div class="text-muted">Missed</div></div></div>
+  <div class="col-6 col-md"><div class="ki-card text-center"><div style="font-size:1.5rem;font-weight:800;">{{ totals.talk_minutes }}</div><div class="text-muted">Talk min</div></div></div>
+</div>
+
+<div class="ki-card mb-3">
+  <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
+    <i class="bi bi-people-fill me-2" style="color:var(--ki-primary);"></i> Per employee · {{ start|date:"d M" }} – {{ end|date:"d M Y" }}
+  </h3>
+  {% if rows %}
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th class="text-end">Dialed</th>
+          <th class="text-end">Connected</th>
+          <th class="text-end">Received</th>
+          <th class="text-end">Missed</th>
+          <th class="text-end">Talk (min)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.display_name }}</td>
+          <td class="text-end">{{ r.dialed }}</td>
+          <td class="text-end">{{ r.dialed_connected }}</td>
+          <td class="text-end">{{ r.received }}</td>
+          <td class="text-end">{{ r.missed }}</td>
+          <td class="text-end">{{ r.talk_minutes }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">No calls recorded in this range yet. Employees need the Android app installed with call permissions granted.</p>
+  {% endif %}
+</div>
+
+<div class="ki-card">
+  <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
+    <i class="bi bi-clock-history me-2" style="color:var(--ki-primary);"></i> Recent calls (latest 100)
+  </h3>
+  {% if recent_calls %}
+  <div class="table-responsive">
+    <table class="table align-middle" style="font-size:.9rem;">
+      <thead><tr><th>Time</th><th>Employee</th><th>Direction</th><th>Number</th><th>Client</th><th class="text-end">Duration</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for c in recent_calls %}
+        <tr>
+          <td>{{ c.started_at|date:"d M, h:i A" }}</td>
+          <td>{{ c.employee.user.get_full_name|default:c.employee.user.username }}</td>
+          <td>{% if c.direction == "outgoing" %}<i class="bi bi-telephone-outbound text-primary"></i> Out{% else %}<i class="bi bi-telephone-inbound text-success"></i> In{% endif %}</td>
+          <td>{{ c.phone }}</td>
+          <td>{% if c.client %}<a href="{% url 'clients:client_profile' c.client.id %}">{{ c.client.name }}</a>{% else %}—{% endif %}</td>
+          <td class="text-end">{{ c.duration_seconds }}s</td>
+          <td>{% if c.connected %}<span class="badge bg-success">Connected</span>{% else %}<span class="badge bg-danger">Not connected</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">Nothing yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Call Follow-ups{% endblock %}
+{% block page_title %}My Call Follow-ups{% endblock %}
+
+{% block content %}
+<div class="ki-card mb-3">
+  <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
+    <i class="bi bi-telephone-outbound me-2" style="color:var(--ki-primary);"></i>
+    Pending ({{ pending|length }})
+  </h3>
+
+  {% if pending %}
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Who</th>
+          <th>Phone</th>
+          <th>Note</th>
+          <th style="width:260px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fu in pending %}
+        <tr {% if fu.scheduled_at <= now %}style="background:rgba(229,183,64,.08);"{% endif %}>
+          <td>
+            {{ fu.scheduled_at|date:"d M, h:i A" }}
+            {% if fu.scheduled_at <= now %}<span class="badge bg-warning text-dark ms-1">Due</span>{% endif %}
+          </td>
+          <td>
+            {% if fu.client %}
+              <a href="{% url 'clients:client_profile' fu.client.id %}">{{ fu.client.name }}</a>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ fu.phone }}</td>
+          <td>{{ fu.note|default:"—" }}</td>
+          <td>
+            <a class="btn btn-sm btn-success" href="tel:{{ fu.phone }}"><i class="bi bi-telephone-fill"></i> Call</a>
+            <form method="post" action="{% url 'clients:call_followup_update' fu.id %}" style="display:inline;">
+              {% csrf_token %}
+              <button name="action" value="done" class="btn btn-sm btn-outline-success">Done</button>
+              <button name="action" value="snooze" class="btn btn-sm btn-outline-secondary">+1h</button>
+              <button name="action" value="dismiss" class="btn btn-sm btn-outline-danger">Dismiss</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">No pending follow-ups. Schedule one from the post-call popup in the app.</p>
+  {% endif %}
+</div>
+
+{% if recent_done %}
+<div class="ki-card">
+  <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
+    <i class="bi bi-check2-circle me-2" style="color:#16a34a;"></i> Recently completed
+  </h3>
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead><tr><th>Scheduled</th><th>Who</th><th>Phone</th><th>Status</th><th>Closed</th></tr></thead>
+      <tbody>
+        {% for fu in recent_done %}
+        <tr>
+          <td>{{ fu.scheduled_at|date:"d M, h:i A" }}</td>
+          <td>{% if fu.client %}{{ fu.client.name }}{% else %}—{% endif %}</td>
+          <td>{{ fu.phone }}</td>
+          <td><span class="badge {% if fu.status == 'done' %}bg-success{% else %}bg-secondary{% endif %}">{{ fu.get_status_display }}</span></td>
+          <td>{{ fu.completed_at|date:"d M, h:i A"|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

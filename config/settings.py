@@ -141,6 +141,8 @@ CRONJOBS = [
     ('0 3 * * 0', 'django.core.management.call_command', ['cleanup_data']),
     # Tag lead-sheet records untouched for 90+ days as 'cold', nightly at 1 AM
     ('0 1 * * *', 'django.core.management.call_command', ['autoclose_stale_leads']),
+    # Push reminders for due call follow-ups (Android app), every minute
+    ('* * * * *', 'django.core.management.call_command', ['send_followup_reminders']),
 ]
 
 
