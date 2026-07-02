@@ -32,6 +32,27 @@ import com.getcapacitor.annotation.PermissionCallback;
 public class CallTrackingPlugin extends Plugin {
 
     @PluginMethod
+    public void isPushAvailable(PluginCall call) {
+        // Without google-services.json compiled in, FirebaseApp never
+        // initializes and calling PushNotifications.register() would crash
+        // the app natively. The web side gates on this instead. Reflection:
+        // FirebaseApp isn't on this module's compile classpath.
+        boolean available;
+        try {
+            Class<?> firebaseApp = Class.forName("com.google.firebase.FirebaseApp");
+            Object apps = firebaseApp
+                    .getMethod("getApps", Context.class)
+                    .invoke(null, getContext());
+            available = apps instanceof java.util.List && !((java.util.List<?>) apps).isEmpty();
+        } catch (Throwable t) {
+            available = false;
+        }
+        JSObject out = new JSObject();
+        out.put("available", available);
+        call.resolve(out);
+    }
+
+    @PluginMethod
     public void getStatus(PluginCall call) {
         JSObject out = new JSObject();
         out.put("callsGranted", getPermissionState("calls") == com.getcapacitor.PermissionState.GRANTED);

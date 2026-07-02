@@ -624,40 +624,50 @@
         var cap = window.Capacitor;
         if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
         var Push = cap.Plugins && cap.Plugins.PushNotifications;
-        if (!Push) return;
+        var CT = cap.Plugins && cap.Plugins.CallTracking;
 
         function getCookie(name) {
           var m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
           return m ? m.pop() : '';
         }
 
-        Push.addListener('registration', function (t) {
-          fetch('{% url "clients:push_register" %}', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRFToken': getCookie('csrftoken'),
-            },
-            body: JSON.stringify({ token: t.value, platform: 'android' }),
-          }).catch(function () {});
-        });
+        // Only touch the push plugin when the app confirms Firebase is
+        // compiled in — registering without it crashes the app natively.
+        // Older app builds lack isPushAvailable → default to NOT available.
+        var pushCheck = (CT && CT.isPushAvailable)
+          ? CT.isPushAvailable().catch(function () { return { available: false }; })
+          : Promise.resolve({ available: false });
 
-        Push.addListener('pushNotificationActionPerformed', function (action) {
-          var link = action.notification && action.notification.data && action.notification.data.link;
-          if (!link) return;
-          if (link.indexOf('tel:') === 0) { window.location.href = link; return; }  // dial follow-up
-          if (link.indexOf('/') === 0) window.location.href = link;
-        });
+        pushCheck.then(function (fcm) {
+          if (!Push || !fcm || !fcm.available) return;
 
-        Push.checkPermissions().then(function (res) {
-          if (res.receive === 'granted') return Push.register();
-          return Push.requestPermissions().then(function (r) {
-            if (r.receive === 'granted') return Push.register();
+          Push.addListener('registration', function (t) {
+            fetch('{% url "clients:push_register" %}', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+              },
+              body: JSON.stringify({ token: t.value, platform: 'android' }),
+            }).catch(function () {});
           });
+
+          Push.addListener('pushNotificationActionPerformed', function (action) {
+            var link = action.notification && action.notification.data && action.notification.data.link;
+            if (!link) return;
+            if (link.indexOf('tel:') === 0) { window.location.href = link; return; }  // dial follow-up
+            if (link.indexOf('/') === 0) window.location.href = link;
+          });
+
+          Push.checkPermissions().then(function (res) {
+            if (res.receive === 'granted') return Push.register();
+            return Push.requestPermissions().then(function (r) {
+              if (r.receive === 'granted') return Push.register();
+            });
+          }).catch(function () {});
         }).catch(function () {});
 
         // ── Call tracking setup ──
-        var CT = cap.Plugins && cap.Plugins.CallTracking;
         if (CT) {
           // Sync the admin-configured office hours to the device so the
           // post-call popup stays silent outside working hours.
