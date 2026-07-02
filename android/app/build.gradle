@@ -1,0 +1,68 @@
+apply plugin: 'com.android.application'
+
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystoreFile))
+}
+
+android {
+    namespace project.property('twaApplicationId')
+    compileSdk 35
+
+    defaultConfig {
+        applicationId project.property('twaApplicationId')
+        minSdk 23
+        targetSdk 35
+        versionCode Integer.parseInt(project.property('twaVersionCode'))
+        versionName project.property('twaVersionName')
+
+        def hostName = project.property('twaHostName')
+        def launchUrl = "https://${hostName}${project.property('twaLaunchPath')}"
+
+        manifestPlaceholders = [
+            hostName   : hostName,
+            defaultUrl : launchUrl,
+            launcherName: project.property('twaAppName'),
+        ]
+
+        resValue "string", "appName", project.property('twaAppNameFull')
+        resValue "string", "launcherName", project.property('twaAppName')
+        resValue "string", "assetStatements",
+            '[{ \\"relation\\": [\\"delegate_permission/common.handle_all_urls\\"], ' +
+            '\\"target\\": { \\"namespace\\": \\"web\\", \\"site\\": \\"https://' + hostName + '\\"}}]'
+        resValue "color", "colorPrimary", project.property('twaThemeColor')
+        resValue "color", "backgroundColor", project.property('twaBackgroundColor')
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreFile.exists()) {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystoreFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // 2.5.0 is the last release depending on stable androidx.browser;
+    // 2.6.x pulls an alpha that demands a newer Android Gradle plugin.
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}
