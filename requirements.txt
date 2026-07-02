@@ -18,3 +18,4 @@ sqlparse==0.5.4
 tablib==3.9.0
 whitenoise==6.11.0
 firebase-admin==6.5.0
+qrcode==8.2

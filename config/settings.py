@@ -127,12 +127,24 @@ DATABASES = {
 if not DEBUG and not DATABASES['default']['PASSWORD']:
     raise ValueError('DB_PASSWORD environment variable is required when DEBUG=False')
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "unique-snowflake",  # just a unique key name
+if DEBUG:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",  # just a unique key name
+        }
     }
-}
+else:
+    # Shared across gunicorn workers — login lockout and request throttles
+    # only work if every worker sees the same counters. LocMem is per-process,
+    # which silently multiplies rate limits by the worker count.
+    # Requires one-time setup on the server: python manage.py createcachetable
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "django_cache",
+        }
+    }
 
 CRONJOBS = [
     # Run close_month at 12:05 AM on 1st of every month

@@ -380,13 +380,18 @@ def admin_past_month_performance(request, year, month):
 
 @login_required
 def monthly_business_report(request):
-    emp = request.user.employee
-    if emp.role not in ("admin", "manager"):
+    emp = getattr(request.user, "employee", None)
+    if not (request.user.is_superuser or (emp and emp.role in ("admin", "manager"))):
         return HttpResponseForbidden("Access denied")
 
     today = date.today()
-    sel_month = int(request.GET.get("month", today.month))
-    sel_year = int(request.GET.get("year", today.year))
+    try:
+        sel_month = int(request.GET.get("month", today.month))
+        sel_year = int(request.GET.get("year", today.year))
+    except (TypeError, ValueError):
+        sel_month, sel_year = today.month, today.year
+    if not 1 <= sel_month <= 12:
+        sel_month = today.month
 
     approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
 

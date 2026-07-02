@@ -1,4 +1,5 @@
 """Sales views: add, list, approve, edit, delete, incentives, recalculate."""
+import logging
 from datetime import date
 from decimal import Decimal
 import json
@@ -16,7 +17,9 @@ from django.views.decorators.http import require_POST
 
 from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Product
 from ..forms import AdminSaleForm, EditSaleForm, SaleForm
-from .helpers import get_manager_access
+from .helpers import get_manager_access, parse_date_param
+
+logger = logging.getLogger(__name__)
 
 
 def _recompute_sibling_sales(sale):
@@ -183,8 +186,8 @@ def all_sales(request):
     employee = request.GET.get("employee")
     policy_type = request.GET.get("policy_type")
     status = request.GET.get("status")
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
+    start_date = parse_date_param(request.GET.get("start_date"))
+    end_date = parse_date_param(request.GET.get("end_date"))
     q = (request.GET.get("q") or "").strip()
 
     if q:
@@ -305,8 +308,8 @@ def approve_sales(request):
         return redirect("clients:approve_sales")
 
     employee_filter = request.GET.get("employee", "").strip()
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
+    start_date = parse_date_param(request.GET.get("start_date"))
+    end_date = parse_date_param(request.GET.get("end_date"))
 
     sales_qs = Sale.objects.filter(status=Sale.STATUS_PENDING).select_related("client", "employee__user")
     if manager_access and not manager_access.allow_view_all_sales:
@@ -393,8 +396,9 @@ def update_incentive_rule(request, rule_id):
         rule.save()
         label = rule.product_ref.name if rule.product_ref_id else rule.product
         return JsonResponse({"success": True, "message": f"{label} updated."})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Incentive rule/slab update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required
@@ -457,8 +461,9 @@ def add_incentive_rule(request):
                 "active": rule.active,
             },
         })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Incentive rule/slab update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required
@@ -508,8 +513,9 @@ def add_incentive_slab(request, rule_id):
                 "label": slab.label,
             },
         })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Incentive rule/slab update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required
@@ -531,8 +537,9 @@ def update_incentive_slab(request, slab_id):
             slab.label = data["label"].strip()
         slab.save()
         return JsonResponse({"success": True, "message": "Slab updated."})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Incentive rule/slab update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required

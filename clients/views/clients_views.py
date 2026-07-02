@@ -15,6 +15,7 @@ from django.conf import settings
 from ..models import Client, Employee, MessageTemplate, Product, Renewal, Sale
 from ..forms import ClientForm, ClientReassignForm
 from ..services.google_drive import DriveNotConfigured, get_or_create_client_folder
+from .helpers import parse_date_param
 
 
 PER_PAGE = getattr(settings, "PER_PAGE", 50)
@@ -471,16 +472,19 @@ def map_client(request, client_id):
 
 @login_required
 def client_analysis(request):
-    if request.user.employee.role == "admin":
+    user_emp = getattr(request.user, "employee", None)
+    if request.user.is_superuser or (user_emp and user_emp.role == "admin"):
         clients = Client.objects.all()
+    elif user_emp:
+        clients = Client.objects.filter(mapped_to=user_emp)
     else:
-        clients = Client.objects.filter(mapped_to=request.user.employee)
+        return HttpResponseForbidden("Need an employee account.")
 
     product_filters = _build_client_product_filters(request)
     clients = _apply_client_product_filters(clients, product_filters)
 
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
+    start_date = parse_date_param(request.GET.get("start_date"))
+    end_date = parse_date_param(request.GET.get("end_date"))
     if start_date and end_date:
         clients = clients.filter(created_at__range=[start_date, end_date])
 

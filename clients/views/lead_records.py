@@ -35,6 +35,7 @@ from ..models import (
     Product,
     Sale,
 )
+from .helpers import throttle_view
 
 
 def _notify_assignment(record: "LeadSheetRecord", actor):
@@ -168,8 +169,13 @@ def _unique_field_key(sheet: LeadSheet, base: str) -> str:
     return candidate
 
 
-def _sanitize_value(col: LeadSheetColumn, raw):
-    """Coerce a raw user input into the right shape for the column type."""
+def _sanitize_value(col: LeadSheetColumn, raw, allow_new_options=True):
+    """Coerce a raw user input into the right shape for the column type.
+
+    `allow_new_options=False` (public form) rejects select/status values that
+    aren't already configured — anonymous visitors must not be able to grow
+    the dropdown option lists.
+    """
     if raw is None:
         return ""
     s = str(raw).strip()
@@ -199,7 +205,9 @@ def _sanitize_value(col: LeadSheetColumn, raw):
         opts = list(col.options or [])
         if s in opts:
             return s
-        # Auto-add new option (so users can extend dropdowns by typing)
+        if not allow_new_options:
+            return ""
+        # Auto-add new option (so staff can extend dropdowns by typing)
         if s and len(opts) < 50:
             opts.append(s)
             col.options = opts
@@ -1343,8 +1351,10 @@ def lead_sheet_archive(request, sheet_id):
 # `show_on_public_form` are rendered. Submissions create a row in the sheet
 # and round-robin assign to one of `sheet.shared_with` employees.
 
+@throttle_view(max_requests=5, window_seconds=300, key_prefix="public_lead")
 def lead_sheet_public_form(request, token):
-    """Open lead-capture form keyed by sheet.public_token."""
+    """Open lead-capture form keyed by sheet.public_token.
+    Throttled: max 5 submissions per 5 minutes per IP."""
     sheet = get_object_or_404(LeadSheet, public_token=token)
     if not sheet.public_form_enabled or sheet.archived:
         # Don't disclose whether the sheet exists — 404.
@@ -1368,7 +1378,7 @@ def lead_sheet_public_form(request, token):
         errors = {}
         for col in columns:
             raw = request.POST.get(f"col_{col.field_key}", "")
-            clean = _sanitize_value(col, raw)
+            clean = _sanitize_value(col, raw, allow_new_options=False)
             if col.required and not clean:
                 errors[col.field_key] = "This field is required."
             values[col.field_key] = clean

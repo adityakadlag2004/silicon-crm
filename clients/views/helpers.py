@@ -67,6 +67,15 @@ def _last_n_months(today, n=12):
     return months
 
 
+def parse_date_param(raw):
+    """Parse a YYYY-MM-DD query param; None for anything malformed.
+    Prevents 500s from raw GET values fed into __range lookups."""
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
 def _client_ip(request):
     xff = (request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
     if xff:

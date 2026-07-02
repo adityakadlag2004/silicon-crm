@@ -6,8 +6,11 @@ the campaign benefit instead of the regular IncentiveRule (handled in
 ``Sale.compute_points``).
 """
 import json
+import logging
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+
+logger = logging.getLogger(__name__)
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -107,8 +110,9 @@ def add_campaign(request):
                 "is_active": campaign.is_active,
             },
         })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Campaign update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required
@@ -154,8 +158,9 @@ def update_campaign(request, campaign_id):
             campaign.is_active = bool(data["is_active"])
         campaign.save()
         return JsonResponse({"success": True, "message": f"'{campaign.name}' updated."})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Campaign update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required
@@ -223,8 +228,9 @@ def add_campaign_product(request, campaign_id):
                 "points_per_unit": str(cp.points_per_unit) if cp.points_per_unit is not None else "",
             },
         })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Campaign update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required
@@ -248,8 +254,9 @@ def update_campaign_product(request, product_id):
             return JsonResponse({"error": "Unit amount must be positive."}, status=400)
         cp.save()
         return JsonResponse({"success": True, "message": f"{cp.product_ref.name} updated."})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Campaign update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required
@@ -293,8 +300,9 @@ def add_campaign_slab(request, product_id):
                 "label": slab.label,
             },
         })
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Campaign update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required
@@ -319,8 +327,9 @@ def update_campaign_slab(request, slab_id):
             slab.label = (data["label"] or "").strip()
         slab.save()
         return JsonResponse({"success": True, "message": "Slab updated."})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+    except Exception:
+        logger.exception("Campaign update failed")
+        return JsonResponse({"error": "Could not save — check the values and try again."}, status=400)
 
 
 @login_required

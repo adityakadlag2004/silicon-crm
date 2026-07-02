@@ -1,6 +1,9 @@
 """Calendar views: calendar page, events JSON API, CRUD, task actions."""
 import json
+import logging
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
@@ -202,7 +205,8 @@ def update_calendar_event(request):
         event.save()
         return JsonResponse({"success": True})
     except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=400)
+        logger.exception("Calendar operation failed")
+        return JsonResponse({"success": False, "error": "Something went wrong — please try again."}, status=400)
 
 
 @login_required
@@ -279,7 +283,8 @@ def create_calendar_event(request):
         }
         return JsonResponse({"success": True, "event": ev_json})
     except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=400)
+        logger.exception("Calendar operation failed")
+        return JsonResponse({"success": False, "error": "Something went wrong — please try again."}, status=400)
 
 
 @login_required
@@ -302,7 +307,8 @@ def delete_calendar_event(request):
         event.delete()
         return JsonResponse({"success": True})
     except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=400)
+        logger.exception("Calendar operation failed")
+        return JsonResponse({"success": False, "error": "Something went wrong — please try again."}, status=400)
 
 
 @login_required
@@ -359,7 +365,8 @@ def update_calendar_event_details(request):
             },
         })
     except Exception as e:
-        return JsonResponse({"success": False, "error": str(e)}, status=400)
+        logger.exception("Calendar operation failed")
+        return JsonResponse({"success": False, "error": "Something went wrong — please try again."}, status=400)
 
 
 @login_required

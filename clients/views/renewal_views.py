@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 
 from ..forms import EditRenewalForm, RenewalForm
 from ..models import Client, Renewal, Product
+from .helpers import parse_date_param
 from .helpers import get_manager_access
 
 
@@ -172,10 +173,12 @@ def all_renewals(request):
 			| Q(employee__user__first_name__icontains=employee)
 			| Q(employee__user__last_name__icontains=employee)
 		)
-	if start_date and end_date:
-		renewals_qs = renewals_qs.filter(renewal_date__range=[start_date, end_date])
-	if payment_start and payment_end:
-		renewals_qs = renewals_qs.filter(premium_collected_on__range=[payment_start, payment_end])
+	renewal_from, renewal_to = parse_date_param(start_date), parse_date_param(end_date)
+	if renewal_from and renewal_to:
+		renewals_qs = renewals_qs.filter(renewal_date__range=[renewal_from, renewal_to])
+	payment_from, payment_to = parse_date_param(payment_start), parse_date_param(payment_end)
+	if payment_from and payment_to:
+		renewals_qs = renewals_qs.filter(premium_collected_on__range=[payment_from, payment_to])
 
 	today_qs = scoped_qs.filter(premium_collected_on=today)
 	today_submission_total = today_qs.aggregate(total=Sum("premium_amount"))["total"] or 0

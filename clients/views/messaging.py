@@ -1,6 +1,9 @@
 """WhatsApp messaging views: bulk send, preview page, CSV export."""
+import base64
 import csv
 import json
+import logging
+from io import BytesIO
 from urllib.parse import quote as urlquote
 
 from django.shortcuts import render
@@ -10,6 +13,23 @@ from django.views.decorators.http import require_POST, require_GET
 
 from ..models import Client, MessageTemplate, MessageLog
 from ..utils.phone_utils import normalize_phone
+
+logger = logging.getLogger(__name__)
+
+
+def _qr_data_uri(text):
+    """Generate a QR code locally as a data URI — client phone numbers and
+    message content must never be sent to a third-party QR service."""
+    try:
+        import qrcode
+
+        img = qrcode.make(text, box_size=6, border=2)
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        logger.exception("QR generation failed")
+        return ""
 
 
 def _get_sender_name(request):
@@ -87,8 +107,9 @@ def bulk_whatsapp(request):
             queued_count += 1
 
         return JsonResponse({"messages_preview": messages_preview, "sent_count": queued_count, "skipped": skipped})
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        logger.exception("Bulk WhatsApp failed")
+        return JsonResponse({"error": "Something went wrong — please try again."}, status=500)
 
 
 @login_required
@@ -117,7 +138,7 @@ def wa_preview_page(request):
         if len(msg) > 1000:
             msg = msg[:1000]
         link = f"https://wa.me/{wa}?text={urlquote(msg)}"
-        qr_src = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urlquote(link)}"
+        qr_src = _qr_data_uri(link)
         previews.append({
             "client": c.name,
             "phone": e164,

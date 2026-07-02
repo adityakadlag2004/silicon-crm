@@ -6,6 +6,8 @@ from itertools import cycle
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
 from django.views.decorators.http import require_POST
@@ -357,8 +359,11 @@ def team_reset_password(request, employee_id):
 
     emp = get_object_or_404(Employee.objects.select_related("user"), id=employee_id)
     new_password = request.POST.get("new_password", "").strip()
-    if not new_password or len(new_password) < 6:
-        msg = "Password must be at least 6 characters."
+    try:
+        # Enforce the same AUTH_PASSWORD_VALIDATORS as everywhere else.
+        validate_password(new_password, user=emp.user)
+    except ValidationError as e:
+        msg = " ".join(e.messages)
         if request.headers.get("X-Requested-With") == "XMLHttpRequest":
             return JsonResponse({"error": msg}, status=400)
         messages.error(request, msg)

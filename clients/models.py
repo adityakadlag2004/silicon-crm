@@ -481,7 +481,8 @@ class Client(models.Model):
 
         with transaction.atomic():
             self.mapped_to = new_employee
-            self.save(update_fields=['mapped_to'])
+            self.status = "Mapped" if new_employee else "Unmapped"
+            self.save(update_fields=['mapped_to', 'status'])
 
             # create audit entry
             ClientMappingAudit.objects.create(
@@ -925,7 +926,11 @@ class Sale(models.Model):
                 rule_qs = rule_qs.filter(product_ref=self.product_ref)
             else:
                 rule_qs = rule_qs.filter(product=product_label)
-            rule = rule_qs.get()
+            # first() instead of get(): a stray duplicate rule must degrade to
+            # deterministic behaviour, not crash every save of this product.
+            rule = rule_qs.order_by("id").first()
+            if rule is None:
+                raise IncentiveRule.DoesNotExist
 
             # Check if this rule has slabs → slab-based calculation
             slab_qs = IncentiveSlab.objects.filter(rule=rule).order_by("-threshold")
