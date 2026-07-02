@@ -21,7 +21,29 @@ def _login_lockout_key(request, username):
     return f"auth:login:fail:{_client_ip(request)}:{(username or '').strip().lower()}"
 
 
+def _dashboard_redirect(user):
+    """Role-based landing page, or None if the user has no role mapping."""
+    emp = getattr(user, "employee", None)
+    role = emp.role.lower() if emp and emp.role else None
+    if role == "admin":
+        return redirect("clients:admin_dashboard")
+    if role in ("manager", "employee"):
+        return redirect("clients:employee_dashboard")
+    if user.is_superuser or user.is_staff:
+        # Superusers/staff created via createsuperuser have no Employee
+        # record but must still be able to log in.
+        return redirect("clients:admin_dashboard")
+    return None
+
+
 def login_view(request):
+    # Already signed in (e.g. the Android app reopening on its start URL) —
+    # go straight to the dashboard instead of showing the login form again.
+    if request.user.is_authenticated:
+        target = _dashboard_redirect(request.user)
+        if target is not None:
+            return target
+
     if request.method == "POST":
         username = (request.POST.get("username") or "").strip()
         password = request.POST.get("password") or ""
@@ -36,20 +58,10 @@ def login_view(request):
         if user:
             cache.delete(throttle_key)
             login(request, user)
-
-            # Redirect based on role
-            emp = getattr(user, "employee", None)
-            role = emp.role.lower() if emp and emp.role else None
-            if role == "admin":
-                return redirect("clients:admin_dashboard")
-            elif role in ("manager", "employee"):
-                return redirect("clients:employee_dashboard")
-            elif user.is_superuser or user.is_staff:
-                # Superusers/staff created via createsuperuser have no Employee
-                # record but must still be able to log in.
-                return redirect("clients:admin_dashboard")
-            else:
-                messages.error(request, "No employee role mapped. Contact an administrator.")
+            target = _dashboard_redirect(user)
+            if target is not None:
+                return target
+            messages.error(request, "No employee role mapped. Contact an administrator.")
         else:
             cache.set(throttle_key, failed_attempts + 1, LOGIN_LOCKOUT_SECONDS)
             messages.error(request, "Invalid username or password")

@@ -159,6 +159,14 @@ CRONJOBS = [
 
 
 
+# ── Sessions ──
+# App-like persistence: 30-day rolling window. Every request refreshes the
+# expiry, so active users (especially the Android app) stay signed in and
+# only truly idle sessions expire.
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
+SESSION_SAVE_EVERY_REQUEST = True
+
+
 # Password validation
 # https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators
 

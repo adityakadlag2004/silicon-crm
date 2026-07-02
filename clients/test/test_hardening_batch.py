@@ -111,6 +111,21 @@ class PasswordResetPolicyTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
 
+class LoginRedirectTests(TestCase):
+    def test_authenticated_user_skips_login_page(self):
+        user = User.objects.create_user(username="lr_emp", password="x")
+        Employee.objects.create(user=user, role="employee", salary=0, active=True)
+        http = TestClient()
+        http.force_login(user)
+        resp = http.get(reverse("clients:login"))
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(resp.url, reverse("clients:employee_dashboard"))
+
+    def test_anonymous_user_sees_login_page(self):
+        resp = TestClient().get(reverse("clients:login"))
+        self.assertEqual(resp.status_code, 200)
+
+
 class ClientStatusSyncTests(TestCase):
     def test_reassign_updates_status_field(self):
         user = User.objects.create_user(username="cs_emp", password="x")
