@@ -36,6 +36,8 @@ urlpatterns = [
     path("notifications/json/", views.notifications_json, name="notifications_json"),
     path("notifications/mark-all-read/", views.notifications_mark_all_read, name="notifications_mark_all_read"),
     path("notifications/clear/", views.notifications_clear, name="notifications_clear"),
+    path("api/push/register/", views.push_register, name="push_register"),
+    path("api/push/unregister/", views.push_unregister, name="push_unregister"),
 
 
     # New

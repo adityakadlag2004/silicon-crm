@@ -1,0 +1,17 @@
+{
+  "appId": "bo.kadlaginvestment.crm",
+  "appName": "Kadlag Inv BO",
+  "webDir": "www",
+  "server": {
+    "url": "https://bo.kadlaginvestment.com/clients/login/",
+    "allowNavigation": ["bo.kadlaginvestment.com"]
+  },
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

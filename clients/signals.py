@@ -33,6 +33,27 @@ def update_client_status(sender, instance, **kwargs):
     client.save()
 
 
+@receiver(post_save, sender=Notification)
+def push_on_notification(sender, instance, created, **kwargs):
+    """Mirror every new in-app notification as an FCM push to the recipient's
+    registered devices (Android app). No-op when Firebase isn't configured."""
+    if not created:
+        return
+    try:
+        from .services.push import send_push_to_user
+        send_push_to_user(
+            instance.recipient,
+            title=instance.title,
+            body=instance.body,
+            link=instance.link or "",
+        )
+    except Exception:
+        # Push delivery must never break the transaction that created the
+        # notification (sale save, lead assignment, etc.).
+        import logging
+        logging.getLogger(__name__).exception("Push notification dispatch failed")
+
+
 @receiver(post_save, sender=Sale)
 def notify_admins_on_sale(sender, instance, created, **kwargs):
     if not created:

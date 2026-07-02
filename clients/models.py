@@ -1717,6 +1717,27 @@ class Notification(models.Model):
         return f"{self.title} -> {self.recipient}"
 
 
+class PushDevice(models.Model):
+    """An FCM device token belonging to a user, registered by the Android app.
+
+    One user can have several devices. Tokens are upserted on app launch and
+    pruned automatically when FCM reports them unregistered.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="push_devices"
+    )
+    token = models.CharField(max_length=512, unique=True)
+    platform = models.CharField(max_length=20, default="android")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-last_seen"]
+
+    def __str__(self):
+        return f"{self.user.username} · {self.platform} · …{self.token[-12:]}"
+
+
 class FirmSettings(models.Model):
     """
     Singleton model to store firm/company details for branding in reports and documents.

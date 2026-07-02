@@ -610,6 +610,49 @@
       }
     </script>
 
+    {% if request.user.is_authenticated %}
+    <script>
+      // ── Android app (Capacitor) push notifications ──
+      // Runs only inside the native app: registers this device's FCM token
+      // against the logged-in user, and opens the right page when a
+      // notification is tapped.
+      (function () {
+        var cap = window.Capacitor;
+        if (!cap || !cap.isNativePlatform || !cap.isNativePlatform()) return;
+        var Push = cap.Plugins && cap.Plugins.PushNotifications;
+        if (!Push) return;
+
+        function getCookie(name) {
+          var m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+          return m ? m.pop() : '';
+        }
+
+        Push.addListener('registration', function (t) {
+          fetch('{% url "clients:push_register" %}', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({ token: t.value, platform: 'android' }),
+          }).catch(function () {});
+        });
+
+        Push.addListener('pushNotificationActionPerformed', function (action) {
+          var link = action.notification && action.notification.data && action.notification.data.link;
+          if (link && link.indexOf('/') === 0) window.location.href = link;
+        });
+
+        Push.checkPermissions().then(function (res) {
+          if (res.receive === 'granted') return Push.register();
+          return Push.requestPermissions().then(function (r) {
+            if (r.receive === 'granted') return Push.register();
+          });
+        }).catch(function () {});
+      })();
+    </script>
+    {% endif %}
+
     <!-- Bootstrap JS (self-hosted) -->
     <script src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
     <!-- Select2 JS -->
