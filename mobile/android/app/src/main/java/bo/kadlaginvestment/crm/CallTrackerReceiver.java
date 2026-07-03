@@ -97,15 +97,10 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         boolean connected = (type == CallLog.Calls.INCOMING_TYPE)
                 || (type == CallLog.Calls.OUTGOING_TYPE && durationSec > 0);
 
-        // 1) Sync the event to the CRM.
-        String json = "{\"events\":[{"
-                + "\"phone\":\"" + BackendClient.jsonEscape(number) + "\","
-                + "\"direction\":\"" + (incoming ? "incoming" : "outgoing") + "\","
-                + "\"connected\":" + connected + ","
-                + "\"duration_seconds\":" + durationSec + ","
-                + "\"started_at\":" + dateMillis
-                + "}]}";
-        BackendClient.postJson("/clients/api/calls/sync/", json);
+        // 1) Sync to the CRM — catch-up style: uploads this call AND any
+        // backlog from earlier network gaps. Offline? The marker doesn't
+        // advance and the next trigger retries.
+        CallSyncManager.syncRecentCalls(ctx);
 
         // 2) Follow-up prompt — only during office hours (config synced at login).
         SharedPreferences prefs = ctx.getSharedPreferences("call_tracking", Context.MODE_PRIVATE);

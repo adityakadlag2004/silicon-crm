@@ -43,6 +43,10 @@ class ShellActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Catch-up sync: uploads any calls that couldn't be synced when they
+        // ended (no internet at the time). Server-side dedup makes this safe.
+        Thread { CallSyncManager.syncRecentCalls(applicationContext) }.start()
+
         setContent {
             KadlagTheme {
                 var selected by remember { mutableIntStateOf(0) }
