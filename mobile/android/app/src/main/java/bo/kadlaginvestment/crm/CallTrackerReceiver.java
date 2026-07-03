@@ -65,7 +65,9 @@ public class CallTrackerReceiver extends BroadcastReceiver {
     }
 
     private void handleCallEnded(Context ctx) {
+        Log.i(TAG, "call ended — processing");
         if (ctx.checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "skip: READ_CALL_LOG not granted");
             return;
         }
 
@@ -74,10 +76,13 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         long durationSec = 0;
         long dateMillis = 0;
 
+        // NOTE: no "LIMIT 1" — Android 14+ call-log provider rejects it
+        // (IllegalArgumentException: Invalid token LIMIT). Sort DESC and
+        // read only the first row instead.
         Cursor c = ctx.getContentResolver().query(
                 CallLog.Calls.CONTENT_URI,
                 new String[]{CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DURATION, CallLog.Calls.DATE},
-                null, null, CallLog.Calls.DATE + " DESC LIMIT 1");
+                null, null, CallLog.Calls.DATE + " DESC");
         if (c != null) {
             if (c.moveToFirst()) {
                 number = c.getString(0);
@@ -104,12 +109,19 @@ public class CallTrackerReceiver extends BroadcastReceiver {
 
         // 2) Follow-up prompt — only during office hours (config synced at login).
         SharedPreferences prefs = ctx.getSharedPreferences("call_tracking", Context.MODE_PRIVATE);
-        if (!prefs.getBoolean("enabled", true)) return;
+        if (!prefs.getBoolean("enabled", true)) {
+            Log.i(TAG, "popup skip: tracking disabled by admin config");
+            return;
+        }
         Calendar now = Calendar.getInstance();
         int minutesNow = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
         int workStart = prefs.getInt("work_start_minutes", 600);  // 10:00
         int workEnd = prefs.getInt("work_end_minutes", 1080);     // 18:00
-        if (minutesNow < workStart || minutesNow >= workEnd) return;
+        if (minutesNow < workStart || minutesNow >= workEnd) {
+            Log.i(TAG, "popup skip: outside office hours (" + minutesNow + " not in "
+                    + workStart + "-" + workEnd + ")");
+            return;
+        }
 
         Intent popup = new Intent(ctx, FollowupActivity.class);
         popup.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
@@ -121,10 +133,13 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         if (Settings.canDrawOverlays(ctx)) {
             try {
                 ctx.startActivity(popup);
+                Log.i(TAG, "popup shown for " + number);
                 return;
             } catch (Exception e) {
-                Log.w(TAG, "Popup start failed, falling back to notification: " + e);
+                Log.w(TAG, "popup start failed, falling back to notification: " + e);
             }
+        } else {
+            Log.i(TAG, "popup skip: overlay permission missing — using notification");
         }
         showFollowupNotification(ctx, popup, number);
     }

@@ -95,6 +95,39 @@ class FollowUpTests(_CallSetup):
             (fu.scheduled_at - timezone.now()).total_seconds(), 15 * 60, delta=30
         )
 
+
+    def test_new_grid_choices(self):
+        # Minute/hour choices: exact offset
+        resp = self.employee.post(
+            reverse("clients:call_followup_create"),
+            data=json.dumps({"phone": "9876543210", "choice": "10m"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        fu = CallFollowUp.objects.latest("id")
+        self.assertAlmostEqual(
+            (fu.scheduled_at - timezone.now()).total_seconds(), 10 * 60, delta=30
+        )
+        # Day+ choices: 10:00 on the target day
+        resp = self.employee.post(
+            reverse("clients:call_followup_create"),
+            data=json.dumps({"phone": "9876543210", "choice": "2mo"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        fu = CallFollowUp.objects.latest("id")
+        local = timezone.localtime(fu.scheduled_at)
+        self.assertEqual(local.hour, 10)
+        self.assertEqual((local.date() - timezone.localdate()).days, 60)
+
+    def test_legacy_choices_still_work(self):
+        resp = self.employee.post(
+            reverse("clients:call_followup_create"),
+            data=json.dumps({"phone": "9876543210", "choice": "tomorrow"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
     def test_invalid_choice_rejected(self):
         resp = self.employee.post(
             reverse("clients:call_followup_create"),

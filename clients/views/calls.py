@@ -123,13 +123,20 @@ def calls_sync(request):
     return JsonResponse({"ok": True, "created": created})
 
 
-# Quick-choice → delay from now. Server-side so phone clock skew doesn't matter.
-_FOLLOWUP_CHOICES = {
-    "15m": timedelta(minutes=15),
-    "1h": timedelta(hours=1),
-    "tomorrow": None,   # next day 10:00
-    "week": None,       # +7 days 10:00
+# Quick-choice → delay from now. Server-side so phone clock skew doesn't
+# matter. Minute/hour choices fire at the exact offset; day+ choices fire at
+# 10:00 on the target day (calling someone "in 10 days" at 9 PM is wrong).
+_FOLLOWUP_MINUTES = {
+    "10m": 10, "15m": 15, "30m": 30,
+    "1h": 60, "2h": 120, "3h": 180, "4h": 240,
 }
+_FOLLOWUP_DAYS = {
+    "1d": 1, "5d": 5, "10d": 10,
+    "1w": 7, "2w": 14, "1mo": 30, "2mo": 60,
+    # Legacy keys from app v3.x popups still in the field:
+    "tomorrow": 1, "week": 7,
+}
+_FOLLOWUP_CHOICES = {**_FOLLOWUP_MINUTES, **_FOLLOWUP_DAYS}
 
 
 @login_required
@@ -152,12 +159,12 @@ def call_followup_create(request):
         return JsonResponse({"ok": False, "error": "phone and valid choice required"}, status=400)
 
     now = timezone.localtime()
-    if choice == "tomorrow":
-        scheduled = (now + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
-    elif choice == "week":
-        scheduled = (now + timedelta(days=7)).replace(hour=10, minute=0, second=0, microsecond=0)
+    if choice in _FOLLOWUP_MINUTES:
+        scheduled = now + timedelta(minutes=_FOLLOWUP_MINUTES[choice])
     else:
-        scheduled = now + _FOLLOWUP_CHOICES[choice]
+        scheduled = (now + timedelta(days=_FOLLOWUP_DAYS[choice])).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
 
     fu = CallFollowUp.objects.create(
         employee=emp,
