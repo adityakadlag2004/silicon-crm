@@ -244,3 +244,97 @@ class AppRenewalNotificationTests(TestCase):
         Notification.objects.create(recipient=other, title="Secret", body="x")
         data = self._http().get(reverse("clients:app_notifications")).json()
         self.assertEqual(len(data["results"]), 0)
+
+
+class AppLeadsReportsTests(TestCase):
+    """Screen APIs for v3.3: leads pipeline + reports summary."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="lr_admin2", password="x")
+        cls.admin_emp = Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="lr_emp2", password="x")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+        cls.other_user = User.objects.create_user(username="lr_other2", password="x")
+        cls.other = Employee.objects.create(user=cls.other_user, role="employee", salary=0, active=True)
+
+    def _http(self, user):
+        c = TestClient()
+        c.force_login(user)
+        return c
+
+    def _post(self, user, url, payload):
+        import json as _json
+        return self._http(user).post(url, data=_json.dumps(payload), content_type="application/json")
+
+    def test_lead_create_employee_forced_self(self):
+        resp = self._post(self.emp_user, reverse("clients:app_lead_create"), {
+            "customer_name": "Lead A", "phone": "981", "assigned_to_id": self.other.id,
+        })
+        self.assertEqual(resp.status_code, 200)
+        from clients.models import Lead
+        lead = Lead.objects.get()
+        self.assertEqual(lead.assigned_to, self.emp)          # spoof ignored
+        self.assertEqual(lead.progress_entries.count(), 3)    # seeded tracks
+
+    def test_leads_scoped_to_employee(self):
+        from clients.models import Lead
+        Lead.objects.create(customer_name="Mine", assigned_to=self.emp)
+        Lead.objects.create(customer_name="Theirs", assigned_to=self.other)
+        data = self._http(self.emp_user).get(reverse("clients:app_leads")).json()
+        self.assertEqual(len(data["results"]), 1)
+        self.assertEqual(data["results"][0]["name"], "Mine")
+        # Admin sees both
+        data = self._http(self.admin_user).get(reverse("clients:app_leads")).json()
+        self.assertEqual(len(data["results"]), 2)
+
+    def test_progress_updates_stage_and_convert(self):
+        from clients.models import Lead
+        lead = Lead.objects.create(customer_name="Conv", phone="97000", assigned_to=self.emp)
+        for product in ("health", "life", "wealth"):
+            resp = self._post(
+                self.emp_user,
+                reverse("clients:app_lead_progress", args=[lead.id]),
+                {"product": product, "status": "processed", "achieved_amount": "100000"},
+            )
+            self.assertEqual(resp.status_code, 200)
+        lead.refresh_from_db()
+        self.assertEqual(lead.stage, Lead.STAGE_PROCESSED)
+
+        resp = self._post(self.emp_user, reverse("clients:app_lead_action", args=[lead.id]), {"action": "convert"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        lead.refresh_from_db()
+        client = lead.converted_client
+        self.assertIsNotNone(client)
+        self.assertTrue(client.health_status and client.life_status and client.sip_status)
+        self.assertEqual(client.mapped_to, self.emp)
+
+    def test_convert_requires_processed(self):
+        from clients.models import Lead
+        lead = Lead.objects.create(customer_name="Early", assigned_to=self.emp)
+        resp = self._post(self.emp_user, reverse("clients:app_lead_action", args=[lead.id]), {"action": "convert"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_remark_added(self):
+        from clients.models import Lead
+        lead = Lead.objects.create(customer_name="R", assigned_to=self.emp)
+        self._post(self.emp_user, reverse("clients:app_lead_remark", args=[lead.id]), {"text": "called, callback tomorrow"})
+        self.assertEqual(lead.remarks.count(), 1)
+
+    def test_report_summary_scoping(self):
+        from django.utils import timezone as tz
+        c = Client.objects.create(name="Rep C")
+        Sale.objects.create(client=c, employee=self.emp, product="SIP",
+                            amount=Decimal("1000"), status=Sale.STATUS_APPROVED, date=tz.localdate())
+        Sale.objects.create(client=c, employee=self.other, product="SIP",
+                            amount=Decimal("2000"), status=Sale.STATUS_APPROVED, date=tz.localdate())
+
+        data = self._http(self.emp_user).get(reverse("clients:app_report_summary")).json()
+        self.assertFalse(data["firm_wide"])
+        self.assertNotIn("leaderboard", data)
+        self.assertEqual(data["trend"][-1]["amount"], 1000.0)  # own only
+
+        data = self._http(self.admin_user).get(reverse("clients:app_report_summary")).json()
+        self.assertTrue(data["firm_wide"])
+        self.assertEqual(data["trend"][-1]["amount"], 3000.0)
+        self.assertEqual(len(data["leaderboard"]), 2)

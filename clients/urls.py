@@ -63,6 +63,14 @@ urlpatterns = [
     path("api/app/renewals/create/", views.app_renewal_create, name="app_renewal_create"),
     path("api/app/notifications/", views.app_notifications, name="app_notifications"),
     path("api/app/notifications/read/", views.app_notifications_read, name="app_notifications_read"),
+    path("api/app/lead-meta/", views.app_lead_meta, name="app_lead_meta"),
+    path("api/app/leads/", views.app_leads, name="app_leads"),
+    path("api/app/leads/create/", views.app_lead_create, name="app_lead_create"),
+    path("api/app/leads/<int:lead_id>/", views.app_lead_detail, name="app_lead_detail"),
+    path("api/app/leads/<int:lead_id>/progress/", views.app_lead_progress, name="app_lead_progress"),
+    path("api/app/leads/<int:lead_id>/remark/", views.app_lead_remark, name="app_lead_remark"),
+    path("api/app/leads/<int:lead_id>/action/", views.app_lead_action, name="app_lead_action"),
+    path("api/app/reports/summary/", views.app_report_summary, name="app_report_summary"),
 
 
     # New

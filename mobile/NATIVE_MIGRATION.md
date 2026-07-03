@@ -39,8 +39,8 @@ in the WebView.
 | 6 | Native Menu + logout | `/api/app/logout/` | **v3.1** |
 | 7 | Renewals (list + add) | `/api/app/renewals/…` | **v3.2** |
 | 8 | Notifications screen | `/api/app/notifications/…` | **v3.2** |
-| 9 | Leads pipeline | | |
-| 10 | Reports (charts via Compose) | | |
+| 9 | Leads pipeline (stages, progress, remarks, convert, create) | `/api/app/leads/…` | **v3.3** |
+| 10 | Reports (trend chart, product mix, leaderboard) | `/api/app/reports/summary/` | **v3.3** |
 | 11 | Team management (admin) | | |
 | 12 | Campaigns / Incentives (admin) | | |
 | 13 | Lead sheets (spreadsheet — hardest, last) | | |

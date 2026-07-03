@@ -28,7 +28,9 @@ import bo.kadlaginvestment.crm.ui.ClientsScreen
 import bo.kadlaginvestment.crm.ui.DashboardScreen
 import bo.kadlaginvestment.crm.ui.FollowupsScreen
 import bo.kadlaginvestment.crm.ui.KadlagTheme
+import bo.kadlaginvestment.crm.ui.LeadsScreen
 import bo.kadlaginvestment.crm.ui.MenuScreen
+import bo.kadlaginvestment.crm.ui.ReportsScreen
 import bo.kadlaginvestment.crm.ui.NotificationsScreen
 import bo.kadlaginvestment.crm.ui.RenewalsScreen
 import bo.kadlaginvestment.crm.ui.SalesScreen
@@ -117,6 +119,16 @@ class ShellActivity : ComponentActivity() {
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
                             onOpenWeb = openWeb,
+                        )
+                        overlay == "leads" -> LeadsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                        )
+                        overlay == "reports" -> ReportsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
                         )
                         selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = smartOpen)
                         selected == 1 -> ClientsScreen(m, onSessionExpired = goLogin, onOpenWeb = openWeb)

@@ -625,3 +625,350 @@ def app_notifications(request):
 def app_notifications_read(request):
     Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
     return JsonResponse({"ok": True})
+
+
+# ── Screen 9: Leads pipeline ─────────────────────────────────────────────────
+
+from ..models import Lead, LeadProductProgress, LeadRemark  # noqa: E402
+from django.db import transaction  # noqa: E402
+
+
+def _lead_qs(request):
+    """Same scoping as the web pipeline: employees see only their own leads."""
+    emp = _emp(request)
+    qs = Lead.objects.select_related("assigned_to__user").prefetch_related("progress_entries")
+    if emp and emp.role == "employee":
+        qs = qs.filter(assigned_to=emp)
+    return qs
+
+
+def _can_assign_leads(request):
+    emp = _emp(request)
+    return request.user.is_superuser or (emp and emp.role in ("admin", "manager"))
+
+
+@login_required
+@require_GET
+def app_lead_meta(request):
+    data = {
+        "can_assign": _can_assign_leads(request),
+        "products": [
+            {"value": v, "label": l} for v, l in LeadProductProgress.PRODUCT_CHOICES
+        ],
+        "statuses": [
+            {"value": v, "label": l} for v, l in LeadProductProgress.STATUS_CHOICES
+        ],
+    }
+    if _can_assign_leads(request):
+        data["employees"] = [
+            {"id": e.id, "name": e.user.get_full_name() or e.user.username}
+            for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username")
+        ]
+    return JsonResponse(data)
+
+
+def _progress_summary(lead):
+    marks = {"pending": "·", "half_sold": "½", "processed": "✓"}
+    out = []
+    entries = {p.product: p.status for p in lead.progress_entries.all()}
+    for key, label in (("health", "H"), ("life", "L"), ("wealth", "W")):
+        out.append(f"{label}{marks.get(entries.get(key, 'pending'), '·')}")
+    return " ".join(out)
+
+
+@login_required
+@require_GET
+def app_leads(request):
+    qs = _lead_qs(request)
+
+    counts = {
+        "pending": qs.filter(is_discarded=False, stage=Lead.STAGE_PENDING).count(),
+        "half_sold": qs.filter(is_discarded=False, stage=Lead.STAGE_HALF).count(),
+        "processed": qs.filter(is_discarded=False, stage=Lead.STAGE_PROCESSED).count(),
+        "discarded": qs.filter(is_discarded=True).count(),
+    }
+
+    stage = request.GET.get("stage", "")
+    if stage == "discarded":
+        qs = qs.filter(is_discarded=True)
+    else:
+        qs = qs.filter(is_discarded=False)
+        if stage in (Lead.STAGE_PENDING, Lead.STAGE_HALF, Lead.STAGE_PROCESSED):
+            qs = qs.filter(stage=stage)
+
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        qs = qs.filter(
+            Q(customer_name__icontains=q) | Q(phone__icontains=q) | Q(email__icontains=q)
+        )
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except ValueError:
+        page = 1
+    start, end = (page - 1) * _PAGE, page * _PAGE
+    rows = list(qs.order_by("-updated_at")[start:end + 1])
+
+    return JsonResponse({
+        "counts": counts,
+        "has_more": len(rows) > _PAGE,
+        "page": page,
+        "results": [
+            {
+                "id": l.id,
+                "name": l.customer_name,
+                "phone": l.phone or "",
+                "stage": l.stage,
+                "is_discarded": l.is_discarded,
+                "converted": bool(l.converted_client_id),
+                "progress": _progress_summary(l),
+                "assigned_to": (
+                    l.assigned_to.user.get_full_name() or l.assigned_to.user.username
+                ) if l.assigned_to_id and l.assigned_to.user_id else "",
+            }
+            for l in rows[:_PAGE]
+        ],
+    })
+
+
+@login_required
+@require_GET
+def app_lead_detail(request, lead_id):
+    lead = get_object_or_404(_lead_qs(request), pk=lead_id)
+    remarks = lead.remarks.select_related("created_by").order_by("-created_at")[:15]
+    progress = {p.product: p for p in lead.progress_entries.all()}
+    return JsonResponse({
+        "id": lead.id,
+        "name": lead.customer_name,
+        "phone": lead.phone or "",
+        "email": lead.email or "",
+        "income": _money(lead.income) if lead.income is not None else None,
+        "expenses": _money(lead.expenses) if lead.expenses is not None else None,
+        "notes": lead.notes or "",
+        "stage": lead.stage,
+        "is_discarded": lead.is_discarded,
+        "converted_client_id": lead.converted_client_id,
+        "can_convert": lead.stage == Lead.STAGE_PROCESSED and not lead.converted_client_id,
+        "assigned_to": (
+            lead.assigned_to.user.get_full_name() or lead.assigned_to.user.username
+        ) if lead.assigned_to_id and lead.assigned_to.user_id else "",
+        "progress": [
+            {
+                "product": key,
+                "label": label,
+                "status": progress[key].status if key in progress else "pending",
+                "target": _money(progress[key].target_amount) if key in progress and progress[key].target_amount is not None else None,
+                "achieved": _money(progress[key].achieved_amount) if key in progress and progress[key].achieved_amount is not None else None,
+            }
+            for key, label in LeadProductProgress.PRODUCT_CHOICES
+        ],
+        "remarks": [
+            {
+                "text": r.text,
+                "by": r.created_by.username if r.created_by_id else "",
+                "at": timezone.localtime(r.created_at).strftime("%d %b, %I:%M %p"),
+            }
+            for r in remarks
+        ],
+    })
+
+
+@login_required
+@require_POST
+def app_lead_create(request):
+    emp = _emp(request)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+
+    name = str(body.get("customer_name") or "").strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Customer name is required."}, status=400)
+
+    assigned = emp
+    if _can_assign_leads(request) and body.get("assigned_to_id"):
+        assigned = Employee.objects.filter(pk=body.get("assigned_to_id"), active=True).first() or emp
+    if assigned is None:
+        return JsonResponse({"ok": False, "error": "No employee to assign the lead to."}, status=400)
+
+    def _opt_decimal(key):
+        raw = body.get(key)
+        if raw in (None, ""):
+            return None
+        try:
+            return Decimal(str(raw))
+        except InvalidOperation:
+            return None
+
+    lead = Lead.objects.create(
+        customer_name=name[:255],
+        phone=str(body.get("phone") or "").strip()[:20],
+        email=str(body.get("email") or "").strip()[:254],
+        income=_opt_decimal("income"),
+        expenses=_opt_decimal("expenses"),
+        notes=str(body.get("notes") or "").strip(),
+        assigned_to=assigned,
+        created_by=request.user,
+    )
+    # Seed the three product tracks like the web form's default rows.
+    for product, _label in LeadProductProgress.PRODUCT_CHOICES:
+        LeadProductProgress.objects.create(lead=lead, product=product)
+    return JsonResponse({"ok": True, "id": lead.id})
+
+
+@login_required
+@require_POST
+def app_lead_progress(request, lead_id):
+    lead = get_object_or_404(_lead_qs(request), pk=lead_id)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+
+    product = body.get("product")
+    if product not in dict(LeadProductProgress.PRODUCT_CHOICES):
+        return JsonResponse({"ok": False, "error": "Unknown product."}, status=400)
+    status = body.get("status")
+    if status not in dict(LeadProductProgress.STATUS_CHOICES):
+        return JsonResponse({"ok": False, "error": "Unknown status."}, status=400)
+
+    defaults = {"status": status}
+    for field in ("target_amount", "achieved_amount"):
+        raw = body.get(field)
+        if raw not in (None, ""):
+            try:
+                defaults[field] = Decimal(str(raw))
+            except InvalidOperation:
+                return JsonResponse({"ok": False, "error": f"Invalid {field}."}, status=400)
+
+    LeadProductProgress.objects.update_or_create(
+        lead=lead, product=product, defaults=defaults
+    )
+    lead.refresh_from_db()
+    return JsonResponse({"ok": True, "stage": lead.stage})
+
+
+@login_required
+@require_POST
+def app_lead_remark(request, lead_id):
+    lead = get_object_or_404(_lead_qs(request), pk=lead_id)
+    try:
+        text = json.loads(request.body.decode("utf-8")).get("text", "").strip()
+    except Exception:
+        text = ""
+    if not text:
+        return JsonResponse({"ok": False, "error": "Remark text required."}, status=400)
+    LeadRemark.objects.create(lead=lead, text=text[:2000], created_by=request.user)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def app_lead_action(request, lead_id):
+    lead = get_object_or_404(_lead_qs(request), pk=lead_id)
+    try:
+        action = json.loads(request.body.decode("utf-8")).get("action")
+    except Exception:
+        action = None
+
+    if action == "discard":
+        lead.is_discarded = True
+        lead.save(update_fields=["is_discarded", "updated_at"])
+    elif action == "undiscard":
+        lead.is_discarded = False
+        lead.save(update_fields=["is_discarded", "updated_at"])
+    elif action == "convert":
+        # Mirrors web lead_convert_to_client exactly.
+        if lead.converted_client_id:
+            return JsonResponse({"ok": False, "error": "Already converted."}, status=400)
+        if lead.stage != Lead.STAGE_PROCESSED:
+            return JsonResponse({"ok": False, "error": "Only processed leads can be converted."}, status=400)
+        progress_map = {p.product: p for p in lead.progress_entries.all()}
+        with transaction.atomic():
+            client = Client(
+                name=lead.customer_name,
+                phone=lead.phone or None,
+                email=lead.email or None,
+                mapped_to=lead.assigned_to,
+                status="Mapped" if lead.assigned_to else "Unmapped",
+            )
+            hp = progress_map.get("health")
+            lp = progress_map.get("life")
+            wp = progress_map.get("wealth")
+            if hp and hp.status == LeadProductProgress.STATUS_PROCESSED:
+                client.health_status = True
+                client.health_cover = hp.achieved_amount
+            if lp and lp.status == LeadProductProgress.STATUS_PROCESSED:
+                client.life_status = True
+                client.life_cover = lp.achieved_amount
+            if wp and wp.status == LeadProductProgress.STATUS_PROCESSED:
+                client.sip_status = True
+                client.sip_amount = wp.achieved_amount
+            client.save()
+            lead.converted_client = client
+            lead.save(update_fields=["converted_client", "updated_at"])
+        return JsonResponse({"ok": True, "client_id": client.id})
+    else:
+        return JsonResponse({"ok": False, "error": "Unknown action."}, status=400)
+    return JsonResponse({"ok": True})
+
+
+# ── Screen 10: Reports summary ───────────────────────────────────────────────
+
+@login_required
+@require_GET
+def app_report_summary(request):
+    """Monthly trend + product mix + (admins/managers) employee leaderboard."""
+    emp = _emp(request)
+    is_admin = _is_admin(request)
+    is_manager = bool(emp and emp.role == "manager")
+    firm_wide = is_admin or (is_manager and get_manager_access().allow_employee_performance)
+
+    base = Sale.objects.filter(status=Sale.STATUS_APPROVED)
+    if not firm_wide:
+        if emp is None:
+            return JsonResponse({"ok": False, "error": "No employee account."}, status=403)
+        base = base.filter(employee=emp)
+
+    today = timezone.localdate()
+    months = []
+    y, m = today.year, today.month
+    for _ in range(6):
+        months.append((y, m))
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    months.reverse()
+
+    trend = []
+    for (yy, mm) in months:
+        agg = base.filter(date__year=yy, date__month=mm).aggregate(
+            amount=Sum("amount"), n=Count("id")
+        )
+        trend.append({
+            "label": date(yy, mm, 1).strftime("%b"),
+            "amount": _money(agg["amount"]),
+            "count": agg["n"] or 0,
+        })
+
+    month_qs = base.filter(date__year=today.year, date__month=today.month)
+    products = [
+        {"name": r["product"] or "Other", "amount": _money(r["t"]), "count": r["n"]}
+        for r in month_qs.values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
+    ]
+
+    data = {"firm_wide": firm_wide, "trend": trend, "products": products}
+
+    if firm_wide:
+        data["leaderboard"] = [
+            {
+                "name": r["employee__user__first_name"] or r["employee__user__username"],
+                "amount": _money(r["t"]),
+                "points": _money(r["p"]),
+            }
+            for r in month_qs.values(
+                "employee__user__username", "employee__user__first_name"
+            ).annotate(t=Sum("amount"), p=Sum("points")).order_by("-t")[:15]
+        ]
+    return JsonResponse(data)
