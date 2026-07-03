@@ -29,11 +29,14 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
 import bo.kadlaginvestment.crm.ui.AddSaleScreen
 import bo.kadlaginvestment.crm.ui.ClientsScreen
@@ -109,6 +112,28 @@ class ShellActivity : ComponentActivity() {
             KadlagTheme {
                 var selected by remember { mutableIntStateOf(0) }
                 var permDialogDismissed by remember { mutableStateOf(false) }
+
+                // ── Self-hosted update check ──
+                var update by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
+                LaunchedEffect(Unit) {
+                    update = withContext(Dispatchers.IO) { UpdateManager.checkForUpdate(this@ShellActivity) }
+                }
+                update?.let { info ->
+                    AlertDialog(
+                        onDismissRequest = { update = null },
+                        title = { Text("Update available — v${info.versionName}") },
+                        text = { Text(info.notes.ifEmpty { "A new version of the app is ready." }) },
+                        confirmButton = {
+                            Button(onClick = {
+                                UpdateManager.downloadAndInstall(this@ShellActivity, info)
+                                update = null
+                            }) { Text("Update now") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { update = null }) { Text("Later") }
+                        },
+                    )
+                }
                 // Reading permTick subscribes this composition to onResume bumps,
                 // so the checks below re-run after returning from Settings.
                 @Suppress("UNUSED_VARIABLE") val tick = permTick.intValue

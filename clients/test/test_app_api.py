@@ -368,3 +368,34 @@ class DeviceStatusTests(TestCase):
         self.assertEqual(AppDeviceStatus.objects.filter(user=user).count(), 1)
         s.refresh_from_db()
         self.assertTrue(s.overlay_granted)
+
+
+class AppUpdateEndpointTests(TestCase):
+    def test_version_unavailable_when_unpublished(self):
+        import tempfile
+        from django.test import override_settings
+        with tempfile.TemporaryDirectory() as tmp:
+            with override_settings(MEDIA_ROOT=tmp):
+                data = TestClient().get(reverse("clients:app_version")).json()
+                self.assertFalse(data["available"])
+                resp = TestClient().get(reverse("clients:app_apk_download"))
+                self.assertEqual(resp.status_code, 404)
+
+    def test_version_and_download_when_published(self):
+        import json as _json
+        import os
+        import tempfile
+        from django.test import override_settings
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "app"))
+            with open(os.path.join(tmp, "app", "version.json"), "w") as f:
+                _json.dump({"version_code": 12, "version_name": "3.4.0", "notes": "test"}, f)
+            with open(os.path.join(tmp, "app", "latest.apk"), "wb") as f:
+                f.write(b"fake-apk-bytes")
+            with override_settings(MEDIA_ROOT=tmp):
+                data = TestClient().get(reverse("clients:app_version")).json()
+                self.assertTrue(data["available"])
+                self.assertEqual(data["version_code"], 12)
+                self.assertIn("/clients/app/latest.apk", data["url"])
+                resp = TestClient().get(reverse("clients:app_apk_download"))
+                self.assertEqual(resp.status_code, 200)

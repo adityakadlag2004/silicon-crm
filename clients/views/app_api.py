@@ -997,3 +997,51 @@ def app_device_status(request):
         },
     )
     return JsonResponse({"ok": True})
+
+
+# ── Self-hosted app updates ──────────────────────────────────────────────────
+# The app checks /api/app/version/ at launch; if the server has a newer
+# versionCode it offers a one-tap download+install of /app/latest.apk.
+# Publish a release with mobile/release.sh (uploads APK + version.json
+# to MEDIA_ROOT/app/ on the server). Both endpoints are deliberately
+# public: the APK is signed and contains no secrets, and the updater
+# must work even before login.
+
+import os as _os  # noqa: E402
+
+from django.conf import settings as _settings  # noqa: E402
+from django.http import FileResponse, Http404  # noqa: E402
+from django.views.decorators.http import require_GET as _require_GET  # noqa: E402
+
+
+def _app_dist_dir():
+    return _os.path.join(str(_settings.MEDIA_ROOT), "app")
+
+
+@_require_GET
+def app_version(request):
+    path = _os.path.join(_app_dist_dir(), "version.json")
+    if not _os.path.exists(path):
+        return JsonResponse({"available": False})
+    try:
+        with open(path) as f:
+            info = json.load(f)
+    except Exception:
+        return JsonResponse({"available": False})
+    return JsonResponse({
+        "available": True,
+        "version_code": int(info.get("version_code", 0)),
+        "version_name": str(info.get("version_name", "")),
+        "notes": str(info.get("notes", "")),
+        "url": "https://" + request.get_host() + "/clients/app/latest.apk",
+    })
+
+
+@_require_GET
+def app_apk_download(request):
+    path = _os.path.join(_app_dist_dir(), "latest.apk")
+    if not _os.path.exists(path):
+        raise Http404("No app build published.")
+    resp = FileResponse(open(path, "rb"), content_type="application/vnd.android.package-archive")
+    resp["Content-Disposition"] = 'attachment; filename="KadlagBO.apk"'
+    return resp
