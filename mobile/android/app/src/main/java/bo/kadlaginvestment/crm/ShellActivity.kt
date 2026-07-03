@@ -29,6 +29,8 @@ import bo.kadlaginvestment.crm.ui.DashboardScreen
 import bo.kadlaginvestment.crm.ui.FollowupsScreen
 import bo.kadlaginvestment.crm.ui.KadlagTheme
 import bo.kadlaginvestment.crm.ui.MenuScreen
+import bo.kadlaginvestment.crm.ui.NotificationsScreen
+import bo.kadlaginvestment.crm.ui.RenewalsScreen
 import bo.kadlaginvestment.crm.ui.SalesScreen
 
 /**
@@ -44,7 +46,9 @@ class ShellActivity : ComponentActivity() {
         setContent {
             KadlagTheme {
                 var selected by remember { mutableIntStateOf(0) }
-                var salesOverlay by remember { mutableStateOf<String?>(null) } // initial status filter
+                // Native routes layered above the tabs: "sales", "sales_pending",
+                // "renewals", "notifications".
+                var overlay by remember { mutableStateOf<String?>(null) }
 
                 val goLogin: () -> Unit = {
                     startActivity(
@@ -62,7 +66,7 @@ class ShellActivity : ComponentActivity() {
                 // Dashboard shortcuts route to native screens where they exist.
                 val smartOpen: (String) -> Unit = { path ->
                     when (path) {
-                        "/clients/sales/approve/" -> salesOverlay = "pending"
+                        "/clients/sales/approve/" -> overlay = "sales_pending"
                         "/clients/calls/followups/" -> selected = 3
                         else -> openWeb(path)
                     }
@@ -82,8 +86,8 @@ class ShellActivity : ComponentActivity() {
                         NavigationBar {
                             tabs.forEachIndexed { i, tab ->
                                 NavigationBarItem(
-                                    selected = selected == i && salesOverlay == null,
-                                    onClick = { selected = i; salesOverlay = null },
+                                    selected = selected == i && overlay == null,
+                                    onClick = { selected = i; overlay = null },
                                     icon = { Icon(tab.icon, contentDescription = tab.label) },
                                     label = { Text(tab.label) },
                                 )
@@ -93,11 +97,22 @@ class ShellActivity : ComponentActivity() {
                 ) { padding ->
                     val m = Modifier.padding(padding)
                     when {
-                        salesOverlay != null -> SalesScreen(
+                        overlay == "sales" || overlay == "sales_pending" -> SalesScreen(
                             modifier = m,
-                            initialStatus = salesOverlay!!,
-                            onBack = { salesOverlay = null },
+                            initialStatus = if (overlay == "sales_pending") "pending" else "",
+                            onBack = { overlay = null },
                             onSessionExpired = goLogin,
+                        )
+                        overlay == "renewals" -> RenewalsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                        )
+                        overlay == "notifications" -> NotificationsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                            onOpenWeb = openWeb,
                         )
                         selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = smartOpen)
                         selected == 1 -> ClientsScreen(m, onSessionExpired = goLogin, onOpenWeb = openWeb)
@@ -106,7 +121,7 @@ class ShellActivity : ComponentActivity() {
                         else -> MenuScreen(
                             modifier = m,
                             onOpenWeb = openWeb,
-                            onOpenSales = { salesOverlay = "" },
+                            onOpenNative = { route -> overlay = route },
                             onLoggedOut = logout,
                             onSessionExpired = goLogin,
                         )

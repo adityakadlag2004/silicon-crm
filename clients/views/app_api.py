@@ -439,3 +439,189 @@ def app_logout(request):
     from django.contrib.auth import logout as django_logout
     django_logout(request)
     return JsonResponse({"ok": True})
+
+
+# ── Screen 7: Renewals ───────────────────────────────────────────────────────
+
+def _renewal_product_type(product):
+    """Derive Renewal.product_type from a Product row."""
+    name = (product.name or "").strip().lower()
+    if product.code == "HEALTH_INS" or name == "health insurance":
+        return Renewal.PRODUCT_TYPE_HEALTH, None
+    if product.code == "LIFE_INS" or name == "life insurance":
+        return Renewal.PRODUCT_TYPE_LIFE, None
+    return Renewal.PRODUCT_TYPE_OTHER, product.name
+
+
+@login_required
+@require_GET
+def app_renewal_meta(request):
+    emp = _emp(request)
+    is_admin = _is_admin(request)
+    products = [
+        {"id": p.id, "name": p.name}
+        for p in Product.objects.filter(
+            is_active=True, archived_at__isnull=True,
+            domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH],
+        ).order_by("display_order", "name")
+    ]
+    data = {
+        "is_admin": is_admin,
+        "products": products,
+        "frequencies": [
+            {"value": v, "label": l} for v, l in Renewal.FREQUENCY_CHOICES
+        ],
+    }
+    if is_admin:
+        data["employees"] = [
+            {"id": e.id, "name": e.user.get_full_name() or e.user.username}
+            for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username")
+        ]
+    return JsonResponse(data)
+
+
+@login_required
+@require_GET
+def app_renewals(request):
+    emp = _emp(request)
+    is_admin = _is_admin(request)
+    is_manager = bool(emp and emp.role == "manager")
+
+    qs = Renewal.objects.select_related("client", "employee__user", "product_ref")
+    if not (is_admin or is_manager):
+        qs = qs.filter(employee=emp) if emp else qs.none()
+
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        qs = qs.filter(
+            Q(client__name__icontains=q) | Q(client__phone__icontains=q)
+            | Q(product_name__icontains=q) | Q(product_ref__name__icontains=q)
+        )
+
+    today = timezone.localdate()
+    month_qs = qs.filter(
+        premium_collected_on__year=today.year, premium_collected_on__month=today.month
+    )
+    summary = {
+        "month_premium": _money(month_qs.aggregate(t=Sum("premium_amount"))["t"]),
+        "month_count": month_qs.count(),
+        "today_premium": _money(
+            qs.filter(premium_collected_on=today).aggregate(t=Sum("premium_amount"))["t"]
+        ),
+    }
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except ValueError:
+        page = 1
+    start, end = (page - 1) * _PAGE, page * _PAGE
+    rows = list(qs.order_by("-premium_collected_on", "-id")[start:end + 1])
+
+    return JsonResponse({
+        "summary": summary,
+        "has_more": len(rows) > _PAGE,
+        "page": page,
+        "results": [
+            {
+                "id": r.id,
+                "client": r.client.name if r.client_id else "",
+                "product": r.product_ref.name if r.product_ref_id else (
+                    r.product_name or r.get_product_type_display()
+                ),
+                "premium": _money(r.premium_amount),
+                "frequency": r.get_frequency_display(),
+                "renewal_date": r.renewal_date.strftime("%d %b %Y") if r.renewal_date else "",
+                "collected_on": r.premium_collected_on.strftime("%d %b %Y") if r.premium_collected_on else "",
+                "employee": (
+                    r.employee.user.get_full_name() or r.employee.user.username
+                ) if r.employee_id and r.employee.user_id else "",
+            }
+            for r in rows[:_PAGE]
+        ],
+    })
+
+
+@login_required
+@require_POST
+def app_renewal_create(request):
+    emp = _emp(request)
+    is_admin = _is_admin(request)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+
+    client = Client.objects.filter(pk=body.get("client_id")).first()
+    if client is None:
+        return JsonResponse({"ok": False, "error": "Select a client."}, status=400)
+
+    product = Product.objects.filter(
+        pk=body.get("product_id"),
+        domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH],
+    ).first()
+    if product is None:
+        return JsonResponse({"ok": False, "error": "Select a product."}, status=400)
+    product_type, product_name = _renewal_product_type(product)
+
+    try:
+        premium = Decimal(str(body.get("premium_amount")))
+        if premium <= 0:
+            raise InvalidOperation
+    except (InvalidOperation, TypeError):
+        return JsonResponse({"ok": False, "error": "Enter a valid premium amount."}, status=400)
+
+    try:
+        renewal_date = date.fromisoformat(str(body.get("renewal_date")))
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Renewal date must be YYYY-MM-DD."}, status=400)
+
+    frequency = body.get("frequency")
+    if frequency not in dict(Renewal.FREQUENCY_CHOICES):
+        return JsonResponse({"ok": False, "error": "Pick a frequency."}, status=400)
+
+    renewal_emp = emp
+    if is_admin and body.get("employee_id"):
+        renewal_emp = Employee.objects.filter(pk=body.get("employee_id"), active=True).first() or emp
+
+    renewal = Renewal.objects.create(
+        client=client,
+        product_ref=product,
+        product_type=product_type,
+        product_name=product_name,
+        renewal_date=renewal_date,
+        frequency=frequency,
+        premium_amount=premium,
+        employee=renewal_emp,
+        notes=str(body.get("notes") or "").strip() or None,
+        created_by=request.user,
+    )
+    return JsonResponse({"ok": True, "id": renewal.id})
+
+
+# ── Screen 8: Notifications ──────────────────────────────────────────────────
+
+@login_required
+@require_GET
+def app_notifications(request):
+    notes = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:40]
+    return JsonResponse({
+        "unread": Notification.objects.filter(recipient=request.user, is_read=False).count(),
+        "results": [
+            {
+                "id": n.id,
+                "title": n.title,
+                "body": n.body,
+                "link": n.link or "",
+                "is_read": n.is_read,
+                "created_at": timezone.localtime(n.created_at).strftime("%d %b, %I:%M %p"),
+            }
+            for n in notes
+        ],
+    })
+
+
+@login_required
+@require_POST
+def app_notifications_read(request):
+    Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+    return JsonResponse({"ok": True})

@@ -58,6 +58,11 @@ urlpatterns = [
     path("api/app/followups/", views.app_followups, name="app_followups"),
     path("api/app/followups/<int:followup_id>/action/", views.app_followup_action, name="app_followup_action"),
     path("api/app/logout/", views.app_logout, name="app_logout"),
+    path("api/app/renewal-meta/", views.app_renewal_meta, name="app_renewal_meta"),
+    path("api/app/renewals/", views.app_renewals, name="app_renewals"),
+    path("api/app/renewals/create/", views.app_renewal_create, name="app_renewal_create"),
+    path("api/app/notifications/", views.app_notifications, name="app_notifications"),
+    path("api/app/notifications/read/", views.app_notifications_read, name="app_notifications_read"),
 
 
     # New

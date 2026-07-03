@@ -37,8 +37,8 @@ in the WebView.
 | 4 | Call Follow-ups (native list + actions) | `/api/app/followups/…` | **v3.1** |
 | 5 | Sales list + Approve (admin) | `/api/app/sales/…` | **v3.1** |
 | 6 | Native Menu + logout | `/api/app/logout/` | **v3.1** |
-| 7 | Renewals | | |
-| 8 | Notifications screen | | |
+| 7 | Renewals (list + add) | `/api/app/renewals/…` | **v3.2** |
+| 8 | Notifications screen | `/api/app/notifications/…` | **v3.2** |
 | 9 | Leads pipeline | | |
 | 10 | Reports (charts via Compose) | | |
 | 11 | Team management (admin) | | |

@@ -40,8 +40,9 @@ private data class MenuEntry(
 )
 
 private val ENTRIES = listOf(
+    MenuEntry("🔔", "Notifications", native = "notifications"),
     MenuEntry("🧾", "All Sales", native = "sales"),
-    MenuEntry("🔁", "Renewals", webPath = "/clients/renewals/all/"),
+    MenuEntry("🔁", "Renewals", native = "renewals"),
     MenuEntry("📇", "Lead Records", webPath = "/clients/leads/sheets/"),
     MenuEntry("🫧", "Lead Pipeline", webPath = "/clients/leads/"),
     MenuEntry("📅", "Calendar", webPath = "/clients/calendar/view/"),
@@ -64,7 +65,7 @@ private val ENTRIES = listOf(
 fun MenuScreen(
     modifier: Modifier = Modifier,
     onOpenWeb: (String) -> Unit,
-    onOpenSales: () -> Unit,
+    onOpenNative: (String) -> Unit,
     onLoggedOut: () -> Unit,
     onSessionExpired: () -> Unit,
 ) {
@@ -94,7 +95,7 @@ fun MenuScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable {
                         when {
-                            entry.native == "sales" -> onOpenSales()
+                            entry.native != null -> onOpenNative(entry.native)
                             entry.webPath != null -> onOpenWeb(entry.webPath)
                         }
                     },

@@ -170,3 +170,77 @@ class AppScreenApiTests(TestCase):
         # Session is dead now
         resp = http.get(reverse("clients:app_dashboard"))
         self.assertEqual(resp.status_code, 302)
+
+
+class AppRenewalNotificationTests(TestCase):
+    """Screen APIs for v3.2: renewals + notifications."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.emp_user = User.objects.create_user(username="rn_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+        cls.customer = Client.objects.create(name="Renewal Customer", phone="9700000001")
+        from clients.models import Product
+        cls.product, _ = Product.objects.get_or_create(
+            name="Life Insurance", defaults={"code": "LIFE_INS"}
+        )
+
+    def _http(self):
+        c = TestClient()
+        c.force_login(self.emp_user)
+        return c
+
+    def test_renewal_meta(self):
+        data = self._http().get(reverse("clients:app_renewal_meta")).json()
+        self.assertTrue(any(f["value"] == "yearly" for f in data["frequencies"]))
+        self.assertNotIn("employees", data)
+
+    def test_renewal_create_and_list(self):
+        import json as _json
+        resp = self._http().post(
+            reverse("clients:app_renewal_create"),
+            data=_json.dumps({
+                "client_id": self.customer.id, "product_id": self.product.id,
+                "premium_amount": "12000", "renewal_date": "2027-01-15",
+                "frequency": "yearly", "notes": "test",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        from clients.models import Renewal
+        r = Renewal.objects.get()
+        self.assertEqual(r.employee, self.emp)
+        self.assertEqual(r.product_type, Renewal.PRODUCT_TYPE_LIFE)
+
+        data = self._http().get(reverse("clients:app_renewals")).json()
+        self.assertEqual(len(data["results"]), 1)
+        self.assertEqual(data["summary"]["month_count"], 1)  # collected today
+
+    def test_renewal_create_bad_date_rejected(self):
+        import json as _json
+        resp = self._http().post(
+            reverse("clients:app_renewal_create"),
+            data=_json.dumps({
+                "client_id": self.customer.id, "product_id": self.product.id,
+                "premium_amount": "1000", "renewal_date": "15/01/2027", "frequency": "yearly",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_notifications_list_and_mark_read(self):
+        from clients.models import Notification
+        Notification.objects.create(recipient=self.emp_user, title="Hi", body="There")
+        data = self._http().get(reverse("clients:app_notifications")).json()
+        self.assertEqual(data["unread"], 1)
+        self.assertEqual(len(data["results"]), 1)
+        self._http().post(reverse("clients:app_notifications_read"))
+        data = self._http().get(reverse("clients:app_notifications")).json()
+        self.assertEqual(data["unread"], 0)
+
+    def test_notifications_are_own_only(self):
+        from clients.models import Notification
+        other = User.objects.create_user(username="rn_other", password="x")
+        Notification.objects.create(recipient=other, title="Secret", body="x")
+        data = self._http().get(reverse("clients:app_notifications")).json()
+        self.assertEqual(len(data["results"]), 0)
