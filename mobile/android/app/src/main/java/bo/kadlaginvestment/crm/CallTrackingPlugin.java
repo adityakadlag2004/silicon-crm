@@ -32,6 +32,17 @@ import com.getcapacitor.annotation.PermissionCallback;
 public class CallTrackingPlugin extends Plugin {
 
     @PluginMethod
+    public void notifyLoggedIn(PluginCall call) {
+        // Called by base.html when an authenticated page loads in the
+        // Capacitor WebView (i.e. right after login) — hand over to the
+        // native shell.
+        Intent intent = new Intent(getContext(), ShellActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        getContext().startActivity(intent);
+        call.resolve();
+    }
+
+    @PluginMethod
     public void isPushAvailable(PluginCall call) {
         // Without google-services.json compiled in, FirebaseApp never
         // initializes and calling PushNotifications.register() would crash

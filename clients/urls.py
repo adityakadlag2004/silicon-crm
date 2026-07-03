@@ -47,6 +47,9 @@ urlpatterns = [
     path("calls/followups/<int:followup_id>/update/", views.call_followup_update, name="call_followup_update"),
     path("calls/analytics/", views.call_analytics, name="call_analytics"),
 
+    # Native app JSON API (one group per converted screen — see mobile/NATIVE_MIGRATION.md)
+    path("api/app/dashboard/", views.app_dashboard, name="app_dashboard"),
+
 
     # New
     # sales CRUD

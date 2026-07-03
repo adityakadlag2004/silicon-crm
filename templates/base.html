@@ -667,6 +667,14 @@
           }).catch(function () {});
         }).catch(function () {});
 
+        // ── Native shell handover (app v3+) ──
+        // An authenticated page inside the Capacitor WebView means login just
+        // succeeded — switch to the native Android shell. Older app versions
+        // don't have this method; the catch keeps them on the web UI.
+        if (CT && CT.notifyLoggedIn) {
+          try { CT.notifyLoggedIn(); } catch (e) {}
+        }
+
         // ── Call tracking setup ──
         if (CT) {
           // Sync the admin-configured office hours to the device so the

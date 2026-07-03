@@ -9,19 +9,36 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- Launcher: routes to native shell (signed in) or WebView login. -->
+        <activity
+            android:name=".RouterActivity"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Native shell: bottom nav + Compose screens. -->
+        <activity
+            android:name=".ShellActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:exported="false" />
+
+        <!-- WebView for screens not yet converted to native UI. -->
+        <activity
+            android:name=".WebActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:exported="false" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
-            android:exported="true">
-
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-
+            android:exported="false">
         </activity>
 
         <provider
