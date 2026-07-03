@@ -89,6 +89,34 @@
   {% endif %}
 </div>
 
+<div class="ki-card mb-3">
+  <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
+    <i class="bi bi-shield-check me-2" style="color:var(--ki-primary);"></i> Device permissions
+    <span class="text-muted" style="font-size:.8rem;font-weight:400;">— reported each time the app is opened. ✗ means that employee's calls are NOT being tracked.</span>
+  </h3>
+  <div class="table-responsive">
+    <table class="table align-middle" style="font-size:.9rem;">
+      <thead><tr><th>Employee</th><th>Call tracking</th><th>Follow-up popup</th><th>Notifications</th><th>App version</th><th>Last seen</th></tr></thead>
+      <tbody>
+        {% for row in device_roster %}
+        <tr>
+          <td>{{ row.name }}</td>
+          {% if row.status %}
+            <td>{% if row.status.calls_granted %}<span class="badge bg-success">✓ Allowed</span>{% else %}<span class="badge bg-danger">✗ Missing</span>{% endif %}</td>
+            <td>{% if row.status.overlay_granted %}<span class="badge bg-success">✓ Allowed</span>{% else %}<span class="badge bg-warning text-dark">✗ Missing</span>{% endif %}</td>
+            <td>{% if row.status.notifications_granted %}<span class="badge bg-success">✓ Allowed</span>{% else %}<span class="badge bg-warning text-dark">✗ Missing</span>{% endif %}</td>
+            <td>{{ row.status.app_version|default:"—" }}</td>
+            <td>{{ row.status.updated_at|date:"d M, h:i A" }}</td>
+          {% else %}
+            <td colspan="5"><span class="badge bg-secondary">App not installed / never opened</span></td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <div class="ki-card">
   <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
     <i class="bi bi-clock-history me-2" style="color:var(--ki-primary);"></i> Recent calls (latest 100)

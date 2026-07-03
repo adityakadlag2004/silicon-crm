@@ -1,11 +1,23 @@
 package bo.kadlaginvestment.crm
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Call
@@ -35,12 +47,56 @@ import bo.kadlaginvestment.crm.ui.NotificationsScreen
 import bo.kadlaginvestment.crm.ui.RenewalsScreen
 import bo.kadlaginvestment.crm.ui.SalesScreen
 
+@androidx.compose.runtime.Composable
+private fun PermRow(label: String, onFix: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(top = 10.dp),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Text(label, modifier = Modifier.padding(end = 8.dp))
+        Button(onClick = onFix) { Text("Allow") }
+    }
+}
+
 /**
  * Native app shell: bottom navigation, all tabs rendered in Compose.
  * Screens not yet converted open in [WebActivity] from the Menu tab
  * (see mobile/NATIVE_MIGRATION.md for the conversion order).
  */
 class ShellActivity : ComponentActivity() {
+
+    // Bumped on every resume so the permission gate re-checks after the user
+    // returns from a settings screen.
+    private val permTick = mutableIntStateOf(0)
+
+    private fun callsGranted(): Boolean =
+        checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED &&
+            checkSelfPermission(Manifest.permission.READ_CALL_LOG) == PackageManager.PERMISSION_GRANTED
+
+    private fun notificationsGranted(): Boolean =
+        Build.VERSION.SDK_INT < 33 ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    private fun reportDeviceStatus() {
+        Thread {
+            try {
+                val version = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+                val body = org.json.JSONObject()
+                    .put("calls_granted", callsGranted())
+                    .put("overlay_granted", Settings.canDrawOverlays(this))
+                    .put("notifications_granted", notificationsGranted())
+                    .put("app_version", version)
+                BackendClient.postJson("/clients/api/app/device-status/", body.toString())
+            } catch (_: Exception) {}
+        }.start()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        permTick.intValue++
+        reportDeviceStatus()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +108,45 @@ class ShellActivity : ComponentActivity() {
         setContent {
             KadlagTheme {
                 var selected by remember { mutableIntStateOf(0) }
+                var permDialogDismissed by remember { mutableStateOf(false) }
+                // Reading permTick subscribes this composition to onResume bumps,
+                // so the checks below re-run after returning from Settings.
+                @Suppress("UNUSED_VARIABLE") val tick = permTick.intValue
+
+                val needCalls = !callsGranted()
+                val needOverlay = !Settings.canDrawOverlays(this)
+                val needNotifications = !notificationsGranted()
+
+                if (!permDialogDismissed && (needCalls || needOverlay || needNotifications)) {
+                    AlertDialog(
+                        onDismissRequest = { permDialogDismissed = true },
+                        title = { Text("Setup needed") },
+                        text = {
+                            Column {
+                                Text("Some permissions are missing — call tracking and follow-up popups won't work until these are allowed:")
+                                if (needCalls) PermRow("Call tracking (phone + call log)") {
+                                    requestPermissions(
+                                        arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_CALL_LOG), 100,
+                                    )
+                                }
+                                if (needOverlay) PermRow("Follow-up popup (display over apps)") {
+                                    startActivity(
+                                        Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                                    )
+                                }
+                                if (needNotifications) PermRow("Notifications") {
+                                    if (Build.VERSION.SDK_INT >= 33) {
+                                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { permDialogDismissed = true }) { Text("Later") }
+                        },
+                    )
+                }
                 // Native routes layered above the tabs: "sales", "sales_pending",
                 // "renewals", "notifications".
                 var overlay by remember { mutableStateOf<String?>(null) }

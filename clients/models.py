@@ -1810,6 +1810,28 @@ class CallFollowUp(models.Model):
         return f"Follow-up {self.phone} @ {self.scheduled_at:%d-%b %H:%M} ({self.status})"
 
 
+class AppDeviceStatus(models.Model):
+    """Latest app/permission state per user, reported by the Android app on
+    every launch. Lets admins see who hasn't granted call-tracking permissions
+    (Call Analytics page shows the roster)."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="app_device_status"
+    )
+    calls_granted = models.BooleanField(default=False)      # READ_PHONE_STATE + READ_CALL_LOG
+    overlay_granted = models.BooleanField(default=False)    # display-over-other-apps (popup)
+    notifications_granted = models.BooleanField(default=False)
+    app_version = models.CharField(max_length=20, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "App Device Status"
+        verbose_name_plural = "App Device Statuses"
+
+    def __str__(self):
+        return f"{self.user.username} v{self.app_version} calls={self.calls_granted} overlay={self.overlay_granted}"
+
+
 class PushDevice(models.Model):
     """An FCM device token belonging to a user, registered by the Android app.
 

@@ -71,6 +71,7 @@ urlpatterns = [
     path("api/app/leads/<int:lead_id>/remark/", views.app_lead_remark, name="app_lead_remark"),
     path("api/app/leads/<int:lead_id>/action/", views.app_lead_action, name="app_lead_action"),
     path("api/app/reports/summary/", views.app_report_summary, name="app_report_summary"),
+    path("api/app/device-status/", views.app_device_status, name="app_device_status"),
 
 
     # New

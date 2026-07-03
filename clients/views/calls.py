@@ -291,6 +291,19 @@ def call_analytics(request):
     # Recent calls (drill-down list, work-hours filtered, latest 100)
     recent_calls = qs.select_related("employee__user", "client").order_by("-started_at")[:100]
 
+    # Per-employee app/permission roster (reported by the app at each launch).
+    from ..models import AppDeviceStatus
+    statuses = {s.user_id: s for s in AppDeviceStatus.objects.select_related("user")}
+    device_roster = []
+    for emp in Employee.objects.filter(active=True).select_related("user").order_by("user__username"):
+        if not emp.user_id:
+            continue
+        s = statuses.get(emp.user_id)
+        device_roster.append({
+            "name": emp.user.get_full_name() or emp.user.username,
+            "status": s,  # None = app never opened / not installed
+        })
+
     return render(request, "calls/call_analytics.html", {
         "rows": rows,
         "totals": totals,
@@ -298,4 +311,5 @@ def call_analytics(request):
         "end": end,
         "cfg": cfg,
         "recent_calls": recent_calls,
+        "device_roster": device_roster,
     })

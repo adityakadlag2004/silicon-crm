@@ -972,3 +972,28 @@ def app_report_summary(request):
             ).annotate(t=Sum("amount"), p=Sum("points")).order_by("-t")[:15]
         ]
     return JsonResponse(data)
+
+
+# ── Device permission reporting (admin visibility on Call Analytics) ─────────
+
+from ..models import AppDeviceStatus  # noqa: E402
+
+
+@login_required
+@require_POST
+def app_device_status(request):
+    """The app reports its permission state on every launch."""
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False}, status=400)
+    AppDeviceStatus.objects.update_or_create(
+        user=request.user,
+        defaults={
+            "calls_granted": bool(body.get("calls_granted")),
+            "overlay_granted": bool(body.get("overlay_granted")),
+            "notifications_granted": bool(body.get("notifications_granted")),
+            "app_version": str(body.get("app_version") or "")[:20],
+        },
+    )
+    return JsonResponse({"ok": True})

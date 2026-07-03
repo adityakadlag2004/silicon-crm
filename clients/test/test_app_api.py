@@ -338,3 +338,33 @@ class AppLeadsReportsTests(TestCase):
         self.assertTrue(data["firm_wide"])
         self.assertEqual(data["trend"][-1]["amount"], 3000.0)
         self.assertEqual(len(data["leaderboard"]), 2)
+
+
+class DeviceStatusTests(TestCase):
+    def test_report_and_upsert(self):
+        import json as _json
+        user = User.objects.create_user(username="ds_emp", password="x")
+        Employee.objects.create(user=user, role="employee", salary=0, active=True)
+        http = TestClient()
+        http.force_login(user)
+        resp = http.post(
+            reverse("clients:app_device_status"),
+            data=_json.dumps({"calls_granted": True, "overlay_granted": False,
+                              "notifications_granted": True, "app_version": "3.3.1"}),
+            content_type="application/json",
+        )
+        self.assertTrue(resp.json()["ok"])
+        from clients.models import AppDeviceStatus
+        s = AppDeviceStatus.objects.get(user=user)
+        self.assertTrue(s.calls_granted)
+        self.assertFalse(s.overlay_granted)
+        # Second report updates, not duplicates
+        http.post(
+            reverse("clients:app_device_status"),
+            data=_json.dumps({"calls_granted": True, "overlay_granted": True,
+                              "notifications_granted": True, "app_version": "3.3.1"}),
+            content_type="application/json",
+        )
+        self.assertEqual(AppDeviceStatus.objects.filter(user=user).count(), 1)
+        s.refresh_from_db()
+        self.assertTrue(s.overlay_granted)
