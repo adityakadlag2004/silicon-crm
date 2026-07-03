@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "985320355284",
+    "project_id": "ki-bo-37599",
+    "storage_bucket": "ki-bo-37599.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:985320355284:android:6c99687eae3e8f8b461241",
+        "android_client_info": {
+          "package_name": "bo.kadlaginvestment.crm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBHHbeHh4ATzGVQZxGQESAxv0mH613TR6o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
