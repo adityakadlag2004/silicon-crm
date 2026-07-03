@@ -288,8 +288,39 @@ def call_analytics(request):
         "talk_minutes": round(sum(r["talk_seconds"] or 0 for r in rows) / 60, 1),
     }
 
-    # Recent calls (drill-down list, work-hours filtered, latest 100)
-    recent_calls = qs.select_related("employee__user", "client").order_by("-started_at")[:100]
+    # Call log drill-down: independent employee + timeframe filters
+    # (still work-hours scoped), latest 100.
+    calls_range = request.GET.get("calls_range", "today")
+    if calls_range not in ("today", "week", "month"):
+        calls_range = "today"
+    list_qs = CallLogEntry.objects.filter(
+        started_at__time__gte=cfg.work_start,
+        started_at__time__lt=cfg.work_end,
+    )
+    if calls_range == "today":
+        list_qs = list_qs.filter(started_at__date=today)
+    elif calls_range == "week":
+        list_qs = list_qs.filter(started_at__date__gte=today - timedelta(days=6))
+    else:
+        list_qs = list_qs.filter(started_at__year=today.year, started_at__month=today.month)
+
+    calls_emp = request.GET.get("calls_emp", "")
+    try:
+        calls_emp_id = int(calls_emp)
+        list_qs = list_qs.filter(employee_id=calls_emp_id)
+    except (TypeError, ValueError):
+        calls_emp_id = None
+
+    list_totals = list_qs.aggregate(
+        dialed=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_OUTGOING)),
+        connected_calls=Count("id", filter=Q(connected=True)),
+        missed=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_INCOMING, connected=False)),
+        talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
+    )
+    list_totals["talk_minutes"] = round((list_totals["talk_seconds"] or 0) / 60, 1)
+
+    recent_calls = list_qs.select_related("employee__user", "client").order_by("-started_at")[:100]
+    employees = Employee.objects.filter(active=True).select_related("user").order_by("user__username")
 
     # Per-employee app/permission roster (reported by the app at each launch).
     from ..models import AppDeviceStatus
@@ -312,4 +343,8 @@ def call_analytics(request):
         "cfg": cfg,
         "recent_calls": recent_calls,
         "device_roster": device_roster,
+        "employees": employees,
+        "calls_emp_id": calls_emp_id,
+        "calls_range": calls_range,
+        "list_totals": list_totals,
     })

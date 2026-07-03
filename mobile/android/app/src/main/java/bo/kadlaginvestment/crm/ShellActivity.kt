@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
 import bo.kadlaginvestment.crm.ui.AddSaleScreen
+import bo.kadlaginvestment.crm.ui.CallAnalyticsScreen
 import bo.kadlaginvestment.crm.ui.ClientsScreen
 import bo.kadlaginvestment.crm.ui.DashboardScreen
 import bo.kadlaginvestment.crm.ui.FollowupsScreen
@@ -246,6 +247,11 @@ class ShellActivity : ComponentActivity() {
                             onSessionExpired = goLogin,
                         )
                         overlay == "reports" -> ReportsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                        )
+                        overlay == "call_analytics" -> CallAnalyticsScreen(
                             modifier = m,
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,

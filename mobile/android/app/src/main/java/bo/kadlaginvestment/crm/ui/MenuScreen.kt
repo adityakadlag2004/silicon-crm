@@ -50,7 +50,7 @@ private val ENTRIES = listOf(
     MenuEntry("🧮", "Financial Planner", webPath = "/clients/sales/financial-planner/"),
     MenuEntry("📊", "Client Analysis", webPath = "/clients/analysis/"),
     MenuEntry("📈", "Past Performance", webPath = "/clients/past-performance/"),
-    MenuEntry("📞", "Call Analytics", webPath = "/clients/calls/analytics/", adminOnly = true),
+    MenuEntry("📞", "Call Analytics", native = "call_analytics", adminOnly = true),
     MenuEntry("✅", "Approve Sales (web)", webPath = "/clients/sales/approve/", adminOnly = true),
     MenuEntry("👥", "Team", webPath = "/clients/team/", adminOnly = true),
     MenuEntry("🏆", "Incentive Rules", webPath = "/clients/incentives/manage/", adminOnly = true),

@@ -170,3 +170,31 @@ class AnalyticsTests(_CallSetup):
         data = resp.json()
         self.assertEqual(data["work_start_minutes"], 600)
         self.assertEqual(data["work_end_minutes"], 1080)
+
+
+class AppCallAnalyticsTests(_CallSetup):
+    def test_admin_only(self):
+        resp = self.employee.get(reverse("clients:app_call_analytics"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_employee_and_range_filters(self):
+        from datetime import timedelta as td
+        base = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
+        other_user = User.objects.create_user(username="ct_emp2", password="x")
+        other = Employee.objects.create(user=other_user, role="employee", salary=0, active=True)
+        CallLogEntry.objects.create(employee=self.emp, phone="1", direction="outgoing",
+                                    connected=True, duration_seconds=60, started_at=base)
+        CallLogEntry.objects.create(employee=other, phone="2", direction="outgoing",
+                                    connected=True, duration_seconds=30, started_at=base)
+        CallLogEntry.objects.create(employee=self.emp, phone="3", direction="outgoing",
+                                    connected=True, duration_seconds=30, started_at=base - td(days=3))
+
+        data = self.admin.get(reverse("clients:app_call_analytics"), {"range": "today"}).json()
+        self.assertEqual(data["totals"]["dialed"], 2)
+
+        data = self.admin.get(
+            reverse("clients:app_call_analytics"),
+            {"range": "week", "employee_id": self.emp.id},
+        ).json()
+        self.assertEqual(data["totals"]["dialed"], 2)  # today's + 3 days ago, own only
+        self.assertTrue(all(c["employee"] for c in data["calls"]))

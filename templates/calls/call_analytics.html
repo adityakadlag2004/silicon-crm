@@ -118,9 +118,38 @@
 </div>
 
 <div class="ki-card">
-  <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
-    <i class="bi bi-clock-history me-2" style="color:var(--ki-primary);"></i> Recent calls (latest 100)
-  </h3>
+  <div class="d-flex flex-wrap justify-content-between align-items-end gap-2" style="margin-bottom:14px;">
+    <h3 style="font-size:1rem;font-weight:700;margin:0;">
+      <i class="bi bi-clock-history me-2" style="color:var(--ki-primary);"></i> Call log
+    </h3>
+    <form method="get" class="d-flex gap-2 align-items-end">
+      <input type="hidden" name="start" value="{{ start|date:'Y-m-d' }}">
+      <input type="hidden" name="end" value="{{ end|date:'Y-m-d' }}">
+      <div>
+        <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Employee</label>
+        <select name="calls_emp" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="">All employees</option>
+          {% for e in employees %}
+            <option value="{{ e.id }}" {% if e.id == calls_emp_id %}selected{% endif %}>
+              {{ e.user.get_full_name|default:e.user.username }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Timeframe</label>
+        <select name="calls_range" class="form-select form-select-sm" onchange="this.form.submit()">
+          <option value="today" {% if calls_range == "today" %}selected{% endif %}>Today</option>
+          <option value="week" {% if calls_range == "week" %}selected{% endif %}>This week</option>
+          <option value="month" {% if calls_range == "month" %}selected{% endif %}>This month</option>
+        </select>
+      </div>
+    </form>
+  </div>
+  <p class="text-muted" style="font-size:.85rem;">
+    {{ list_totals.dialed }} dialed · {{ list_totals.connected_calls }} connected ·
+    {{ list_totals.missed }} missed · {{ list_totals.talk_minutes }} talk min
+  </p>
   {% if recent_calls %}
   <div class="table-responsive">
     <table class="table align-middle" style="font-size:.9rem;">

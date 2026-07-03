@@ -1045,3 +1045,76 @@ def app_apk_download(request):
     resp = FileResponse(open(path, "rb"), content_type="application/vnd.android.package-archive")
     resp["Content-Disposition"] = 'attachment; filename="KadlagBO.apk"'
     return resp
+
+
+# ── Native Call Analytics (admin-only) ───────────────────────────────────────
+
+from ..models import CallLogEntry, CallTrackingSettings  # noqa: E402
+
+
+@login_required
+@require_GET
+def app_call_analytics(request):
+    """Employee-wise call drill-down for the native screen.
+    Params: employee_id (optional), range = today|week|month."""
+    if not _is_admin(request):
+        return JsonResponse({"ok": False, "error": "Admins only."}, status=403)
+
+    cfg = CallTrackingSettings.current()
+    today = timezone.localdate()
+    rng = request.GET.get("range", "today")
+    if rng not in ("today", "week", "month"):
+        rng = "today"
+
+    qs = CallLogEntry.objects.filter(
+        started_at__time__gte=cfg.work_start,
+        started_at__time__lt=cfg.work_end,
+    )
+    if rng == "today":
+        qs = qs.filter(started_at__date=today)
+    elif rng == "week":
+        qs = qs.filter(started_at__date__gte=today - timedelta(days=6))
+    else:
+        qs = qs.filter(started_at__year=today.year, started_at__month=today.month)
+
+    try:
+        emp_id = int(request.GET.get("employee_id", ""))
+        qs = qs.filter(employee_id=emp_id)
+    except (TypeError, ValueError):
+        pass
+
+    totals = qs.aggregate(
+        dialed=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_OUTGOING)),
+        connected_calls=Count("id", filter=Q(connected=True)),
+        received=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_INCOMING, connected=True)),
+        missed=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_INCOMING, connected=False)),
+        talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
+    )
+
+    return JsonResponse({
+        "totals": {
+            "dialed": totals["dialed"] or 0,
+            "connected": totals["connected_calls"] or 0,
+            "received": totals["received"] or 0,
+            "missed": totals["missed"] or 0,
+            "talk_minutes": round((totals["talk_seconds"] or 0) / 60, 1),
+        },
+        "employees": [
+            {"id": e.id, "name": e.user.get_full_name() or e.user.username}
+            for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username")
+        ],
+        "calls": [
+            {
+                "time": timezone.localtime(c.started_at).strftime("%d %b, %I:%M %p"),
+                "employee": (
+                    c.employee.user.get_full_name() or c.employee.user.username
+                ) if c.employee_id and c.employee.user_id else "",
+                "direction": c.direction,
+                "phone": c.phone,
+                "client": c.client.name if c.client_id else "",
+                "duration": c.duration_seconds,
+                "connected": c.connected,
+            }
+            for c in qs.select_related("employee__user", "client").order_by("-started_at")[:100]
+        ],
+    })
