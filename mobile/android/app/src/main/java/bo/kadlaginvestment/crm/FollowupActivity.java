@@ -82,15 +82,23 @@ public class FollowupActivity extends Activity {
             root.addView(line, lineLp);
         }
 
-        TextView dismiss = new TextView(this);
-        dismiss.setText("No follow-up needed");
-        dismiss.setTextSize(14);
-        dismiss.setTextColor(MUTED);
-        dismiss.setGravity(Gravity.CENTER);
-        dismiss.setPadding(0, dp(10), 0, dp(10));
-        dismiss.setOnClickListener(v -> finish());
-        root.addView(dismiss, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView ignore = new TextView(this);
+        ignore.setText("✕  Ignore — no follow-up");
+        ignore.setTextSize(14);
+        ignore.setTypeface(null, Typeface.BOLD);
+        ignore.setTextColor(MUTED);
+        ignore.setGravity(Gravity.CENTER);
+        ignore.setPadding(0, dp(12), 0, dp(12));
+        GradientDrawable ignoreBg = new GradientDrawable();
+        ignoreBg.setColor(Color.parseColor("#F3F4F6"));
+        ignoreBg.setCornerRadius(dp(10));
+        ignore.setBackground(ignoreBg);
+        ignore.setOnClickListener(v -> finish());
+        LinearLayout.LayoutParams ignoreLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        ignoreLp.topMargin = dp(4);
+        ignoreLp.bottomMargin = dp(6);
+        root.addView(ignore, ignoreLp);
 
         setContentView(root, new ViewGroup.LayoutParams(dp(340), ViewGroup.LayoutParams.WRAP_CONTENT));
         if (getWindow() != null) {
