@@ -1118,3 +1118,263 @@ def app_call_analytics(request):
             for c in qs.select_related("employee__user", "client").order_by("-started_at")[:100]
         ],
     })
+
+
+# ── Screen 11: Team management (admin only) ──────────────────────────────────
+
+from itertools import cycle as _cycle  # noqa: E402
+
+from django.contrib.auth.models import User as _User  # noqa: E402
+from django.contrib.auth.password_validation import validate_password as _validate_password  # noqa: E402
+from django.core.exceptions import ValidationError as _ValidationError  # noqa: E402
+from django.db import transaction as _transaction  # noqa: E402
+
+from ..models import AuditLog  # noqa: E402
+
+
+def _team_forbidden(request):
+    if not _is_admin(request):
+        return JsonResponse({"ok": False, "error": "Admins only."}, status=403)
+    return None
+
+
+@login_required
+@require_GET
+def app_team(request):
+    denied = _team_forbidden(request)
+    if denied:
+        return denied
+    today = timezone.localdate()
+    rows = []
+    for e in Employee.objects.select_related("user").order_by("-active", "user__first_name", "user__username"):
+        if not e.user_id:
+            continue
+        month = Sale.objects.filter(
+            employee=e, status=Sale.STATUS_APPROVED,
+            date__year=today.year, date__month=today.month,
+        ).aggregate(amount=Sum("amount"), n=Count("id"))
+        rows.append({
+            "id": e.id,
+            "name": e.user.get_full_name() or e.user.username,
+            "username": e.user.username,
+            "role": e.role,
+            "active": e.active,
+            "employee_number": e.employee_number or "",
+            "client_count": Client.objects.filter(mapped_to=e).count(),
+            "month_amount": _money(month["amount"]),
+            "month_sales": month["n"] or 0,
+        })
+    return JsonResponse({
+        "results": rows,
+        "roles": [
+            {"value": v, "label": l}
+            for v, l in Employee._meta.get_field("role").choices
+        ],
+    })
+
+
+@login_required
+@require_GET
+def app_team_detail(request, employee_id):
+    denied = _team_forbidden(request)
+    if denied:
+        return denied
+    e = get_object_or_404(Employee.objects.select_related("user"), pk=employee_id)
+    today = timezone.localdate()
+    approved = Sale.objects.filter(employee=e, status=Sale.STATUS_APPROVED)
+    month = approved.filter(date__year=today.year, date__month=today.month)
+    return JsonResponse({
+        "id": e.id,
+        "username": e.user.username if e.user_id else "",
+        "first_name": e.user.first_name if e.user_id else "",
+        "last_name": e.user.last_name if e.user_id else "",
+        "email": e.user.email if e.user_id else "",
+        "role": e.role,
+        "active": e.active,
+        "salary": _money(e.salary),
+        "employee_number": e.employee_number or "",
+        "stats": {
+            "total_sales": Sale.objects.filter(employee=e).count(),
+            "pending_sales": Sale.objects.filter(employee=e, status=Sale.STATUS_PENDING).count(),
+            "total_amount": _money(approved.aggregate(t=Sum("amount"))["t"]),
+            "total_points": _money(approved.aggregate(t=Sum("points"))["t"]),
+            "clients": Client.objects.filter(mapped_to=e).count(),
+            "month_amount": _money(month.aggregate(t=Sum("amount"))["t"]),
+            "month_points": _money(month.aggregate(t=Sum("points"))["t"]),
+        },
+    })
+
+
+def _team_validate(body, exclude_emp=None):
+    """Shared validation for create/update. Returns (cleaned, error)."""
+    valid_roles = dict(Employee._meta.get_field("role").choices)
+    role = (body.get("role") or "").strip()
+    if role not in valid_roles:
+        return None, f"Invalid role '{role}'."
+    raw_salary = str(body.get("salary") or "0").strip()
+    try:
+        salary = Decimal(raw_salary)
+        if salary < 0:
+            raise InvalidOperation
+    except InvalidOperation:
+        return None, "Salary must be a non-negative number."
+    number = str(body.get("employee_number") or "").strip() or None
+    if number:
+        qs = Employee.objects.filter(employee_number=number)
+        if exclude_emp is not None:
+            qs = qs.exclude(pk=exclude_emp.pk)
+        if qs.exists():
+            return None, f"Employee number '{number}' is already in use."
+    return {
+        "role": role,
+        "salary": salary,
+        "employee_number": number,
+        "first_name": str(body.get("first_name") or "").strip()[:150],
+        "last_name": str(body.get("last_name") or "").strip()[:150],
+        "email": str(body.get("email") or "").strip()[:254],
+    }, None
+
+
+@login_required
+@require_POST
+def app_team_create(request):
+    denied = _team_forbidden(request)
+    if denied:
+        return denied
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+
+    username = str(body.get("username") or "").strip()
+    if not username:
+        return JsonResponse({"ok": False, "error": "Username is required."}, status=400)
+    if _User.objects.filter(username__iexact=username).exists():
+        return JsonResponse({"ok": False, "error": "Username already exists."}, status=400)
+
+    password = str(body.get("password") or "")
+    try:
+        _validate_password(password)
+    except _ValidationError as e:
+        return JsonResponse({"ok": False, "error": " ".join(e.messages)}, status=400)
+
+    cleaned, err = _team_validate(body)
+    if err:
+        return JsonResponse({"ok": False, "error": err}, status=400)
+
+    from .team import _next_employee_number
+    with _transaction.atomic():
+        user = _User.objects.create_user(
+            username=username,
+            password=password,
+            email=cleaned["email"],
+            first_name=cleaned["first_name"],
+            last_name=cleaned["last_name"],
+            is_active=True,
+        )
+        emp = Employee.objects.create(
+            user=user,
+            role=cleaned["role"],
+            salary=cleaned["salary"],
+            employee_number=cleaned["employee_number"] or _next_employee_number(),
+            active=True,
+        )
+    return JsonResponse({"ok": True, "id": emp.id})
+
+
+@login_required
+@require_POST
+def app_team_update(request, employee_id):
+    denied = _team_forbidden(request)
+    if denied:
+        return denied
+    e = get_object_or_404(Employee.objects.select_related("user"), pk=employee_id)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+    cleaned, err = _team_validate(body, exclude_emp=e)
+    if err:
+        return JsonResponse({"ok": False, "error": err}, status=400)
+
+    user = e.user
+    user.first_name = cleaned["first_name"]
+    user.last_name = cleaned["last_name"]
+    user.email = cleaned["email"]
+    user.save(update_fields=["first_name", "last_name", "email"])
+
+    old_role = e.role
+    e.role = cleaned["role"]
+    e.salary = cleaned["salary"]
+    e.employee_number = cleaned["employee_number"]
+    e.save(update_fields=["role", "salary", "employee_number"])
+
+    if old_role != e.role:
+        AuditLog.objects.create(
+            action=AuditLog.ACTION_EMPLOYEE_ROLE_CHANGED,
+            actor=request.user,
+            target_model="Employee",
+            target_id=e.pk,
+            summary=f"Role of '{user.username}' changed: {old_role} → {e.role}",
+            details={"from": old_role, "to": e.role, "via": "app"},
+        )
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def app_team_toggle(request, employee_id):
+    """Activate/deactivate — mirrors web team_toggle_status incl. round-robin
+    client reassignment on deactivation."""
+    denied = _team_forbidden(request)
+    if denied:
+        return denied
+    e = get_object_or_404(Employee.objects.select_related("user"), pk=employee_id)
+
+    if e.active:
+        others = list(Employee.objects.filter(active=True).exclude(pk=e.pk))
+        mapped = list(Client.objects.filter(mapped_to=e))
+        if mapped and not others:
+            return JsonResponse(
+                {"ok": False, "error": "Cannot deactivate: last active employee with mapped clients."},
+                status=400,
+            )
+        with _transaction.atomic():
+            if others:
+                rr = _cycle(others)
+                for c in mapped:
+                    c.reassign_to(next(rr), changed_by=request.user, note="Auto-reassigned on deactivation (app)")
+            e.active = False
+            e.save(update_fields=["active"])
+            if e.user_id:
+                e.user.is_active = False
+                e.user.save(update_fields=["is_active"])
+        return JsonResponse({"ok": True, "active": False, "reassigned": len(mapped)})
+
+    with _transaction.atomic():
+        e.active = True
+        e.save(update_fields=["active"])
+        if e.user_id:
+            e.user.is_active = True
+            e.user.save(update_fields=["is_active"])
+    return JsonResponse({"ok": True, "active": True, "reassigned": 0})
+
+
+@login_required
+@require_POST
+def app_team_reset_password(request, employee_id):
+    denied = _team_forbidden(request)
+    if denied:
+        return denied
+    e = get_object_or_404(Employee.objects.select_related("user"), pk=employee_id)
+    try:
+        password = json.loads(request.body.decode("utf-8")).get("new_password") or ""
+    except Exception:
+        password = ""
+    try:
+        _validate_password(password, user=e.user)
+    except _ValidationError as err:
+        return JsonResponse({"ok": False, "error": " ".join(err.messages)}, status=400)
+    e.user.set_password(password)
+    e.user.save()
+    return JsonResponse({"ok": True})

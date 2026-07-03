@@ -399,3 +399,73 @@ class AppUpdateEndpointTests(TestCase):
                 self.assertIn("/clients/app/latest.apk", data["url"])
                 resp = TestClient().get(reverse("clients:app_apk_download"))
                 self.assertEqual(resp.status_code, 200)
+
+
+class AppTeamApiTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="t_admin", password="x")
+        cls.admin_emp = Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="t_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+
+    def _http(self, user):
+        c = TestClient()
+        c.force_login(user)
+        return c
+
+    def _post(self, user, url, payload):
+        import json as _json
+        return self._http(user).post(url, data=_json.dumps(payload), content_type="application/json")
+
+    def test_admin_only(self):
+        self.assertEqual(self._http(self.emp_user).get(reverse("clients:app_team")).status_code, 403)
+        self.assertEqual(self._http(self.admin_user).get(reverse("clients:app_team")).status_code, 200)
+
+    def test_create_validates_password_and_role(self):
+        resp = self._post(self.admin_user, reverse("clients:app_team_create"), {
+            "username": "newguy", "password": "123456", "role": "employee",
+        })
+        self.assertEqual(resp.status_code, 400)  # weak password
+        resp = self._post(self.admin_user, reverse("clients:app_team_create"), {
+            "username": "newguy", "password": "k9#Vip-Lantern42", "role": "superboss",
+        })
+        self.assertEqual(resp.status_code, 400)  # bogus role
+        resp = self._post(self.admin_user, reverse("clients:app_team_create"), {
+            "username": "newguy", "password": "k9#Vip-Lantern42", "role": "employee", "salary": "15000",
+        })
+        self.assertEqual(resp.status_code, 200, resp.content)
+        e = Employee.objects.get(user__username="newguy")
+        self.assertTrue(e.employee_number)  # auto-assigned
+
+    def test_update_role_audited(self):
+        resp = self._post(self.admin_user, reverse("clients:app_team_update", args=[self.emp.id]), {
+            "role": "manager", "salary": "0",
+        })
+        self.assertEqual(resp.status_code, 200)
+        from clients.models import AuditLog
+        self.assertTrue(AuditLog.objects.filter(
+            action=AuditLog.ACTION_EMPLOYEE_ROLE_CHANGED, target_id=self.emp.pk
+        ).exists())
+
+    def test_toggle_reassigns_clients(self):
+        c = Client.objects.create(name="Toggle C", mapped_to=self.emp)
+        resp = self._post(self.admin_user, reverse("clients:app_team_toggle", args=[self.emp.id]), {})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertFalse(data["active"])
+        self.assertEqual(data["reassigned"], 1)
+        c.refresh_from_db()
+        self.assertEqual(c.mapped_to, self.admin_emp)
+        self.emp.user.refresh_from_db()
+        self.assertFalse(self.emp.user.is_active)
+
+    def test_reset_password_policy(self):
+        resp = self._post(self.admin_user, reverse("clients:app_team_reset_password", args=[self.emp.id]), {
+            "new_password": "123456",
+        })
+        self.assertEqual(resp.status_code, 400)
+        resp = self._post(self.admin_user, reverse("clients:app_team_reset_password", args=[self.emp.id]), {
+            "new_password": "k9#Vip-Lantern42",
+        })
+        self.assertEqual(resp.status_code, 200)

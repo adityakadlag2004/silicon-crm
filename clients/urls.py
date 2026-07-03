@@ -73,6 +73,12 @@ urlpatterns = [
     path("api/app/reports/summary/", views.app_report_summary, name="app_report_summary"),
     path("api/app/device-status/", views.app_device_status, name="app_device_status"),
     path("api/app/calls/analytics/", views.app_call_analytics, name="app_call_analytics"),
+    path("api/app/team/", views.app_team, name="app_team"),
+    path("api/app/team/create/", views.app_team_create, name="app_team_create"),
+    path("api/app/team/<int:employee_id>/", views.app_team_detail, name="app_team_detail"),
+    path("api/app/team/<int:employee_id>/update/", views.app_team_update, name="app_team_update"),
+    path("api/app/team/<int:employee_id>/toggle/", views.app_team_toggle, name="app_team_toggle"),
+    path("api/app/team/<int:employee_id>/reset-password/", views.app_team_reset_password, name="app_team_reset_password"),
     path("api/app/version/", views.app_version, name="app_version"),
     path("app/latest.apk", views.app_apk_download, name="app_apk_download"),
 

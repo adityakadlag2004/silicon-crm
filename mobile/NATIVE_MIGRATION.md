@@ -41,7 +41,7 @@ in the WebView.
 | 8 | Notifications screen | `/api/app/notifications/…` | **v3.2** |
 | 9 | Leads pipeline (stages, progress, remarks, convert, create) | `/api/app/leads/…` | **v3.3** |
 | 10 | Reports (trend chart, product mix, leaderboard) | `/api/app/reports/summary/` | **v3.3** |
-| 11 | Team management (admin) | | |
+| 11 | Team management (roster, edit, activate/deactivate, reset password, add) | `/api/app/team/…` | **v3.6** |
 | 12 | Campaigns / Incentives (admin) | | |
 | 13 | Lead sheets (spreadsheet — hardest, last) | | |
 | 14 | Native login | `/api/app/login/` | |

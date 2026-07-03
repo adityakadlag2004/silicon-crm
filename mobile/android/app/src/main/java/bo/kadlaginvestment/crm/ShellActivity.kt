@@ -50,6 +50,7 @@ import bo.kadlaginvestment.crm.ui.ReportsScreen
 import bo.kadlaginvestment.crm.ui.NotificationsScreen
 import bo.kadlaginvestment.crm.ui.RenewalsScreen
 import bo.kadlaginvestment.crm.ui.SalesScreen
+import bo.kadlaginvestment.crm.ui.TeamScreen
 
 @androidx.compose.runtime.Composable
 private fun PermRow(label: String, onFix: () -> Unit) {
@@ -252,6 +253,11 @@ class ShellActivity : ComponentActivity() {
                             onSessionExpired = goLogin,
                         )
                         overlay == "call_analytics" -> CallAnalyticsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                        )
+                        overlay == "team" -> TeamScreen(
                             modifier = m,
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
