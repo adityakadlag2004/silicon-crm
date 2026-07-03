@@ -54,11 +54,45 @@ object ApiClient {
     }
 
     suspend fun post(path: String, body: JSONObject): Result = withContext(Dispatchers.IO) {
-        val code = BackendClient.postJson(path, body.toString())
-        when (code) {
-            200 -> Result.Ok(JSONObject())
-            -1 -> Result.NotLoggedIn
-            else -> Result.Error("Server error ($code)")
+        val cookies = CookieManager.getInstance().getCookie(BackendClient.BASE_URL)
+        if (cookies == null || !cookies.contains("sessionid=")) {
+            return@withContext Result.NotLoggedIn
+        }
+        val csrf = cookies.split(";").map { it.trim() }
+            .firstOrNull { it.startsWith("csrftoken=") }?.substringAfter("=")
+        var conn: HttpURLConnection? = null
+        try {
+            conn = URL(BackendClient.BASE_URL + path).openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            conn.doOutput = true
+            conn.instanceFollowRedirects = false
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Cookie", cookies)
+            conn.setRequestProperty("Origin", BackendClient.BASE_URL)
+            conn.setRequestProperty("Referer", BackendClient.BASE_URL + "/")
+            if (csrf != null) conn.setRequestProperty("X-CSRFToken", csrf)
+            conn.outputStream.use { it.write(body.toString().toByteArray()) }
+
+            when (val code = conn.responseCode) {
+                200 -> Result.Ok(JSONObject(conn.inputStream.bufferedReader().readText()))
+                301, 302, 401 -> Result.NotLoggedIn
+                else -> {
+                    val msg = try {
+                        JSONObject(conn.errorStream?.bufferedReader()?.readText() ?: "")
+                            .optString("error", "Server error ($code)")
+                    } catch (_: Exception) {
+                        "Server error ($code)"
+                    }
+                    Result.Error(msg)
+                }
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Network error")
+        } finally {
+            conn?.disconnect()
         }
     }
 }

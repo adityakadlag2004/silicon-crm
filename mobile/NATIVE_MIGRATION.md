@@ -32,18 +32,19 @@ in the WebView.
 | # | Screen | API | Status |
 |---|--------|-----|--------|
 | 1 | Shell + Dashboard (role-aware) | `/api/app/dashboard/` | **v3.0** |
-| 2 | Add Sale (client search, product picker) | `/api/app/clients/search/`, `/api/app/sales/` | |
-| 3 | My/All Clients list + Client profile | `/api/app/clients/…` | |
-| 4 | Call Follow-ups (native list + actions) | reuse `/api/calls/…` | |
-| 5 | Sales list + Approve (admin) | `/api/app/sales/…` | |
-| 6 | Renewals | | |
-| 7 | Notifications screen | | |
-| 8 | Leads pipeline | | |
-| 9 | Reports (charts via Compose) | | |
-| 10 | Team management (admin) | | |
-| 11 | Campaigns / Incentives (admin) | | |
-| 12 | Lead sheets (spreadsheet — hardest, last) | | |
-| 13 | Native login + logout | `/api/app/login/` | |
+| 2 | Add Sale (client search, product picker) | `/api/app/sale-meta/`, `/api/app/sales/create/` | **v3.1** |
+| 3 | My/All Clients list + Client profile | `/api/app/clients/…` | **v3.1** |
+| 4 | Call Follow-ups (native list + actions) | `/api/app/followups/…` | **v3.1** |
+| 5 | Sales list + Approve (admin) | `/api/app/sales/…` | **v3.1** |
+| 6 | Native Menu + logout | `/api/app/logout/` | **v3.1** |
+| 7 | Renewals | | |
+| 8 | Notifications screen | | |
+| 9 | Leads pipeline | | |
+| 10 | Reports (charts via Compose) | | |
+| 11 | Team management (admin) | | |
+| 12 | Campaigns / Incentives (admin) | | |
+| 13 | Lead sheets (spreadsheet — hardest, last) | | |
+| 14 | Native login | `/api/app/login/` | |
 | — | Financial planner | stays WebView (calc engine is fine there) | |
 
 ## Rules
