@@ -97,20 +97,19 @@ private fun LoginForm(onLoggedIn: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Spacer(Modifier.height(64.dp))
-        Text(
-            "Kadlag Investment",
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            color = BrandGoldDark,
-            textAlign = TextAlign.Center,
+        Spacer(Modifier.height(56.dp))
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = bo.kadlaginvestment.crm.R.drawable.kilogo),
+            contentDescription = "Kadlag Investment",
+            modifier = Modifier.fillMaxWidth(0.72f).height(120.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
         )
         Text(
             "Back Office",
             fontSize = 15.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(36.dp))
 
         OutlinedTextField(
             value = username,
