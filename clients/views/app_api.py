@@ -1378,3 +1378,58 @@ def app_team_reset_password(request, employee_id):
     e.user.set_password(password)
     e.user.save()
     return JsonResponse({"ok": True})
+
+
+# ── Add Client (Clients screen "+ Add") ──────────────────────────────────────
+
+@login_required
+@require_POST
+def app_client_create(request):
+    """Create a client. Mirrors the web add form: name + phone required.
+    Employees' clients map to themselves; admins may pick anyone or leave
+    unmapped."""
+    emp = _emp(request)
+    is_admin = _is_admin(request)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+
+    name = str(body.get("name") or "").strip()
+    phone = str(body.get("phone") or "").strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "Client name is required."}, status=400)
+    if not phone:
+        return JsonResponse({"ok": False, "error": "Phone number is required."}, status=400)
+
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    if Client.objects.filter(phone__endswith=digits[-10:]).exists() and len(digits) >= 10:
+        return JsonResponse({"ok": False, "error": "A client with this phone number already exists."}, status=400)
+
+    mapped_to = emp
+    if is_admin:
+        raw = body.get("mapped_to_id")
+        if raw in (None, "", 0):
+            mapped_to = None
+        else:
+            mapped_to = Employee.objects.filter(pk=raw, active=True).first()
+
+    dob = None
+    raw_dob = str(body.get("date_of_birth") or "").strip()
+    if raw_dob:
+        try:
+            dob = date.fromisoformat(raw_dob)
+        except ValueError:
+            return JsonResponse({"ok": False, "error": "Date of birth must be YYYY-MM-DD."}, status=400)
+
+    client = Client.objects.create(
+        name=name[:255],
+        phone=phone[:15],
+        email=str(body.get("email") or "").strip()[:254] or None,
+        pan=str(body.get("pan") or "").strip().upper()[:20] or None,
+        address=str(body.get("address") or "").strip() or None,
+        date_of_birth=dob,
+        mapped_to=mapped_to,
+        status="Mapped" if mapped_to else "Unmapped",
+    )
+    return JsonResponse({"ok": True, "id": client.id})

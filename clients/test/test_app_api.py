@@ -469,3 +469,42 @@ class AppTeamApiTests(TestCase):
             "new_password": "k9#Vip-Lantern42",
         })
         self.assertEqual(resp.status_code, 200)
+
+
+class AppClientCreateTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="cc_admin", password="x")
+        cls.admin_emp = Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="cc_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+
+    def _post(self, user, payload):
+        import json as _json
+        c = TestClient()
+        c.force_login(user)
+        return c.post(reverse("clients:app_client_create"),
+                      data=_json.dumps(payload), content_type="application/json")
+
+    def test_employee_client_maps_to_self(self):
+        resp = self._post(self.emp_user, {"name": "New Client", "phone": "9811112222"})
+        self.assertEqual(resp.status_code, 200, resp.content)
+        c = Client.objects.get(name="New Client")
+        self.assertEqual(c.mapped_to, self.emp)
+        self.assertEqual(c.status, "Mapped")
+
+    def test_requires_name_and_phone(self):
+        self.assertEqual(self._post(self.emp_user, {"name": "X"}).status_code, 400)
+        self.assertEqual(self._post(self.emp_user, {"phone": "981"}).status_code, 400)
+
+    def test_duplicate_phone_rejected(self):
+        Client.objects.create(name="Existing", phone="9822223333")
+        resp = self._post(self.emp_user, {"name": "Dup", "phone": "+91 98222 23333"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_admin_can_leave_unmapped_or_assign(self):
+        resp = self._post(self.admin_user, {"name": "Unmapped C", "phone": "9833334444", "mapped_to_id": ""})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(Client.objects.get(name="Unmapped C").mapped_to)
+        resp = self._post(self.admin_user, {"name": "Assigned C", "phone": "9844445555", "mapped_to_id": self.emp.id})
+        self.assertEqual(Client.objects.get(name="Assigned C").mapped_to, self.emp)

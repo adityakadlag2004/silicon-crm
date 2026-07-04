@@ -54,6 +54,7 @@ urlpatterns = [
     path("api/app/sales/", views.app_sales, name="app_sales"),
     path("api/app/sales/<int:sale_id>/action/", views.app_sale_action, name="app_sale_action"),
     path("api/app/clients/", views.app_clients, name="app_clients"),
+    path("api/app/clients/create/", views.app_client_create, name="app_client_create"),
     path("api/app/clients/<int:client_id>/", views.app_client_detail, name="app_client_detail"),
     path("api/app/followups/", views.app_followups, name="app_followups"),
     path("api/app/followups/<int:followup_id>/action/", views.app_followup_action, name="app_followup_action"),

@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.net.ApiClient
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /** Native Clients: My/All list with search → tap for the client profile. */
@@ -49,6 +50,22 @@ fun ClientsScreen(
     onOpenWeb: (String) -> Unit,
 ) {
     var selectedClientId by remember { mutableStateOf<Int?>(null) }
+    var creating by remember { mutableStateOf(false) }
+    var createdReload by remember { mutableStateOf(0) }
+
+    if (creating) {
+        BackHandler { creating = false }
+        AddClientForm(
+            modifier = modifier,
+            onDone = { newId ->
+                creating = false
+                createdReload++
+                if (newId != null) selectedClientId = newId
+            },
+            onSessionExpired = onSessionExpired,
+        )
+        return
+    }
 
     if (selectedClientId != null) {
         BackHandler { selectedClientId = null }
@@ -71,7 +88,7 @@ fun ClientsScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(scopeMy, q, page, reloadKey) {
+    LaunchedEffect(scopeMy, q, page, reloadKey, createdReload) {
         loading = true
         error = null
         if (q.isNotEmpty()) delay(350) // debounce typing
@@ -97,9 +114,10 @@ fun ClientsScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Clients", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("My", scopeMy) { scopeMy = true; page = 1 }
                 Chip("All", !scopeMy) { scopeMy = false; page = 1 }
+                Button(onClick = { creating = true }) { Text("＋ Add") }
             }
         }
 
@@ -271,5 +289,147 @@ private fun InfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth()) {
         Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.35f))
         Text(if (value.isEmpty()) "—" else value, fontSize = 13.sp, modifier = Modifier.weight(0.65f))
+    }
+}
+
+@Composable
+private fun AddClientForm(
+    modifier: Modifier,
+    onDone: (Int?) -> Unit,
+    onSessionExpired: () -> Unit,
+) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var meta by remember { mutableStateOf<JSONObject?>(null) }
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var pan by remember { mutableStateOf("") }
+    var address by remember { mutableStateOf("") }
+    var dob by remember { mutableStateOf("") }
+    var mappedTo by remember { mutableStateOf<Pair<Int, String>?>(null) } // null = Myself/Unmapped label below
+    var mappedUnset by remember { mutableStateOf(false) }                 // admin chose "Unmapped"
+    var mapMenuOpen by remember { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        when (val r = bo.kadlaginvestment.crm.net.ApiClient.get("/clients/api/app/sale-meta/")) {
+            is bo.kadlaginvestment.crm.net.ApiClient.Result.Ok -> meta = r.json
+            is bo.kadlaginvestment.crm.net.ApiClient.Result.NotLoggedIn -> onSessionExpired()
+            is bo.kadlaginvestment.crm.net.ApiClient.Result.Error -> meta = JSONObject()
+        }
+    }
+    val m = meta ?: run { LoadingBox(modifier); return }
+    val isAdmin = m.optBoolean("is_admin")
+
+    Column(
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "← Back",
+                color = MaterialTheme.colorScheme.secondary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable { onDone(null) }.padding(end = 12.dp),
+            )
+            Text("Add Client", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(
+            value = phone, onValueChange = { phone = it },
+            label = { Text("Phone *") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone
+            ),
+            modifier = Modifier.fillMaxWidth(), singleLine = true,
+        )
+        OutlinedTextField(
+            value = email, onValueChange = { email = it }, label = { Text("Email") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Email
+            ),
+            modifier = Modifier.fillMaxWidth(), singleLine = true,
+        )
+        OutlinedTextField(value = pan, onValueChange = { pan = it.uppercase() }, label = { Text("PAN") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = dob, onValueChange = { dob = it },
+            label = { Text("Date of birth (YYYY-MM-DD, optional)") },
+            placeholder = { Text("1985-06-15") },
+            modifier = Modifier.fillMaxWidth(), singleLine = true,
+        )
+
+        if (isAdmin) {
+            androidx.compose.foundation.layout.Box {
+                OutlinedTextField(
+                    value = when {
+                        mappedUnset -> "Unmapped"
+                        mappedTo != null -> mappedTo!!.second
+                        else -> "Myself"
+                    },
+                    onValueChange = {}, readOnly = true, enabled = false,
+                    label = { Text("Map to employee") },
+                    modifier = Modifier.fillMaxWidth().clickable { mapMenuOpen = true },
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+                androidx.compose.material3.DropdownMenu(
+                    expanded = mapMenuOpen, onDismissRequest = { mapMenuOpen = false },
+                ) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Unmapped") },
+                        onClick = { mappedUnset = true; mappedTo = null; mapMenuOpen = false },
+                    )
+                    val es = m.optJSONArray("employees")
+                    for (i in 0 until (es?.length() ?: 0)) {
+                        val e = es!!.getJSONObject(i)
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(e.optString("name")) },
+                            onClick = {
+                                mappedTo = e.getInt("id") to e.optString("name")
+                                mappedUnset = false
+                                mapMenuOpen = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+
+        message?.let { Text(it, color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+
+        Button(
+            onClick = {
+                submitting = true
+                message = null
+                scope.launch {
+                    val body = JSONObject()
+                        .put("name", name).put("phone", phone).put("email", email)
+                        .put("pan", pan).put("address", address).put("date_of_birth", dob.trim())
+                    if (isAdmin) {
+                        when {
+                            mappedUnset -> body.put("mapped_to_id", "")
+                            mappedTo != null -> body.put("mapped_to_id", mappedTo!!.first)
+                            else -> body.put("mapped_to_id", m.optInt("employee_id"))
+                        }
+                    }
+                    when (val r = bo.kadlaginvestment.crm.net.ApiClient.post("/clients/api/app/clients/create/", body)) {
+                        is bo.kadlaginvestment.crm.net.ApiClient.Result.Ok -> onDone(r.json.optInt("id"))
+                        is bo.kadlaginvestment.crm.net.ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                        is bo.kadlaginvestment.crm.net.ApiClient.Result.Error -> message = r.message
+                    }
+                    submitting = false
+                }
+            },
+            enabled = !submitting && name.isNotBlank() && phone.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) { Text(if (submitting) "Saving…" else "Save Client", fontSize = 16.sp) }
+
+        Spacer(Modifier.height(24.dp))
     }
 }
