@@ -45,6 +45,7 @@ fun CallAnalyticsScreen(
 ) {
     BackHandler(onBack = onBack)
 
+    var tab by remember { mutableStateOf(0) }  // 0 = By employee, 1 = Call log
     var range by remember { mutableStateOf("today") }
     var employee by remember { mutableStateOf<Pair<Int, String>?>(null) }  // null = all
     var empMenuOpen by remember { mutableStateOf(false) }
@@ -80,29 +81,15 @@ fun CallAnalyticsScreen(
             Text("Call Analytics", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
 
+        // Tabs
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box {
-                OutlinedButton(onClick = { empMenuOpen = true }) {
-                    Text(employee?.second ?: "All employees")
-                }
-                DropdownMenu(expanded = empMenuOpen, onDismissRequest = { empMenuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text("All employees") },
-                        onClick = { employee = null; empMenuOpen = false },
-                    )
-                    val es = data?.optJSONArray("employees")
-                    for (i in 0 until (es?.length() ?: 0)) {
-                        val e = es!!.getJSONObject(i)
-                        DropdownMenuItem(
-                            text = { Text(e.optString("name")) },
-                            onClick = {
-                                employee = e.getInt("id") to e.optString("name")
-                                empMenuOpen = false
-                            },
-                        )
-                    }
-                }
-            }
+            Chip("By employee", tab == 0) { tab = 0 }
+            Chip("Call log", tab == 1) { tab = 1 }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        // Filters: timeframe (both tabs) + employee (call-log tab only)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box {
                 OutlinedButton(onClick = { rangeMenuOpen = true }) {
                     Text(
@@ -119,12 +106,83 @@ fun CallAnalyticsScreen(
                     }
                 }
             }
+            if (tab == 1) {
+                Box {
+                    OutlinedButton(onClick = { empMenuOpen = true }) {
+                        Text(employee?.second ?: "All employees")
+                    }
+                    DropdownMenu(expanded = empMenuOpen, onDismissRequest = { empMenuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("All employees") },
+                            onClick = { employee = null; empMenuOpen = false },
+                        )
+                        val es = data?.optJSONArray("employees")
+                        for (i in 0 until (es?.length() ?: 0)) {
+                            val e = es!!.getJSONObject(i)
+                            DropdownMenuItem(
+                                text = { Text(e.optString("name")) },
+                                onClick = {
+                                    employee = e.getInt("id") to e.optString("name")
+                                    empMenuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
         Spacer(Modifier.height(10.dp))
 
         val d = data
         if (d == null) { LoadingBox(); return }
 
+        // ── By-employee team overview ──
+        if (tab == 0) {
+            val be = d.optJSONArray("by_employee")
+            val emps = (0 until (be?.length() ?: 0)).map { be!!.getJSONObject(it) }
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
+            ) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text("Employee", Modifier.weight(1.6f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Calls", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Conn", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Talk", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Ser.", Modifier.weight(0.8f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (emps.isEmpty()) {
+                    item { Text("No active employees.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+                }
+                items(emps) { e ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(e.optString("name"), Modifier.weight(1.6f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${e.optInt("calls")}", Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("${e.optInt("connected")}", Modifier.weight(1f), fontSize = 13.sp, color = StatusGreen)
+                            Text(minsShort(e.optDouble("talk_minutes", 0.0)), Modifier.weight(1f), fontSize = 12.sp)
+                            Text("${e.optInt("serious")}", Modifier.weight(0.8f), fontSize = 13.sp, color = BrandGoldDark, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            return
+        }
+
+        // ── Call log tab ──
         val t = d.optJSONObject("totals") ?: JSONObject()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AnalyticsStat("Dialed", "${t.optInt("dialed")}", Modifier.weight(1f))
@@ -200,4 +258,11 @@ private fun AnalyticsStat(
             Text(title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+private fun minsShort(totalMinutes: Double): String {
+    val totalSec = (totalMinutes * 60).toInt()
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    return if (h > 0) "${h}h${m}m" else "${m}m"
 }

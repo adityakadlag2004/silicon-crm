@@ -1119,6 +1119,42 @@ def app_call_analytics(request):
         talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
     )
 
+    # Per-employee team breakdown for the same timeframe (ignores the
+    # employee_id filter — always the whole team, so admins can see who's
+    # doing what). Includes active employees with zero calls.
+    breakdown_qs = CallLogEntry.objects.filter(
+        started_at__time__gte=cfg.work_start,
+        started_at__time__lt=cfg.work_end,
+    )
+    if rng == "today":
+        breakdown_qs = breakdown_qs.filter(started_at__date=today)
+    elif rng == "week":
+        breakdown_qs = breakdown_qs.filter(started_at__date__gte=today - timedelta(days=6))
+    else:
+        breakdown_qs = breakdown_qs.filter(started_at__year=today.year, started_at__month=today.month)
+
+    per_emp = {
+        row["employee_id"]: row
+        for row in breakdown_qs.values("employee_id").annotate(
+            calls=Count("id"),
+            connected_count=Count("id", filter=Q(connected=True)),
+            talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
+            serious=Count("id", filter=Q(duration_seconds__gt=_SERIOUS_CALL_SECONDS)),
+        )
+    }
+    by_employee = []
+    for e in Employee.objects.filter(active=True).select_related("user"):
+        r = per_emp.get(e.id)
+        by_employee.append({
+            "id": e.id,
+            "name": e.user.get_full_name() or e.user.username if e.user_id else f"#{e.id}",
+            "calls": (r["calls"] if r else 0),
+            "connected": (r["connected_count"] if r else 0),
+            "talk_minutes": round(((r["talk_seconds"] if r else 0) or 0) / 60, 1),
+            "serious": (r["serious"] if r else 0),
+        })
+    by_employee.sort(key=lambda x: (-x["calls"], -x["talk_minutes"]))
+
     return JsonResponse({
         "totals": {
             "dialed": totals["dialed"] or 0,
@@ -1127,6 +1163,7 @@ def app_call_analytics(request):
             "missed": totals["missed"] or 0,
             "talk_minutes": round((totals["talk_seconds"] or 0) / 60, 1),
         },
+        "by_employee": by_employee,
         "employees": [
             {"id": e.id, "name": e.user.get_full_name() or e.user.username}
             for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username")

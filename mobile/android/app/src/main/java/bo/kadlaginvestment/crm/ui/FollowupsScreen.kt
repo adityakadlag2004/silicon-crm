@@ -35,8 +35,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.net.ApiClient
+import bo.kadlaginvestment.crm.net.ContactResolver
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+
+/** CRM client name if present, else the device-saved contact name, else the number. */
+private fun displayName(context: android.content.Context, f: JSONObject): String {
+    val client = f.optString("client")
+    if (client.isNotEmpty()) return client
+    val phone = f.optString("phone")
+    return ContactResolver.nameFor(context, phone) ?: phone
+}
 
 /** Call Follow-ups: today's personal call performance on top, then the
  * pending follow-up list (completed/dismissed items disappear). */
@@ -150,7 +159,7 @@ fun FollowupsScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
                             Text(
-                                f.optString("client").ifEmpty { f.optString("phone") },
+                                displayName(context, f),
                                 fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
                             )
                             Text(

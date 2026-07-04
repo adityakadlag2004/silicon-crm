@@ -231,3 +231,17 @@ class AppCallAnalyticsTests(_CallSetup):
         ).json()
         self.assertEqual(data["totals"]["dialed"], 2)  # today's + 3 days ago, own only
         self.assertTrue(all(c["employee"] for c in data["calls"]))
+
+    def test_by_employee_breakdown_covers_whole_team(self):
+        base = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
+        CallLogEntry.objects.create(employee=self.emp, phone="1", direction="outgoing",
+                                    connected=True, duration_seconds=200, started_at=base)
+        # admin_emp has no calls -> should still appear with zeros
+        data = self.admin.get(reverse("clients:app_call_analytics"), {"range": "today"}).json()
+        rows = {r["name"]: r for r in data["by_employee"]}
+        # both active employees present
+        self.assertIn(self.emp.user.username, [r["name"] for r in data["by_employee"]] +
+                      [self.emp.user.get_full_name()])
+        emp_row = next(r for r in data["by_employee"] if r["calls"] == 1)
+        self.assertEqual(emp_row["connected"], 1)
+        self.assertEqual(emp_row["serious"], 1)  # 200s > 150s

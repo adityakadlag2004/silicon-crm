@@ -200,7 +200,11 @@ class ShellActivity : ComponentActivity() {
                                 Text("Some permissions are missing — call tracking and follow-up popups won't work until these are allowed:")
                                 if (needCalls) PermRow("Call tracking (phone + call log)") {
                                     requestPermissions(
-                                        arrayOf(Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_CALL_LOG), 100,
+                                        arrayOf(
+                                            Manifest.permission.READ_PHONE_STATE,
+                                            Manifest.permission.READ_CALL_LOG,
+                                            Manifest.permission.READ_CONTACTS,
+                                        ), 100,
                                     )
                                 }
                                 if (needOverlay) PermRow("Follow-up popup (display over apps)") {
