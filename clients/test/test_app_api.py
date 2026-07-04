@@ -687,3 +687,52 @@ class AppFollowupStatsTests(TestCase):
         self.assertAlmostEqual(s["talk_minutes"], round(260 / 60, 1))
         self.assertEqual(len(data["pending"]), 1)  # done one excluded
         self.assertNotIn("done", data)
+
+
+class AppReportsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="rp_admin", password="x")
+        cls.admin_emp = Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="rp_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+        cls.customer = Client.objects.create(name="Rep Cust")
+        today = timezone.localdate()
+        Sale.objects.create(client=cls.customer, employee=cls.emp, product="SIP",
+                            amount=Decimal("5000"), status=Sale.STATUS_APPROVED, date=today)
+        Sale.objects.create(client=cls.customer, employee=cls.admin_emp, product="PMS",
+                            amount=Decimal("9000"), status=Sale.STATUS_APPROVED, date=today)
+
+    def _http(self, user):
+        c = TestClient()
+        c.force_login(user)
+        return c
+
+    def test_monthly_admin_firm_wide_with_employees(self):
+        data = self._http(self.admin_user).get(reverse("clients:app_report_monthly")).json()
+        self.assertTrue(data["firm_wide"])
+        self.assertEqual(data["total_amount"], 14000.0)
+        self.assertIn("employees", data)
+        self.assertEqual({p["name"] for p in data["products"]}, {"SIP", "PMS"})
+
+    def test_monthly_employee_scoped_no_employees_list(self):
+        data = self._http(self.emp_user).get(reverse("clients:app_report_monthly")).json()
+        self.assertFalse(data["firm_wide"])
+        self.assertEqual(data["total_amount"], 5000.0)   # own only
+        self.assertNotIn("employees", data)
+
+    def test_past_trend_12_months_and_scope(self):
+        data = self._http(self.admin_user).get(reverse("clients:app_report_past")).json()
+        self.assertEqual(len(data["trend"]), 12)
+        self.assertEqual(data["total_amount"], 14000.0)
+        self.assertTrue(data["firm_wide"])
+        # employee drill-down
+        data = self._http(self.admin_user).get(
+            reverse("clients:app_report_past"), {"employee_id": self.emp.id}
+        ).json()
+        self.assertEqual(data["total_amount"], 5000.0)
+
+    def test_past_employee_sees_own(self):
+        data = self._http(self.emp_user).get(reverse("clients:app_report_past")).json()
+        self.assertFalse(data["firm_wide"])
+        self.assertEqual(data["total_amount"], 5000.0)

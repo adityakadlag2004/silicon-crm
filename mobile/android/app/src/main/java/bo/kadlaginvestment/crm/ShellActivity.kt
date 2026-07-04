@@ -50,6 +50,7 @@ import bo.kadlaginvestment.crm.ui.MenuScreen
 import bo.kadlaginvestment.crm.ui.ReportsScreen
 import bo.kadlaginvestment.crm.ui.NotificationsScreen
 import bo.kadlaginvestment.crm.ui.RenewalsScreen
+import bo.kadlaginvestment.crm.ui.ReportsHub
 import bo.kadlaginvestment.crm.ui.SalesScreen
 import bo.kadlaginvestment.crm.ui.SheetsScreen
 import bo.kadlaginvestment.crm.ui.TeamScreen
@@ -298,10 +299,11 @@ class ShellActivity : ComponentActivity() {
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
                         )
-                        overlay == "reports" -> ReportsScreen(
+                        overlay == "reports" -> ReportsHub(
                             modifier = m,
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
+                            onOpenWeb = openWeb,
                         )
                         overlay == "call_analytics" -> CallAnalyticsScreen(
                             modifier = m,

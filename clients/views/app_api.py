@@ -1763,3 +1763,136 @@ def app_login(request):
         "role": role,
         "name": user.get_full_name() or user.username,
     })
+
+
+# ── Reports hub: monthly report + past performance ───────────────────────────
+
+from calendar import month_name as _month_name  # noqa: E402
+
+
+def _reports_allowed(request):
+    """Admin/superuser, or manager with employee-performance access."""
+    emp = _emp(request)
+    if request.user.is_superuser or (emp and emp.role == "admin"):
+        return True, True  # allowed, firm_wide
+    if emp and emp.role == "manager":
+        return bool(get_manager_access().allow_employee_performance), True
+    return True, False  # plain employee: allowed, own-scope only
+
+
+@login_required
+@require_GET
+def app_report_monthly(request):
+    """Product-wise + per-employee business for a chosen month."""
+    allowed, firm_wide = _reports_allowed(request)
+    if not allowed:
+        return JsonResponse({"ok": False, "error": "Not allowed."}, status=403)
+
+    today = timezone.localdate()
+    try:
+        sel_month = int(request.GET.get("month", today.month))
+        sel_year = int(request.GET.get("year", today.year))
+    except (TypeError, ValueError):
+        sel_month, sel_year = today.month, today.year
+    if not 1 <= sel_month <= 12:
+        sel_month = today.month
+
+    emp = _emp(request)
+    approved = Sale.objects.filter(status=Sale.STATUS_APPROVED, date__year=sel_year, date__month=sel_month)
+    if not firm_wide:
+        approved = approved.filter(employee=emp)
+
+    products = [
+        {"name": r["product"] or "Other", "amount": _money(r["t"]), "count": r["n"]}
+        for r in approved.values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
+    ]
+    tot = approved.aggregate(amount=Sum("amount"), points=Sum("points"), n=Count("id"))
+    data = {
+        "firm_wide": firm_wide,
+        "month": sel_month,
+        "year": sel_year,
+        "month_label": _month_name[sel_month],
+        "products": products,
+        "total_amount": _money(tot["amount"]),
+        "total_points": _money(tot["points"]),
+        "total_count": tot["n"] or 0,
+        "months": [{"value": i, "label": _month_name[i]} for i in range(1, 13)],
+        "years": list(range(today.year - 3, today.year + 1)),
+    }
+    if firm_wide:
+        data["employees"] = [
+            {
+                "name": r["employee__user__first_name"] or r["employee__user__username"] or "—",
+                "amount": _money(r["amount"]),
+                "points": _money(r["points"]),
+            }
+            for r in approved.values(
+                "employee__user__username", "employee__user__first_name"
+            ).annotate(amount=Sum("amount"), points=Sum("points")).order_by("-amount")
+        ]
+    return JsonResponse(data)
+
+
+@login_required
+@require_GET
+def app_report_past(request):
+    """Last 12 months business trend (amount + points), own or firm/employee."""
+    allowed, firm_wide = _reports_allowed(request)
+    if not allowed:
+        return JsonResponse({"ok": False, "error": "Not allowed."}, status=403)
+
+    today = timezone.localdate()
+    emp = _emp(request)
+
+    # Optional employee drill-down (firm-wide viewers only)
+    target_emp = None
+    if firm_wide:
+        raw = request.GET.get("employee_id")
+        if raw and raw != "all":
+            target_emp = Employee.objects.filter(pk=raw).first()
+    else:
+        target_emp = emp
+
+    # Build last 12 (year, month) oldest→newest
+    months = []
+    y, m = today.year, today.month
+    for _ in range(12):
+        months.append((y, m))
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    months.reverse()
+
+    trend = []
+    for (yy, mm) in months:
+        f = {"status": Sale.STATUS_APPROVED, "date__year": yy, "date__month": mm}
+        if target_emp:
+            f["employee"] = target_emp
+        agg = Sale.objects.filter(**f).aggregate(amount=Sum("amount"), points=Sum("points"))
+        trend.append({
+            "label": _month_name[mm][:3],
+            "year": yy,
+            "amount": _money(agg["amount"]),
+            "points": _money(agg["points"]),
+        })
+
+    max_amt = max((t["amount"] for t in trend), default=0.0)
+    for t in trend:
+        t["percent"] = round((t["amount"] / max_amt) * 100, 1) if max_amt else 0.0
+
+    data = {
+        "firm_wide": firm_wide,
+        "scope_name": (
+            (target_emp.user.get_full_name() or target_emp.user.username)
+            if target_emp and target_emp.user_id else ("Whole firm" if firm_wide else "You")
+        ),
+        "trend": trend,
+        "total_amount": _money(sum(t["amount"] for t in trend)),
+        "total_points": _money(sum(t["points"] for t in trend)),
+    }
+    if firm_wide:
+        data["employees"] = [
+            {"id": e.id, "name": e.user.get_full_name() or e.user.username}
+            for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username")
+        ]
+    return JsonResponse(data)
