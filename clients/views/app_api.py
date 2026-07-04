@@ -139,6 +139,52 @@ def app_dashboard(request):
             "serious": ca["serious"] or 0,
         }
 
+    # ── Gamified employee dashboard (non-admin) ──
+    if emp is not None and not is_admin:
+        salary = float(emp.salary or 0)
+        earned = float(month_agg["points"] or 0)  # incentive points ≈ ₹ value (1:1)
+        data["earnings"] = {
+            "salary": salary,
+            "earned": earned,
+            "percent": round(earned / salary * 100, 1) if salary > 0 else None,
+            "surplus": max(0.0, earned - salary),
+            "remaining": max(0.0, salary - earned),
+            "justified": salary > 0 and earned >= salary,
+        }
+
+        # Own month-to-date business per product
+        month_start = today.replace(day=1)
+        data["product_mtd"] = [
+            {"name": r["product"] or "Other", "amount": _money(r["t"]), "count": r["n"]}
+            for r in Sale.objects.filter(
+                employee=emp, status=Sale.STATUS_APPROVED,
+                date__gte=month_start, date__lte=today,
+            ).values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
+        ]
+
+        # Live campaigns the employee can earn extra on
+        from ..models import Campaign, CampaignProduct
+        camps = Campaign.objects.filter(
+            is_active=True, start_date__lte=today, end_date__gte=today,
+        ).prefetch_related("products__product_ref")
+        active_campaigns = []
+        for c in camps:
+            products = []
+            for cp in c.products.all():
+                products.append({
+                    "product": cp.product_ref.name if cp.product_ref_id else "",
+                    "benefit_type": cp.benefit_type,
+                    "unit_amount": _money(cp.unit_amount),
+                    "points_per_unit": float(cp.points_per_unit or 0),
+                })
+            if products:
+                active_campaigns.append({
+                    "name": c.name,
+                    "ends": c.end_date.strftime("%d %b"),
+                    "products": products,
+                })
+        data["active_campaigns"] = active_campaigns
+
     return JsonResponse(data)
 
 

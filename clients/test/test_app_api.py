@@ -742,3 +742,57 @@ class AppReportsTests(TestCase):
         data = self._http(self.emp_user).get(reverse("clients:app_report_past")).json()
         self.assertFalse(data["firm_wide"])
         self.assertEqual(data["total_amount"], 5000.0)
+
+
+class AppEmployeeGamificationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from decimal import Decimal as D
+        cls.emp_user = User.objects.create_user(username="gm_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=D("10000"), active=True)
+        cls.customer = Client.objects.create(name="Gm Cust")
+
+    def _dash(self):
+        c = TestClient(); c.force_login(self.emp_user)
+        return c.get(reverse("clients:app_dashboard")).json()
+
+    def test_earnings_below_salary(self):
+        from decimal import Decimal as D
+        s = Sale.objects.create(client=self.customer, employee=self.emp, product="SIP",
+                                amount=D("1000"), status=Sale.STATUS_APPROVED, date=timezone.localdate())
+        Sale.objects.filter(pk=s.pk).update(points=D("4000"))  # below 10000 salary
+        e = self._dash()["earnings"]
+        self.assertEqual(e["salary"], 10000.0)
+        self.assertEqual(e["earned"], 4000.0)
+        self.assertFalse(e["justified"])
+        self.assertEqual(e["remaining"], 6000.0)
+
+    def test_earnings_justified(self):
+        from decimal import Decimal as D
+        s = Sale.objects.create(client=self.customer, employee=self.emp, product="SIP",
+                                amount=D("1000"), status=Sale.STATUS_APPROVED, date=timezone.localdate())
+        Sale.objects.filter(pk=s.pk).update(points=D("12000"))  # above salary
+        e = self._dash()["earnings"]
+        self.assertTrue(e["justified"])
+        self.assertEqual(e["surplus"], 2000.0)
+
+    def test_active_campaign_shown(self):
+        from decimal import Decimal as D
+        from datetime import timedelta as td
+        from clients.models import Campaign, CampaignProduct, Product
+        p, _ = Product.objects.get_or_create(name="SIP", defaults={"code": "SIP"})
+        today = timezone.localdate()
+        camp = Campaign.objects.create(name="Diwali Blast", start_date=today - td(days=1),
+                                       end_date=today + td(days=10), is_active=True)
+        CampaignProduct.objects.create(campaign=camp, product_ref=p, benefit_type="unit",
+                                       unit_amount=D("1000"), points_per_unit=D("2"))
+        data = self._dash()
+        self.assertEqual(len(data["active_campaigns"]), 1)
+        self.assertEqual(data["active_campaigns"][0]["name"], "Diwali Blast")
+
+    def test_admin_has_no_earnings(self):
+        admin = User.objects.create_user(username="gm_admin", password="x")
+        Employee.objects.create(user=admin, role="admin", salary=0, active=True)
+        c = TestClient(); c.force_login(admin)
+        data = c.get(reverse("clients:app_dashboard")).json()
+        self.assertNotIn("earnings", data)

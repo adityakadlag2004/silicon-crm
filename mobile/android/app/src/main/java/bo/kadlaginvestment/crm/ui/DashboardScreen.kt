@@ -234,19 +234,43 @@ private fun Dashboard(
                 }
             }
         } else {
-            // Employees keep their own recent-sales feed.
-            item { SectionHeader("Recent sales") }
-            if (recent == null || recent.length() == 0) {
+            // ── Gamified employee view ──
+            val earnings = d.optJSONObject("earnings")
+            if (earnings != null) {
+                item { EarningsCard(earnings) }
+            }
+
+            // Active campaigns to chase
+            val camps = d.optJSONArray("active_campaigns")
+            if (camps != null && camps.length() > 0) {
+                item { SectionHeader("🔥 Live campaigns — earn extra!") }
+                items((0 until camps.length()).map { camps.getJSONObject(it) }) { c ->
+                    CampaignCard(c)
+                }
+            }
+
+            // My business this month by product
+            val pm = d.optJSONArray("product_mtd")
+            item { SectionHeader("My business this month") }
+            if (pm == null || pm.length() == 0) {
                 item {
                     Text(
-                        "No sales yet — add one from the Add Sale tab.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 13.sp,
+                        "No approved sales yet this month — add one from the Add Sale tab.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
                     )
                 }
             } else {
-                val rows = (0 until recent.length()).map { recent.getJSONObject(it) }
-                items(rows) { s -> SaleRow(s, false) }
+                val maxAmt = (0 until pm.length()).maxOf { pm.getJSONObject(it).optDouble("amount", 0.0) }
+                items((0 until pm.length()).map { pm.getJSONObject(it) }) { p ->
+                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(p.optString("name"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${money(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        ProgressBar(if (maxAmt > 0) (p.optDouble("amount", 0.0) / maxAmt).toFloat() else 0f)
+                    }
+                }
             }
         }
 
@@ -257,6 +281,94 @@ private fun Dashboard(
 @Composable
 private fun SectionHeader(text: String) {
     Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun EarningsCard(e: JSONObject) {
+    val salary = e.optDouble("salary", 0.0)
+    val earned = e.optDouble("earned", 0.0)
+    val justified = e.optBoolean("justified")
+    val hasSalary = !e.isNull("percent") && salary > 0
+    val percent = if (hasSalary) e.optDouble("percent", 0.0) else 0.0
+    val fraction = (earned / salary).coerceIn(0.0, 1.0).toFloat()
+
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (justified) StatusGreen.copy(alpha = 0.12f)
+            else MaterialTheme.colorScheme.primaryContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                if (justified) "🎉 Salary justified!" else "💪 Your earning progress",
+                fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                color = if (justified) StatusGreen else BrandGoldDark,
+            )
+
+            if (!hasSalary) {
+                Text("You've earned ${money(earned)} in incentive points this month.", fontSize = 14.sp)
+            } else {
+                Text(
+                    "${money(earned)} earned  ·  ${money(salary)} salary",
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Progress bar
+                androidx.compose.foundation.layout.Box(
+                    Modifier.fillMaxWidth().height(14.dp)
+                        .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
+                ) {
+                    androidx.compose.foundation.layout.Box(
+                        Modifier.fillMaxWidth(fraction).height(14.dp)
+                            .background(if (justified) StatusGreen else BrandGold, RoundedCornerShape(8.dp))
+                    )
+                }
+                Text(
+                    "${"%.0f".format(percent)}% of salary",
+                    fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (justified) {
+                    Text(
+                        "You're ${money(e.optDouble("surplus", 0.0))} above your salary — that's your bonus zone. Keep selling! 🚀",
+                        fontSize = 13.sp, fontWeight = FontWeight.Medium, color = StatusGreen,
+                    )
+                } else {
+                    Text(
+                        "Just ${money(e.optDouble("remaining", 0.0))} more to justify your salary this month.",
+                        fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CampaignCard(c: JSONObject) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(c.optString("name"), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = BrandGoldDark)
+                Text("ends ${c.optString("ends")}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val products = c.optJSONArray("products")
+            for (i in 0 until (products?.length() ?: 0)) {
+                val p = products!!.getJSONObject(i)
+                val benefit = if (p.optString("benefit_type") == "unit") {
+                    "${"%.1f".format(p.optDouble("points_per_unit", 0.0))} pts per ${money(p.optDouble("unit_amount", 0.0))}"
+                } else {
+                    "target payout — hit the slab for a bonus"
+                }
+                Text("• ${p.optString("product")}: $benefit", fontSize = 13.sp)
+            }
+        }
+    }
 }
 
 @Composable
