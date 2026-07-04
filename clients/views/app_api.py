@@ -1514,3 +1514,133 @@ def app_campaigns(request):
         ).order_by("display_order", "name")
     ]
     return JsonResponse({"campaigns": campaigns, "products": products})
+
+
+# ── Screen 13: Lead sheets (mobile card view over the dynamic columns) ──────
+
+from ..models import LeadSheet, LeadSheetColumn, LeadSheetRecord  # noqa: E402
+from .lead_records import (  # noqa: E402
+    _accessible_sheets,
+    _can_touch_record,
+    _full_visibility,
+    _round_robin,
+    _sanitize_value,
+    _visible_records,
+)
+
+
+@login_required
+@require_GET
+def app_sheets(request):
+    sheets = list(
+        _accessible_sheets(request).filter(archived=False).select_related("product", "owner__user")
+    )
+    counts = {}
+    if sheets:
+        for row in (
+            LeadSheetRecord.objects.filter(sheet__in=sheets)
+            .values("sheet_id").annotate(c=Count("id"))
+        ):
+            counts[row["sheet_id"]] = row["c"]
+    return JsonResponse({
+        "results": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "product": s.product.name if s.product_id else "",
+                "record_count": counts.get(s.id, 0),
+                "is_private": s.is_private,
+            }
+            for s in sheets
+        ],
+    })
+
+
+@login_required
+@require_GET
+def app_sheet_records(request, sheet_id):
+    sheet = get_object_or_404(LeadSheet, pk=sheet_id)
+    if not sheet.can_view(request.user):
+        return JsonResponse({"ok": False, "error": "No access."}, status=403)
+
+    columns = list(sheet.columns.all())
+    qs = _visible_records(request, sheet).select_related("assigned_to__user", "converted_client")
+
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        from django.db.models.expressions import RawSQL
+        qs = qs.annotate(_vtext=RawSQL("values::text", [])).filter(_vtext__icontains=q)
+
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except ValueError:
+        page = 1
+    start, end = (page - 1) * _PAGE, page * _PAGE
+    rows = list(qs.order_by("-created_at", "-id")[start:end + 1])
+
+    def _row(r):
+        vals = r.values or {}
+        return {
+            "id": r.id,
+            "values": {c.field_key: vals.get(c.field_key, "") for c in columns},
+            "tags": r.tags or [],
+            "assigned_to": (
+                r.assigned_to.user.get_full_name() or r.assigned_to.user.username
+            ) if r.assigned_to_id and r.assigned_to.user_id else "",
+            "converted": bool(r.converted_client_id),
+        }
+
+    return JsonResponse({
+        "sheet": {"id": sheet.id, "name": sheet.name, "can_edit": sheet.can_edit(request.user)},
+        "columns": [
+            {
+                "key": c.field_key, "name": c.name, "type": c.type,
+                "options": c.options or [], "required": c.required,
+            }
+            for c in columns
+        ],
+        "results": [_row(r) for r in rows[:_PAGE]],
+        "has_more": len(rows) > _PAGE,
+        "page": page,
+    })
+
+
+@login_required
+@require_POST
+def app_sheet_record_save(request, sheet_id):
+    """Create (no record_id) or update (record_id) a row's values."""
+    sheet = get_object_or_404(LeadSheet, pk=sheet_id)
+    if not sheet.can_edit(request.user):
+        return JsonResponse({"ok": False, "error": "No edit permission."}, status=403)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+
+    columns = list(sheet.columns.all())
+    raw_values = body.get("values") or {}
+    record_id = body.get("record_id")
+
+    if record_id:
+        record = get_object_or_404(LeadSheetRecord, pk=record_id, sheet=sheet)
+        if not _can_touch_record(request, sheet, record):
+            return JsonResponse({"ok": False, "error": "This row isn't assigned to you."}, status=403)
+        merged = dict(record.values or {})
+        for c in columns:
+            if c.field_key in raw_values:
+                merged[c.field_key] = _sanitize_value(c, raw_values.get(c.field_key))
+        record.values = merged
+        record.updated_by = request.user
+        record.save(update_fields=["values", "updated_by", "updated_at"])
+    else:
+        values = {c.field_key: _sanitize_value(c, raw_values.get(c.field_key, "")) for c in columns}
+        missing = [c.name for c in columns if c.required and not values.get(c.field_key)]
+        if missing:
+            return JsonResponse({"ok": False, "error": f"Required: {', '.join(missing)}."}, status=400)
+        assignee = next(_round_robin(sheet, 1), None)
+        record = LeadSheetRecord.objects.create(
+            sheet=sheet, values=values, assigned_to=assignee,
+            created_by=request.user, updated_by=request.user,
+        )
+    sheet.save(update_fields=["updated_at"])
+    return JsonResponse({"ok": True, "id": record.id})

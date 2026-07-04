@@ -549,3 +549,53 @@ class AppIncentivesCampaignsTests(TestCase):
         data = self._http(self.admin_user).get(reverse("clients:app_campaigns")).json()
         self.assertEqual(len(data["campaigns"]), 1)
         self.assertEqual(data["campaigns"][0]["products"][0]["product_name"], "PMS")
+
+
+class AppSheetsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from clients.models import LeadSheet, LeadSheetColumn
+        cls.owner_user = User.objects.create_user(username="sh_owner", password="x")
+        cls.owner = Employee.objects.create(user=cls.owner_user, role="employee", salary=0, active=True)
+        cls.outsider_user = User.objects.create_user(username="sh_out", password="x")
+        cls.outsider = Employee.objects.create(user=cls.outsider_user, role="employee", salary=0, active=True)
+        cls.sheet = LeadSheet.objects.create(name="Health Q3", owner=cls.owner, is_private=True)
+        LeadSheetColumn.objects.create(sheet=cls.sheet, name="Name", field_key="name",
+                                       type=LeadSheetColumn.TYPE_TEXT, required=True, display_order=0)
+        LeadSheetColumn.objects.create(sheet=cls.sheet, name="Status", field_key="status",
+                                       type=LeadSheetColumn.TYPE_STATUS, options=["new", "hot"], display_order=1)
+
+    def _http(self, user):
+        c = TestClient()
+        c.force_login(user)
+        return c
+
+    def test_private_sheet_hidden_from_outsider(self):
+        data = self._http(self.outsider_user).get(reverse("clients:app_sheets")).json()
+        self.assertEqual(len(data["results"]), 0)
+        resp = self._http(self.outsider_user).get(reverse("clients:app_sheet_records", args=[self.sheet.id]))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_owner_sees_columns_and_can_add_row(self):
+        import json as _json
+        data = self._http(self.owner_user).get(reverse("clients:app_sheet_records", args=[self.sheet.id])).json()
+        self.assertEqual(len(data["columns"]), 2)
+        self.assertTrue(data["sheet"]["can_edit"])
+        resp = self._http(self.owner_user).post(
+            reverse("clients:app_sheet_record_save", args=[self.sheet.id]),
+            data=_json.dumps({"values": {"name": "Ramesh", "status": "hot"}}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        from clients.models import LeadSheetRecord
+        rec = LeadSheetRecord.objects.get(sheet=self.sheet)
+        self.assertEqual(rec.values["name"], "Ramesh")
+
+    def test_required_field_enforced(self):
+        import json as _json
+        resp = self._http(self.owner_user).post(
+            reverse("clients:app_sheet_record_save", args=[self.sheet.id]),
+            data=_json.dumps({"values": {"status": "new"}}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)

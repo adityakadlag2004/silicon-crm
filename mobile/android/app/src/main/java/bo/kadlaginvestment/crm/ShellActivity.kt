@@ -51,6 +51,7 @@ import bo.kadlaginvestment.crm.ui.ReportsScreen
 import bo.kadlaginvestment.crm.ui.NotificationsScreen
 import bo.kadlaginvestment.crm.ui.RenewalsScreen
 import bo.kadlaginvestment.crm.ui.SalesScreen
+import bo.kadlaginvestment.crm.ui.SheetsScreen
 import bo.kadlaginvestment.crm.ui.TeamScreen
 
 @androidx.compose.runtime.Composable
@@ -267,6 +268,12 @@ class ShellActivity : ComponentActivity() {
                             modifier = m,
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
+                        )
+                        overlay == "sheets" -> SheetsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                            onOpenWeb = openWeb,
                         )
                         selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = smartOpen)
                         selected == 1 -> ClientsScreen(m, onSessionExpired = goLogin, onOpenWeb = openWeb)
