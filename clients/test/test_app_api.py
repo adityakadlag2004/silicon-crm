@@ -57,6 +57,12 @@ class AppDashboardTests(TestCase):
         self.assertEqual(data["today"]["amount"], 5000.0)  # approved only
         self.assertEqual(data["pending_approvals"], 1)
         self.assertEqual(len(data["recent_sales"]), 2)  # firm-wide list
+        # New admin home widgets
+        self.assertIn("leaderboard_today", data)
+        self.assertIn("product_mtd", data)
+        self.assertIn("team_calls_today", data)
+        self.assertEqual(sum(p["amount"] for p in data["product_mtd"]), 5000.0)  # only approved
+        self.assertTrue(any(r["name"] for r in data["leaderboard_today"]))
 
 
 class AppScreenApiTests(TestCase):

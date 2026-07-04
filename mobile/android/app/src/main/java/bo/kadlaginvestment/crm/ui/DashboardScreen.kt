@@ -165,30 +165,141 @@ private fun Dashboard(
             }
         }
 
-        item {
-            Text(
-                "Recent sales",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-        }
+        if (isAdmin) {
+            // ── Team calls today ──
+            val tc = d.optJSONObject("team_calls_today")
+            if (tc != null) {
+                item { SectionHeader("Team calls today") }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniStat("Calls", "${tc.optInt("calls")}", Modifier.weight(1f))
+                        MiniStat("Connected", "${tc.optInt("connected")}", Modifier.weight(1f), StatusGreen)
+                        MiniStat("Talk", compactMins(tc.optDouble("talk_minutes", 0.0)), Modifier.weight(1f))
+                        MiniStat("Serious", "${tc.optInt("serious")}", Modifier.weight(1f), BrandGoldDark)
+                    }
+                }
+            }
 
-        if (recent == null || recent.length() == 0) {
-            item {
-                Text(
-                    "No sales yet — add one from the Add Sale tab.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
-                )
+            // ── Today's team leaderboard ──
+            val lb = d.optJSONArray("leaderboard_today")
+            item { SectionHeader("Today's leaders") }
+            if (lb == null || lb.length() == 0) {
+                item { Text("No sales logged yet today.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+            } else {
+                items((0 until lb.length()).map { lb.getJSONObject(it) to it }) { (e, i) ->
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${i + 1}",
+                                    fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                                    color = if (i == 0) BrandGoldDark else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(end = 12.dp),
+                                )
+                                Text(e.optString("name"), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(money(e.optDouble("amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("${e.optInt("count")} sale(s)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Month-to-date product-wise ──
+            val pm = d.optJSONArray("product_mtd")
+            item { SectionHeader("This month by product (till today)") }
+            if (pm == null || pm.length() == 0) {
+                item { Text("No approved business this month yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+            } else {
+                val maxAmt = (0 until pm.length()).maxOf { pm.getJSONObject(it).optDouble("amount", 0.0) }
+                items((0 until pm.length()).map { pm.getJSONObject(it) }) { p ->
+                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(p.optString("name"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${money(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(Modifier.height(3.dp))
+                        ProgressBar(if (maxAmt > 0) (p.optDouble("amount", 0.0) / maxAmt).toFloat() else 0f)
+                    }
+                }
             }
         } else {
-            val rows = (0 until recent.length()).map { recent.getJSONObject(it) }
-            items(rows) { s -> SaleRow(s, isAdmin) }
+            // Employees keep their own recent-sales feed.
+            item { SectionHeader("Recent sales") }
+            if (recent == null || recent.length() == 0) {
+                item {
+                    Text(
+                        "No sales yet — add one from the Add Sale tab.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                }
+            } else {
+                val rows = (0 until recent.length()).map { recent.getJSONObject(it) }
+                items(rows) { s -> SaleRow(s, false) }
+            }
         }
 
         item { Spacer(Modifier.height(16.dp)) }
     }
+}
+
+@Composable
+private fun SectionHeader(text: String) {
+    Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+}
+
+@Composable
+private fun MiniStat(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    accent: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(vertical = 12.dp, horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                value, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                color = if (accent == androidx.compose.ui.graphics.Color.Unspecified) MaterialTheme.colorScheme.onSurface else accent,
+            )
+            Text(title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ProgressBar(fraction: Float) {
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val fill = MaterialTheme.colorScheme.primary
+    androidx.compose.foundation.layout.Box(
+        Modifier.fillMaxWidth().height(7.dp).background(track, RoundedCornerShape(4.dp))
+    ) {
+        androidx.compose.foundation.layout.Box(
+            Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(7.dp).background(fill, RoundedCornerShape(4.dp))
+        )
+    }
+}
+
+private fun compactMins(totalMinutes: Double): String {
+    val totalSec = (totalMinutes * 60).toInt()
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    return if (h > 0) "${h}h${m}m" else "${m}m"
 }
 
 @Composable

@@ -98,6 +98,47 @@ def app_dashboard(request):
         data["pending_approvals"] = Sale.objects.filter(status=Sale.STATUS_PENDING).count()
         data["unmapped_clients"] = Client.objects.filter(mapped_to__isnull=True).count()
 
+        # Today's team leaderboard (approved business today, top 6)
+        data["leaderboard_today"] = [
+            {
+                "name": r["employee__user__first_name"] or r["employee__user__username"] or "—",
+                "amount": _money(r["amount"]),
+                "count": r["n"],
+            }
+            for r in Sale.objects.filter(status=Sale.STATUS_APPROVED, date=today)
+            .values("employee__user__username", "employee__user__first_name")
+            .annotate(amount=Sum("amount"), n=Count("id")).order_by("-amount")[:6]
+        ]
+
+        # Month-to-date business per product (1st of month → today)
+        month_start = today.replace(day=1)
+        data["product_mtd"] = [
+            {"name": r["product"] or "Other", "amount": _money(r["t"]), "count": r["n"]}
+            for r in Sale.objects.filter(
+                status=Sale.STATUS_APPROVED, date__gte=month_start, date__lte=today
+            ).values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
+        ]
+
+        # Team call activity today (within the office-hours window)
+        from ..models import CallLogEntry, CallTrackingSettings
+        cfg = CallTrackingSettings.current()
+        ca = CallLogEntry.objects.filter(
+            started_at__date=today,
+            started_at__time__gte=cfg.work_start,
+            started_at__time__lt=cfg.work_end,
+        ).aggregate(
+            calls=Count("id"),
+            connected_count=Count("id", filter=Q(connected=True)),
+            talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
+            serious=Count("id", filter=Q(duration_seconds__gt=_SERIOUS_CALL_SECONDS)),
+        )
+        data["team_calls_today"] = {
+            "calls": ca["calls"] or 0,
+            "connected": ca["connected_count"] or 0,
+            "talk_minutes": round((ca["talk_seconds"] or 0) / 60, 1),
+            "serious": ca["serious"] or 0,
+        }
+
     return JsonResponse(data)
 
 
