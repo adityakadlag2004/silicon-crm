@@ -42,7 +42,7 @@ in the WebView.
 | 9 | Leads pipeline (stages, progress, remarks, convert, create) | `/api/app/leads/…` | **v3.3** |
 | 10 | Reports (trend chart, product mix, leaderboard) | `/api/app/reports/summary/` | **v3.3** |
 | 11 | Team management (roster, edit, activate/deactivate, reset password, add) | `/api/app/team/…` | **v3.6** |
-| 12 | Campaigns / Incentives (admin) | | |
+| 12 | Incentives & Campaigns builders (rules, slabs, campaigns, products) | `/api/app/incentives|campaigns/` + web AJAX writes | **v3.7** |
 | 13 | Lead sheets (spreadsheet — hardest, last) | | |
 | 14 | Native login | `/api/app/login/` | |
 | — | Financial planner | stays WebView (calc engine is fine there) | |

@@ -43,6 +43,7 @@ import bo.kadlaginvestment.crm.ui.CallAnalyticsScreen
 import bo.kadlaginvestment.crm.ui.ClientsScreen
 import bo.kadlaginvestment.crm.ui.DashboardScreen
 import bo.kadlaginvestment.crm.ui.FollowupsScreen
+import bo.kadlaginvestment.crm.ui.IncentivesScreen
 import bo.kadlaginvestment.crm.ui.KadlagTheme
 import bo.kadlaginvestment.crm.ui.LeadsScreen
 import bo.kadlaginvestment.crm.ui.MenuScreen
@@ -258,6 +259,11 @@ class ShellActivity : ComponentActivity() {
                             onSessionExpired = goLogin,
                         )
                         overlay == "team" -> TeamScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                        )
+                        overlay == "incentives" -> IncentivesScreen(
                             modifier = m,
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,

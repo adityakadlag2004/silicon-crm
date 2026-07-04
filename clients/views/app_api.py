@@ -1433,3 +1433,84 @@ def app_client_create(request):
         status="Mapped" if mapped_to else "Unmapped",
     )
     return JsonResponse({"ok": True, "id": client.id})
+
+
+# ── Screen 12: Incentive rules + campaigns (admin builders, read snapshots;
+#    mutations reuse the existing web AJAX endpoints) ────────────────────────
+
+from ..models import Campaign, IncentiveRule  # noqa: E402
+
+
+@login_required
+@require_GET
+def app_incentives(request):
+    denied = _team_forbidden(request)
+    if denied:
+        return denied
+    rules = []
+    used_product_ids = set()
+    used_names = set()
+    for r in IncentiveRule.objects.select_related("product_ref").prefetch_related("slabs"):
+        if r.product_ref_id:
+            used_product_ids.add(r.product_ref_id)
+        used_names.add((r.product or "").strip().lower())
+        rules.append({
+            "id": r.id,
+            "product": r.product_ref.name if r.product_ref_id else r.product,
+            "unit_amount": _money(r.unit_amount),
+            "points_per_unit": _money(r.points_per_unit),
+            "active": r.active,
+            "slabs": [
+                {"id": s.id, "threshold": _money(s.threshold), "payout": _money(s.payout), "label": s.label}
+                for s in r.slabs.all()
+            ],
+        })
+    available = [
+        {"id": p.id, "name": p.name}
+        for p in Product.objects.filter(
+            is_active=True, archived_at__isnull=True,
+            domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
+        ).order_by("display_order", "name")
+        if p.id not in used_product_ids and (p.name or "").strip().lower() not in used_names
+    ]
+    return JsonResponse({"rules": rules, "available_products": available})
+
+
+@login_required
+@require_GET
+def app_campaigns(request):
+    denied = _team_forbidden(request)
+    if denied:
+        return denied
+    campaigns = []
+    for c in Campaign.objects.prefetch_related("products__product_ref", "products__slabs"):
+        campaigns.append({
+            "id": c.id,
+            "name": c.name,
+            "description": c.description,
+            "start_date": c.start_date.isoformat(),
+            "end_date": c.end_date.isoformat(),
+            "is_active": c.is_active,
+            "products": [
+                {
+                    "id": cp.id,
+                    "product_name": cp.product_ref.name if cp.product_ref_id else "",
+                    "benefit_type": cp.benefit_type,
+                    "unit_amount": _money(cp.unit_amount) if cp.unit_amount is not None else None,
+                    "points_per_unit": _money(cp.points_per_unit) if cp.points_per_unit is not None else None,
+                    "slabs": [
+                        {"id": s.id, "threshold": _money(s.threshold), "payout": _money(s.payout), "label": s.label}
+                        for s in cp.slabs.all()
+                    ],
+                }
+                for cp in c.products.all()
+            ],
+        })
+    products = [
+        {"id": p.id, "name": p.name}
+        for p in Product.objects.filter(
+            is_active=True, archived_at__isnull=True,
+            domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
+        ).order_by("display_order", "name")
+    ]
+    return JsonResponse({"campaigns": campaigns, "products": products})

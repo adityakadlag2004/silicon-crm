@@ -508,3 +508,44 @@ class AppClientCreateTests(TestCase):
         self.assertIsNone(Client.objects.get(name="Unmapped C").mapped_to)
         resp = self._post(self.admin_user, {"name": "Assigned C", "phone": "9844445555", "mapped_to_id": self.emp.id})
         self.assertEqual(Client.objects.get(name="Assigned C").mapped_to, self.emp)
+
+
+class AppIncentivesCampaignsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="ic_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="ic_emp", password="x")
+        Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+
+    def _http(self, user):
+        c = TestClient()
+        c.force_login(user)
+        return c
+
+    def test_admin_only(self):
+        for name in ("clients:app_incentives", "clients:app_campaigns"):
+            self.assertEqual(self._http(self.emp_user).get(reverse(name)).status_code, 403)
+            self.assertEqual(self._http(self.admin_user).get(reverse(name)).status_code, 200)
+
+    def test_snapshots_shape(self):
+        from clients.models import Campaign, CampaignProduct, IncentiveRule, IncentiveSlab, Product
+        from datetime import date as _d, timedelta as _td
+        p, _ = Product.objects.get_or_create(name="PMS", defaults={"code": "PMS"})
+        rule = IncentiveRule.objects.create(product=p.name, product_ref=p,
+                                            unit_amount=Decimal("100000"), points_per_unit=Decimal("2"))
+        IncentiveSlab.objects.create(rule=rule, threshold=Decimal("500000"), payout=Decimal("100"))
+        camp = Campaign.objects.create(name="Diwali", start_date=_d.today(),
+                                       end_date=_d.today() + _td(days=30))
+        CampaignProduct.objects.create(campaign=camp, product_ref=p,
+                                       benefit_type="unit", unit_amount=Decimal("1000"),
+                                       points_per_unit=Decimal("1.5"))
+
+        data = self._http(self.admin_user).get(reverse("clients:app_incentives")).json()
+        self.assertEqual(len(data["rules"]), 1)
+        self.assertEqual(len(data["rules"][0]["slabs"]), 1)
+        self.assertTrue(all(pr["name"] != "PMS" for pr in data["available_products"]))
+
+        data = self._http(self.admin_user).get(reverse("clients:app_campaigns")).json()
+        self.assertEqual(len(data["campaigns"]), 1)
+        self.assertEqual(data["campaigns"][0]["products"][0]["product_name"], "PMS")
