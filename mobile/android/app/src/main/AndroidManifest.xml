@@ -20,6 +20,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Native login screen. -->
+        <activity
+            android:name=".LoginActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false" />
+
         <!-- Native shell: bottom nav + Compose screens. -->
         <activity
             android:name=".ShellActivity"

@@ -26,6 +26,51 @@ object ApiClient {
         return cookies?.contains("sessionid=") == true
     }
 
+    /** Native login: posts credentials, then writes the returned session +
+     * CSRF cookies into CookieManager so the whole app (native ApiClient and
+     * any WebActivity) shares one authenticated session. */
+    suspend fun login(username: String, password: String): Result = withContext(Dispatchers.IO) {
+        var conn: HttpURLConnection? = null
+        try {
+            conn = URL(BackendClient.BASE_URL + "/clients/api/app/login/").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 12000
+            conn.readTimeout = 12000
+            conn.doOutput = true
+            conn.instanceFollowRedirects = false
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("Origin", BackendClient.BASE_URL)
+            val payload = JSONObject().put("username", username).put("password", password)
+            conn.outputStream.use { it.write(payload.toString().toByteArray()) }
+
+            val code = conn.responseCode
+            if (code == 200) {
+                // Store every Set-Cookie the server returned (sessionid, csrftoken).
+                val cm = CookieManager.getInstance()
+                conn.headerFields.forEach { (name, values) ->
+                    if (name != null && name.equals("Set-Cookie", ignoreCase = true)) {
+                        values.forEach { cm.setCookie(BackendClient.BASE_URL, it) }
+                    }
+                }
+                cm.flush()
+                Result.Ok(JSONObject(conn.inputStream.bufferedReader().readText()))
+            } else {
+                val msg = try {
+                    JSONObject(conn.errorStream?.bufferedReader()?.readText() ?: "")
+                        .optString("error", "Login failed ($code)")
+                } catch (_: Exception) {
+                    "Login failed ($code)"
+                }
+                Result.Error(msg)
+            }
+        } catch (e: Exception) {
+            Result.Error(e.message ?: "Network error")
+        } finally {
+            conn?.disconnect()
+        }
+    }
+
     suspend fun get(path: String): Result = withContext(Dispatchers.IO) {
         val cookies = CookieManager.getInstance().getCookie(BackendClient.BASE_URL)
         if (cookies == null || !cookies.contains("sessionid=")) {

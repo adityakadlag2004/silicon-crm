@@ -1644,3 +1644,57 @@ def app_sheet_record_save(request, sheet_id):
         )
     sheet.save(update_fields=["updated_at"])
     return JsonResponse({"ok": True, "id": record.id})
+
+
+# ── Screen 14: Native login ──────────────────────────────────────────────────
+
+from django.contrib.auth import authenticate as _authenticate, login as _auth_login  # noqa: E402
+from django.core.cache import cache as _cache  # noqa: E402
+from django.middleware.csrf import get_token as _get_csrf_token  # noqa: E402
+from django.views.decorators.csrf import csrf_exempt as _csrf_exempt  # noqa: E402
+
+
+@_csrf_exempt
+@require_POST
+def app_login(request):
+    """Native login. csrf-exempt because it's the pre-session entry point
+    (no authenticated session exists yet to protect). Reuses the same
+    per-IP+username lockout as the web login."""
+    from .auth import LOGIN_MAX_ATTEMPTS, LOGIN_LOCKOUT_SECONDS, _login_lockout_key
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid request."}, status=400)
+
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    key = _login_lockout_key(request, username)
+    fails = _cache.get(key, 0)
+    if fails >= LOGIN_MAX_ATTEMPTS:
+        return JsonResponse(
+            {"ok": False, "error": "Too many failed attempts. Try again in 15 minutes."},
+            status=429,
+        )
+
+    user = _authenticate(request, username=username, password=password)
+    if user is None:
+        _cache.set(key, fails + 1, LOGIN_LOCKOUT_SECONDS)
+        return JsonResponse({"ok": False, "error": "Invalid username or password."}, status=401)
+
+    emp = getattr(user, "employee", None)
+    role = emp.role if (emp and emp.role) else ("admin" if (user.is_superuser or user.is_staff) else None)
+    if role is None:
+        return JsonResponse(
+            {"ok": False, "error": "No employee role mapped. Contact an administrator."},
+            status=403,
+        )
+
+    _cache.delete(key)
+    _auth_login(request, user)          # sets sessionid on the response
+    _get_csrf_token(request)            # forces csrftoken cookie onto the response
+    return JsonResponse({
+        "ok": True,
+        "role": role,
+        "name": user.get_full_name() or user.username,
+    })

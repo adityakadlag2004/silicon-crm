@@ -44,7 +44,7 @@ in the WebView.
 | 11 | Team management (roster, edit, activate/deactivate, reset password, add) | `/api/app/team/…` | **v3.6** |
 | 12 | Incentives & Campaigns builders (rules, slabs, campaigns, products) | `/api/app/incentives|campaigns/` + web AJAX writes | **v3.7** |
 | 13 | Lead sheets (mobile card view over dynamic columns, add/edit rows) | `/api/app/sheets/…` | **v3.8** |
-| 14 | Native login | `/api/app/login/` | |
+| 14 | Native login (session-cookie capture, native push + call-config bootstrap) | `/api/app/login/` | **v4.0** |
 | — | Financial planner | stays WebView (calc engine is fine there) | |
 
 ## Rules

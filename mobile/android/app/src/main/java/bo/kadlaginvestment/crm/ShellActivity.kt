@@ -105,12 +105,57 @@ class ShellActivity : ComponentActivity() {
         reportDeviceStatus()
     }
 
+    /** Bootstraps that used to run in the WebView login's JS: sync the
+     * admin call-tracking window to the device, and register this device's
+     * FCM push token. Best-effort, off the main thread. */
+    private fun bootstrapNative() {
+        Thread {
+            // 1) Call-tracking config → SharedPreferences (read by CallTrackerReceiver)
+            try {
+                val cookies = android.webkit.CookieManager.getInstance().getCookie(BackendClient.BASE_URL)
+                if (cookies != null && cookies.contains("sessionid=")) {
+                    val url = java.net.URL(BackendClient.BASE_URL + "/clients/api/calls/config/")
+                    val conn = url.openConnection() as java.net.HttpURLConnection
+                    conn.setRequestProperty("Cookie", cookies)
+                    conn.setRequestProperty("Accept", "application/json")
+                    conn.connectTimeout = 8000; conn.readTimeout = 8000
+                    if (conn.responseCode == 200) {
+                        val cfg = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+                        getSharedPreferences("call_tracking", MODE_PRIVATE).edit()
+                            .putBoolean("enabled", cfg.optBoolean("enabled", true))
+                            .putInt("work_start_minutes", cfg.optInt("work_start_minutes", 600))
+                            .putInt("work_end_minutes", cfg.optInt("work_end_minutes", 1080))
+                            .apply()
+                    }
+                    conn.disconnect()
+                }
+            } catch (_: Exception) {}
+
+            // 2) FCM push token → register with the server (needs Firebase configured)
+            try {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                    .addOnSuccessListener { token ->
+                        Thread {
+                            try {
+                                val body = org.json.JSONObject()
+                                    .put("token", token).put("platform", "android")
+                                BackendClient.postJson("/clients/api/push/register/", body.toString())
+                            } catch (_: Exception) {}
+                        }.start()
+                    }
+            } catch (_: Throwable) {
+                // Firebase not configured / not available — push simply stays off.
+            }
+        }.start()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Catch-up sync: uploads any calls that couldn't be synced when they
         // ended (no internet at the time). Server-side dedup makes this safe.
         Thread { CallSyncManager.syncRecentCalls(applicationContext) }.start()
+        bootstrapNative()
 
         setContent {
             KadlagTheme {
@@ -182,7 +227,7 @@ class ShellActivity : ComponentActivity() {
 
                 val goLogin: () -> Unit = {
                     startActivity(
-                        Intent(this, MainActivity::class.java)
+                        Intent(this, LoginActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                     )
                     finish()

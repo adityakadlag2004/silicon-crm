@@ -599,3 +599,50 @@ class AppSheetsTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class AppLoginTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="li_emp", password="rightpass123!")
+        Employee.objects.create(user=cls.user, role="employee", salary=0, active=True)
+
+    def setUp(self):
+        # LocMemCache is process-global; clear the login-lockout counter so
+        # tests don't pollute each other.
+        from django.core.cache import cache
+        cache.clear()
+
+    def _login(self, username, password):
+        import json as _json
+        return TestClient().post(
+            reverse("clients:app_login"),
+            data=_json.dumps({"username": username, "password": password}),
+            content_type="application/json",
+        )
+
+    def test_success_returns_role_and_sets_session(self):
+        resp = self._login("li_emp", "rightpass123!")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["role"], "employee")
+        self.assertIn("sessionid", resp.cookies)
+
+    def test_wrong_password_401(self):
+        resp = self._login("li_emp", "wrong")
+        self.assertEqual(resp.status_code, 401)
+        self.assertFalse(resp.json()["ok"])
+
+    def test_lockout_after_five_failures(self):
+        from django.core.cache import cache
+        cache.clear()
+        for _ in range(5):
+            self._login("li_emp", "wrong")
+        resp = self._login("li_emp", "rightpass123!")  # correct, but locked out
+        self.assertEqual(resp.status_code, 429)
+
+    def test_user_without_role_rejected(self):
+        User.objects.create_user(username="noemp", password="rightpass123!")
+        resp = self._login("noemp", "rightpass123!")
+        self.assertEqual(resp.status_code, 403)

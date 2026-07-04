@@ -85,6 +85,7 @@ urlpatterns = [
     path("api/app/team/<int:employee_id>/update/", views.app_team_update, name="app_team_update"),
     path("api/app/team/<int:employee_id>/toggle/", views.app_team_toggle, name="app_team_toggle"),
     path("api/app/team/<int:employee_id>/reset-password/", views.app_team_reset_password, name="app_team_reset_password"),
+    path("api/app/login/", views.app_login, name="app_login"),
     path("api/app/version/", views.app_version, name="app_version"),
     path("app/latest.apk", views.app_apk_download, name="app_apk_download"),
 
