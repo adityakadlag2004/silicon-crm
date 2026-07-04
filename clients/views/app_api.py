@@ -296,22 +296,50 @@ def _fu_row(fu, now):
     }
 
 
+_SERIOUS_CALL_SECONDS = 150  # calls longer than this count as "serious"
+
+
+def _today_call_stats(emp):
+    """The employee's own call performance for today, within the admin office-
+    hours window (so it matches what Call Analytics shows for them)."""
+    from ..models import CallLogEntry, CallTrackingSettings
+
+    cfg = CallTrackingSettings.current()
+    today = timezone.localdate()
+    qs = CallLogEntry.objects.filter(
+        employee=emp,
+        started_at__date=today,
+        started_at__time__gte=cfg.work_start,
+        started_at__time__lt=cfg.work_end,
+    )
+    agg = qs.aggregate(
+        calls=Count("id"),
+        connected_count=Count("id", filter=Q(connected=True)),
+        talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
+        serious=Count("id", filter=Q(duration_seconds__gt=_SERIOUS_CALL_SECONDS)),
+    )
+    return {
+        "calls": agg["calls"] or 0,
+        "connected": agg["connected_count"] or 0,
+        "talk_minutes": round((agg["talk_seconds"] or 0) / 60, 1),
+        "serious": agg["serious"] or 0,
+    }
+
+
 @login_required
 @require_GET
 def app_followups(request):
     emp = _emp(request)
     if emp is None:
-        return JsonResponse({"pending": [], "done": []})
+        return JsonResponse({"pending": [], "stats": None})
     now = timezone.now()
+    # Only pending — completed/dismissed follow-ups drop off the screen.
     pending = CallFollowUp.objects.filter(
         employee=emp, status=CallFollowUp.STATUS_PENDING
     ).select_related("client").order_by("scheduled_at")[:100]
-    done = CallFollowUp.objects.filter(
-        employee=emp, status__in=[CallFollowUp.STATUS_DONE, CallFollowUp.STATUS_DISMISSED]
-    ).select_related("client").order_by("-completed_at")[:15]
     return JsonResponse({
         "pending": [_fu_row(f, now) for f in pending],
-        "done": [_fu_row(f, now) for f in done],
+        "stats": _today_call_stats(emp),
     })
 
 

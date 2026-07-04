@@ -646,3 +646,44 @@ class AppLoginTests(TestCase):
         User.objects.create_user(username="noemp", password="rightpass123!")
         resp = self._login("noemp", "rightpass123!")
         self.assertEqual(resp.status_code, 403)
+
+
+class AppFollowupStatsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.emp_user = User.objects.create_user(username="fs_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+
+    def _http(self):
+        c = TestClient()
+        c.force_login(self.emp_user)
+        return c
+
+    def test_stats_and_pending_only(self):
+        from clients.models import CallLogEntry, CallFollowUp
+        base = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
+        # 3 calls today in work hours: 2 connected (one serious 200s, one 60s), 1 missed
+        CallLogEntry.objects.create(employee=self.emp, phone="1", direction="outgoing",
+                                    connected=True, duration_seconds=200, started_at=base)
+        CallLogEntry.objects.create(employee=self.emp, phone="2", direction="outgoing",
+                                    connected=True, duration_seconds=60, started_at=base)
+        CallLogEntry.objects.create(employee=self.emp, phone="3", direction="incoming",
+                                    connected=False, duration_seconds=0, started_at=base)
+        # After-hours call must NOT count
+        CallLogEntry.objects.create(employee=self.emp, phone="4", direction="outgoing",
+                                    connected=True, duration_seconds=300,
+                                    started_at=base.replace(hour=21))
+
+        # A done follow-up must not appear
+        CallFollowUp.objects.create(employee=self.emp, phone="9", scheduled_at=timezone.now(),
+                                    status=CallFollowUp.STATUS_DONE)
+        CallFollowUp.objects.create(employee=self.emp, phone="8", scheduled_at=timezone.now())
+
+        data = self._http().get(reverse("clients:app_followups")).json()
+        s = data["stats"]
+        self.assertEqual(s["calls"], 3)          # after-hours excluded
+        self.assertEqual(s["connected"], 2)
+        self.assertEqual(s["serious"], 1)        # only the 200s call
+        self.assertAlmostEqual(s["talk_minutes"], round(260 / 60, 1))
+        self.assertEqual(len(data["pending"]), 1)  # done one excluded
+        self.assertNotIn("done", data)

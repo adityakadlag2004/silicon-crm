@@ -29,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,7 +38,8 @@ import bo.kadlaginvestment.crm.net.ApiClient
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-/** Native Call Follow-ups: pending list with Call / Done / Snooze / Dismiss. */
+/** Call Follow-ups: today's personal call performance on top, then the
+ * pending follow-up list (completed/dismissed items disappear). */
 @Composable
 fun FollowupsScreen(
     modifier: Modifier = Modifier,
@@ -70,10 +72,9 @@ fun FollowupsScreen(
     if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
     val d = data ?: run { LoadingBox(modifier); return }
 
+    val stats = d.optJSONObject("stats")
     val pending = d.optJSONArray("pending")
-    val done = d.optJSONArray("done")
     val pendingRows = (0 until (pending?.length() ?: 0)).map { pending!!.getJSONObject(it) }
-    val doneRows = (0 until (done?.length() ?: 0)).map { done!!.getJSONObject(it) }
 
     LazyColumn(
         modifier.fillMaxSize().padding(horizontal = 16.dp),
@@ -86,7 +87,7 @@ fun FollowupsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Call Follow-ups", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("My Calls Today", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "↻",
                     fontSize = 20.sp,
@@ -96,6 +97,34 @@ fun FollowupsScreen(
                         .padding(8.dp),
                 )
             }
+        }
+
+        // ── Today's call performance ──
+        if (stats != null) {
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatBlock("Calls", "${stats.optInt("calls")}", Modifier.weight(1f))
+                    StatBlock(
+                        "Talk time",
+                        formatMinutes(stats.optDouble("talk_minutes", 0.0)),
+                        Modifier.weight(1f),
+                    )
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatBlock("Connected", "${stats.optInt("connected")}", Modifier.weight(1f), StatusGreen)
+                    StatBlock("Serious", "${stats.optInt("serious")}", Modifier.weight(1f), BrandGoldDark, sub = "2½ min+")
+                }
+            }
+        }
+
+        item {
+            Text(
+                "Pending follow-ups (${pendingRows.size})",
+                fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp),
+            )
         }
 
         if (pendingRows.isEmpty()) {
@@ -150,26 +179,46 @@ fun FollowupsScreen(
             }
         }
 
-        if (doneRows.isNotEmpty()) {
-            item { SectionTitle("Recently completed") }
-            items(doneRows) { f ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text(
-                            f.optString("client").ifEmpty { f.optString("phone") },
-                            fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(f.optString("scheduled_at"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    StatusPill(f.optString("status"))
-                }
+        item { Spacer(Modifier.height(12.dp)) }
+    }
+}
+
+@Composable
+private fun StatBlock(
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    accent: Color = Color.Unspecified,
+    sub: String? = null,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(vertical = 14.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                value,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (accent == Color.Unspecified) MaterialTheme.colorScheme.onSurface else accent,
+            )
+            Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (sub != null) {
+                Text(sub, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
 
-        item { Spacer(Modifier.height(12.dp)) }
+private fun formatMinutes(totalMinutes: Double): String {
+    val totalSec = (totalMinutes * 60).toInt()
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return when {
+        h > 0 -> "${h}h ${m}m"
+        m > 0 -> "${m}m ${s}s"
+        else -> "${s}s"
     }
 }
