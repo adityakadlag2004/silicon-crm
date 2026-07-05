@@ -53,6 +53,7 @@ fun SalesScreen(
     var status by remember { mutableStateOf(initialStatus) }
     var rows by remember { mutableStateOf(listOf<JSONObject>()) }
     var canApprove by remember { mutableStateOf(false) }
+    var canDelete by remember { mutableStateOf(false) }
     var page by remember { mutableIntStateOf(1) }
     var hasMore by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
@@ -60,6 +61,7 @@ fun SalesScreen(
     var reloadKey by remember { mutableIntStateOf(0) }
     var rejecting by remember { mutableStateOf<JSONObject?>(null) }
     var rejectReason by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf<JSONObject?>(null) }
 
     LaunchedEffect(status, page, reloadKey) {
         loading = true
@@ -71,6 +73,7 @@ fun SalesScreen(
                 rows = if (page == 1) newRows else rows + newRows
                 hasMore = r.json.optBoolean("has_more")
                 canApprove = r.json.optBoolean("can_approve")
+                canDelete = r.json.optBoolean("can_delete")
             }
             is ApiClient.Result.NotLoggedIn -> onSessionExpired()
             is ApiClient.Result.Error -> error = r.message
@@ -109,6 +112,27 @@ fun SalesScreen(
                 }) { Text("Reject", color = StatusRed) }
             },
             dismissButton = { TextButton(onClick = { rejecting = null }) { Text("Cancel") } },
+        )
+    }
+
+    deleting?.let { sale ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete sale #${sale.optInt("id")}?") },
+            text = {
+                Text(
+                    "This permanently removes the ${rupees(sale.optDouble("amount", 0.0))} " +
+                        "${sale.optString("product")} sale for ${sale.optString("client")}. " +
+                        "This can't be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    act(sale, "delete")
+                    deleting = null
+                }) { Text("Delete", color = StatusRed) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )
     }
 
@@ -172,10 +196,17 @@ fun SalesScreen(
                                     StatusPill(s.optString("status"))
                                 }
                             }
-                            if (canApprove && s.optString("status") == "pending") {
+                            if (canApprove || canDelete) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = { act(s, "approve") }) { Text("Approve") }
-                                    OutlinedButton(onClick = { rejecting = s }) { Text("Reject") }
+                                    if (canApprove && s.optString("status") == "pending") {
+                                        Button(onClick = { act(s, "approve") }) { Text("Approve") }
+                                        OutlinedButton(onClick = { rejecting = s }) { Text("Reject") }
+                                    }
+                                    if (canDelete) {
+                                        OutlinedButton(onClick = { deleting = s }) {
+                                            Text("Delete", color = StatusRed)
+                                        }
+                                    }
                                 }
                             }
                         }

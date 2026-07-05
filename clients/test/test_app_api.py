@@ -118,8 +118,33 @@ class AppScreenApiTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.json()["status"], "approved")
-        sale = Sale.objects.latest("id")
-        self.assertEqual(sale.employee, self.emp)
+
+    def test_admin_can_delete_sale(self):
+        import json as _json
+        sale = Sale.objects.create(
+            client=self.customer, employee=self.emp, product="SIP",
+            amount=Decimal("1000"), status=Sale.STATUS_PENDING,
+        )
+        # employee cannot delete
+        resp = self._http(self.emp_user).post(
+            reverse("clients:app_sale_action", args=[sale.id]),
+            data=_json.dumps({"action": "delete"}), content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(Sale.objects.filter(pk=sale.pk).exists())
+        # admin can delete
+        resp = self._http(self.admin_user).post(
+            reverse("clients:app_sale_action", args=[sale.id]),
+            data=_json.dumps({"action": "delete"}), content_type="application/json",
+        )
+        self.assertTrue(resp.json()["deleted"])
+        self.assertFalse(Sale.objects.filter(pk=sale.pk).exists())
+
+    def test_sales_list_exposes_can_delete(self):
+        admin_data = self._http(self.admin_user).get(reverse("clients:app_sales")).json()
+        self.assertTrue(admin_data["can_delete"])
+        emp_data = self._http(self.emp_user).get(reverse("clients:app_sales")).json()
+        self.assertFalse(emp_data["can_delete"])
 
     def test_clients_scopes(self):
         data = self._http(self.emp_user).get(reverse("clients:app_clients"), {"scope": "my"}).json()

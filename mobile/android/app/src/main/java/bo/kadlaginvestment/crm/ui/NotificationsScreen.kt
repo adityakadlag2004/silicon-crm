@@ -105,12 +105,9 @@ fun NotificationsScreen(
             val unread = !n.optBoolean("is_read")
             Card(
                 modifier = Modifier.fillMaxWidth().clickable {
-                    val link = n.optString("link")
-                    when {
-                        link.startsWith("tel:") ->
-                            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse(link)))
-                        link.startsWith("/") -> onOpenWeb(link)
-                    }
+                    // onOpenWeb is the shell's routeLink: handles tel:, native
+                    // screens, and web links.
+                    n.optString("link").takeIf { it.isNotBlank() }?.let { onOpenWeb(it) }
                 },
                 colors = CardDefaults.cardColors(
                     containerColor = if (unread) MaterialTheme.colorScheme.primaryContainer

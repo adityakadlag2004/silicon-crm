@@ -60,10 +60,14 @@ def notify_admins_on_sale(sender, instance, created, **kwargs):
         return
 
     User = get_user_model()
+    # Deep-link admins to the sales screen (pending ones need approval).
+    # The app routes "/clients/sales/…" to the native Sales screen; on the
+    # web it opens the approvals page.
     try:
-        dashboard_url = reverse("clients:admin_dashboard")
+        sales_url = reverse("clients:approve_sales") if instance.status == Sale.STATUS_PENDING \
+            else reverse("clients:all_sales")
     except Exception:
-        dashboard_url = ""
+        sales_url = ""
 
     employee_name = getattr(instance.employee, "user", None)
     if employee_name and hasattr(employee_name, "username"):
@@ -89,7 +93,7 @@ def notify_admins_on_sale(sender, instance, created, **kwargs):
             recipient=admin_user,
             title="New sale recorded",
             body=body,
-            link=dashboard_url,
+            link=sales_url,
             related_sale=instance,
         )
 

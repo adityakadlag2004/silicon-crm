@@ -493,6 +493,7 @@ def app_sales(request):
     rows = list(qs[start:end + 1])
     return JsonResponse({
         "can_approve": can_approve,
+        "can_delete": is_admin,
         "has_more": len(rows) > _PAGE,
         "page": page,
         "results": [
@@ -532,6 +533,15 @@ def app_sale_action(request, sale_id):
     except Exception:
         body = {}
     action = body.get("action")
+
+    if action == "delete":
+        # Admins/superusers only (matches the web delete_sale admin path).
+        if not is_admin:
+            return JsonResponse({"ok": False, "error": "Only an admin can delete a sale."}, status=403)
+        sale._audit_actor = request.user
+        sale.delete()
+        _recompute_sibling_sales(sale)
+        return JsonResponse({"ok": True, "deleted": True})
 
     if action == "approve":
         sale.status = Sale.STATUS_APPROVED

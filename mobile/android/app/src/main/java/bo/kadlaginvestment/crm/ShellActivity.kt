@@ -254,13 +254,23 @@ class ShellActivity : ComponentActivity() {
                     goLogin()
                 }
                 val openWeb: (String) -> Unit = { path -> WebActivity.open(this, path) }
-                // Dashboard shortcuts route to native screens where they exist.
-                val smartOpen: (String) -> Unit = { path ->
-                    when (path) {
-                        "/clients/sales/approve/" -> overlay = "sales_pending"
-                        "/clients/calls/followups/" -> selected = 3
-                        else -> openWeb(path)
+                // Route a notification/shortcut link to the right destination —
+                // native screens where they exist, else the web page or dialer.
+                val routeLink: (String) -> Unit = { raw ->
+                    val link = raw.trim()
+                    when {
+                        link.isEmpty() -> {}
+                        link.startsWith("tel:") ->
+                            startActivity(Intent(Intent.ACTION_DIAL, Uri.parse(link)))
+                        link.contains("/sales/approve/") -> { overlay = "sales_pending" }
+                        link.contains("/sales/") -> { overlay = "sales" }
+                        link.contains("/calls/followups") -> { overlay = null; selected = 3 }
+                        link.startsWith("/") -> openWeb(link)
                     }
+                }
+                // Apply a route passed in from a push-notification tap (once).
+                LaunchedEffect(Unit) {
+                    intent?.getStringExtra("route")?.let { if (it.isNotBlank()) routeLink(it) }
                 }
 
                 data class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
@@ -303,7 +313,7 @@ class ShellActivity : ComponentActivity() {
                             modifier = m,
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
-                            onOpenWeb = openWeb,
+                            onOpenWeb = routeLink,
                         )
                         overlay == "leads" -> LeadsScreen(
                             modifier = m,
@@ -337,7 +347,7 @@ class ShellActivity : ComponentActivity() {
                             onSessionExpired = goLogin,
                             onOpenWeb = openWeb,
                         )
-                        selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = smartOpen)
+                        selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = routeLink)
                         selected == 1 -> ClientsScreen(m, onSessionExpired = goLogin, onOpenWeb = openWeb)
                         selected == 2 -> AddSaleScreen(m, onSessionExpired = goLogin)
                         selected == 3 -> FollowupsScreen(m, onSessionExpired = goLogin)

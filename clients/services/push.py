@@ -68,8 +68,11 @@ def send_push_to_user(user, title, body, link=""):
             data={"link": link or ""},
             android=messaging.AndroidConfig(
                 priority="high",
+                # No click_action: let the tap launch the default launcher
+                # activity (RouterActivity) with the data payload in the
+                # intent extras, which routes to the right screen.
                 notification=messaging.AndroidNotification(
-                    icon="ic_launcher", color="#E5B740", click_action="OPEN_LINK"
+                    icon="ic_launcher", color="#E5B740",
                 ),
             ),
         )
