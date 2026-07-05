@@ -1723,12 +1723,31 @@ class Notification(models.Model):
 
 
 class CallTrackingSettings(models.Model):
-    """Singleton: admin-configured window of working hours. Calls outside the
-    window are personal — excluded from analytics and no follow-up popup."""
+    """Singleton: admin-configured windows for call tracking and the follow-up
+    popup. These are now independent — e.g. don't count calls on Sundays but
+    still show the follow-up popup every day.
 
+    Days are stored as comma-separated weekday numbers, 0=Mon … 6=Sun.
+    """
+
+    # ── Call tracking / analytics window ──
     enabled = models.BooleanField(default=True)
     work_start = models.TimeField(default=datetime_time(10, 0))
     work_end = models.TimeField(default=datetime_time(18, 0))
+    work_days = models.CharField(
+        max_length=20, default="0,1,2,3,4,5",
+        help_text="Weekdays counted in analytics. 0=Mon … 6=Sun. Default Mon–Sat.",
+    )
+
+    # ── Follow-up popup window (independent of tracking) ──
+    popup_enabled = models.BooleanField(default=True)
+    popup_start = models.TimeField(default=datetime_time(9, 0))
+    popup_end = models.TimeField(default=datetime_time(21, 0))
+    popup_days = models.CharField(
+        max_length=20, default="0,1,2,3,4,5,6",
+        help_text="Weekdays the post-call popup appears. Default every day.",
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -1742,6 +1761,39 @@ class CallTrackingSettings(models.Model):
     def current(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+    @staticmethod
+    def _parse_days(raw):
+        out = []
+        for part in (raw or "").split(","):
+            part = part.strip()
+            if part.isdigit() and 0 <= int(part) <= 6:
+                out.append(int(part))
+        return out
+
+    def work_day_list(self):
+        return self._parse_days(self.work_days)
+
+    def popup_day_list(self):
+        return self._parse_days(self.popup_days)
+
+    @staticmethod
+    def _to_django_week_days(day_list):
+        """Map our 0=Mon…6=Sun to Django __week_day (1=Sun…7=Sat)."""
+        # Mon(0)->2, Tue(1)->3, … Sat(5)->7, Sun(6)->1
+        return [1 if d == 6 else d + 2 for d in day_list]
+
+    def work_week_days_django(self):
+        return self._to_django_week_days(self.work_day_list())
+
+    def filter_work_window(self, qs, field="started_at"):
+        """Restrict a CallLogEntry queryset to the tracking window
+        (work hours + work days), evaluated in the project timezone."""
+        return qs.filter(**{
+            f"{field}__time__gte": self.work_start,
+            f"{field}__time__lt": self.work_end,
+            f"{field}__week_day__in": self.work_week_days_django(),
+        })
 
 
 class CallLogEntry(models.Model):

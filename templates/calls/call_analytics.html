@@ -24,26 +24,77 @@
   </div>
   <div class="col-lg-4">
     <div class="ki-card h-100">
-      <form method="post" class="d-flex flex-wrap gap-2 align-items-end">
+      <form method="post">
         {% csrf_token %}
         <input type="hidden" name="form" value="settings">
-        <div>
-          <label class="form-label fw-semibold mb-1">Office start</label>
-          <input type="time" name="work_start" value="{{ cfg.work_start|time:'H:i' }}" class="form-control">
+
+        {# ── Call tracking window ── #}
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="fw-bold" style="font-size:.95rem;">📊 Call tracking</span>
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" name="enabled" id="ct-enabled" {% if cfg.enabled %}checked{% endif %}>
+          </div>
         </div>
-        <div>
-          <label class="form-label fw-semibold mb-1">Office end</label>
-          <input type="time" name="work_end" value="{{ cfg.work_end|time:'H:i' }}" class="form-control">
+        <div class="text-muted mb-2" style="font-size:.78rem;">Only calls in this window count in analytics.</div>
+        <div class="d-flex gap-2 mb-2">
+          <div class="flex-fill">
+            <label class="form-label mb-1" style="font-size:.75rem;">From</label>
+            <input type="time" name="work_start" value="{{ cfg.work_start|time:'H:i' }}" class="form-control form-control-sm">
+          </div>
+          <div class="flex-fill">
+            <label class="form-label mb-1" style="font-size:.75rem;">To</label>
+            <input type="time" name="work_end" value="{{ cfg.work_end|time:'H:i' }}" class="form-control form-control-sm">
+          </div>
         </div>
-        <div class="form-check mb-2">
-          <input class="form-check-input" type="checkbox" name="enabled" id="ct-enabled" {% if cfg.enabled %}checked{% endif %}>
-          <label class="form-check-label" for="ct-enabled">Tracking on</label>
+        <div class="d-flex flex-wrap gap-1 mb-3">
+          {% for num, label in weekdays %}
+          <label class="badge day-toggle {% if num in work_days_sel %}bg-primary{% else %}bg-light text-dark border{% endif %}" style="cursor:pointer;font-weight:500;padding:.45rem .55rem;">
+            <input type="checkbox" name="work_days" value="{{ num }}" {% if num in work_days_sel %}checked{% endif %} style="display:none;"> {{ label }}
+          </label>
+          {% endfor %}
         </div>
-        <button class="btn btn-outline-primary">Save</button>
+
+        {# ── Follow-up popup window ── #}
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="fw-bold" style="font-size:.95rem;">📞 Follow-up popup</span>
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" name="popup_enabled" id="pu-enabled" {% if cfg.popup_enabled %}checked{% endif %}>
+          </div>
+        </div>
+        <div class="text-muted mb-2" style="font-size:.78rem;">When the after-call reminder popup appears (can run every day).</div>
+        <div class="d-flex gap-2 mb-2">
+          <div class="flex-fill">
+            <label class="form-label mb-1" style="font-size:.75rem;">From</label>
+            <input type="time" name="popup_start" value="{{ cfg.popup_start|time:'H:i' }}" class="form-control form-control-sm">
+          </div>
+          <div class="flex-fill">
+            <label class="form-label mb-1" style="font-size:.75rem;">To</label>
+            <input type="time" name="popup_end" value="{{ cfg.popup_end|time:'H:i' }}" class="form-control form-control-sm">
+          </div>
+        </div>
+        <div class="d-flex flex-wrap gap-1 mb-3">
+          {% for num, label in weekdays %}
+          <label class="badge day-toggle {% if num in popup_days_sel %}bg-primary{% else %}bg-light text-dark border{% endif %}" style="cursor:pointer;font-weight:500;padding:.45rem .55rem;">
+            <input type="checkbox" name="popup_days" value="{{ num }}" {% if num in popup_days_sel %}checked{% endif %} style="display:none;"> {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+
+        <button class="btn btn-primary w-100">Save settings</button>
       </form>
     </div>
   </div>
 </div>
+<script>
+  // Immediate colour feedback for day toggles (applied on Save).
+  document.querySelectorAll('.day-toggle input[type=checkbox]').forEach(function (cb) {
+    cb.addEventListener('change', function () {
+      var b = cb.closest('.day-toggle');
+      if (cb.checked) { b.classList.add('bg-primary'); b.classList.remove('bg-light', 'text-dark', 'border'); }
+      else { b.classList.remove('bg-primary'); b.classList.add('bg-light', 'text-dark', 'border'); }
+    });
+  });
+</script>
 
 <div class="row g-3 mb-3">
   <div class="col-6 col-md"><div class="ki-card text-center"><div style="font-size:1.5rem;font-weight:800;">{{ totals.dialed }}</div><div class="text-muted">Dialed</div></div></div>

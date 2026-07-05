@@ -659,6 +659,8 @@ class AppFollowupStatsTests(TestCase):
     def setUpTestData(cls):
         cls.emp_user = User.objects.create_user(username="fs_emp", password="x")
         cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+        from clients.models import CallTrackingSettings
+        CallTrackingSettings.objects.update_or_create(pk=1, defaults={"work_days": "0,1,2,3,4,5,6"})
 
     def _http(self):
         c = TestClient()

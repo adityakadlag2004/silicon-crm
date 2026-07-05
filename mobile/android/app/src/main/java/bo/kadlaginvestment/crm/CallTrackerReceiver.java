@@ -107,19 +107,28 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         // advance and the next trigger retries.
         CallSyncManager.syncRecentCalls(ctx);
 
-        // 2) Follow-up prompt — only during office hours (config synced at login).
+        // 2) Follow-up prompt — governed by its OWN window (independent of the
+        // tracking window, so it can run every day incl. Sunday).
         SharedPreferences prefs = ctx.getSharedPreferences("call_tracking", Context.MODE_PRIVATE);
-        if (!prefs.getBoolean("enabled", true)) {
-            Log.i(TAG, "popup skip: tracking disabled by admin config");
+        if (!prefs.getBoolean("popup_enabled", true)) {
+            Log.i(TAG, "popup skip: popup disabled by admin config");
             return;
         }
         Calendar now = Calendar.getInstance();
         int minutesNow = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
-        int workStart = prefs.getInt("work_start_minutes", 600);  // 10:00
-        int workEnd = prefs.getInt("work_end_minutes", 1080);     // 18:00
-        if (minutesNow < workStart || minutesNow >= workEnd) {
-            Log.i(TAG, "popup skip: outside office hours (" + minutesNow + " not in "
-                    + workStart + "-" + workEnd + ")");
+        int popupStart = prefs.getInt("popup_start_minutes", 540);   // 09:00
+        int popupEnd = prefs.getInt("popup_end_minutes", 1260);      // 21:00
+        if (minutesNow < popupStart || minutesNow >= popupEnd) {
+            Log.i(TAG, "popup skip: outside popup hours (" + minutesNow + " not in "
+                    + popupStart + "-" + popupEnd + ")");
+            return;
+        }
+        // Weekday check. Calendar: SUNDAY=1..SATURDAY=7 → our 0=Mon..6=Sun.
+        int cd = now.get(Calendar.DAY_OF_WEEK);
+        int myDay = (cd == Calendar.SUNDAY) ? 6 : cd - 2;
+        String popupDays = prefs.getString("popup_days", "0,1,2,3,4,5,6");
+        if (!dayEnabled(popupDays, myDay)) {
+            Log.i(TAG, "popup skip: not a popup day (" + myDay + " not in " + popupDays + ")");
             return;
         }
 
@@ -142,6 +151,17 @@ public class CallTrackerReceiver extends BroadcastReceiver {
             Log.i(TAG, "popup skip: overlay permission missing — using notification");
         }
         showFollowupNotification(ctx, popup, number);
+    }
+
+    /** True if `day` (0=Mon..6=Sun) appears in a comma-separated day string. */
+    private static boolean dayEnabled(String csv, int day) {
+        if (csv == null || csv.isEmpty()) return true;
+        for (String p : csv.split(",")) {
+            try {
+                if (Integer.parseInt(p.trim()) == day) return true;
+            } catch (NumberFormatException ignored) {}
+        }
+        return false;
     }
 
     private void showFollowupNotification(Context ctx, Intent popup, String number) {

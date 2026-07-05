@@ -126,6 +126,7 @@ def app_dashboard(request):
             started_at__date=today,
             started_at__time__gte=cfg.work_start,
             started_at__time__lt=cfg.work_end,
+            started_at__week_day__in=cfg.work_week_days_django(),
         ).aggregate(
             calls=Count("id"),
             connected_count=Count("id", filter=Q(connected=True)),
@@ -398,6 +399,7 @@ def _today_call_stats(emp):
         started_at__date=today,
         started_at__time__gte=cfg.work_start,
         started_at__time__lt=cfg.work_end,
+        started_at__week_day__in=cfg.work_week_days_django(),
     )
     agg = qs.aggregate(
         calls=Count("id"),
@@ -1184,6 +1186,7 @@ def app_call_analytics(request):
     qs = CallLogEntry.objects.filter(
         started_at__time__gte=cfg.work_start,
         started_at__time__lt=cfg.work_end,
+        started_at__week_day__in=cfg.work_week_days_django(),
     )
     if rng == "today":
         qs = qs.filter(started_at__date=today)
@@ -1212,6 +1215,7 @@ def app_call_analytics(request):
     breakdown_qs = CallLogEntry.objects.filter(
         started_at__time__gte=cfg.work_start,
         started_at__time__lt=cfg.work_end,
+        started_at__week_day__in=cfg.work_week_days_django(),
     )
     if rng == "today":
         breakdown_qs = breakdown_qs.filter(started_at__date=today)

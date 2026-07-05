@@ -29,6 +29,10 @@ class _CallSetup(TestCase):
         cls.emp_user = User.objects.create_user(username="ct_emp", password="x")
         cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
         cls.customer = Client.objects.create(name="Callee", phone="9876543210")
+        # Count all 7 days so "today" assertions are day-of-week independent.
+        CallTrackingSettings.objects.update_or_create(
+            pk=1, defaults={"work_days": "0,1,2,3,4,5,6"}
+        )
 
     def setUp(self):
         self.admin = TestClient()
@@ -245,3 +249,66 @@ class AppCallAnalyticsTests(_CallSetup):
         emp_row = next(r for r in data["by_employee"] if r["calls"] == 1)
         self.assertEqual(emp_row["connected"], 1)
         self.assertEqual(emp_row["serious"], 1)  # 200s > 150s
+
+
+class WorkDayAndPopupSettingsTests(TestCase):
+    """Tracking excludes non-work days (e.g. Sunday); popup window is independent."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username="wd_admin", password="x")
+        Employee.objects.create(user=cls.admin, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="wd_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+
+    def _admin(self):
+        c = TestClient(); c.force_login(self.admin); return c
+
+    def _next_weekday(self, base, target_py_weekday):
+        # target_py_weekday: Mon=0..Sun=6
+        d = base
+        while d.weekday() != target_py_weekday:
+            d += timedelta(days=1)
+        return d
+
+    def test_sunday_calls_excluded_from_analytics(self):
+        cfg = CallTrackingSettings.current()
+        cfg.work_days = "0,1,2,3,4,5"  # Mon–Sat, exclude Sunday
+        cfg.save()
+        base = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
+        saturday = self._next_weekday(base, 5)   # Sat
+        sunday = self._next_weekday(base, 6)      # Sun
+        CallLogEntry.objects.create(employee=self.emp, phone="1", direction="outgoing",
+                                    connected=True, duration_seconds=60, started_at=saturday)
+        CallLogEntry.objects.create(employee=self.emp, phone="2", direction="outgoing",
+                                    connected=True, duration_seconds=60, started_at=sunday)
+        # analytics "month" range covers both; Sunday one must be excluded
+        data = self._admin().get(reverse("clients:app_call_analytics"), {"range": "month"}).json()
+        self.assertEqual(data["totals"]["dialed"], 1)
+
+    def test_config_exposes_independent_windows(self):
+        cfg = CallTrackingSettings.current()
+        cfg.work_days = "0,1,2,3,4,5"
+        cfg.popup_days = "0,1,2,3,4,5,6"
+        cfg.popup_enabled = True
+        cfg.save()
+        c = TestClient(); c.force_login(self.emp_user)
+        data = c.get(reverse("clients:call_config")).json()
+        self.assertEqual(data["work_days"], [0, 1, 2, 3, 4, 5])
+        self.assertEqual(data["popup_days"], [0, 1, 2, 3, 4, 5, 6])  # every day
+        self.assertTrue(data["popup_enabled"])
+
+    def test_admin_form_saves_days_and_popup(self):
+        self._admin().post(reverse("clients:call_analytics"), {
+            "form": "settings",
+            "work_start": "10:00", "work_end": "18:00",
+            "popup_start": "08:00", "popup_end": "22:00",
+            "enabled": "on", "popup_enabled": "on",
+            "work_days": ["0", "1", "2", "3", "4", "5"],   # no Sunday
+            "popup_days": ["0", "1", "2", "3", "4", "5", "6"],
+        })
+        cfg = CallTrackingSettings.current()
+        self.assertEqual(cfg.work_days, "0,1,2,3,4,5")
+        self.assertEqual(cfg.popup_days, "0,1,2,3,4,5,6")
+        self.assertEqual(cfg.popup_start.hour, 8)
+        self.assertEqual(cfg.popup_end.hour, 22)

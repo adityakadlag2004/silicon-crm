@@ -53,13 +53,25 @@ def _within_work_hours(dt, settings_obj):
 @login_required
 @require_GET
 def call_config(request):
-    """The app fetches this at login to know the work-hours window
-    (popup suppression outside office hours happens on-device)."""
+    """The app fetches this at launch. Two independent windows: tracking
+    (which calls the device syncs / that analytics count) and the follow-up
+    popup (which can run on more days, e.g. every day incl. Sunday)."""
     cfg = CallTrackingSettings.current()
+
+    def _mins(t):
+        return t.hour * 60 + t.minute
+
     return JsonResponse({
+        # Tracking window
         "enabled": cfg.enabled,
-        "work_start_minutes": cfg.work_start.hour * 60 + cfg.work_start.minute,
-        "work_end_minutes": cfg.work_end.hour * 60 + cfg.work_end.minute,
+        "work_start_minutes": _mins(cfg.work_start),
+        "work_end_minutes": _mins(cfg.work_end),
+        "work_days": cfg.work_day_list(),
+        # Follow-up popup window (independent)
+        "popup_enabled": cfg.popup_enabled,
+        "popup_start_minutes": _mins(cfg.popup_start),
+        "popup_end_minutes": _mins(cfg.popup_end),
+        "popup_days": cfg.popup_day_list(),
     })
 
 
@@ -235,15 +247,29 @@ def call_analytics(request):
 
     cfg = CallTrackingSettings.current()
 
-    # Admin updates the work-hours window from the same page.
+    # Admin updates the tracking + popup windows from the same page.
     if request.method == "POST" and request.POST.get("form") == "settings":
-        try:
-            cfg.work_start = datetime.strptime(request.POST.get("work_start", ""), "%H:%M").time()
-            cfg.work_end = datetime.strptime(request.POST.get("work_end", ""), "%H:%M").time()
-        except ValueError:
-            messages.error(request, "Enter times as HH:MM.")
-            return redirect("clients:call_analytics")
+        def _time(field, current):
+            raw = request.POST.get(field, "")
+            if not raw:
+                return current
+            try:
+                return datetime.strptime(raw, "%H:%M").time()
+            except ValueError:
+                return current
+
+        def _days(field, default):
+            vals = [d for d in request.POST.getlist(field) if d.isdigit() and 0 <= int(d) <= 6]
+            return ",".join(sorted(set(vals), key=int)) if vals else default
+
+        cfg.work_start = _time("work_start", cfg.work_start)
+        cfg.work_end = _time("work_end", cfg.work_end)
+        cfg.popup_start = _time("popup_start", cfg.popup_start)
+        cfg.popup_end = _time("popup_end", cfg.popup_end)
         cfg.enabled = request.POST.get("enabled") == "on"
+        cfg.popup_enabled = request.POST.get("popup_enabled") == "on"
+        cfg.work_days = _days("work_days", "0,1,2,3,4,5")
+        cfg.popup_days = _days("popup_days", "0,1,2,3,4,5,6")
         cfg.save()
         messages.success(request, "Call tracking settings saved.")
         return redirect("clients:call_analytics")
@@ -267,6 +293,7 @@ def call_analytics(request):
         # Personal calls outside office hours stay out of the numbers.
         started_at__time__gte=cfg.work_start,
         started_at__time__lt=cfg.work_end,
+        started_at__week_day__in=cfg.work_week_days_django(),
     )
 
     rows = (
@@ -303,6 +330,7 @@ def call_analytics(request):
     list_qs = CallLogEntry.objects.filter(
         started_at__time__gte=cfg.work_start,
         started_at__time__lt=cfg.work_end,
+        started_at__week_day__in=cfg.work_week_days_django(),
     )
     if calls_range == "today":
         list_qs = list_qs.filter(started_at__date=today)
@@ -354,4 +382,7 @@ def call_analytics(request):
         "calls_emp_id": calls_emp_id,
         "calls_range": calls_range,
         "list_totals": list_totals,
+        "weekdays": [(0, "Mon"), (1, "Tue"), (2, "Wed"), (3, "Thu"), (4, "Fri"), (5, "Sat"), (6, "Sun")],
+        "work_days_sel": cfg.work_day_list(),
+        "popup_days_sel": cfg.popup_day_list(),
     })

@@ -122,10 +122,21 @@ class ShellActivity : ComponentActivity() {
                     conn.connectTimeout = 8000; conn.readTimeout = 8000
                     if (conn.responseCode == 200) {
                         val cfg = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+                        fun daysCsv(key: String, fallback: String): String {
+                            val arr = cfg.optJSONArray(key) ?: return fallback
+                            return (0 until arr.length()).joinToString(",") { arr.getInt(it).toString() }
+                        }
                         getSharedPreferences("call_tracking", MODE_PRIVATE).edit()
+                            // tracking window
                             .putBoolean("enabled", cfg.optBoolean("enabled", true))
                             .putInt("work_start_minutes", cfg.optInt("work_start_minutes", 600))
                             .putInt("work_end_minutes", cfg.optInt("work_end_minutes", 1080))
+                            .putString("work_days", daysCsv("work_days", "0,1,2,3,4,5"))
+                            // follow-up popup window (independent)
+                            .putBoolean("popup_enabled", cfg.optBoolean("popup_enabled", true))
+                            .putInt("popup_start_minutes", cfg.optInt("popup_start_minutes", 540))
+                            .putInt("popup_end_minutes", cfg.optInt("popup_end_minutes", 1260))
+                            .putString("popup_days", daysCsv("popup_days", "0,1,2,3,4,5,6"))
                             .apply()
                     }
                     conn.disconnect()
