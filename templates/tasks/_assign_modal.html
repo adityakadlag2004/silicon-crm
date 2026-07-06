@@ -26,11 +26,11 @@
 
           <div class="row g-3">
             <div class="col-md-6">
-              <label class="form-label">Assign to</label>
-              <select name="assigned_to" class="form-select">
-                <option value="">— Unassigned —</option>
+              <label class="form-label">Assign to <span class="text-muted" style="font-weight:400;">(pick one or more)</span></label>
+              <select name="assigned_to" class="form-select" multiple size="4">
                 {% for e in employees %}<option value="{{ e.id }}">{{ e.user.get_full_name|default:e.user.username }} ({{ e.role }})</option>{% endfor %}
               </select>
+              <div class="form-text">Select multiple to create a copy of the task for each person. Leave blank for an unassigned task.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Category</label>

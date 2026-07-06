@@ -194,6 +194,67 @@ def app_task_activities(request):
 
 
 @login_required
+@require_POST
+def app_task_category_create(request):
+    """Quick-create a task category from the native Assign screen."""
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "invalid payload"}, status=400)
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"ok": False, "error": "name required"}, status=400)
+    cat, _ = TaskCategory.objects.get_or_create(
+        name=name[:80],
+        defaults={"color": (body.get("color") or "#E5B740")[:7],
+                  "icon": "bi-folder-fill", "created_by": request.user},
+    )
+    return JsonResponse({"ok": True, "id": cat.id, "name": cat.name, "color": cat.color})
+
+
+@login_required
+@require_GET
+def app_task_scorecard(request):
+    """Per-member task completion stats for a period (day/week/month).
+
+    Managers/admins get the whole team; employees get just themselves.
+    Percentages are of tasks assigned within the window.
+    """
+    period = request.GET.get("period", "week")
+    today = timezone.localdate()
+    if period == "day":
+        start = today
+    elif period == "month":
+        start = today.replace(day=1)
+    else:
+        period = "week"
+        start = today - timedelta(days=today.weekday())
+
+    emps = Employee.objects.filter(active=True).select_related("user")
+    if not _can_manage_all(request):
+        emp = _emp(request)
+        emps = emps.filter(pk=emp.pk) if emp else emps.none()
+
+    rows = []
+    for e in emps:
+        qs = Task.objects.filter(is_deleted=False, assigned_to=e, created_at__date__gte=start)
+        total = qs.count()
+        completed = qs.filter(status=Task.STATUS_COMPLETED).count()
+        overdue = qs.filter(status=Task.STATUS_OVERDUE).count()
+        pct = round(completed * 100 / total) if total else 0
+        rows.append({
+            "name": e.user.get_full_name() or e.user.username,
+            "total": total,
+            "completed": completed,
+            "overdue": overdue,
+            "completed_pct": pct,
+            "not_completed_pct": 100 - pct if total else 0,
+        })
+    rows.sort(key=lambda r: (-r["completed_pct"], -r["total"]))
+    return JsonResponse({"period": period, "scorecard": rows})
+
+
+@login_required
 @require_GET
 def app_task_meta(request):
     return JsonResponse({
@@ -253,37 +314,40 @@ def app_task_create(request):
     if priority not in dict(Task.PRIORITY_CHOICES):
         priority = Task.PRIORITY_MEDIUM
     category = TaskCategory.objects.filter(pk=body.get("category_id"), is_active=True).first()
-    assignee = Employee.objects.filter(pk=body.get("assigned_to"), active=True).first()
 
-    task = Task.objects.create(
-        title=title[:255],
-        description=(body.get("description") or "").strip(),
-        category=category,
-        priority=priority,
-        created_by=request.user,
-        assigned_to=assignee,
-        due_date=parse_date_param(body.get("due_date")),
-        due_time=_parse_time(body.get("due_time")),
-    )
-    for i, ct in enumerate(body.get("checklist") or []):
-        ct = (ct or "").strip()
-        if ct:
-            TaskChecklistItem.objects.create(task=task, title=ct[:255], order=i)
-    for uid in body.get("subscribers") or []:
-        if str(uid).isdigit():
-            TaskSubscriber.objects.get_or_create(task=task, user_id=int(uid))
+    # Accept a list of assignees ("assignees") or a single "assigned_to".
+    raw_ids = body.get("assignees") or ([body.get("assigned_to")] if body.get("assigned_to") else [])
+    emp_ids = [int(x) for x in raw_ids if str(x).isdigit()]
+    assignees = list(Employee.objects.filter(pk__in=emp_ids, active=True)) or [None]
 
-    log_activity(task, request.user, TaskActivity.CREATED, f"Created “{task.title}”.")
-    if assignee:
-        log_activity(task, request.user, TaskActivity.ASSIGNED, f"Assigned to {assignee.user.username}.")
-
+    description = (body.get("description") or "").strip()
+    due_date = parse_date_param(body.get("due_date"))
+    due_time = _parse_time(body.get("due_time"))
+    checklist = [c for c in (body.get("checklist") or []) if (c or "").strip()]
+    subs = [int(u) for u in (body.get("subscribers") or []) if str(u).isdigit()]
     freq = (body.get("repeat_rule") or "").strip()
-    if freq:
-        build_recurrence(task, freq, request.user)
 
-    notify_task(task, request.user, "New task assigned",
-                f"{request.user.username} assigned you “{task.title}”.", event="assigned")
-    return JsonResponse({"ok": True, "id": task.pk})
+    created_ids = []
+    for assignee in assignees:
+        task = Task.objects.create(
+            title=title[:255], description=description, category=category,
+            priority=priority, created_by=request.user, assigned_to=assignee,
+            due_date=due_date, due_time=due_time,
+        )
+        for i, ct in enumerate(checklist):
+            TaskChecklistItem.objects.create(task=task, title=ct.strip()[:255], order=i)
+        for uid in subs:
+            TaskSubscriber.objects.get_or_create(task=task, user_id=uid)
+        log_activity(task, request.user, TaskActivity.CREATED, f"Created “{task.title}”.")
+        if assignee:
+            log_activity(task, request.user, TaskActivity.ASSIGNED, f"Assigned to {assignee.user.username}.")
+        if freq:
+            build_recurrence(task, freq, request.user)
+        notify_task(task, request.user, "New task assigned",
+                    f"{request.user.username} assigned you “{task.title}”.", event="assigned")
+        created_ids.append(task.pk)
+
+    return JsonResponse({"ok": True, "id": created_ids[0], "ids": created_ids})
 
 
 @login_required

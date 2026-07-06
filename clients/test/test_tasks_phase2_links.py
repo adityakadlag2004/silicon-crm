@@ -269,6 +269,44 @@ class NativeApiTests(_Base):
         self.assertIn("Crit", titles)
         self.assertNotIn("Low", titles)
 
+    def test_app_task_create_multi_assignee(self):
+        # second employee
+        u2 = User.objects.create_user(username="p2_emp2", password="pw", first_name="Two")
+        e2 = Employee.objects.create(user=u2, role="employee", salary=0, active=True)
+        c = self.c("admin")
+        resp = c.post(reverse("clients:app_task_create"),
+                      data=json.dumps({"title": "Multi", "assignees": [self.assignee.id, e2.id]}),
+                      content_type="application/json")
+        ids = resp.json()["ids"]
+        self.assertEqual(len(ids), 2)
+        assignees = set(Task.objects.filter(id__in=ids).values_list("assigned_to_id", flat=True))
+        self.assertEqual(assignees, {self.assignee.id, e2.id})
+
+    def test_app_task_category_create(self):
+        resp = self.c("admin").post(reverse("clients:app_task_category_create"),
+                                    data=json.dumps({"name": "Ops2", "color": "#111111"}),
+                                    content_type="application/json")
+        self.assertTrue(resp.json()["ok"])
+        self.assertTrue(TaskCategory.objects.filter(name="Ops2").exists())
+
+    def test_app_task_scorecard(self):
+        Task.objects.create(title="A", created_by=self.users["admin"], assigned_to=self.assignee, status="completed")
+        Task.objects.create(title="B", created_by=self.users["admin"], assigned_to=self.assignee, status="pending")
+        data = self.c("admin").get(reverse("clients:app_task_scorecard"), {"period": "month"}).json()
+        self.assertEqual(data["period"], "month")
+        row = next(r for r in data["scorecard"] if r["total"] >= 2)
+        self.assertEqual(row["completed_pct"] + row["not_completed_pct"], 100)
+
+    def test_web_create_multi_assignee(self):
+        u2 = User.objects.create_user(username="p2_emp3", password="pw", first_name="Three")
+        e2 = Employee.objects.create(user=u2, role="employee", salary=0, active=True)
+        before = Task.objects.count()
+        self.c("admin").post(reverse("clients:task_create"), {
+            "title": "Web multi", "priority": "medium",
+            "assigned_to": [str(self.assignee.id), str(e2.id)],
+        })
+        self.assertEqual(Task.objects.count(), before + 2)
+
     def test_app_links_and_favorite(self):
         link = Link.objects.create(title="AMFI", url="https://amfi.com",
                                    created_by=self.users["admin"])

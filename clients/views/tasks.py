@@ -450,65 +450,65 @@ def task_create(request):
     if cat_id and cat_id.isdigit():
         category = TaskCategory.objects.filter(pk=int(cat_id), is_active=True).first()
 
-    assignee = None
-    emp_id = request.POST.get("assigned_to")
-    if emp_id and emp_id.isdigit():
-        assignee = Employee.objects.filter(pk=int(emp_id), active=True).first()
+    # Multiple assignees → one task per person (each gets its own notification).
+    emp_ids = [int(x) for x in request.POST.getlist("assigned_to") if x.isdigit()]
+    assignees = list(Employee.objects.filter(pk__in=emp_ids, active=True)) or [None]
 
+    description = (request.POST.get("description") or "").strip()
+    due_date = parse_date_param(request.POST.get("due_date"))
+    due_time = _parse_time(request.POST.get("due_time"))
+    repeat_rule = (request.POST.get("repeat_rule") or "").strip()[:20]
+    checklist_titles = [c.strip() for c in request.POST.getlist("checklist_item") if c.strip()]
+    subscriber_ids = [int(u) for u in request.POST.getlist("subscribers") if u.isdigit()]
+
+    created_tasks = []
     with transaction.atomic():
-        task = Task.objects.create(
-            title=title[:255],
-            description=(request.POST.get("description") or "").strip(),
-            category=category,
-            priority=priority,
-            created_by=request.user,
-            assigned_to=assignee,
-            due_date=parse_date_param(request.POST.get("due_date")),
-            due_time=_parse_time(request.POST.get("due_time")),
-            repeat_rule=(request.POST.get("repeat_rule") or "").strip()[:20],
-        )
-
-        # Checklist items (parallel arrays from the form).
-        for i, ct in enumerate(request.POST.getlist("checklist_item")):
-            ct = ct.strip()
-            if ct:
+        for assignee in assignees:
+            task = Task.objects.create(
+                title=title[:255], description=description, category=category,
+                priority=priority, created_by=request.user, assigned_to=assignee,
+                due_date=due_date, due_time=due_time, repeat_rule=repeat_rule,
+            )
+            for i, ct in enumerate(checklist_titles):
                 TaskChecklistItem.objects.create(task=task, title=ct[:255], order=i)
+            for uid in subscriber_ids:
+                TaskSubscriber.objects.get_or_create(task=task, user_id=uid)
+            log_activity(task, request.user, TaskActivity.CREATED, f"Created “{task.title}”.")
+            if assignee:
+                log_activity(task, request.user, TaskActivity.ASSIGNED,
+                             f"Assigned to {assignee.user.username}.")
+            created_tasks.append(task)
 
-        # Subscribers (In Loop) — list of user ids.
-        for uid in request.POST.getlist("subscribers"):
-            if uid.isdigit():
-                TaskSubscriber.objects.get_or_create(task=task, user_id=int(uid))
+    first = created_tasks[0]
 
-        log_activity(task, request.user, TaskActivity.CREATED, f"Created “{task.title}”.")
-        if assignee:
-            log_activity(task, request.user, TaskActivity.ASSIGNED,
-                         f"Assigned to {assignee.user.username}.")
-
-    # Attachments + voice note (best-effort, outside the create transaction).
+    # Attachments + voice note attach to the first task (best-effort).
     warnings = []
     for f in request.FILES.getlist("attachments"):
-        _att, err = _upload_attachment(task, f, request.user)
+        _att, err = _upload_attachment(first, f, request.user)
         if err:
             warnings.append(err)
         else:
-            log_activity(task, request.user, TaskActivity.ATTACHMENT_UPLOADED, f.name[:200])
+            log_activity(first, request.user, TaskActivity.ATTACHMENT_UPLOADED, f.name[:200])
     voice = request.FILES.get("voice_note")
     if voice:
-        _att, err = _upload_attachment(task, voice, request.user, is_voice=True)
+        _att, err = _upload_attachment(first, voice, request.user, is_voice=True)
         if err:
             warnings.append(err)
         else:
-            log_activity(task, request.user, TaskActivity.VOICENOTE_UPLOADED, "Voice note")
+            log_activity(first, request.user, TaskActivity.VOICENOTE_UPLOADED, "Voice note")
 
-    _maybe_create_recurrence(request, task)
-
-    notify_task(task, request.user, "New task assigned",
-                f"{request.user.username} assigned you “{task.title}”.", event="assigned")
+    for task in created_tasks:
+        _maybe_create_recurrence(request, task)
+        notify_task(task, request.user, "New task assigned",
+                    f"{request.user.username} assigned you “{task.title}”.", event="assigned")
 
     if warnings:
         messages.warning(request, " ".join(warnings))
-    messages.success(request, f"Task #{task.pk} created.")
-    return redirect("clients:task_detail", pk=task.pk)
+    if len(created_tasks) > 1:
+        messages.success(request, f"Created {len(created_tasks)} tasks.")
+        return redirect("clients:task_dashboard")
+    messages.success(request, f"Task #{first.pk} created.")
+    return redirect("clients:task_detail", pk=first.pk)
 
 
 def _maybe_create_recurrence(request, task):

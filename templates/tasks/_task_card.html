@@ -23,4 +23,18 @@
       {% with pct=task.checklist_percent %}{% if pct %}<span class="tk-prog" title="{{ pct }}% checklist"><span style="width:{{ pct }}%"></span></span>{% endif %}{% endwith %}
     </div>
   </a>
+  {% if task.can_check and task.status != 'completed' %}
+  <div class="tk-quick">
+    {% if task.status != 'in_progress' %}
+    <form method="post" action="{% url 'clients:task_set_status' task.pk %}" style="margin:0;">{% csrf_token %}
+      <input type="hidden" name="status" value="in_progress">
+      <button type="submit" class="tk-quick-btn tk-q-prog" title="Mark In Progress"><i class="bi bi-play-fill"></i></button>
+    </form>
+    {% endif %}
+    <form method="post" action="{% url 'clients:task_set_status' task.pk %}" style="margin:0;">{% csrf_token %}
+      <input type="hidden" name="status" value="completed">
+      <button type="submit" class="tk-quick-btn tk-q-done" title="Mark Completed"><i class="bi bi-check-lg"></i></button>
+    </form>
+  </div>
+  {% endif %}
 </div>

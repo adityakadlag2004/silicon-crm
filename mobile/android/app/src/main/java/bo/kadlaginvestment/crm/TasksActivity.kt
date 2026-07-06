@@ -47,6 +47,7 @@ import bo.kadlaginvestment.crm.ui.AssignTaskScreen
 import bo.kadlaginvestment.crm.ui.KadlagTheme
 import bo.kadlaginvestment.crm.ui.StatusGreen
 import bo.kadlaginvestment.crm.ui.TaskActivitiesScreen
+import bo.kadlaginvestment.crm.ui.TaskDashboardScreen
 import bo.kadlaginvestment.crm.ui.TaskDetailScreen
 import bo.kadlaginvestment.crm.ui.TaskMoreScreen
 import bo.kadlaginvestment.crm.ui.TasksListScreen
@@ -182,7 +183,7 @@ class TasksActivity : ComponentActivity() {
                                 onOpenTask = { detailId = it }, onSessionExpired = goLogin)
                             subRoute == "all" -> TasksListScreen("all", reloadSignal, { detailId = it }, goLogin)
                             subRoute == "subscribed" -> TasksListScreen("subscribed", reloadSignal, { detailId = it }, goLogin)
-                            tab == 0 -> TasksListScreen("dashboard", reloadSignal, { detailId = it }, goLogin)
+                            tab == 0 -> TaskDashboardScreen(reloadSignal, { detailId = it }, goLogin)
                             tab == 1 -> TasksListScreen("my", reloadSignal, { detailId = it }, goLogin)
                             tab == 2 -> MyAppsScreen(openWeb)
                             tab == 3 -> TasksListScreen("delegated", reloadSignal, { detailId = it }, goLogin)
