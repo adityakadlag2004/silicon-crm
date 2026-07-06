@@ -49,9 +49,17 @@ private val STATUS_TABS = listOf(
     "in_progress" to "In Progress", "completed" to "Completed",
 )
 
-/** Dashboard: team scorecard on top, then swipeable per-status task pages. */
+/**
+ * Reusable swipeable task view: optional team scorecard on top, then a pager of
+ * per-status pages (All/Overdue/Pending/In Progress/Completed). Used by every
+ * task list tab — Dashboard (with scorecard), My Tasks, Delegated, Subscribed,
+ * All — so the experience is identical everywhere. `tab` = the API scope
+ * (all/my/delegated/subscribed).
+ */
 @Composable
-fun TaskDashboardScreen(
+fun TaskPagerScreen(
+    tab: String,
+    showScorecard: Boolean,
     reloadSignal: Int,
     onOpenTask: (Int) -> Unit,
     onSessionExpired: () -> Unit,
@@ -60,7 +68,7 @@ fun TaskDashboardScreen(
     val pager = rememberPagerState(pageCount = { STATUS_TABS.size })
 
     Column(Modifier.fillMaxSize()) {
-        Scorecard(reloadSignal, onSessionExpired)
+        if (showScorecard) Scorecard(reloadSignal, onSessionExpired)
 
         ScrollableTabRow(
             selectedTabIndex = pager.currentPage,
@@ -77,7 +85,7 @@ fun TaskDashboardScreen(
         }
 
         HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
-            StatusTaskList(STATUS_TABS[page].first, reloadSignal, onOpenTask, onSessionExpired)
+            StatusTaskList(tab, STATUS_TABS[page].first, reloadSignal, onOpenTask, onSessionExpired)
         }
     }
 }
@@ -162,9 +170,10 @@ private fun ScoreCardItem(s: JSONObject) {
     }
 }
 
-/** A single status page inside the pager. */
+/** A single status page inside the pager, scoped to `tab`. */
 @Composable
 private fun StatusTaskList(
+    tab: String,
     status: String,
     reloadSignal: Int,
     onOpenTask: (Int) -> Unit,
@@ -176,9 +185,9 @@ private fun StatusTaskList(
     var error by remember { mutableStateOf<String?>(null) }
     var localReload by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(status, reloadSignal, localReload) {
+    LaunchedEffect(tab, status, reloadSignal, localReload) {
         loading = true; error = null
-        val q = if (status.isBlank()) "?tab=all" else "?tab=all&status=$status"
+        val q = if (status.isBlank()) "?tab=$tab" else "?tab=$tab&status=$status"
         when (val r = ApiClient.get("/clients/api/app/tasks/$q")) {
             is ApiClient.Result.Ok -> {
                 val arr = r.json.optJSONArray("tasks")

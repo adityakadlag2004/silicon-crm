@@ -91,7 +91,6 @@ fun TaskMoreScreen(
     onOpenWeb: (String) -> Unit,
 ) {
     val items = buildList {
-        add(Triple("🔔", "Subscribed Tasks", "route:subscribed"))
         add(Triple("📋", "All Tasks", "route:all"))
         add(Triple("📈", "Activities", "route:activities"))
         add(Triple("🗑️", "Deleted Tasks", "web:/clients/tasks/deleted/"))

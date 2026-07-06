@@ -17,8 +17,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -47,10 +47,9 @@ import bo.kadlaginvestment.crm.ui.AssignTaskScreen
 import bo.kadlaginvestment.crm.ui.KadlagTheme
 import bo.kadlaginvestment.crm.ui.StatusGreen
 import bo.kadlaginvestment.crm.ui.TaskActivitiesScreen
-import bo.kadlaginvestment.crm.ui.TaskDashboardScreen
 import bo.kadlaginvestment.crm.ui.TaskDetailScreen
 import bo.kadlaginvestment.crm.ui.TaskMoreScreen
-import bo.kadlaginvestment.crm.ui.TasksListScreen
+import bo.kadlaginvestment.crm.ui.TaskPagerScreen
 
 /** Self-contained native Task module: its own bottom nav, FAB and sub-pages. */
 class TasksActivity : ComponentActivity() {
@@ -68,7 +67,7 @@ class TasksActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             KadlagTheme {
-                var tab by remember { mutableIntStateOf(0) }       // 0 Dash 1 My 2 MyApps 3 Delegated 4 More
+                var tab by remember { mutableIntStateOf(0) }       // 0 Dash 1 My 2 Delegated 3 Subscribed 4 More
                 var subRoute by remember { mutableStateOf<String?>(null) } // all/subscribed/activities from More
                 var detailId by remember {
                     mutableStateOf<Int?>(intent?.getIntExtra("task_id", 0)?.takeIf { it > 0 })
@@ -116,8 +115,8 @@ class TasksActivity : ComponentActivity() {
                 }
 
                 val isAdminOrManager = role == "admin" || role == "manager"
-                val onList = subRoute == "all" || subRoute == "subscribed" ||
-                    (subRoute == null && tab in listOf(0, 1, 3))
+                val onList = subRoute == "all" ||
+                    (subRoute == null && tab in listOf(0, 1, 2, 3))
 
                 Scaffold(
                     topBar = {
@@ -149,8 +148,8 @@ class TasksActivity : ComponentActivity() {
                             val tabs = listOf(
                                 T("Dashboard", Icons.Filled.Home),
                                 T("My Tasks", Icons.Filled.CheckCircle),
-                                T("My Apps", Icons.Filled.List),
                                 T("Delegated", Icons.Filled.Send),
+                                T("Subscribed", Icons.Filled.Notifications),
                                 T("More", Icons.Filled.Menu),
                             )
                             tabs.forEachIndexed { i, t ->
@@ -181,12 +180,11 @@ class TasksActivity : ComponentActivity() {
                         when {
                             subRoute == "activities" -> TaskActivitiesScreen(
                                 onOpenTask = { detailId = it }, onSessionExpired = goLogin)
-                            subRoute == "all" -> TasksListScreen("all", reloadSignal, { detailId = it }, goLogin)
-                            subRoute == "subscribed" -> TasksListScreen("subscribed", reloadSignal, { detailId = it }, goLogin)
-                            tab == 0 -> TaskDashboardScreen(reloadSignal, { detailId = it }, goLogin)
-                            tab == 1 -> TasksListScreen("my", reloadSignal, { detailId = it }, goLogin)
-                            tab == 2 -> MyAppsScreen(openWeb)
-                            tab == 3 -> TasksListScreen("delegated", reloadSignal, { detailId = it }, goLogin)
+                            subRoute == "all" -> TaskPagerScreen("all", false, reloadSignal, { detailId = it }, goLogin)
+                            tab == 0 -> TaskPagerScreen("all", true, reloadSignal, { detailId = it }, goLogin)
+                            tab == 1 -> TaskPagerScreen("my", false, reloadSignal, { detailId = it }, goLogin)
+                            tab == 2 -> TaskPagerScreen("delegated", false, reloadSignal, { detailId = it }, goLogin)
+                            tab == 3 -> TaskPagerScreen("subscribed", false, reloadSignal, { detailId = it }, goLogin)
                             else -> TaskMoreScreen(
                                 isAdminOrManager = isAdminOrManager,
                                 onNavigate = { subRoute = it },
@@ -196,26 +194,6 @@ class TasksActivity : ComponentActivity() {
                     }
                 }
             }
-        }
-    }
-}
-
-@androidx.compose.runtime.Composable
-private fun MyAppsScreen(onOpenWeb: (String) -> Unit) {
-    Column(
-        Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-    ) {
-        Text("🔗", fontSize = 44.sp)
-        Text("Business Links", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-        Text(
-            "Your business links & portals.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
-        )
-        androidx.compose.foundation.layout.Spacer(Modifier.padding(6.dp))
-        androidx.compose.material3.Button(onClick = { onOpenWeb("/clients/links/") }) {
-            Text("Open Links")
         }
     }
 }
