@@ -73,6 +73,9 @@ def send_push_to_user(user, title, body, link=""):
                 # intent extras, which routes to the right screen.
                 notification=messaging.AndroidNotification(
                     icon="ic_launcher", color="#E5B740",
+                    # Must match KadlagMessagingService.CHANNEL_ID so background
+                    # (tray) notifications use the high-importance channel too.
+                    channel_id="ki_notifications",
                 ),
             ),
         )

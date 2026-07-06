@@ -164,6 +164,9 @@ class ShellActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Ensure the push notification channel exists before any FCM arrives.
+        KadlagMessagingService.ensureChannel(this)
+
         // Catch-up sync: uploads any calls that couldn't be synced when they
         // ended (no internet at the time). Server-side dedup makes this safe.
         Thread { CallSyncManager.syncRecentCalls(applicationContext) }.start()
