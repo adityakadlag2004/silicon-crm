@@ -1,0 +1,18 @@
+{# Clickable status tabs (web swipe-pager equivalent). Expects counts, f.status, base_query. #}
+<div class="tk-stabs">
+  <a class="tk-stab {% if not f.status %}active{% endif %}" href="?{{ base_query }}">
+    <span class="d" style="background:#9ca3af"></span>All <span class="n">{{ counts.total }}</span>
+  </a>
+  <a class="tk-stab {% if f.status == 'overdue' %}active{% endif %}" href="?{% if base_query %}{{ base_query }}&{% endif %}status=overdue">
+    <span class="d" style="background:#dc2626"></span>Overdue <span class="n">{{ counts.overdue }}</span>
+  </a>
+  <a class="tk-stab {% if f.status == 'pending' %}active{% endif %}" href="?{% if base_query %}{{ base_query }}&{% endif %}status=pending">
+    <span class="d" style="background:#9ca3af"></span>Pending <span class="n">{{ counts.pending }}</span>
+  </a>
+  <a class="tk-stab {% if f.status == 'in_progress' %}active{% endif %}" href="?{% if base_query %}{{ base_query }}&{% endif %}status=in_progress">
+    <span class="d" style="background:#2563eb"></span>In Progress <span class="n">{{ counts.in_progress }}</span>
+  </a>
+  <a class="tk-stab {% if f.status == 'completed' %}active{% endif %}" href="?{% if base_query %}{{ base_query }}&{% endif %}status=completed">
+    <span class="d" style="background:#16a34a"></span>Completed <span class="n">{{ counts.completed }}</span>
+  </a>
+</div>

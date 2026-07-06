@@ -4,10 +4,7 @@
   <div style="flex:1 1 240px;min-width:200px;">
     <input type="text" name="q" class="form-control form-control-sm" placeholder="Search id, title, description, people…" value="{{ f.q }}" autocomplete="off">
   </div>
-  <select name="status" class="form-select form-select-sm" style="width:auto;">
-    <option value="">All statuses</option>
-    {% for val,label in statuses %}<option value="{{ val }}" {% if f.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-  </select>
+  <input type="hidden" name="status" value="{{ f.status }}">
   <select name="priority" class="form-select form-select-sm" style="width:auto;">
     <option value="">All priorities</option>
     {% for val,label in priorities %}<option value="{{ val }}" {% if f.priority == val %}selected{% endif %}>{{ label }}</option>{% endfor %}

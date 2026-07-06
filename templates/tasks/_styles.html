@@ -29,6 +29,19 @@
   .tk-st-overdue { background:rgba(220,38,38,.16); color:#dc2626; }
   .tk-st-cancelled { background:rgba(107,114,128,.12); color:#9ca3af; text-decoration:line-through; }
 
+  /* Status tabs (web equivalent of the mobile swipe pager) */
+  .tk-stabs { display:flex; gap:.3rem; overflow-x:auto; padding-bottom:.4rem; margin-bottom:1rem;
+    border-bottom:1px solid var(--ki-card-border,#e5e7eb); scrollbar-width:thin; }
+  .tk-stab { display:inline-flex; align-items:center; gap:.4rem; white-space:nowrap; text-decoration:none;
+    padding:.5rem .85rem; border-radius:8px 8px 0 0; font-size:.85rem; font-weight:600;
+    color:var(--ki-text-secondary,#6b7280); border-bottom:2px solid transparent; }
+  .tk-stab:hover { background:var(--kn-hover-bg,#f3f4f6); color:var(--ki-text-primary,#1f2937); }
+  .tk-stab.active { color:var(--ki-primary,#d97706); border-bottom-color:var(--ki-primary,#d97706); }
+  .tk-stab .d { width:8px; height:8px; border-radius:50%; }
+  .tk-stab .n { font-size:.72rem; background:var(--kn-hover-bg,#eef0f3); color:var(--ki-text-secondary,#6b7280);
+    padding:.05rem .4rem; border-radius:999px; font-weight:700; }
+  .tk-stab.active .n { background:var(--ki-primary-pale,#fef3c7); color:var(--ki-primary,#d97706); }
+
   /* Metric cards row (reuse ki-metric-card look, add accent) */
   .tk-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:.75rem; margin-bottom:1.1rem; }
   .tk-metric { background:var(--ki-card-bg,#fff); border:1px solid var(--ki-card-border,#e5e7eb);

@@ -196,6 +196,14 @@ def _apply_filters(qs, request):
     return qs
 
 
+def _query_without(request, *drop):
+    """Current query string with the given params removed (for tab links)."""
+    gp = request.GET.copy()
+    for key in drop:
+        gp.pop(key, None)
+    return gp.urlencode()
+
+
 def _list_context(request, active_tab, title):
     """Shared context for the list/kanban/calendar template."""
     return {
@@ -207,6 +215,7 @@ def _list_context(request, active_tab, title):
         "all_users": User.objects.filter(is_active=True).order_by("username"),
         "saved_filters": SavedTaskFilter.objects.filter(user=request.user),
         "current_query": request.META.get("QUERY_STRING", ""),
+        "base_query": _query_without(request, "status", "page"),
         "statuses": Task.STATUS_CHOICES,
         "priorities": Task.PRIORITY_CHOICES,
         "can_manage_all": _can_manage_all(request),
@@ -248,35 +257,37 @@ def task_dashboard(request):
 @login_required
 def task_my(request):
     emp = _emp(request)
-    qs = _apply_filters(_base_qs().filter(assigned_to=emp), request) if emp else _base_qs().none()
+    base = _base_qs().filter(assigned_to=emp) if emp else _base_qs().none()
     ctx = _list_context(request, "my", "My Tasks")
-    ctx.update(_board_ctx(request, qs, 300))
+    ctx["counts"] = _status_counts(base)
+    ctx.update(_board_ctx(request, _apply_filters(base, request), 300))
     return render(request, "tasks/list.html", ctx)
 
 
 @login_required
 def task_delegated(request):
-    qs = _apply_filters(_base_qs().filter(created_by=request.user), request)
+    base = _base_qs().filter(created_by=request.user)
     ctx = _list_context(request, "delegated", "Delegated Tasks")
-    ctx.update(_board_ctx(request, qs, 300))
+    ctx["counts"] = _status_counts(base)
+    ctx.update(_board_ctx(request, _apply_filters(base, request), 300))
     return render(request, "tasks/list.html", ctx)
 
 
 @login_required
 def task_subscribed(request):
-    qs = _apply_filters(
-        _base_qs().filter(subscribers__user=request.user).distinct(), request
-    )
+    base = _base_qs().filter(subscribers__user=request.user).distinct()
     ctx = _list_context(request, "subscribed", "Subscribed Tasks")
-    ctx.update(_board_ctx(request, qs, 300))
+    ctx["counts"] = _status_counts(base)
+    ctx.update(_board_ctx(request, _apply_filters(base, request), 300))
     return render(request, "tasks/list.html", ctx)
 
 
 @login_required
 def task_all(request):
-    qs = _apply_filters(_scoped_qs(request), request)
+    base = _scoped_qs(request)
     ctx = _list_context(request, "all", "All Tasks")
-    ctx.update(_board_ctx(request, qs, 400))
+    ctx["counts"] = _status_counts(base)
+    ctx.update(_board_ctx(request, _apply_filters(base, request), 400))
     return render(request, "tasks/list.html", ctx)
 
 
@@ -348,6 +359,17 @@ def _cal_events(items):
         }
         for t in items if t.due_date
     ]
+
+
+def _status_counts(qs):
+    """Per-status counts for the status tab bar (across the page's scope)."""
+    return qs.aggregate(
+        total=Count("id"),
+        pending=Count("id", filter=Q(status=Task.STATUS_PENDING)),
+        in_progress=Count("id", filter=Q(status=Task.STATUS_IN_PROGRESS)),
+        completed=Count("id", filter=Q(status=Task.STATUS_COMPLETED)),
+        overdue=Count("id", filter=Q(status=Task.STATUS_OVERDUE)),
+    )
 
 
 def _board_ctx(request, qs, limit):
