@@ -45,6 +45,8 @@ in the WebView.
 | 12 | Incentives & Campaigns builders (rules, slabs, campaigns, products) | `/api/app/incentives|campaigns/` + web AJAX writes | **v3.7** |
 | 13 | Lead sheets (mobile card view over dynamic columns, add/edit rows) | `/api/app/sheets/…` | **v3.8** |
 | 14 | Native login (session-cookie capture, native push + call-config bootstrap) | `/api/app/login/` | **v4.0** |
+| 15 | Task Management module (own bottom nav: Dashboard/My/My Apps/Delegated/More; list+filters+status tabs, detail w/ checklist·comments·activity·actions, full-screen Assign form, Activities) | `/api/app/tasks/…` | **native done, unreleased** |
+| — | Business Links (My Apps tab) | opens web `/clients/links/` for now; native screens later | |
 | — | Financial planner | stays WebView (calc engine is fine there) | |
 
 ## Rules

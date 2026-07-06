@@ -1,0 +1,167 @@
+{# Shared JS for the Task module. Included via extra_js. #}
+<form id="tkCsrf" style="display:none;">{% csrf_token %}</form>
+<script>
+(function(){
+  var CSRF = (document.querySelector('#tkCsrf [name=csrfmiddlewaretoken]')||{}).value || '';
+
+  /* ---------- View toggle (List / Kanban / Calendar) ---------- */
+  var toggle = document.getElementById('tkViewToggle');
+  function showView(v){
+    document.querySelectorAll('.tk-view').forEach(function(el){ el.hidden = (el.dataset.view !== v); });
+    if(toggle){ toggle.querySelectorAll('button').forEach(function(b){
+      b.classList.toggle('ki-btn-primary', b.dataset.view === v);
+      b.classList.toggle('ki-btn-secondary', b.dataset.view !== v);
+    }); }
+    var field = document.getElementById('tkViewField'); if(field) field.value = v;
+    try{ var u = new URL(window.location); u.searchParams.set('view', v); history.replaceState(null,'',u); }catch(e){}
+    if(v === 'calendar') renderCalendar();
+  }
+  if(toggle){
+    toggle.querySelectorAll('button').forEach(function(b){
+      b.addEventListener('click', function(){ showView(b.dataset.view); });
+    });
+    showView(toggle.dataset.default || 'list');
+  }
+
+  /* ---------- Kanban drag & drop ---------- */
+  var dragId = null;
+  document.querySelectorAll('.tk-card[draggable=true]').forEach(function(card){
+    card.addEventListener('dragstart', function(e){ dragId = card.dataset.taskId; e.dataTransfer.effectAllowed='move'; });
+  });
+  document.querySelectorAll('.tk-col').forEach(function(col){
+    col.addEventListener('dragover', function(e){ e.preventDefault(); col.classList.add('drag-over'); });
+    col.addEventListener('dragleave', function(){ col.classList.remove('drag-over'); });
+    col.addEventListener('drop', function(e){
+      e.preventDefault(); col.classList.remove('drag-over');
+      if(!dragId) return;
+      var status = col.dataset.status;
+      var body = new FormData(); body.append('csrfmiddlewaretoken', CSRF); body.append('status', status);
+      fetch('/clients/tasks/'+dragId+'/status/', {method:'POST', body:body, headers:{'X-Requested-With':'XMLHttpRequest'}})
+        .then(function(r){ if(r.ok || r.status===302){ window.location.reload(); } else { alert('Could not move task.'); } })
+        .catch(function(){ alert('Network error.'); });
+      dragId = null;
+    });
+  });
+
+  /* ---------- Checklist builder (assign modal) ---------- */
+  var addBtn = document.getElementById('tkAddCheck');
+  var wrap = document.getElementById('tkChecklist');
+  function addRow(){
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:.4rem;margin-bottom:.4rem;';
+    row.innerHTML = '<input type="text" name="checklist_item" class="form-control form-control-sm" placeholder="Checklist item">'
+      + '<button type="button" class="ki-btn ki-btn-secondary ki-btn-sm">&times;</button>';
+    row.querySelector('button').addEventListener('click', function(){ row.remove(); });
+    wrap.appendChild(row);
+  }
+  if(addBtn){ addBtn.addEventListener('click', addRow); }
+
+  /* ---------- Inline "Add category" in the Assign Task dropdown ---------- */
+  var catSelect = document.getElementById('tkCatSelect');
+  var catAdd = document.getElementById('tkCatAdd');
+  if(catSelect && catAdd){
+    var prevCat = '';
+    catSelect.addEventListener('focus', function(){ prevCat = catSelect.value; });
+    catSelect.addEventListener('change', function(){
+      if(catSelect.value === '__add__'){
+        catAdd.style.display = 'block';
+        var n = document.getElementById('tkNewCatName'); if(n) n.focus();
+      } else { catAdd.style.display = 'none'; prevCat = catSelect.value; }
+    });
+    document.getElementById('tkNewCatCancel').addEventListener('click', function(){
+      catAdd.style.display = 'none'; catSelect.value = prevCat || '';
+    });
+    document.getElementById('tkNewCatSave').addEventListener('click', function(){
+      var name = document.getElementById('tkNewCatName').value.trim();
+      if(!name){ return; }
+      var body = new FormData();
+      body.append('csrfmiddlewaretoken', CSRF);
+      body.append('name', name);
+      body.append('color', document.getElementById('tkNewCatColor').value);
+      fetch(catSelect.dataset.createUrl, {method:'POST', body:body, headers:{'X-Requested-With':'XMLHttpRequest'}})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if(d.ok){
+            var opt = new Option(d.name, d.id, true, true);
+            catSelect.insertBefore(opt, catSelect.querySelector('option[value="__add__"]'));
+            catSelect.value = d.id; prevCat = String(d.id);
+            catAdd.style.display = 'none';
+            document.getElementById('tkNewCatName').value = '';
+          } else { alert(d.error || 'Could not add category.'); }
+        })
+        .catch(function(){ alert('Network error.'); });
+    });
+  }
+
+  /* ---------- Repeat end fields toggle ---------- */
+  var repeat = document.getElementById('tkRepeat'), repeatEnd = document.getElementById('tkRepeatEnd');
+  if(repeat && repeatEnd){
+    repeat.addEventListener('change', function(){ repeatEnd.style.display = repeat.value ? 'block' : 'none'; });
+  }
+
+  /* ---------- Voice recorder (works in modal + detail) ---------- */
+  document.querySelectorAll('[data-voice-record]').forEach(function(btn){
+    var scope = btn.closest('form') || document;
+    var input = scope.querySelector('[data-voice-input]');
+    var status = scope.querySelector('[data-voice-status]');
+    var preview = scope.querySelector('[data-voice-preview]');
+    var recorder = null, chunks = [];
+    btn.addEventListener('click', function(){
+      if(recorder && recorder.state === 'recording'){ recorder.stop(); return; }
+      if(!navigator.mediaDevices){ alert('Recording not supported on this device.'); return; }
+      navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+        chunks = []; recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = function(e){ chunks.push(e.data); };
+        recorder.onstop = function(){
+          var blob = new Blob(chunks, {type:'audio/webm'});
+          var file = new File([blob], 'voice-note.webm', {type:'audio/webm'});
+          if(input){ var dt = new DataTransfer(); dt.items.add(file); input.files = dt.files; }
+          if(preview){ preview.src = URL.createObjectURL(blob); preview.style.display='block'; }
+          if(status) status.textContent = 'Recorded ✓';
+          btn.innerHTML = '<i class="bi bi-mic"></i> Record';
+          stream.getTracks().forEach(function(t){ t.stop(); });
+        };
+        recorder.start();
+        btn.innerHTML = '<i class="bi bi-stop-fill"></i> Stop';
+        if(status) status.textContent = 'Recording…';
+      }).catch(function(){ alert('Microphone permission denied.'); });
+    });
+  });
+
+  /* ---------- Calendar ---------- */
+  var calState = new Date(); calState.setDate(1);
+  function events(){ try{ return JSON.parse(document.getElementById('tkCalData').textContent) || []; }catch(e){ return []; } }
+  function pcolor(p){ return p==='critical'?'#dc2626':p==='high'?'#d97706':p==='low'?'#9ca3af':'#2563eb'; }
+  function renderCalendar(){
+    var body = document.getElementById('tkCalBody'); if(!body) return;
+    var evs = events();
+    var y = calState.getFullYear(), m = calState.getMonth();
+    var title = document.getElementById('tkCalTitle');
+    if(title) title.textContent = calState.toLocaleString('default',{month:'long', year:'numeric'});
+    var first = new Date(y, m, 1);
+    var startDow = (first.getDay()+6)%7; // Monday=0
+    var daysInMonth = new Date(y, m+1, 0).getDate();
+    var todayStr = new Date().toISOString().slice(0,10);
+    var byDate = {}; evs.forEach(function(e){ (byDate[e.date]=byDate[e.date]||[]).push(e); });
+    var html = '', day = 1 - startDow;
+    for(var w=0; w<6 && day<=daysInMonth; w++){
+      html += '<tr>';
+      for(var d=0; d<7; d++, day++){
+        if(day < 1 || day > daysInMonth){ html += '<td class="other"></td>'; continue; }
+        var ds = y + '-' + String(m+1).padStart(2,'0') + '-' + String(day).padStart(2,'0');
+        var cls = ds === todayStr ? ' class="today"' : '';
+        var cell = '<td'+cls+'><span class="day-num">'+day+'</span>';
+        (byDate[ds]||[]).slice(0,4).forEach(function(e){
+          cell += '<a class="ev" style="background:'+pcolor(e.priority)+'" href="/clients/tasks/'+e.id+'/" title="'+e.title.replace(/"/g,'&quot;')+'">'+e.title+'</a>';
+        });
+        html += cell + '</td>';
+      }
+      html += '</tr>';
+    }
+    body.innerHTML = html;
+  }
+  var prev = document.getElementById('tkCalPrev'), next = document.getElementById('tkCalNext');
+  if(prev) prev.addEventListener('click', function(){ calState.setMonth(calState.getMonth()-1); renderCalendar(); });
+  if(next) next.addEventListener('click', function(){ calState.setMonth(calState.getMonth()+1); renderCalendar(); });
+})();
+</script>

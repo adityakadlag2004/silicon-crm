@@ -1,0 +1,71 @@
+{# Shared JS for Business Links: copy-to-clipboard + add/edit modal retargeting. #}
+<script>
+(function(){
+  // Copy URL to clipboard.
+  document.querySelectorAll('[data-copy]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var text = btn.getAttribute('data-copy');
+      var done = function(){ var old = btn.innerHTML; btn.innerHTML = '<i class="bi bi-check2"></i>'; setTimeout(function(){ btn.innerHTML = old; }, 1200); };
+      if(navigator.clipboard){ navigator.clipboard.writeText(text).then(done, done); }
+      else { var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch(e){} ta.remove(); done(); }
+    });
+  });
+
+  // Add/edit modal.
+  var form = document.getElementById('linkForm');
+  var modalEl = document.getElementById('linkModal');
+  var createAction = form ? form.getAttribute('action') : '';
+  function setField(id, v){ var el = document.getElementById(id); if(el) el.value = v || ''; }
+
+  document.querySelectorAll('[data-add-link]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      form.setAttribute('action', createAction);
+      document.getElementById('linkModalTitle').innerHTML = '<i class="bi bi-link-45deg"></i> Add Link';
+      setField('linkTitle',''); setField('linkUrl',''); setField('linkDesc',''); setField('linkIcon','');
+      setField('linkCat', btn.getAttribute('data-cat') || '');
+    });
+  });
+
+  // Inline "Add category" in the link category dropdown.
+  var linkCat = document.getElementById('linkCat');
+  var lkCatAdd = document.getElementById('lkCatAdd');
+  if(linkCat && lkCatAdd){
+    var CSRF = (document.querySelector('#linkForm [name=csrfmiddlewaretoken]')||{}).value || '';
+    var prevCat = '';
+    linkCat.addEventListener('focus', function(){ prevCat = linkCat.value; });
+    linkCat.addEventListener('change', function(){
+      if(linkCat.value === '__add__'){ lkCatAdd.style.display = 'block'; var n=document.getElementById('lkNewCatName'); if(n) n.focus(); }
+      else { lkCatAdd.style.display = 'none'; prevCat = linkCat.value; }
+    });
+    document.getElementById('lkNewCatCancel').addEventListener('click', function(){ lkCatAdd.style.display='none'; linkCat.value = prevCat || ''; });
+    document.getElementById('lkNewCatSave').addEventListener('click', function(){
+      var name = document.getElementById('lkNewCatName').value.trim(); if(!name) return;
+      var body = new FormData(); body.append('csrfmiddlewaretoken', CSRF); body.append('name', name);
+      body.append('color', document.getElementById('lkNewCatColor').value);
+      fetch(linkCat.dataset.createUrl, {method:'POST', body:body, headers:{'X-Requested-With':'XMLHttpRequest'}})
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if(d.ok){
+            var opt = new Option(d.name, d.id, true, true);
+            linkCat.insertBefore(opt, linkCat.querySelector('option[value="__add__"]'));
+            linkCat.value = d.id; prevCat = String(d.id);
+            lkCatAdd.style.display='none'; document.getElementById('lkNewCatName').value='';
+          } else { alert(d.error || 'Could not add category.'); }
+        }).catch(function(){ alert('Network error.'); });
+    });
+  }
+
+  document.querySelectorAll('[data-edit-link]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      form.setAttribute('action', '/clients/links/' + btn.getAttribute('data-id') + '/update/');
+      document.getElementById('linkModalTitle').innerHTML = '<i class="bi bi-pencil"></i> Edit Link';
+      setField('linkTitle', btn.getAttribute('data-title'));
+      setField('linkUrl', btn.getAttribute('data-url'));
+      setField('linkDesc', btn.getAttribute('data-desc'));
+      setField('linkIcon', btn.getAttribute('data-icon'));
+      setField('linkCat', btn.getAttribute('data-cat'));
+      if(window.bootstrap && modalEl){ new bootstrap.Modal(modalEl).show(); }
+    });
+  });
+})();
+</script>

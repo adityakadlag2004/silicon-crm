@@ -1,0 +1,22 @@
+{# One link row. Expects `link` (with .is_fav, .can_edit set), `categories`. #}
+<div class="lk-row">
+  <span class="ic" style="background:{% if link.category %}{{ link.category.color }}{% else %}#2563eb{% endif %}"><i class="bi {% if link.icon %}{{ link.icon }}{% elif link.category %}{{ link.category.icon }}{% else %}bi-link-45deg{% endif %}"></i></span>
+  <div class="body">
+    <a class="t" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.title }} <i class="bi bi-box-arrow-up-right" style="font-size:.7rem;"></i></a>
+    {% if link.description %}<div class="d">{{ link.description }}</div>{% endif %}
+    <div class="u">{{ link.url }}</div>
+  </div>
+  <div class="lk-actions">
+    <form method="post" action="{% url 'clients:link_favorite' link.id %}" style="margin:0;">{% csrf_token %}
+      <button class="lk-star {% if link.is_fav %}on{% endif %}" title="Favorite"><i class="bi {% if link.is_fav %}bi-star-fill{% else %}bi-star{% endif %}"></i></button>
+    </form>
+    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" title="Copy URL" data-copy="{{ link.url }}"><i class="bi bi-clipboard"></i></button>
+    {% if link.can_edit %}
+      <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" title="Edit"
+        data-edit-link data-id="{{ link.id }}" data-title="{{ link.title }}" data-url="{{ link.url }}"
+        data-desc="{{ link.description }}" data-icon="{{ link.icon }}" data-cat="{{ link.category_id|default:'' }}"><i class="bi bi-pencil"></i></button>
+      <form method="post" action="{% url 'clients:link_delete' link.id %}" style="margin:0;" onsubmit="return confirm('Delete “{{ link.title }}”?');">{% csrf_token %}
+        <button class="ki-btn ki-btn-danger ki-btn-sm" title="Delete"><i class="bi bi-trash"></i></button></form>
+    {% endif %}
+  </div>
+</div>

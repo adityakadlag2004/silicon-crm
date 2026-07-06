@@ -1,0 +1,58 @@
+{# List / Kanban / Calendar. Expects `tasks`, `kanban`, `view_mode`, `can_manage_all`. #}
+<div style="display:flex;justify-content:flex-end;margin-bottom:.7rem;">
+  <div class="btn-group" role="group" id="tkViewToggle" data-default="{{ view_mode }}">
+    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-view="list"><i class="bi bi-list-task"></i> List</button>
+    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-view="kanban"><i class="bi bi-kanban"></i> Kanban</button>
+    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-view="calendar"><i class="bi bi-calendar3"></i> Calendar</button>
+  </div>
+</div>
+
+{# ── List ── #}
+<div class="tk-view" data-view="list">
+  {% if tasks %}
+    <div class="tk-list">
+      {% for task in tasks %}{% include "tasks/_task_card.html" %}{% endfor %}
+    </div>
+  {% else %}
+    <div class="tk-empty"><i class="bi bi-clipboard-check" style="font-size:2rem;opacity:.4;"></i><p>No tasks match.</p></div>
+  {% endif %}
+</div>
+
+{# ── Kanban ── #}
+<div class="tk-view" data-view="kanban" hidden>
+  <div class="tk-kanban">
+    <div class="tk-col" data-status="pending">
+      <div class="tk-col-head"><span>Pending</span><span>{{ kanban.pending|length }}</span></div>
+      {% for task in kanban.pending %}{% include "tasks/_task_card.html" with draggable_card=True %}{% endfor %}
+    </div>
+    <div class="tk-col" data-status="in_progress">
+      <div class="tk-col-head"><span>In Progress</span><span>{{ kanban.in_progress|length }}</span></div>
+      {% for task in kanban.in_progress %}{% include "tasks/_task_card.html" with draggable_card=True %}{% endfor %}
+    </div>
+    <div class="tk-col" data-status="completed">
+      <div class="tk-col-head"><span>Completed</span><span>{{ kanban.completed|length }}</span></div>
+      {% for task in kanban.completed %}{% include "tasks/_task_card.html" with draggable_card=True %}{% endfor %}
+    </div>
+    <div class="tk-col" data-status="overdue">
+      <div class="tk-col-head"><span>Overdue</span><span>{{ kanban.overdue|length }}</span></div>
+      {% for task in kanban.overdue %}{% include "tasks/_task_card.html" with draggable_card=True %}{% endfor %}
+    </div>
+  </div>
+  <p class="text-muted" style="font-size:.75rem;margin-top:.5rem;"><i class="bi bi-info-circle"></i> Drag a card to another column to change its status.</p>
+</div>
+
+{# ── Calendar ── #}
+<div class="tk-view" data-view="calendar" hidden>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;">
+    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" id="tkCalPrev"><i class="bi bi-chevron-left"></i></button>
+    <strong id="tkCalTitle"></strong>
+    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" id="tkCalNext"><i class="bi bi-chevron-right"></i></button>
+  </div>
+  <div class="ki-card ki-card-flush" style="overflow-x:auto;">
+    <table class="tk-cal"><thead><tr>
+      <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
+    </tr></thead><tbody id="tkCalBody"></tbody></table>
+  </div>
+</div>
+
+{{ cal_events|json_script:"tkCalData" }}

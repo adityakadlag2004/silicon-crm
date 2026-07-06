@@ -411,6 +411,27 @@
               </ul>
             </div>
 
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-check2-square"></i> Tasks <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_subscribed' %}"><i class="bi bi-bell"></i> Subscribed</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a></li>
+                <li><div class="kn-menu-divider"></div></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted Tasks</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_categories' %}"><i class="bi bi-tags"></i> Categories</a></li>
+              </ul>
+            </div>
+
+            <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
+              <i class="bi bi-link-45deg"></i> Links
+            </a>
+
           {# ─── MANAGER ─── #}
           {% elif request.user.employee.role == "manager" %}
 
@@ -485,6 +506,25 @@
               </ul>
             </div>
 
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-check2-square"></i> Tasks <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_subscribed' %}"><i class="bi bi-bell"></i> Subscribed</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted Tasks</a></li>
+              </ul>
+            </div>
+
+            <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
+              <i class="bi bi-link-45deg"></i> Links
+            </a>
+
           {# ─── EMPLOYEE ─── #}
           {% elif request.user.employee.role == "employee" %}
 
@@ -529,6 +569,25 @@
                 <li><a class="kn-menu-item" href="{% url 'clients:lead_sheets' %}"><i class="bi bi-table"></i> Lead Records</a></li>
               </ul>
             </div>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-check2-square"></i> Tasks <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_subscribed' %}"><i class="bi bi-bell"></i> Subscribed</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted Tasks</a></li>
+              </ul>
+            </div>
+
+            <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
+              <i class="bi bi-link-45deg"></i> Links
+            </a>
 
           {% endif %}
         {% endif %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+{% block page_title %}{{ page_title }}{% endblock %}
+{% block extra_css %}{% include "tasks/_styles.html" %}{% endblock %}
+
+{% block content %}
+  {% include "tasks/_tabs.html" %}
+  {% include "tasks/_filters.html" %}
+  {% include "tasks/_saved_filters.html" %}
+  {% include "tasks/_board.html" %}
+  {% include "tasks/_assign_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}{% include "tasks/_scripts.html" %}{% endblock %}

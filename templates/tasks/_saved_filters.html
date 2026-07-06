@@ -1,0 +1,16 @@
+{# Saved filter chips + save-current form. Expects `saved_filters`, `current_query`. #}
+<div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin-bottom:.9rem;">
+  {% for sf in saved_filters %}
+    <span class="ki-chip" style="display:inline-flex;align-items:center;gap:.3rem;">
+      <a href="?{{ sf.query_string }}" style="text-decoration:none;"><i class="bi bi-bookmark-fill"></i> {{ sf.name }}</a>
+      <form method="post" action="{% url 'clients:task_delete_filter' sf.id %}" style="margin:0;display:inline;">{% csrf_token %}
+        <button class="tk-chip-remove" title="Delete filter">&times;</button>
+      </form>
+    </span>
+  {% endfor %}
+  <form method="post" action="{% url 'clients:task_save_filter' %}" style="margin:0;display:inline-flex;gap:.3rem;">{% csrf_token %}
+    <input type="hidden" name="query_string" value="{{ current_query }}">
+    <input type="text" name="name" class="form-control form-control-sm" placeholder="Save current filter as…" style="width:190px;" maxlength="80" required>
+    <button class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-bookmark-plus"></i> Save</button>
+  </form>
+</div>

@@ -1,0 +1,42 @@
+{# Filter + search + sort bar. Expects `f`, `categories`, `employees`. #}
+<form method="get" class="ki-filter-bar" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
+  <input type="hidden" name="view" value="{{ view_mode }}" id="tkViewField">
+  <div style="flex:1 1 240px;min-width:200px;">
+    <input type="text" name="q" class="form-control form-control-sm" placeholder="Search id, title, description, people…" value="{{ f.q }}" autocomplete="off">
+  </div>
+  <select name="status" class="form-select form-select-sm" style="width:auto;">
+    <option value="">All statuses</option>
+    {% for val,label in statuses %}<option value="{{ val }}" {% if f.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="priority" class="form-select form-select-sm" style="width:auto;">
+    <option value="">All priorities</option>
+    {% for val,label in priorities %}<option value="{{ val }}" {% if f.priority == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="category" class="form-select form-select-sm" style="width:auto;">
+    <option value="">All categories</option>
+    {% for c in categories %}<option value="{{ c.id }}" {% if f.category == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+  </select>
+  {% if can_manage_all %}
+  <select name="assigned_to" class="form-select form-select-sm" style="width:auto;">
+    <option value="">Anyone</option>
+    {% for e in employees %}<option value="{{ e.id }}" {% if f.assigned_to == e.id|stringformat:'s' %}selected{% endif %}>{{ e.user.get_full_name|default:e.user.username }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <select name="range" class="form-select form-select-sm" style="width:auto;">
+    <option value="">Any date</option>
+    <option value="today" {% if f.range == 'today' %}selected{% endif %}>Today</option>
+    <option value="tomorrow" {% if f.range == 'tomorrow' %}selected{% endif %}>Tomorrow</option>
+    <option value="this_week" {% if f.range == 'this_week' %}selected{% endif %}>This week</option>
+    <option value="this_month" {% if f.range == 'this_month' %}selected{% endif %}>This month</option>
+  </select>
+  <select name="sort" class="form-select form-select-sm" style="width:auto;">
+    <option value="newest" {% if f.sort == 'newest' %}selected{% endif %}>Newest</option>
+    <option value="oldest" {% if f.sort == 'oldest' %}selected{% endif %}>Oldest</option>
+    <option value="due" {% if f.sort == 'due' %}selected{% endif %}>Due date</option>
+    <option value="priority" {% if f.sort == 'priority' %}selected{% endif %}>Priority</option>
+    <option value="status" {% if f.sort == 'status' %}selected{% endif %}>Status</option>
+    <option value="title" {% if f.sort == 'title' %}selected{% endif %}>A–Z</option>
+  </select>
+  <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel"></i> Apply</button>
+  <a href="?" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-x-circle"></i> Reset</a>
+</form>

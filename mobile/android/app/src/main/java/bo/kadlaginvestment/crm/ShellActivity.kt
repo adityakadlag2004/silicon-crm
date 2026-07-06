@@ -264,6 +264,10 @@ class ShellActivity : ComponentActivity() {
                             startActivity(Intent(Intent.ACTION_DIAL, Uri.parse(link)))
                         link.contains("/sales/approve/") -> { overlay = "sales_pending" }
                         link.contains("/sales/") -> { overlay = "sales" }
+                        link.contains("/tasks/") -> {
+                            val id = Regex("/tasks/(\\d+)/").find(link)?.groupValues?.get(1)?.toIntOrNull()
+                            TasksActivity.open(this, id)
+                        }
                         link.contains("/calls/followups") -> { overlay = null; selected = 3 }
                         link.startsWith("/") -> openWeb(link)
                     }

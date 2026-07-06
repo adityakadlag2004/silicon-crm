@@ -155,6 +155,12 @@ CRONJOBS = [
     ('0 1 * * *', 'django.core.management.call_command', ['autoclose_stale_leads']),
     # Push reminders for due call follow-ups (Android app), every minute
     ('* * * * *', 'django.core.management.call_command', ['send_followup_reminders']),
+    # Flip past-due tasks to Overdue and notify, every 15 minutes
+    ('*/15 * * * *', 'django.core.management.call_command', ['tasks_mark_overdue']),
+    # Generate recurring task instances, daily at 12:20 AM
+    ('20 0 * * *', 'django.core.management.call_command', ['tasks_generate_recurring']),
+    # Send day-before / same-day task reminders (gated to the configured hour), hourly
+    ('0 * * * *', 'django.core.management.call_command', ['tasks_send_reminders']),
 ]
 
 

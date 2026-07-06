@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Activities{% endblock %}
+{% block page_title %}Activities{% endblock %}
+{% block extra_css %}{% include "tasks/_styles.html" %}{% endblock %}
+
+{% block content %}
+  {% include "tasks/_tabs.html" %}
+
+  <form method="get" class="ki-filter-bar" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
+    <select name="action" class="form-select form-select-sm" style="width:auto;">
+      <option value="">All actions</option>
+      {% for val,label in actions %}<option value="{{ val }}" {% if request.GET.action == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <select name="actor" class="form-select form-select-sm" style="width:auto;">
+      <option value="">Anyone</option>
+      {% for u in users %}<option value="{{ u.id }}" {% if request.GET.actor == u.id|stringformat:'s' %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+    </select>
+    <input type="number" name="task" class="form-control form-control-sm" placeholder="Task #" value="{{ request.GET.task }}" style="width:120px;">
+    <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-funnel"></i> Filter</button>
+    <a href="?" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-x-circle"></i> Reset</a>
+  </form>
+
+  <div class="ki-card"><div class="ki-card-body">
+    <ul class="tk-activity">
+      {% for a in activities %}
+      <li>
+        <span class="ic"><i class="bi bi-dot"></i></span>
+        <span>
+          <strong>{{ a.actor.username|default:"System" }}</strong> · {{ a.get_action_display }}
+          {% if a.detail %}— {{ a.detail }}{% endif %}
+          · <a href="{% url 'clients:task_detail' a.task_id %}">#{{ a.task_id }} {{ a.task.title|truncatechars:40 }}</a>
+        </span>
+        <span class="when">{{ a.created_at|date:"d M Y H:i" }}</span>
+      </li>
+      {% empty %}<li class="text-muted">No activity recorded.</li>{% endfor %}
+    </ul>
+  </div></div>
+  {% include "tasks/_assign_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}{% include "tasks/_scripts.html" %}{% endblock %}

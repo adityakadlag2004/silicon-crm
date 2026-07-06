@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Deleted Tasks{% endblock %}
+{% block page_title %}Deleted Tasks{% endblock %}
+{% block extra_css %}{% include "tasks/_styles.html" %}{% endblock %}
+
+{% block content %}
+  {% include "tasks/_tabs.html" %}
+
+  <div class="ki-card ki-card-flush ki-table-wrap">
+    <table class="ki-table">
+      <thead><tr><th>#</th><th>Title</th><th>Assignee</th><th>Deleted</th><th>By</th><th style="width:180px;">Actions</th></tr></thead>
+      <tbody>
+        {% for task in tasks %}
+        <tr>
+          <td>{{ task.pk }}</td>
+          <td><a href="{% url 'clients:task_detail' task.pk %}">{{ task.title }}</a></td>
+          <td>{% if task.assigned_to %}{{ task.assigned_to.user.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          <td>{{ task.deleted_at|date:"d M Y H:i"|default:"—" }}</td>
+          <td>{{ task.deleted_by.username|default:"—" }}</td>
+          <td>
+            <form method="post" action="{% url 'clients:task_restore' task.pk %}" style="display:inline;">{% csrf_token %}
+              <button class="ki-btn ki-btn-success ki-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Restore</button></form>
+            {% if is_admin %}
+            <form method="post" action="{% url 'clients:task_purge' task.pk %}" style="display:inline;" onsubmit="return confirm('Permanently delete task #{{ task.pk }}? This cannot be undone.');">{% csrf_token %}
+              <button class="ki-btn ki-btn-danger ki-btn-sm"><i class="bi bi-trash"></i></button></form>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="tk-empty"><i class="bi bi-trash" style="font-size:2rem;opacity:.4;"></i><p>Recycle bin is empty.</p></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "tasks/_assign_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}{% include "tasks/_scripts.html" %}{% endblock %}

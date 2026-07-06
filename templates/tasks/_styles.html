@@ -1,0 +1,109 @@
+{# Shared styles for the Task Management module. Included via extra_css. #}
+<style>
+  .tk-tabs { display:flex; gap:.35rem; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
+  .tk-tab {
+    display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .8rem;
+    border-radius:8px; font-size:.85rem; font-weight:600; text-decoration:none;
+    color:var(--ki-text-secondary,#6b7280); border:1px solid transparent; white-space:nowrap;
+  }
+  .tk-tab:hover { background:var(--kn-hover-bg,#f3f4f6); color:var(--ki-text-primary,#1f2937); }
+  .tk-tab.active { background:var(--ki-primary-pale,#fef3c7); color:var(--ki-primary,#d97706); }
+  .tk-tab i { opacity:.8; }
+  .tk-spacer { flex:1 1 auto; }
+
+  /* Priority pills */
+  .tk-pri { display:inline-flex; align-items:center; gap:.3rem; padding:.12rem .5rem;
+    border-radius:999px; font-size:.72rem; font-weight:700; text-transform:capitalize; }
+  .tk-pri::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; }
+  .tk-pri-low { background:rgba(107,114,128,.14); color:#6b7280; }
+  .tk-pri-medium { background:rgba(37,99,235,.14); color:#2563eb; }
+  .tk-pri-high { background:rgba(217,119,6,.16); color:#d97706; }
+  .tk-pri-critical { background:rgba(220,38,38,.16); color:#dc2626; }
+
+  /* Status badges */
+  .tk-st { display:inline-flex; align-items:center; padding:.12rem .5rem; border-radius:6px;
+    font-size:.72rem; font-weight:700; }
+  .tk-st-pending { background:rgba(107,114,128,.14); color:#6b7280; }
+  .tk-st-in_progress { background:rgba(37,99,235,.14); color:#2563eb; }
+  .tk-st-completed { background:rgba(22,163,74,.15); color:#16a34a; }
+  .tk-st-overdue { background:rgba(220,38,38,.16); color:#dc2626; }
+  .tk-st-cancelled { background:rgba(107,114,128,.12); color:#9ca3af; text-decoration:line-through; }
+
+  /* Metric cards row (reuse ki-metric-card look, add accent) */
+  .tk-metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:.75rem; margin-bottom:1.1rem; }
+  .tk-metric { background:var(--ki-card-bg,#fff); border:1px solid var(--ki-card-border,#e5e7eb);
+    border-radius:12px; padding:.85rem 1rem; }
+  .tk-metric .v { font-size:1.5rem; font-weight:800; line-height:1; }
+  .tk-metric .l { font-size:.72rem; text-transform:uppercase; letter-spacing:.03em;
+    color:var(--ki-text-secondary,#6b7280); margin-top:.35rem; }
+  .tk-metric.is-overdue .v { color:#dc2626; }
+  .tk-metric.is-done .v { color:#16a34a; }
+
+  /* Task card */
+  .tk-list { display:flex; flex-direction:column; gap:.55rem; }
+  .tk-card { display:flex; align-items:flex-start; gap:.55rem; background:var(--ki-card-bg,#fff);
+    border:1px solid var(--ki-card-border,#e5e7eb);
+    border-left:4px solid var(--ki-card-border,#e5e7eb); border-radius:10px; padding:.7rem .9rem;
+    transition:box-shadow .12s,border-color .12s; }
+  .tk-card:hover { box-shadow:0 2px 10px rgba(0,0,0,.06); border-color:var(--ki-primary,#d97706); }
+  .tk-card-link { flex:1 1 auto; min-width:0; text-decoration:none; color:inherit; }
+  .tk-check-form { margin:0; flex:0 0 auto; }
+  .tk-card-check { border:none; background:none; cursor:pointer; padding:0; line-height:1;
+    font-size:1.3rem; color:#cbd5e1; margin-top:.05rem; transition:color .12s,transform .12s; }
+  .tk-card-check:hover { color:var(--ki-primary,#16a34a); transform:scale(1.1); }
+  .tk-card-check.done { color:#16a34a; }
+  .tk-card-title.tk-done { text-decoration:line-through; color:var(--ki-text-secondary,#9ca3af); }
+  .tk-card.p-critical { border-left-color:#dc2626; }
+  .tk-card.p-high { border-left-color:#d97706; }
+  .tk-card.p-medium { border-left-color:#2563eb; }
+  .tk-card.p-low { border-left-color:#9ca3af; }
+  .tk-card-top { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+  .tk-card-title { font-weight:700; font-size:.95rem; margin-right:auto; }
+  .tk-id { font-size:.72rem; color:var(--ki-text-secondary,#6b7280); font-weight:700; }
+  .tk-card-meta { display:flex; gap:.9rem; flex-wrap:wrap; align-items:center;
+    margin-top:.45rem; font-size:.78rem; color:var(--ki-text-secondary,#6b7280); }
+  .tk-card-meta i { opacity:.75; }
+  .tk-cat { display:inline-flex; align-items:center; gap:.3rem; font-weight:600; }
+  .tk-cat .dot { width:9px; height:9px; border-radius:3px; display:inline-block; }
+
+  /* Progress bar */
+  .tk-prog { height:5px; border-radius:3px; background:var(--kn-hover-bg,#eef0f3); overflow:hidden; min-width:70px; flex:0 0 70px; }
+  .tk-prog > span { display:block; height:100%; background:var(--ki-primary,#d97706); }
+
+  /* Kanban */
+  .tk-kanban { display:grid; grid-template-columns:repeat(4,minmax(220px,1fr)); gap:.8rem; overflow-x:auto; padding-bottom:.5rem; }
+  .tk-col { background:var(--ki-body-bg,#f9fafb); border:1px solid var(--ki-card-border,#e5e7eb); border-radius:12px; padding:.6rem; min-height:120px; }
+  .tk-col.drag-over { outline:2px dashed var(--ki-primary,#d97706); outline-offset:-4px; }
+  .tk-col-head { display:flex; align-items:center; justify-content:space-between; font-weight:700; font-size:.8rem; text-transform:uppercase; letter-spacing:.03em; margin:.15rem .3rem .55rem; color:var(--ki-text-secondary,#6b7280); }
+  .tk-col .tk-card { margin-bottom:.5rem; cursor:grab; }
+  .tk-col .tk-card:active { cursor:grabbing; }
+
+  /* Calendar */
+  .tk-cal { width:100%; border-collapse:collapse; }
+  .tk-cal th { font-size:.72rem; text-transform:uppercase; color:var(--ki-text-secondary,#6b7280); padding:.4rem; text-align:center; }
+  .tk-cal td { border:1px solid var(--ki-card-border,#e5e7eb); vertical-align:top; height:96px; width:14.28%; padding:.3rem; }
+  .tk-cal .day-num { font-size:.72rem; color:var(--ki-text-secondary,#6b7280); font-weight:700; }
+  .tk-cal td.other { background:var(--ki-body-bg,#f9fafb); opacity:.6; }
+  .tk-cal td.today { outline:2px solid var(--ki-primary,#d97706); outline-offset:-2px; }
+  .tk-cal .ev { display:block; font-size:.7rem; padding:.1rem .3rem; border-radius:5px; margin-top:.2rem;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-decoration:none; color:#fff; background:#2563eb; }
+
+  .tk-empty { text-align:center; padding:2.5rem 1rem; color:var(--ki-text-secondary,#6b7280); }
+
+  /* Detail layout */
+  .tk-detail { display:grid; grid-template-columns:1fr 320px; gap:1.1rem; align-items:start; }
+  @media (max-width:900px){ .tk-detail{ grid-template-columns:1fr; } .tk-kanban{ grid-template-columns:repeat(4,minmax(200px,1fr)); } }
+  .tk-side .ki-card { margin-bottom:.9rem; }
+  .tk-check { display:flex; align-items:center; gap:.55rem; padding:.35rem 0; border-bottom:1px solid var(--ki-card-border,#eee); }
+  .tk-check.done label { text-decoration:line-through; color:var(--ki-text-secondary,#9ca3af); }
+  .tk-check label { margin:0; flex:1; }
+  .tk-activity { list-style:none; margin:0; padding:0; }
+  .tk-activity li { display:flex; gap:.6rem; padding:.5rem 0; border-bottom:1px solid var(--ki-card-border,#eee); font-size:.83rem; }
+  .tk-activity .ic { color:var(--ki-primary,#d97706); }
+  .tk-activity .when { color:var(--ki-text-secondary,#6b7280); font-size:.75rem; margin-left:auto; white-space:nowrap; }
+  .tk-comment { padding:.5rem 0; border-bottom:1px solid var(--ki-card-border,#eee); }
+  .tk-comment .who { font-weight:700; font-size:.82rem; }
+  .tk-comment .when { color:var(--ki-text-secondary,#6b7280); font-size:.72rem; }
+  .tk-chip-remove { border:none; background:none; color:#dc2626; cursor:pointer; }
+  .tk-checklist-add { display:flex; gap:.4rem; margin-top:.5rem; }
+</style>

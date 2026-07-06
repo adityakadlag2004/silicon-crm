@@ -37,9 +37,11 @@ private data class MenuEntry(
     val webPath: String? = null,     // opens WebActivity
     val native: String? = null,      // native route key
     val adminOnly: Boolean = false,
+    val launchTasks: Boolean = false, // opens the native TasksActivity
 )
 
 private val ENTRIES = listOf(
+    MenuEntry("✅", "Tasks", launchTasks = true),
     MenuEntry("🔔", "Notifications", native = "notifications"),
     MenuEntry("🧾", "All Sales", native = "sales"),
     MenuEntry("🔁", "Renewals", native = "renewals"),
@@ -70,6 +72,7 @@ fun MenuScreen(
     onSessionExpired: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var role by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -95,6 +98,7 @@ fun MenuScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable {
                         when {
+                            entry.launchTasks -> bo.kadlaginvestment.crm.TasksActivity.open(context)
                             entry.native != null -> onOpenNative(entry.native)
                             entry.webPath != null -> onOpenWeb(entry.webPath)
                         }

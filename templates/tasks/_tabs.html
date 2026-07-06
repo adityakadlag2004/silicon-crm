@@ -1,0 +1,14 @@
+{# Task module sub-navigation. Expects `active_tab` in context. #}
+<div class="tk-tabs">
+  <a class="tk-tab {% if active_tab == 'dashboard' %}active{% endif %}" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
+  <a class="tk-tab {% if active_tab == 'my' %}active{% endif %}" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a>
+  <a class="tk-tab {% if active_tab == 'delegated' %}active{% endif %}" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a>
+  <a class="tk-tab {% if active_tab == 'subscribed' %}active{% endif %}" href="{% url 'clients:task_subscribed' %}"><i class="bi bi-bell"></i> Subscribed</a>
+  <a class="tk-tab {% if active_tab == 'all' %}active{% endif %}" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a>
+  <a class="tk-tab {% if active_tab == 'deleted' %}active{% endif %}" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted</a>
+  <a class="tk-tab {% if active_tab == 'activities' %}active{% endif %}" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a>
+  {% if is_admin %}<a class="tk-tab {% if active_tab == 'categories' %}active{% endif %}" href="{% url 'clients:task_categories' %}"><i class="bi bi-tags"></i> Categories</a>{% endif %}
+  {% if can_manage_all %}<a class="tk-tab {% if active_tab == 'settings' %}active{% endif %}" href="{% url 'clients:task_settings' %}"><i class="bi bi-gear"></i> Settings</a>{% endif %}
+  <span class="tk-spacer"></span>
+  <button type="button" class="ki-btn ki-btn-primary ki-btn-sm" data-bs-toggle="modal" data-bs-target="#assignTaskModal"><i class="bi bi-plus-lg"></i> Assign Task</button>
+</div>

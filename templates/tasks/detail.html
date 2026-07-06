@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}#{{ task.pk }} {{ task.title }}{% endblock %}
+{% block page_title %}Task #{{ task.pk }}{% endblock %}
+{% block extra_css %}{% include "tasks/_styles.html" %}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:1rem;">
+  <a href="{% url 'clients:task_dashboard' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-left"></i> Tasks</a>
+</div>
+
+{% if task.is_deleted %}
+  <div class="ki-alert ki-alert-warning">This task is in the recycle bin.
+    <form method="post" action="{% url 'clients:task_restore' task.pk %}" style="display:inline;">{% csrf_token %}
+      <button class="ki-btn ki-btn-success ki-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Restore</button></form>
+    {% if is_admin %}<form method="post" action="{% url 'clients:task_purge' task.pk %}" style="display:inline;" onsubmit="return confirm('Permanently delete this task? This cannot be undone.');">{% csrf_token %}
+      <button class="ki-btn ki-btn-danger ki-btn-sm"><i class="bi bi-trash"></i> Delete forever</button></form>{% endif %}
+  </div>
+{% endif %}
+
+<div class="tk-detail">
+  {# ─────────── Main column ─────────── #}
+  <div class="tk-main">
+    <div class="ki-card">
+      <div class="ki-card-body">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+          <span class="tk-id">#{{ task.pk }}</span>
+          <h2 style="margin:0;font-size:1.25rem;flex:1;">{{ task.title }}</h2>
+          <span class="tk-pri tk-pri-{{ task.priority }}">{{ task.get_priority_display }}</span>
+          <span class="tk-st tk-st-{{ task.status }}">{{ task.get_status_display }}</span>
+        </div>
+        {% if task.description %}<p style="margin-top:.8rem;white-space:pre-wrap;">{{ task.description }}</p>{% endif %}
+        <div class="tk-card-meta" style="margin-top:.8rem;">
+          <span><i class="bi bi-person-badge"></i> Created by {{ task.created_by.get_full_name|default:task.created_by.username|default:"—" }}</span>
+          {% if task.assigned_to %}<span><i class="bi bi-person-check"></i> {{ task.assigned_to.user.get_full_name|default:task.assigned_to.user.username }}</span>{% endif %}
+          {% if task.category %}<span class="tk-cat"><span class="dot" style="background:{{ task.category.color }}"></span>{{ task.category.name }}</span>{% endif %}
+          {% if task.due_date %}<span><i class="bi bi-calendar-event"></i> {{ task.due_date|date:"d M Y" }}{% if task.due_time %} {{ task.due_time|time:"H:i" }}{% endif %}</span>{% endif %}
+          <span><i class="bi bi-clock-history"></i> {{ task.created_at|date:"d M Y H:i" }}</span>
+        </div>
+      </div>
+    </div>
+
+    {# ── Checklist ── #}
+    <div class="ki-card">
+      <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-check2-square"></i> Checklist</span>
+        <span class="text-muted" style="font-size:.8rem;">{{ task.checklist_percent }}%</span></div>
+      <div class="ki-card-body">
+        <div class="tk-prog" style="flex:auto;margin-bottom:.7rem;"><span style="width:{{ task.checklist_percent }}%"></span></div>
+        {% for item in checklist %}
+          <div class="tk-check {% if item.is_done %}done{% endif %}">
+            {% if can_edit %}
+            <form method="post" action="{% url 'clients:task_toggle_checklist' task.pk item.id %}" style="margin:0;">{% csrf_token %}
+              <button type="submit" class="tk-chip-remove" style="color:{% if item.is_done %}#16a34a{% else %}#9ca3af{% endif %};font-size:1.1rem;">
+                <i class="bi {% if item.is_done %}bi-check-square-fill{% else %}bi-square{% endif %}"></i></button>
+            </form>
+            {% else %}<i class="bi {% if item.is_done %}bi-check-square-fill{% else %}bi-square{% endif %}"></i>{% endif %}
+            <label>{{ item.title }}{% if item.is_done and item.completed_by %} <span class="text-muted" style="font-size:.72rem;">— {{ item.completed_by.username }}</span>{% endif %}</label>
+          </div>
+        {% empty %}<p class="text-muted" style="font-size:.85rem;">No checklist items.</p>{% endfor %}
+        {% if can_edit %}
+        <form method="post" action="{% url 'clients:task_add_checklist' task.pk %}" class="tk-checklist-add">{% csrf_token %}
+          <input type="text" name="title" class="form-control form-control-sm" placeholder="Add checklist item" required>
+          <button class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-plus"></i></button>
+        </form>{% endif %}
+      </div>
+    </div>
+
+    {# ── Attachments ── #}
+    <div class="ki-card">
+      <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-paperclip"></i> Attachments &amp; Voice Notes</span></div>
+      <div class="ki-card-body">
+        {% for att in attachments %}
+          <div style="display:flex;align-items:center;gap:.6rem;padding:.4rem 0;border-bottom:1px solid var(--ki-card-border,#eee);">
+            <i class="bi {% if att.is_voice_note %}bi-mic-fill{% elif 'image' in att.mime %}bi-image{% elif 'pdf' in att.mime %}bi-file-earmark-pdf{% else %}bi-file-earmark{% endif %}" style="font-size:1.2rem;color:var(--ki-primary,#d97706);"></i>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:.85rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;">{{ att.filename }}</div>
+              {% if att.is_voice_note or 'audio' in att.mime %}
+                <audio controls preload="none" src="{% url 'clients:task_attachment_download' att.id %}" style="height:34px;max-width:100%;"></audio>
+              {% elif 'image' in att.mime %}
+                <a href="{% url 'clients:task_attachment_download' att.id %}" target="_blank"><img src="{% url 'clients:task_attachment_download' att.id %}" style="max-height:90px;border-radius:6px;margin-top:.3rem;"></a>
+              {% endif %}
+            </div>
+            <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:task_attachment_download' att.id %}?dl=1"><i class="bi bi-download"></i></a>
+            {% if can_edit %}<form method="post" action="{% url 'clients:task_delete_attachment' task.pk att.id %}" style="margin:0;" onsubmit="return confirm('Delete this file?');">{% csrf_token %}<button class="ki-btn ki-btn-danger ki-btn-sm"><i class="bi bi-trash"></i></button></form>{% endif %}
+          </div>
+        {% empty %}<p class="text-muted" style="font-size:.85rem;">No attachments.</p>{% endfor %}
+
+        {% if can_edit %}
+        <form method="post" action="{% url 'clients:task_upload_attachment' task.pk %}" enctype="multipart/form-data" style="margin-top:.7rem;display:flex;gap:.4rem;flex-wrap:wrap;">{% csrf_token %}
+          <input type="file" name="attachments" class="form-control form-control-sm" multiple style="flex:1;min-width:180px;">
+          <button class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-upload"></i> Upload</button>
+        </form>
+        <form method="post" action="{% url 'clients:task_upload_attachment' task.pk %}" enctype="multipart/form-data" style="margin-top:.5rem;display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">{% csrf_token %}
+          <input type="hidden" name="is_voice" value="1">
+          <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-voice-record><i class="bi bi-mic"></i> Record</button>
+          <span data-voice-status class="text-muted" style="font-size:.8rem;"></span>
+          <input type="file" name="voice_note" accept="audio/*" data-voice-input style="display:none;">
+          <audio data-voice-preview controls style="display:none;height:34px;"></audio>
+          <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-save"></i> Save note</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── Comments ── #}
+    <div class="ki-card">
+      <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-chat-left-text"></i> Comments</span></div>
+      <div class="ki-card-body">
+        {% for c in comments %}
+          <div class="tk-comment"><span class="who">{{ c.author.get_full_name|default:c.author.username|default:"—" }}</span>
+            <span class="when">· {{ c.created_at|date:"d M Y H:i" }}</span>
+            <div style="white-space:pre-wrap;margin-top:.2rem;">{{ c.body }}</div></div>
+        {% empty %}<p class="text-muted" style="font-size:.85rem;">No comments yet.</p>{% endfor %}
+        <form method="post" action="{% url 'clients:task_add_comment' task.pk %}" style="margin-top:.6rem;display:flex;gap:.4rem;">{% csrf_token %}
+          <input type="text" name="body" class="form-control form-control-sm" placeholder="Write a comment…" required>
+          <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-send"></i></button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  {# ─────────── Side column ─────────── #}
+  <div class="tk-side">
+    {% if can_edit %}
+    <div class="ki-card"><div class="ki-card-header"><span class="ki-card-title">Update</span></div>
+      <div class="ki-card-body">
+        <form method="post" action="{% url 'clients:task_set_status' task.pk %}" style="margin-bottom:.6rem;">{% csrf_token %}
+          <label class="form-label" style="font-size:.75rem;">Status</label>
+          <div style="display:flex;gap:.3rem;"><select name="status" class="form-select form-select-sm">
+            {% for val,label in statuses %}<option value="{{ val }}" {% if task.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select><button class="ki-btn ki-btn-secondary ki-btn-sm">Set</button></div>
+        </form>
+        <form method="post" action="{% url 'clients:task_set_priority' task.pk %}" style="margin-bottom:.6rem;">{% csrf_token %}
+          <label class="form-label" style="font-size:.75rem;">Priority</label>
+          <div style="display:flex;gap:.3rem;"><select name="priority" class="form-select form-select-sm">
+            {% for val,label in priorities %}<option value="{{ val }}" {% if task.priority == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select><button class="ki-btn ki-btn-secondary ki-btn-sm">Set</button></div>
+        </form>
+        <form method="post" action="{% url 'clients:task_set_category' task.pk %}" style="margin-bottom:.6rem;">{% csrf_token %}
+          <label class="form-label" style="font-size:.75rem;">Category</label>
+          <div style="display:flex;gap:.3rem;"><select name="category" class="form-select form-select-sm">
+            <option value="">— None —</option>
+            {% for c in categories %}<option value="{{ c.id }}" {% if task.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+          </select><button class="ki-btn ki-btn-secondary ki-btn-sm">Set</button></div>
+        </form>
+        <form method="post" action="{% url 'clients:task_set_due' task.pk %}">{% csrf_token %}
+          <label class="form-label" style="font-size:.75rem;">Due date / time</label>
+          <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
+            <input type="date" name="due_date" class="form-control form-control-sm" value="{{ task.due_date|date:'Y-m-d' }}" style="flex:1;">
+            <input type="time" name="due_time" class="form-control form-control-sm" value="{{ task.due_time|time:'H:i' }}" style="width:auto;">
+            <button class="ki-btn ki-btn-secondary ki-btn-sm">Set</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Subscribers #}
+    <div class="ki-card"><div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-people"></i> In Loop</span></div>
+      <div class="ki-card-body">
+        {% for sub in subscribers %}
+          <div style="display:flex;align-items:center;gap:.4rem;padding:.25rem 0;">
+            <i class="bi bi-person-circle"></i><span style="flex:1;font-size:.85rem;">{{ sub.user.get_full_name|default:sub.user.username }}</span>
+            {% if can_edit %}<form method="post" action="{% url 'clients:task_remove_subscriber' task.pk %}" style="margin:0;">{% csrf_token %}<input type="hidden" name="subscriber" value="{{ sub.id }}"><button class="tk-chip-remove">&times;</button></form>{% endif %}
+          </div>
+        {% empty %}<p class="text-muted" style="font-size:.82rem;">No subscribers.</p>{% endfor %}
+        {% if can_edit %}
+        <form method="post" action="{% url 'clients:task_add_subscriber' task.pk %}" style="margin-top:.5rem;display:flex;gap:.3rem;">{% csrf_token %}
+          <select name="user" class="form-select form-select-sm" required>
+            <option value="">Add someone…</option>
+            {% for u in all_users %}<option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+          </select><button class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-plus"></i></button>
+        </form>{% endif %}
+      </div>
+    </div>
+
+    {# Activity timeline #}
+    <div class="ki-card"><div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-activity"></i> Activity</span></div>
+      <div class="ki-card-body">
+        <ul class="tk-activity">
+          {% for a in activities %}
+            <li><span class="ic"><i class="bi bi-dot"></i></span>
+              <span>{{ a.actor.username|default:"System" }} · {{ a.get_action_display }}{% if a.detail %} — {{ a.detail }}{% endif %}</span>
+              <span class="when">{{ a.created_at|date:"d M H:i" }}</span></li>
+          {% empty %}<li class="text-muted">No activity.</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    {% if not task.is_deleted and can_edit %}
+    <form method="post" action="{% url 'clients:task_delete' task.pk %}" onsubmit="return confirm('Move this task to the recycle bin?');">{% csrf_token %}
+      <button class="ki-btn ki-btn-danger ki-btn-sm" style="width:100%;"><i class="bi bi-trash"></i> Delete task</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}{% include "tasks/_scripts.html" %}{% endblock %}

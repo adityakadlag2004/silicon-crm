@@ -33,6 +33,12 @@
             android:theme="@style/AppTheme.NoActionBar"
             android:exported="false" />
 
+        <!-- Native Task Management module (own bottom nav). -->
+        <activity
+            android:name=".TasksActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:exported="false" />
+
         <!-- WebView for screens not yet converted to native UI. -->
         <activity
             android:name=".WebActivity"

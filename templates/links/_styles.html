@@ -1,0 +1,29 @@
+{# Shared styles for the Business Links module. #}
+<style>
+  .lk-cats { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1rem; }
+  .lk-cat-card { background:var(--ki-card-bg,#fff); border:1px solid var(--ki-card-border,#e5e7eb);
+    border-top:3px solid var(--ki-primary,#2563eb); border-radius:12px; padding:1rem; display:flex; flex-direction:column; }
+  .lk-cat-head { display:flex; align-items:center; gap:.55rem; margin-bottom:.6rem; }
+  .lk-cat-head .ic { width:36px; height:36px; border-radius:9px; display:grid; place-items:center; color:#fff; font-size:1.05rem; }
+  .lk-cat-head h3 { margin:0; font-size:1rem; }
+  .lk-cat-head .cnt { margin-left:auto; font-size:.75rem; color:var(--ki-text-secondary,#6b7280); }
+  .lk-preview { list-style:none; margin:0 0 .6rem; padding:0; flex:1; }
+  .lk-preview li { padding:.28rem 0; border-bottom:1px solid var(--ki-card-border,#f0f0f0); font-size:.85rem; }
+  .lk-preview li a { text-decoration:none; color:var(--ki-text-primary,#1f2937); display:flex; align-items:center; gap:.4rem; }
+  .lk-preview li a:hover { color:var(--ki-primary,#2563eb); }
+  .lk-cat-actions { display:flex; gap:.4rem; }
+
+  .lk-list { display:flex; flex-direction:column; gap:.5rem; }
+  .lk-row { display:flex; align-items:center; gap:.7rem; background:var(--ki-card-bg,#fff);
+    border:1px solid var(--ki-card-border,#e5e7eb); border-radius:10px; padding:.6rem .8rem; }
+  .lk-row .ic { width:34px; height:34px; border-radius:8px; display:grid; place-items:center; color:#fff; flex:0 0 34px; }
+  .lk-row .body { flex:1; min-width:0; }
+  .lk-row .body a.t { font-weight:700; text-decoration:none; color:var(--ki-text-primary,#1f2937); }
+  .lk-row .body a.t:hover { color:var(--ki-primary,#2563eb); }
+  .lk-row .u { font-size:.75rem; color:var(--ki-text-secondary,#6b7280); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lk-row .d { font-size:.8rem; color:var(--ki-text-secondary,#6b7280); }
+  .lk-actions { display:flex; gap:.25rem; align-items:center; flex-wrap:wrap; }
+  .lk-star { border:none; background:none; cursor:pointer; font-size:1.1rem; color:#d1d5db; }
+  .lk-star.on { color:#f59e0b; }
+  .lk-empty { text-align:center; padding:2.5rem 1rem; color:var(--ki-text-secondary,#6b7280); }
+</style>

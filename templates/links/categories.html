@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Link Categories{% endblock %}
+{% block page_title %}Link Categories{% endblock %}
+{% block extra_css %}{% include "links/_styles.html" %}{% endblock %}
+
+{% block content %}
+  <div style="margin-bottom:1rem;"><a href="{% url 'clients:links_dashboard' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-left"></i> All Links</a></div>
+
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">
+    <div class="ki-card ki-card-flush ki-table-wrap">
+      <table class="ki-table">
+        <thead><tr><th>Category</th><th>Description</th><th>Links</th><th>Status</th><th style="width:150px;">Actions</th></tr></thead>
+        <tbody>
+          {% for c in categories %}
+          <tr>
+            <td><span style="display:inline-flex;align-items:center;gap:.4rem;"><span style="width:14px;height:14px;border-radius:4px;background:{{ c.color }};display:inline-block;"></span><i class="bi {{ c.icon }}"></i> {{ c.name }}</span></td>
+            <td class="text-muted">{{ c.description|default:"—" }}</td>
+            <td>{{ c.link_count }}</td>
+            <td>{% if c.is_active %}<span class="ki-badge ki-badge-success">Active</span>{% else %}<span class="ki-badge ki-badge-muted">Inactive</span>{% endif %}</td>
+            <td>
+              <form method="post" style="display:inline;">{% csrf_token %}<input type="hidden" name="action" value="toggle"><input type="hidden" name="id" value="{{ c.id }}">
+                <button class="ki-btn ki-btn-secondary ki-btn-sm">{% if c.is_active %}Deactivate{% else %}Activate{% endif %}</button></form>
+              <form method="post" style="display:inline;" onsubmit="return confirm('Delete “{{ c.name }}”? Its links become uncategorized.');">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ c.id }}">
+                <button class="ki-btn ki-btn-danger ki-btn-sm"><i class="bi bi-trash"></i></button></form>
+            </td>
+          </tr>
+          {% empty %}<tr><td colspan="5" class="lk-empty">No categories yet.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ki-card"><div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-plus-circle"></i> New category</span></div>
+      <div class="ki-card-body">
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="create">
+          <div class="mb-2"><label class="form-label">Name</label><input type="text" name="name" class="form-control form-control-sm" required maxlength="80"></div>
+          <div class="mb-2"><label class="form-label">Description</label><input type="text" name="description" class="form-control form-control-sm" maxlength="255"></div>
+          <div class="row g-2">
+            <div class="col-6"><label class="form-label">Color</label><input type="color" name="color" class="form-control form-control-sm form-control-color" value="#2563eb"></div>
+            <div class="col-6"><label class="form-label">Icon</label><input type="text" name="icon" class="form-control form-control-sm" value="bi-link-45deg"></div>
+          </div>
+          <button class="ki-btn ki-btn-primary ki-btn-sm" style="width:100%;margin-top:.6rem;"><i class="bi bi-check-lg"></i> Add category</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock %}

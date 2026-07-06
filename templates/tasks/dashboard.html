@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Tasks{% endblock %}
+{% block page_title %}Tasks{% endblock %}
+{% block extra_css %}{% include "tasks/_styles.html" %}{% endblock %}
+
+{% block content %}
+  {% include "tasks/_tabs.html" %}
+
+  <div class="tk-metrics">
+    <div class="tk-metric"><div class="v">{{ counts.total }}</div><div class="l">Total</div></div>
+    <div class="tk-metric"><div class="v">{{ counts.pending }}</div><div class="l">Pending</div></div>
+    <div class="tk-metric"><div class="v">{{ counts.in_progress }}</div><div class="l">In Progress</div></div>
+    <div class="tk-metric is-done"><div class="v">{{ counts.completed }}</div><div class="l">Completed</div></div>
+    <div class="tk-metric is-overdue"><div class="v">{{ counts.overdue }}</div><div class="l">Overdue</div></div>
+  </div>
+
+  {% include "tasks/_filters.html" %}
+  {% include "tasks/_saved_filters.html" %}
+  {% include "tasks/_board.html" %}
+  {% include "tasks/_assign_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}{% include "tasks/_scripts.html" %}{% endblock %}

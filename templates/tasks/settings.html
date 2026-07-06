@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Task Settings{% endblock %}
+{% block page_title %}Task Settings{% endblock %}
+{% block extra_css %}{% include "tasks/_styles.html" %}{% endblock %}
+
+{% block content %}
+  {% include "tasks/_tabs.html" %}
+
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:1rem;align-items:start;">
+    <div class="ki-card">
+      <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-bell"></i> My notifications</span></div>
+      <div class="ki-card-body">
+        <p class="text-muted" style="font-size:.85rem;">Choose which task events notify you (in-app &amp; on your phone).</p>
+        <form method="post">{% csrf_token %}
+          <input type="hidden" name="scope" value="prefs">
+          {% for field, label, checked in pref_fields %}
+            <div class="ki-form-check" style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;">
+              <input type="checkbox" class="form-check-input" id="{{ field }}" name="{{ field }}" {% if checked %}checked{% endif %}>
+              <label class="form-check-label" for="{{ field }}">{{ label }}</label>
+            </div>
+          {% endfor %}
+          <button class="ki-btn ki-btn-primary ki-btn-sm" style="margin-top:.7rem;"><i class="bi bi-save"></i> Save preferences</button>
+        </form>
+      </div>
+    </div>
+
+    {% if is_admin %}
+    <div class="ki-card">
+      <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-alarm"></i> Reminder rules</span></div>
+      <div class="ki-card-body">
+        <p class="text-muted" style="font-size:.85rem;">Firm-wide defaults for task reminders.</p>
+        <form method="post">{% csrf_token %}
+          <input type="hidden" name="scope" value="reminders">
+          <div class="ki-form-check" style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;">
+            <input type="checkbox" class="form-check-input" id="remind_day_before" name="remind_day_before" {% if reminder.remind_day_before %}checked{% endif %}>
+            <label class="form-check-label" for="remind_day_before">One day before due date</label>
+          </div>
+          <div class="ki-form-check" style="display:flex;align-items:center;gap:.5rem;padding:.3rem 0;">
+            <input type="checkbox" class="form-check-input" id="remind_same_day" name="remind_same_day" {% if reminder.remind_same_day %}checked{% endif %}>
+            <label class="form-check-label" for="remind_same_day">On the due day</label>
+          </div>
+          <label class="form-label" style="margin-top:.6rem;">Reminder hour (0–23)</label>
+          <input type="number" name="same_day_hour" min="0" max="23" class="form-control form-control-sm" value="{{ reminder.same_day_hour }}" style="width:100px;">
+          <div class="form-text">Overdue alerts are always sent when a task passes its deadline.</div>
+          <button class="ki-btn ki-btn-primary ki-btn-sm" style="margin-top:.7rem;"><i class="bi bi-save"></i> Save reminders</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% include "tasks/_assign_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}{% include "tasks/_scripts.html" %}{% endblock %}

@@ -116,6 +116,83 @@ def get_or_create_client_folder(client_name: str, client_id: int) -> tuple[str, 
     return folder_id, _folder_url(folder_id)
 
 
+def get_or_create_tasks_root() -> str:
+    """Return the folder id of the shared "CRM Tasks" folder under the Drive root.
+
+    Task attachments and voice notes live here (one flat folder is enough — each
+    file name is prefixed with the task id). Created on first use.
+    """
+    service = _service()
+    root_id = _root_folder_id()
+    folder_name = "CRM Tasks"
+
+    existing = _find_subfolder(service, root_id, folder_name)
+    if existing:
+        return existing
+
+    created = service.files().create(
+        body={"name": folder_name, "mimeType": _FOLDER_MIME, "parents": [root_id]},
+        fields="id",
+        supportsAllDrives=True,
+    ).execute()
+    return created["id"]
+
+
+def upload_file(parent_id: str, filename: str, mime: str, fileobj) -> tuple[str, str]:
+    """Upload a file-like object into `parent_id`. Returns (file_id, view_link).
+
+    `fileobj` must be a binary stream (e.g. an UploadedFile). Raises on failure —
+    callers decide how to surface it (attachments degrade gracefully to an error
+    message rather than a 500).
+    """
+    from googleapiclient.http import MediaIoBaseUpload
+
+    service = _service()
+    media = MediaIoBaseUpload(fileobj, mimetype=mime or "application/octet-stream",
+                              resumable=False)
+    created = service.files().create(
+        body={"name": filename, "parents": [parent_id]},
+        media_body=media,
+        fields="id, webViewLink",
+        supportsAllDrives=True,
+    ).execute()
+    return created["id"], created.get("webViewLink", "")
+
+
+def stream_file(file_id: str):
+    """Fetch a Drive file's bytes and mime type for the download-proxy view.
+
+    Returns (content_bytes, mime_type). Keeps Drive auth server-side so previews
+    and audio playback work inside the WebView app without exposing credentials.
+    """
+    import io
+
+    from googleapiclient.http import MediaIoBaseDownload
+
+    service = _service()
+    meta = service.files().get(
+        fileId=file_id, fields="mimeType, name", supportsAllDrives=True,
+    ).execute()
+    request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+    buffer = io.BytesIO()
+    downloader = MediaIoBaseDownload(buffer, request)
+    done = False
+    while not done:
+        _status, done = downloader.next_chunk()
+    return buffer.getvalue(), meta.get("mimeType", "application/octet-stream")
+
+
+def delete_file(file_id: str) -> bool:
+    """Best-effort delete of a Drive file. Never raises."""
+    if not file_id:
+        return False
+    try:
+        _service().files().delete(fileId=file_id, supportsAllDrives=True).execute()
+        return True
+    except Exception:
+        return False
+
+
 def archive_client_folder(folder_id: str, client_name: str, client_id: int) -> bool:
     """Mark a client's Drive folder as archived by prefixing the name with [DELETED].
 

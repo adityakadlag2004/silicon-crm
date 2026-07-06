@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ category.name }}{% endblock %}
+{% block page_title %}{{ category.name }}{% endblock %}
+{% block extra_css %}{% include "links/_styles.html" %}{% endblock %}
+
+{% block content %}
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
+    <a href="{% url 'clients:links_dashboard' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-left"></i> All Links</a>
+    <form method="get" style="flex:1 1 220px;display:flex;gap:.4rem;">
+      <input type="text" name="q" class="form-control form-control-sm" placeholder="Search in {{ category.name }}…" value="{{ q }}">
+      <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-search"></i></button>
+    </form>
+    <span style="flex:1 1 auto;"></span>
+    <button type="button" class="ki-btn ki-btn-primary ki-btn-sm" data-add-link data-cat="{{ category.id }}" data-bs-toggle="modal" data-bs-target="#linkModal"><i class="bi bi-plus-lg"></i> Add Link</button>
+  </div>
+
+  {% if category.description %}<p class="text-muted">{{ category.description }}</p>{% endif %}
+
+  <div class="lk-list">
+    {% for link in links %}
+      <div style="display:flex;gap:.3rem;align-items:stretch;">
+        <div style="flex:1;">{% include "links/_link_row.html" %}</div>
+        {% if link.can_edit %}
+        <div style="display:flex;flex-direction:column;gap:.2rem;">
+          <form method="post" action="{% url 'clients:link_move' link.id %}" style="margin:0;">{% csrf_token %}<input type="hidden" name="dir" value="up"><button class="ki-btn ki-btn-secondary ki-btn-sm" title="Move up"><i class="bi bi-chevron-up"></i></button></form>
+          <form method="post" action="{% url 'clients:link_move' link.id %}" style="margin:0;">{% csrf_token %}<input type="hidden" name="dir" value="down"><button class="ki-btn ki-btn-secondary ki-btn-sm" title="Move down"><i class="bi bi-chevron-down"></i></button></form>
+        </div>
+        {% endif %}
+      </div>
+    {% empty %}
+      <div class="lk-empty"><i class="bi bi-link-45deg" style="font-size:2rem;opacity:.4;"></i><p>No links in this category yet.</p></div>
+    {% endfor %}
+  </div>
+
+  {% include "links/_link_modal.html" %}
+{% endblock %}
+
+{% block extra_js %}{% include "links/_scripts.html" %}{% endblock %}
