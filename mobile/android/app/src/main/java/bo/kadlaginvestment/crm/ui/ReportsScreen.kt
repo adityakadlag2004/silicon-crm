@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -246,13 +247,15 @@ private fun BucketLegend(buckets: List<String>) {
     }
 }
 
-/** Horizontally-scrollable stacked bars: one column per period, each split
- * into product segments (bottom-up, index-aligned to [buckets]). */
+/** Full-width stacked bars: one column per period, sharing the screen width
+ * evenly (columns re-flow as the count changes), each split into product
+ * segments (bottom-up, index-aligned to [buckets]) with a divider and, where
+ * there is room, the compartment's amount. */
 @Composable
 private fun StackedBars(
     rows: List<JSONObject>,
     buckets: List<String>,
-    plotHeight: Dp = 150.dp,
+    plotHeight: Dp = 160.dp,
 ) {
     if (rows.isEmpty()) {
         Text("No data.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
@@ -260,24 +263,31 @@ private fun StackedBars(
     }
     val maxAmount = rows.maxOf { it.optDouble("amount", 0.0) }
     val dividerColor = MaterialTheme.colorScheme.surface
+    val showSegLabels = rows.size <= 8
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         rows.forEach { r ->
             val amount = r.optDouble("amount", 0.0)
             val byProduct = r.optJSONArray("by_product").toDoubles()
             val barHeight = if (maxAmount > 0) plotHeight * (amount / maxAmount).toFloat() else 0.dp
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
                 Text(
                     if (amount > 0) compactRupees(amount) else "–",
-                    fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                    fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(4.dp))
-                Box(Modifier.width(28.dp).height(plotHeight), contentAlignment = Alignment.BottomCenter) {
+                Box(
+                    Modifier.fillMaxWidth(0.66f).widthIn(max = 52.dp).height(plotHeight),
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
                     Column(
-                        Modifier.width(28.dp).height(barHeight)
+                        Modifier.fillMaxWidth().height(barHeight)
                             .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)),
                     ) {
                         // Highest bucket index on top, bucket 0 at the bottom,
@@ -288,11 +298,20 @@ private fun StackedBars(
                                 if (pos > 0) {
                                     Box(Modifier.fillMaxWidth().height(2.dp).background(dividerColor))
                                 }
+                                val segH = barHeight * (byProduct[idx] / amount).toFloat()
                                 Box(
-                                    Modifier.fillMaxWidth()
-                                        .height(barHeight * (byProduct[idx] / amount).toFloat())
+                                    Modifier.fillMaxWidth().height(segH)
                                         .background(OverviewColors[idx % OverviewColors.size]),
-                                )
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (showSegLabels && segH >= 18.dp) {
+                                        Text(
+                                            compactRupees(byProduct[idx]),
+                                            color = Color.White, fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold, maxLines = 1,
+                                        )
+                                    }
+                                }
                             }
                         } else if (amount > 0) {
                             // No product split from the server (e.g. backend not
@@ -303,10 +322,10 @@ private fun StackedBars(
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(r.optString("label"), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(r.optString("label"), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 val sub = r.optString("sublabel")
                 if (sub.isNotEmpty()) {
-                    Text(sub, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(sub, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
             }
         }
@@ -345,9 +364,15 @@ private fun HBar(fraction: Float, color: Color = MaterialTheme.colorScheme.prima
     }
 }
 
-private fun compactRupees(v: Double): String = when {
-    v >= 1_00_00_000 -> "%.1fCr".format(v / 1_00_00_000)
-    v >= 1_00_000 -> "%.1fL".format(v / 1_00_000)
-    v >= 1_000 -> "%.0fK".format(v / 1_000)
-    else -> "%.0f".format(v)
+/** Indian-style compact money: 1,24,000 → "1.24L", 24,000 → "24K",
+ * 3,50,00,000 → "3.5Cr". Up to 2 decimals, trailing zeros trimmed. */
+private fun compactRupees(v: Double): String {
+    fun trim(x: Double): String =
+        String.format(java.util.Locale.US, "%.2f", x).trimEnd('0').trimEnd('.')
+    return when {
+        v >= 1_00_00_000 -> trim(v / 1_00_00_000) + "Cr"
+        v >= 1_00_000 -> trim(v / 1_00_000) + "L"
+        v >= 1_000 -> trim(v / 1_000) + "K"
+        else -> trim(v)
+    }
 }

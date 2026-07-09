@@ -10,17 +10,20 @@
   .bo-leg { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--ki-text, #1f2937); }
   .bo-leg i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 
-  .bo-chart { display: flex; align-items: flex-end; gap: 10px; padding-top: 8px; overflow-x: auto; }
-  .bo-col { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; min-width: 46px; }
-  .bo-plot { height: 220px; display: flex; align-items: flex-end; justify-content: center; }
-  .bo-bar { width: 30px; min-height: 2px; display: flex; flex-direction: column-reverse;
+  /* Columns share the full width and re-flow as the count changes. */
+  .bo-chart { display: flex; align-items: flex-end; gap: 6px; padding-top: 8px; }
+  .bo-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+  .bo-plot { width: 100%; height: 220px; display: flex; align-items: flex-end; justify-content: center; }
+  .bo-bar { width: 66%; max-width: 54px; min-height: 2px; display: flex; flex-direction: column-reverse;
             border-radius: 6px 6px 0 0; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-  .bo-seg { width: 100%; }
+  .bo-seg { width: 100%; display: flex; align-items: center; justify-content: center; }
   /* Thin divider line between product compartments (column-reverse → last child is the top slice). */
   .bo-seg:not(:last-child) { box-shadow: inset 0 2px 0 0 var(--ki-card, #fff); }
-  .bo-lbl { font-size: .74rem; text-align: center; margin-top: 6px; color: var(--ki-text, #1f2937); }
-  .bo-lbl span { color: #9aa1ab; font-size: .66rem; }
-  .bo-amt { font-size: .72rem; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+  .bo-seg-lbl { font-size: .58rem; font-weight: 700; color: #fff; white-space: nowrap;
+                text-shadow: 0 1px 1px rgba(0,0,0,.3); }
+  .bo-lbl { font-size: .72rem; text-align: center; margin-top: 6px; color: var(--ki-text, #1f2937); white-space: nowrap; }
+  .bo-lbl span { color: #9aa1ab; font-size: .64rem; }
+  .bo-amt { font-size: .7rem; font-weight: 700; margin-top: 2px; white-space: nowrap; }
 
   .bo-mix { display: flex; flex-direction: column; gap: 10px; }
   .bo-mix-row { display: grid; grid-template-columns: 8rem 1fr 6rem; align-items: center; gap: 10px; font-size: .82rem; }
@@ -88,12 +91,14 @@
             <div class="bo-bar" title="{{ t.label }} {{ t.sublabel }} — ₹{{ t.amount|floatformat:0 }}">
               {% for s in t.segments %}
                 <div class="bo-seg" style="height: {{ s.px }}px; background: {{ s.color }}"
-                     title="{{ s.name }}: ₹{{ s.amount|floatformat:0 }}"></div>
+                     title="{{ s.name }}: ₹{{ s.amount|floatformat:0 }}">
+                  {% if s.show_label %}<span class="bo-seg-lbl">{{ s.label }}</span>{% endif %}
+                </div>
               {% endfor %}
             </div>
           </div>
           <div class="bo-lbl">{{ t.label }}<br><span>{{ t.sublabel }}</span></div>
-          <div class="bo-amt">{% if t.amount %}₹{{ t.amount|floatformat:0 }}{% else %}–{% endif %}</div>
+          <div class="bo-amt">{% if t.amount %}₹{{ t.amount_label }}{% else %}–{% endif %}</div>
         </div>
       {% endfor %}
     </div>

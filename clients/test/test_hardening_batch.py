@@ -96,6 +96,9 @@ class SafeDateFilterTests(TestCase):
         # percentage that can collapse to 0 inside a flex item).
         self.assertContains(resp, "bo-seg")
         self.assertContains(resp, "220px")  # single product fills the plot height
+        # Amounts render abbreviated (1000 → 1K) and the compartment is labelled.
+        self.assertContains(resp, "bo-seg-lbl")
+        self.assertContains(resp, "1K")
 
     def test_business_overview_survives_garbage_params(self):
         resp = self.http.get(reverse("clients:business_overview"),

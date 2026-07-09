@@ -185,6 +185,23 @@ _OVERVIEW_PALETTE = ["#E5B740", "#3b82f6", "#10b981", "#ef4444",
                      "#8b5cf6", "#f97316", "#14b8a6", "#ec4899"]
 
 
+def _compact_inr(value):
+    """Indian-style compact money: 1,24,000 → '1.24L', 24,000 → '24K',
+    3,50,00,000 → '3.5Cr'. Up to 2 decimals, trailing zeros trimmed."""
+    v = float(value or 0)
+
+    def trim(x):
+        return f"{x:.2f}".rstrip("0").rstrip(".")
+
+    if v >= 1_00_00_000:
+        return trim(v / 1_00_00_000) + "Cr"
+    if v >= 1_00_000:
+        return trim(v / 1_00_000) + "L"
+    if v >= 1_000:
+        return trim(v / 1_000) + "K"
+    return trim(v)
+
+
 @login_required
 def business_overview(request):
     """Web Business Overview: period-grouped, product-split business trend +
@@ -216,13 +233,20 @@ def business_overview(request):
     PLOT_PX = 220
     max_amount = max((t["amount"] for t in data["trend"]), default=Decimal("0"))
     scale = (Decimal(PLOT_PX) / max_amount) if max_amount else Decimal("0")
+    few_cols = len(data["trend"]) <= 8
     for t in data["trend"]:
         t["bar_px"] = int(round(float(t["amount"] * scale)))
-        t["segments"] = [
-            {"name": buckets[i]["name"], "color": buckets[i]["color"], "amount": v,
-             "px": max(int(round(float(v * scale))), 2)}  # keep tiny slices visible
-            for i, v in enumerate(t["by_product"]) if v > 0
-        ]
+        t["amount_label"] = _compact_inr(t["amount"])
+        segs = []
+        for i, v in enumerate(t["by_product"]):
+            if v > 0:
+                px = max(int(round(float(v * scale))), 2)  # keep tiny slices visible
+                segs.append({
+                    "name": buckets[i]["name"], "color": buckets[i]["color"], "amount": v,
+                    "px": px, "label": _compact_inr(v),
+                    "show_label": few_cols and px >= 20,  # only if it fits
+                })
+        t["segments"] = segs
 
     # Per-employee product cells + mini stacked bar (integer % widths).
     for e in data.get("leaderboard", []):
