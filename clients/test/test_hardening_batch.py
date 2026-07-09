@@ -80,6 +80,36 @@ class SafeDateFilterTests(TestCase):
         resp = self.http.get(reverse("clients:monthly_business_report"), {"month": "banana", "year": "x"})
         self.assertEqual(resp.status_code, 200)
 
+    def test_business_overview_renders_with_data(self):
+        from decimal import Decimal
+        from django.utils import timezone as tz
+        from clients.models import Product, Sale
+        Product.objects.get_or_create(name="SIP", defaults={"code": "SIP", "display_order": 1})
+        emp = Employee.objects.get(user=self.user)
+        c = Client.objects.create(name="BO C")
+        Sale.objects.create(client=c, employee=emp, product="SIP", amount=Decimal("1000"),
+                            status="approved", date=tz.localdate())
+        resp = self.http.get(reverse("clients:business_overview"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Business Overview")
+        # The stacked bar renders with an absolute pixel height (not a
+        # percentage that can collapse to 0 inside a flex item).
+        self.assertContains(resp, "bo-seg")
+        self.assertContains(resp, "220px")  # single product fills the plot height
+
+    def test_business_overview_survives_garbage_params(self):
+        resp = self.http.get(reverse("clients:business_overview"),
+                             {"period": "banana", "columns": "-5"})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_business_overview_forbidden_for_employee(self):
+        u = User.objects.create_user(username="bo_emp", password="x")
+        Employee.objects.create(user=u, role="employee", salary=0, active=True)
+        http = TestClient()
+        http.force_login(u)
+        resp = http.get(reverse("clients:business_overview"))
+        self.assertEqual(resp.status_code, 403)
+
 
 class PasswordResetPolicyTests(TestCase):
     @classmethod

@@ -276,6 +276,7 @@ urlpatterns = [
     path("reassign-bulk/", views.bulk_reassign_view, name="bulk_reassign"),
 
     # reports
+    path("reports/business-overview/", views.business_overview, name="business_overview"),
     path("reports/monthly-business/", views.monthly_business_report, name="monthly_business_report"),
     path("reports/business-analytics/", views.business_analytics, name="business_analytics"),
     path("reports/mf-revenue-engine/", views.mf_revenue_engine, name="mf_revenue_engine"),

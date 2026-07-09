@@ -48,6 +48,7 @@ fun ClientsScreen(
     modifier: Modifier = Modifier,
     onSessionExpired: () -> Unit,
     onOpenWeb: (String) -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     var selectedClientId by remember { mutableStateOf<Int?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -107,13 +108,25 @@ fun ClientsScreen(
         loading = false
     }
 
+    if (onBack != null) BackHandler(onBack = onBack)
+
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Clients", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onBack != null) {
+                    Text(
+                        "← Back",
+                        color = MaterialTheme.colorScheme.secondary,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
+                    )
+                }
+                Text("Clients", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("My", scopeMy) { scopeMy = true; page = 1 }
                 Chip("All", !scopeMy) { scopeMy = false; page = 1 }

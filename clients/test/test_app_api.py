@@ -370,6 +370,50 @@ class AppLeadsReportsTests(TestCase):
         self.assertEqual(data["trend"][-1]["amount"], 3000.0)
         self.assertEqual(len(data["leaderboard"]), 2)
 
+    def test_report_summary_product_bifurcation(self):
+        from django.utils import timezone as tz
+        from clients.models import Product
+        Product.objects.get_or_create(name="SIP", defaults={"code": "SIP", "display_order": 1})
+        Product.objects.get_or_create(name="Health", defaults={"code": "HLT", "display_order": 2})
+        c = Client.objects.create(name="Bif C")
+        today = tz.localdate()
+        Sale.objects.create(client=c, employee=self.emp, product="SIP", amount=Decimal("2000"),
+                            status=Sale.STATUS_APPROVED, date=today)
+        Sale.objects.create(client=c, employee=self.emp, product="Health", amount=Decimal("3000"),
+                            status=Sale.STATUS_APPROVED, date=today)
+
+        data = self._http(self.admin_user).get(reverse("clients:app_report_summary")).json()
+        self.assertIn("SIP", data["buckets"])
+        self.assertIn("Health", data["buckets"])
+        sip_i = data["buckets"].index("SIP")
+        health_i = data["buckets"].index("Health")
+
+        last = data["trend"][-1]
+        self.assertEqual(last["amount"], 5000.0)
+        self.assertEqual(last["by_product"][sip_i], 2000.0)
+        self.assertEqual(last["by_product"][health_i], 3000.0)
+
+        # Leaderboard row carries the same product split.
+        emp_row = next(e for e in data["leaderboard"] if e["amount"] == 5000.0)
+        self.assertEqual(emp_row["by_product"][sip_i], 2000.0)
+        self.assertEqual(emp_row["by_product"][health_i], 3000.0)
+
+    def test_report_summary_period_and_columns(self):
+        data = self._http(self.admin_user).get(
+            reverse("clients:app_report_summary") + "?period=quarter&columns=4"
+        ).json()
+        self.assertEqual(data["period"], "quarter")
+        self.assertEqual(data["columns"], 4)
+        self.assertEqual(len(data["trend"]), 4)
+
+        # Invalid params fall back to sane defaults / clamp.
+        data = self._http(self.admin_user).get(
+            reverse("clients:app_report_summary") + "?period=weekly&columns=999"
+        ).json()
+        self.assertEqual(data["period"], "month")
+        self.assertEqual(data["columns"], 24)  # clamped to MAX_COLUMNS
+        self.assertEqual(len(data["trend"]), 24)
+
 
 class DeviceStatusTests(TestCase):
     def test_report_and_upsert(self):

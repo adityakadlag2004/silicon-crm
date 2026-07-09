@@ -11,20 +11,34 @@ import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -58,14 +72,19 @@ import bo.kadlaginvestment.crm.ui.SimSettingsScreen
 import bo.kadlaginvestment.crm.ui.TeamScreen
 
 @androidx.compose.runtime.Composable
-private fun PermRow(label: String, onFix: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 10.dp),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceBetween,
-        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+private fun PermCard(title: String, desc: String, cta: String, onFix: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
-        Text(label, modifier = Modifier.padding(end = 8.dp))
-        Button(onClick = onFix) { Text("Allow") }
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Spacer(Modifier.height(4.dp))
+            Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(10.dp))
+            // Full-width button so it can never be clipped off-screen.
+            Button(onClick = onFix, modifier = Modifier.fillMaxWidth().height(46.dp)) { Text(cta) }
+        }
     }
 }
 
@@ -212,14 +231,38 @@ class ShellActivity : ComponentActivity() {
                 val needOverlay = !Settings.canDrawOverlays(this)
                 val needNotifications = !notificationsGranted()
 
+                // Full-screen permission gate. A plain AlertDialog clipped the
+                // Allow buttons on some devices (they sat inside the scrolling
+                // text slot); this uses a wide, scrollable Surface with
+                // full-width buttons that are always visible. It reappears on
+                // every launch while any permission is still missing.
                 if (!permDialogDismissed && (needCalls || needOverlay || needNotifications)) {
-                    AlertDialog(
+                    Dialog(
                         onDismissRequest = { permDialogDismissed = true },
-                        title = { Text("Setup needed") },
-                        text = {
-                            Column {
-                                Text("Some permissions are missing — call tracking and follow-up popups won't work until these are allowed:")
-                                if (needCalls) PermRow("Call tracking (phone + call log)") {
+                        properties = DialogProperties(usePlatformDefaultWidth = false),
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(0.94f).heightIn(max = 640.dp),
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                        ) {
+                            Column(
+                                Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
+                            ) {
+                                Text("Permissions needed", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(10.dp))
+                                Text(
+                                    "These let call tracking and follow-up reminders work. The app " +
+                                        "keeps asking each time you open it until they're allowed.",
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(18.dp))
+                                if (needCalls) PermCard(
+                                    "Call tracking",
+                                    "Phone state, call log & contacts — needed to record office calls.",
+                                    "Allow",
+                                ) {
                                     requestPermissions(
                                         arrayOf(
                                             Manifest.permission.READ_PHONE_STATE,
@@ -228,23 +271,32 @@ class ShellActivity : ComponentActivity() {
                                         ), 100,
                                     )
                                 }
-                                if (needOverlay) PermRow("Follow-up popup (display over apps)") {
+                                if (needOverlay) PermCard(
+                                    "Follow-up popup",
+                                    "Display over other apps — shows the after-call follow-up popup.",
+                                    "Open settings",
+                                ) {
                                     startActivity(
                                         Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                                     )
                                 }
-                                if (needNotifications) PermRow("Notifications") {
+                                if (needNotifications) PermCard(
+                                    "Notifications",
+                                    "Show reminders and alerts sent from the office.",
+                                    "Allow",
+                                ) {
                                     if (Build.VERSION.SDK_INT >= 33) {
                                         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
                                     }
                                 }
+                                Spacer(Modifier.height(6.dp))
+                                TextButton(
+                                    onClick = { permDialogDismissed = true },
+                                    modifier = Modifier.align(androidx.compose.ui.Alignment.End),
+                                ) { Text("Continue for now") }
                             }
-                        },
-                        confirmButton = {},
-                        dismissButton = {
-                            TextButton(onClick = { permDialogDismissed = true }) { Text("Later") }
-                        },
-                    )
+                        }
+                    }
                 }
 
                 // ── First-run office-SIM picker (dual-SIM employees) ──
@@ -325,7 +377,7 @@ class ShellActivity : ComponentActivity() {
                 data class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
                 val tabs = listOf(
                     Tab("Home", Icons.Filled.Home),
-                    Tab("Clients", Icons.Filled.Person),
+                    Tab("Tasks", Icons.Filled.CheckCircle),
                     Tab("Add Sale", Icons.Filled.AddCircle),
                     Tab("Calls", Icons.Filled.Call),
                     Tab("Menu", Icons.Filled.Menu),
@@ -337,7 +389,13 @@ class ShellActivity : ComponentActivity() {
                             tabs.forEachIndexed { i, tab ->
                                 NavigationBarItem(
                                     selected = selected == i && overlay == null,
-                                    onClick = { selected = i; overlay = null },
+                                    onClick = {
+                                        // Tasks is a self-contained module (its own bottom
+                                        // nav) — open it as a full-screen activity instead
+                                        // of rendering it inline as a tab.
+                                        if (tab.label == "Tasks") TasksActivity.open(this@ShellActivity)
+                                        else { selected = i; overlay = null }
+                                    },
                                     icon = { Icon(tab.icon, contentDescription = tab.label) },
                                     label = { Text(tab.label) },
                                 )
@@ -401,8 +459,13 @@ class ShellActivity : ComponentActivity() {
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
                         )
+                        overlay == "clients" -> ClientsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                            onOpenWeb = openWeb,
+                        )
                         selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = routeLink)
-                        selected == 1 -> ClientsScreen(m, onSessionExpired = goLogin, onOpenWeb = openWeb)
                         selected == 2 -> AddSaleScreen(m, onSessionExpired = goLogin)
                         selected == 3 -> FollowupsScreen(m, onSessionExpired = goLogin)
                         else -> MenuScreen(

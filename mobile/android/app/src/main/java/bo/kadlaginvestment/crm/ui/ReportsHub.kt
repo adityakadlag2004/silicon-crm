@@ -82,7 +82,7 @@ fun ReportsHub(
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
-            item { ReportCard("📊", "Business Overview", "6-month trend, product mix, leaderboard") { sub = "overview" } }
+            item { ReportCard("📊", "Business Overview", "Business trend by product, mix & leaderboard") { sub = "overview" } }
             item { ReportCard("📆", "Past Performance", "Month-by-month business over the last year") { sub = "past" } }
             if (isManagerPlus) {
                 item { ReportCard("🧾", "Monthly Report", "Product-wise + employee-wise for a month") { sub = "monthly" } }

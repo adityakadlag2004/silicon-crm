@@ -312,3 +312,57 @@ class WorkDayAndPopupSettingsTests(TestCase):
         self.assertEqual(cfg.popup_days, "0,1,2,3,4,5,6")
         self.assertEqual(cfg.popup_start.hour, 8)
         self.assertEqual(cfg.popup_end.hour, 22)
+
+
+class SilentDeviceAlertTests(_CallSetup):
+    """`detect_silent_devices`: admins are alerted when a previously-active
+    caller stops syncing calls (a proxy for app uninstall)."""
+
+    def _run(self, days=3):
+        call_command("detect_silent_devices", "--days", str(days))
+
+    def _alerts(self):
+        return Notification.objects.filter(
+            recipient=self.admin_user, link__contains=f"silent={self.emp.id}"
+        )
+
+    def test_silent_caller_alerts_admin_once(self):
+        CallLogEntry.objects.create(
+            employee=self.emp, phone="1", direction="outgoing", connected=True,
+            duration_seconds=30, started_at=timezone.now() - timedelta(days=5),
+        )
+        self._run()
+        self.assertEqual(self._alerts().count(), 1)
+        # Same silent streak → no duplicate on a second run.
+        self._run()
+        self.assertEqual(self._alerts().count(), 1)
+
+    def test_recent_caller_not_flagged(self):
+        CallLogEntry.objects.create(
+            employee=self.emp, phone="1", direction="outgoing", connected=True,
+            duration_seconds=30, started_at=timezone.now() - timedelta(days=1),
+        )
+        self._run()
+        self.assertFalse(self._alerts().exists())
+
+    def test_never_called_not_flagged(self):
+        # No CallLogEntry ever → never tracked, so not an uninstall signal.
+        self._run()
+        self.assertFalse(self._alerts().exists())
+
+    def test_resumed_then_silent_again_realerts(self):
+        CallLogEntry.objects.create(
+            employee=self.emp, phone="1", direction="outgoing", connected=True,
+            duration_seconds=30, started_at=timezone.now() - timedelta(days=6),
+        )
+        self._run()
+        self.assertEqual(self._alerts().count(), 1)
+        # Backdate the first alert to before a newer (still-silent) call, so the
+        # employee resumed calling and then went quiet again → a fresh streak.
+        self._alerts().update(created_at=timezone.now() - timedelta(days=5))
+        CallLogEntry.objects.create(
+            employee=self.emp, phone="2", direction="outgoing", connected=True,
+            duration_seconds=30, started_at=timezone.now() - timedelta(days=4),
+        )
+        self._run()
+        self.assertEqual(self._alerts().count(), 2)

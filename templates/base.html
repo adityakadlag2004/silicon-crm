@@ -368,6 +368,7 @@
                 <i class="bi bi-graph-up-arrow"></i> Reports <i class="bi bi-chevron-down kn-caret"></i>
               </button>
               <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
@@ -486,6 +487,7 @@
               <ul class="kn-menu">
                 {% if manager_access.allow_employee_performance %}<li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>{% endif %}
                 {% if manager_access.allow_business_tracking %}
+                  <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
                   <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
                   <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
                   <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>

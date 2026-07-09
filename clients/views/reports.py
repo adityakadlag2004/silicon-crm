@@ -9,7 +9,7 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
-from django.db.models import Sum, Q
+from django.db.models import Sum, Q, Count
 from django.utils.timezone import now
 
 from ..models import (
@@ -20,6 +20,231 @@ from ..services.mf_engine import (
     build_dashboard, reconcile, historical_analytics,
 )
 from .helpers import get_manager_access, _last_n_months
+
+
+# ── Business Overview: period-grouped trend with product bifurcation ──────────
+# Shared by the native app (JSON: clients.views.app_api.app_report_summary) and
+# the web page (business_overview). Groups approved-sale business into the last
+# N periods (month / quarter / half-year / year), split per product so each
+# column shows its product-wise compartments, plus a per-employee leaderboard
+# with the same split.
+
+PERIODS = ("month", "quarter", "half", "year")
+MAX_COLUMNS = 24
+
+
+def _period_ranges(period, columns, today):
+    """Last `columns` calendar periods ending with the one containing `today`.
+
+    Returns a chronological list of (start, end_exclusive, label, sublabel).
+    """
+    ranges = []
+    if period == "year":
+        y = today.year
+        for _ in range(columns):
+            ranges.append((date(y, 1, 1), date(y + 1, 1, 1), str(y), ""))
+            y -= 1
+    elif period == "half":
+        y = today.year
+        h = 0 if today.month <= 6 else 1  # 0 = Jan–Jun, 1 = Jul–Dec
+        for _ in range(columns):
+            if h == 0:
+                ranges.append((date(y, 1, 1), date(y, 7, 1), "H1", str(y)))
+            else:
+                ranges.append((date(y, 7, 1), date(y + 1, 1, 1), "H2", str(y)))
+            h -= 1
+            if h < 0:
+                h, y = 1, y - 1
+    elif period == "quarter":
+        y = today.year
+        q = (today.month - 1) // 3  # 0..3
+        for _ in range(columns):
+            sm = q * 3 + 1
+            end = date(y + 1, 1, 1) if q == 3 else date(y, sm + 3, 1)
+            ranges.append((date(y, sm, 1), end, f"Q{q + 1}", str(y)))
+            q -= 1
+            if q < 0:
+                q, y = 3, y - 1
+    else:  # month
+        y, m = today.year, today.month
+        for _ in range(columns):
+            end = date(y + 1, 1, 1) if m == 12 else date(y, m + 1, 1)
+            ranges.append((date(y, m, 1), end, date(y, m, 1).strftime("%b"), str(y)))
+            m -= 1
+            if m == 0:
+                m, y = 12, y - 1
+    ranges.reverse()
+    return ranges
+
+
+def business_overview_data(base, period="month", columns=6, today=None, with_leaderboard=False):
+    """Compute the period-grouped, product-split business trend.
+
+    `base` is an already-scoped approved-Sale queryset. Money values are
+    Decimals (callers format/serialize). `buckets` names the product columns,
+    aligned index-for-index with each row's `by_product` list; an "Other"
+    bucket is appended only if unmapped-product sales exist in the window.
+    """
+    if today is None:
+        today = now().date()
+    if period not in PERIODS:
+        period = "month"
+    try:
+        columns = int(columns)
+    except (TypeError, ValueError):
+        columns = 6
+    columns = max(1, min(columns, MAX_COLUMNS))
+
+    ranges = _period_ranges(period, columns, today)
+
+    buckets = list(
+        Product.objects.filter(is_active=True)
+        .order_by("display_order", "name")
+        .values_list("name", flat=True)
+    )
+    bucket_index = {name: i for i, name in enumerate(buckets)}
+
+    trend = []
+    other_used = False
+    for (start, end, label, sublabel) in ranges:
+        qs = base.filter(date__gte=start, date__lt=end)
+        by_product = [Decimal("0")] * len(buckets)
+        other = Decimal("0")
+        total = Decimal("0")
+        count = 0
+        for r in qs.values("product").annotate(t=Sum("amount"), n=Count("id")):
+            amt = r["t"] or Decimal("0")
+            total += amt
+            count += r["n"]
+            idx = bucket_index.get(r["product"])
+            if idx is None:
+                other += amt
+            else:
+                by_product[idx] += amt
+        if other > 0:
+            other_used = True
+        trend.append({"label": label, "sublabel": sublabel, "amount": total,
+                      "count": count, "by_product": by_product, "_other": other})
+
+    if other_used:
+        buckets = buckets + ["Other"]
+    for row in trend:
+        if other_used:
+            row["by_product"] = row["by_product"] + [row.pop("_other")]
+        else:
+            row.pop("_other")
+
+    # Latest period drives the "by product" mix and the leaderboard.
+    cur_start, cur_end, cur_label, cur_sublabel = ranges[-1]
+    cur_qs = base.filter(date__gte=cur_start, date__lt=cur_end)
+    products = [
+        {"name": r["product"] or "Other", "amount": r["t"] or Decimal("0"), "count": r["n"]}
+        for r in cur_qs.values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
+    ]
+
+    data = {
+        "period": period,
+        "columns": columns,
+        "buckets": buckets,
+        "trend": trend,
+        "current_label": cur_label,
+        "current_sublabel": cur_sublabel,
+        "products": products,
+    }
+
+    if with_leaderboard:
+        other_idx = buckets.index("Other") if "Other" in buckets else None
+        emp_rows = {}
+        for r in cur_qs.values(
+            "employee_id", "employee__user__username",
+            "employee__user__first_name", "product",
+        ).annotate(t=Sum("amount"), p=Sum("points")):
+            eid = r["employee_id"]
+            row = emp_rows.get(eid)
+            if row is None:
+                row = {
+                    "name": r["employee__user__first_name"] or r["employee__user__username"],
+                    "amount": Decimal("0"), "points": Decimal("0"),
+                    "by_product": [Decimal("0")] * len(buckets),
+                }
+                emp_rows[eid] = row
+            amt = r["t"] or Decimal("0")
+            row["amount"] += amt
+            row["points"] += (r["p"] or Decimal("0"))
+            idx = bucket_index.get(r["product"], other_idx)
+            if idx is not None:
+                row["by_product"][idx] += amt
+        data["leaderboard"] = sorted(
+            emp_rows.values(), key=lambda x: x["amount"], reverse=True
+        )[:15]
+
+    return data
+
+
+_OVERVIEW_PALETTE = ["#E5B740", "#3b82f6", "#10b981", "#ef4444",
+                     "#8b5cf6", "#f97316", "#14b8a6", "#ec4899"]
+
+
+@login_required
+def business_overview(request):
+    """Web Business Overview: period-grouped, product-split business trend +
+    product mix + employee leaderboard (admins/managers). Mirrors the native
+    'Business Overview' screen."""
+    emp = getattr(request.user, "employee", None)
+    is_admin = request.user.is_superuser or (emp and emp.role == "admin")
+    if not (is_admin or (emp and emp.role == "manager")):
+        return HttpResponseForbidden("Access denied")
+
+    firm_wide = bool(is_admin or (emp and emp.role == "manager"
+                                  and get_manager_access().allow_employee_performance))
+
+    base = Sale.objects.filter(status="approved")
+    if not firm_wide and emp:
+        base = base.filter(employee=emp)
+
+    period = request.GET.get("period", "month")
+    columns = request.GET.get("columns", 6)
+    data = business_overview_data(base, period=period, columns=columns, with_leaderboard=firm_wide)
+
+    buckets = [{"name": n, "color": _OVERVIEW_PALETTE[i % len(_OVERVIEW_PALETTE)]}
+               for i, n in enumerate(data["buckets"])]
+
+    # Stacked-bar geometry as absolute integer pixel heights, computed
+    # server-side. Avoids depending on percentage-height resolution inside
+    # flex items (collapses to 0 in some browsers) and on locale decimal
+    # separators leaking into inline styles.
+    PLOT_PX = 220
+    max_amount = max((t["amount"] for t in data["trend"]), default=Decimal("0"))
+    scale = (Decimal(PLOT_PX) / max_amount) if max_amount else Decimal("0")
+    for t in data["trend"]:
+        t["bar_px"] = int(round(float(t["amount"] * scale)))
+        t["segments"] = [
+            {"name": buckets[i]["name"], "color": buckets[i]["color"], "amount": v,
+             "px": max(int(round(float(v * scale))), 2)}  # keep tiny slices visible
+            for i, v in enumerate(t["by_product"]) if v > 0
+        ]
+
+    # Per-employee product cells + mini stacked bar (integer % widths).
+    for e in data.get("leaderboard", []):
+        e["cells"] = [{"color": buckets[i]["color"], "amount": v}
+                      for i, v in enumerate(e["by_product"])]
+        total = e["amount"] or Decimal("1")
+        e["segments"] = [
+            {"color": buckets[i]["color"], "pct": int(round(float(v / total * 100)))}
+            for i, v in enumerate(e["by_product"]) if v > 0
+        ]
+
+    context = {
+        "data": data,
+        "buckets": buckets,
+        "period": data["period"],
+        "columns": data["columns"],
+        "firm_wide": firm_wide,
+        "periods": [("month", "Monthly"), ("quarter", "Quarterly"),
+                    ("half", "Half-year"), ("year", "Yearly")],
+        "column_choices": [3, 6, 9, 12, 18, 24],
+    }
+    return render(request, "reports/business_overview.html", context)
 
 
 @login_required

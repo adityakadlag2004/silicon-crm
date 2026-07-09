@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Business Overview{% endblock %}
+{% block page_title %}Business Overview{% endblock %}
+
+{% block extra_css %}
+<style>
+  .bo-controls .form-select { min-width: 8rem; }
+
+  .bo-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 14px; }
+  .bo-leg { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--ki-text, #1f2937); }
+  .bo-leg i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+  .bo-chart { display: flex; align-items: flex-end; gap: 10px; padding-top: 8px; overflow-x: auto; }
+  .bo-col { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; min-width: 46px; }
+  .bo-plot { height: 220px; display: flex; align-items: flex-end; justify-content: center; }
+  .bo-bar { width: 30px; min-height: 2px; display: flex; flex-direction: column-reverse;
+            border-radius: 6px 6px 0 0; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .bo-seg { width: 100%; }
+  /* Thin divider line between product compartments (column-reverse → last child is the top slice). */
+  .bo-seg:not(:last-child) { box-shadow: inset 0 2px 0 0 var(--ki-card, #fff); }
+  .bo-lbl { font-size: .74rem; text-align: center; margin-top: 6px; color: var(--ki-text, #1f2937); }
+  .bo-lbl span { color: #9aa1ab; font-size: .66rem; }
+  .bo-amt { font-size: .72rem; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+
+  .bo-mix { display: flex; flex-direction: column; gap: 10px; }
+  .bo-mix-row { display: grid; grid-template-columns: 8rem 1fr 6rem; align-items: center; gap: 10px; font-size: .82rem; }
+  .bo-mix-track { background: var(--ki-body, #f1f2f4); border-radius: 6px; height: 14px; overflow: hidden; }
+  .bo-mix-fill { height: 100%; border-radius: 6px; }
+  .bo-mix-amt { text-align: right; font-weight: 700; white-space: nowrap; }
+
+  .bo-lead th, .bo-lead td { text-align: right; white-space: nowrap; font-size: .84rem; vertical-align: middle; }
+  .bo-lead th:nth-child(2), .bo-lead td:nth-child(2) { text-align: left; }
+  .bo-total { font-weight: 700; }
+  .bo-minibar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 4px; width: 100%; max-width: 160px; background: var(--ki-body, #f1f2f4); }
+  .bo-minibar span { height: 100%; }
+  .zero { color: #bbb; }
+
+  @media print {
+    @page { size: landscape; margin: 1cm; }
+    nav, .no-print, footer, .ki-sidebar, .ki-topbar { display: none !important; }
+    .ki-main { margin-left: 0 !important; padding: 0 !important; }
+    .ki-card { border: none !important; box-shadow: none !important; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <h4 class="ki-section-title mb-0"><i class="bi bi-bar-chart-line"></i> Business Overview</h4>
+    <button class="ki-btn ki-btn-sm ki-btn-secondary" onclick="window.print()">
+      <i class="bi bi-printer"></i> Print / PDF
+    </button>
+  </div>
+
+  <!-- Period + column controls -->
+  <form method="get" class="row g-2 align-items-end mb-4 no-print bo-controls">
+    <div class="col-auto">
+      <label class="form-label mb-0 small">Group by</label>
+      <select name="period" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for val, label in periods %}
+          <option value="{{ val }}" {% if val == period %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-0 small">Columns</label>
+      <select name="columns" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for n in column_choices %}
+          <option value="{{ n }}" {% if n == columns %}selected{% endif %}>{{ n }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <!-- Product-split trend -->
+  <div class="ki-card mb-3">
+    <div class="ki-card-label"><i class="bi bi-graph-up"></i> Approved business by product</div>
+    <div class="bo-legend">
+      {% for b in buckets %}
+        <span class="bo-leg"><i style="background: {{ b.color }}"></i>{{ b.name }}</span>
+      {% endfor %}
+    </div>
+    <div class="bo-chart">
+      {% for t in data.trend %}
+        <div class="bo-col">
+          <div class="bo-plot">
+            <div class="bo-bar" title="{{ t.label }} {{ t.sublabel }} — ₹{{ t.amount|floatformat:0 }}">
+              {% for s in t.segments %}
+                <div class="bo-seg" style="height: {{ s.px }}px; background: {{ s.color }}"
+                     title="{{ s.name }}: ₹{{ s.amount|floatformat:0 }}"></div>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="bo-lbl">{{ t.label }}<br><span>{{ t.sublabel }}</span></div>
+          <div class="bo-amt">{% if t.amount %}₹{{ t.amount|floatformat:0 }}{% else %}–{% endif %}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Current-period product mix -->
+  <div class="ki-card mb-3">
+    <div class="ki-card-label">
+      <i class="bi bi-pie-chart"></i> {{ data.current_label }} {{ data.current_sublabel }} — by product
+    </div>
+    {% if data.products %}
+      <div class="bo-mix">
+        {% for p in data.products %}
+          <div class="bo-mix-row">
+            <div>{{ p.name }}</div>
+            <div class="bo-mix-track">
+              <div class="bo-mix-fill" style="width: {% widthratio p.amount data.products.0.amount 100 %}%; background: {{ buckets.0.color }};"></div>
+            </div>
+            <div class="bo-mix-amt">₹{{ p.amount|floatformat:0 }}</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="text-muted mb-0">No approved sales in this period yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Employee leaderboard with product bifurcation -->
+  {% if firm_wide %}
+  <div class="ki-card">
+    <div class="ki-card-label">
+      <i class="bi bi-trophy"></i> Employee leaderboard — {{ data.current_label }} {{ data.current_sublabel }}
+    </div>
+    <div class="ki-table-wrap">
+      <table class="ki-table bo-lead">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Employee</th>
+            {% for b in buckets %}<th>{{ b.name }}</th>{% endfor %}
+            <th>Total</th>
+            <th>Points</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in data.leaderboard %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>
+              {{ e.name }}
+              <div class="bo-minibar">
+                {% for s in e.segments %}<span style="width: {{ s.pct }}%; background: {{ s.color }}"></span>{% endfor %}
+              </div>
+            </td>
+            {% for c in e.cells %}
+              <td>{% if c.amount %}{{ c.amount|floatformat:0 }}{% else %}<span class="zero">–</span>{% endif %}</td>
+            {% endfor %}
+            <td class="bo-total">{{ e.amount|floatformat:0 }}</td>
+            <td>{{ e.points|floatformat:0 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ buckets|length|add:4 }}" class="text-center text-muted py-3">No approved sales in this period.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}

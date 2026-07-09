@@ -25,6 +25,7 @@ from ..models import (
     Sale,
 )
 from .helpers import get_manager_access
+from .reports import business_overview_data
 
 
 def _emp(request):
@@ -1046,7 +1047,9 @@ def app_lead_action(request, lead_id):
 @login_required
 @require_GET
 def app_report_summary(request):
-    """Monthly trend + product mix + (admins/managers) employee leaderboard."""
+    """Period-grouped business trend (product-split) + product mix +
+    (admins/managers) employee leaderboard. Query params: `period`
+    (month|quarter|half|year, default month) and `columns` (default 6)."""
     emp = _emp(request)
     is_admin = _is_admin(request)
     is_manager = bool(emp and emp.role == "manager")
@@ -1058,47 +1061,46 @@ def app_report_summary(request):
             return JsonResponse({"ok": False, "error": "No employee account."}, status=403)
         base = base.filter(employee=emp)
 
-    today = timezone.localdate()
-    months = []
-    y, m = today.year, today.month
-    for _ in range(6):
-        months.append((y, m))
-        m -= 1
-        if m == 0:
-            y, m = y - 1, 12
-    months.reverse()
+    data = business_overview_data(
+        base,
+        period=request.GET.get("period", "month"),
+        columns=request.GET.get("columns", 6),
+        with_leaderboard=firm_wide,
+    )
 
-    trend = []
-    for (yy, mm) in months:
-        agg = base.filter(date__year=yy, date__month=mm).aggregate(
-            amount=Sum("amount"), n=Count("id")
-        )
-        trend.append({
-            "label": date(yy, mm, 1).strftime("%b"),
-            "amount": _money(agg["amount"]),
-            "count": agg["n"] or 0,
-        })
-
-    month_qs = base.filter(date__year=today.year, date__month=today.month)
-    products = [
-        {"name": r["product"] or "Other", "amount": _money(r["t"]), "count": r["n"]}
-        for r in month_qs.values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
-    ]
-
-    data = {"firm_wide": firm_wide, "trend": trend, "products": products}
-
-    if firm_wide:
-        data["leaderboard"] = [
+    resp = {
+        "firm_wide": firm_wide,
+        "period": data["period"],
+        "columns": data["columns"],
+        "buckets": data["buckets"],
+        "current_label": data["current_label"],
+        "current_sublabel": data["current_sublabel"],
+        "trend": [
             {
-                "name": r["employee__user__first_name"] or r["employee__user__username"],
-                "amount": _money(r["t"]),
-                "points": _money(r["p"]),
+                "label": t["label"],
+                "sublabel": t["sublabel"],
+                "amount": _money(t["amount"]),
+                "count": t["count"],
+                "by_product": [_money(v) for v in t["by_product"]],
             }
-            for r in month_qs.values(
-                "employee__user__username", "employee__user__first_name"
-            ).annotate(t=Sum("amount"), p=Sum("points")).order_by("-t")[:15]
+            for t in data["trend"]
+        ],
+        "products": [
+            {"name": p["name"], "amount": _money(p["amount"]), "count": p["count"]}
+            for p in data["products"]
+        ],
+    }
+    if firm_wide:
+        resp["leaderboard"] = [
+            {
+                "name": e["name"],
+                "amount": _money(e["amount"]),
+                "points": _money(e["points"]),
+                "by_product": [_money(v) for v in e["by_product"]],
+            }
+            for e in data["leaderboard"]
         ]
-    return JsonResponse(data)
+    return JsonResponse(resp)
 
 
 # ── Device permission reporting (admin visibility on Call Analytics) ─────────
