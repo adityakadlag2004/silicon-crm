@@ -99,6 +99,10 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
         self.fields["product"].choices = product_choices
         if "employee" in self.fields:
             self.fields["employee"].queryset = Employee.objects.filter(active=True)
+            # Non-admins don't submit an employee (the field is hidden for them);
+            # the view assigns their own employee record. Keep it optional so the
+            # form validates for employees/managers, not just admins.
+            self.fields["employee"].required = False
         self.fields["cover_amount"].required = False
         self._configure_policy_field()
 

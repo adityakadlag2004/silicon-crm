@@ -67,6 +67,23 @@ class SaleAttributionTests(_WorkflowSetup):
         sale = Sale.objects.latest("id")
         self.assertEqual(sale.employee, self.emps["employee"])
 
+    def test_employee_can_add_sale_without_employee_field(self):
+        # The web form hides the employee field for non-admins, so a real
+        # browser POST omits it. The sale must still save under the logged-in
+        # employee (regression: form treated employee as required → 200, no save).
+        before = Sale.objects.count()
+        resp = self.http["employee"].post(reverse("clients:add_sale"), {
+            "client": self.customer.id,
+            "product": "SIP",
+            "amount": "5000",
+            "date": "2026-07-01",
+        })
+        self.assertEqual(resp.status_code, 302, "employee sale POST should redirect (save), not re-render")
+        self.assertEqual(Sale.objects.count(), before + 1)
+        sale = Sale.objects.latest("id")
+        self.assertEqual(sale.employee, self.emps["employee"])
+        self.assertEqual(sale.status, Sale.STATUS_PENDING)
+
     def test_admin_can_attribute_sale_to_other_employee(self):
         resp = self.http["admin"].post(reverse("clients:add_sale"), {
             "client": self.customer.id,
