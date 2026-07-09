@@ -75,13 +75,15 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         int type = 0;
         long durationSec = 0;
         long dateMillis = 0;
+        String account = null;
 
         // NOTE: no "LIMIT 1" — Android 14+ call-log provider rejects it
         // (IllegalArgumentException: Invalid token LIMIT). Sort DESC and
         // read only the first row instead.
         Cursor c = ctx.getContentResolver().query(
                 CallLog.Calls.CONTENT_URI,
-                new String[]{CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DURATION, CallLog.Calls.DATE},
+                new String[]{CallLog.Calls.NUMBER, CallLog.Calls.TYPE, CallLog.Calls.DURATION,
+                        CallLog.Calls.DATE, CallLog.Calls.PHONE_ACCOUNT_ID},
                 null, null, CallLog.Calls.DATE + " DESC");
         if (c != null) {
             if (c.moveToFirst()) {
@@ -89,6 +91,7 @@ public class CallTrackerReceiver extends BroadcastReceiver {
                 type = c.getInt(1);
                 durationSec = c.getLong(2);
                 dateMillis = c.getLong(3);
+                account = c.getString(4);
             }
             c.close();
         }
@@ -103,9 +106,16 @@ public class CallTrackerReceiver extends BroadcastReceiver {
                 || (type == CallLog.Calls.OUTGOING_TYPE && durationSec > 0);
 
         // 1) Sync to the CRM — catch-up style: uploads this call AND any
-        // backlog from earlier network gaps. Offline? The marker doesn't
-        // advance and the next trigger retries.
+        // backlog from earlier network gaps (CallSyncManager filters to the
+        // office SIM itself). Offline? The marker doesn't advance and the next
+        // trigger retries.
         CallSyncManager.syncRecentCalls(ctx);
+
+        // Only prompt a follow-up for office-SIM calls (dual-SIM employees).
+        if (!SimHelper.filterFor(ctx).matches(account)) {
+            Log.i(TAG, "popup skip: call was on a non-office SIM");
+            return;
+        }
 
         // 2) Follow-up prompt — governed by its OWN window (independent of the
         // tracking window, so it can run every day incl. Sunday).

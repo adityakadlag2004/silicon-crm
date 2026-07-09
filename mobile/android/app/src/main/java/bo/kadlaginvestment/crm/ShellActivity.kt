@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,6 +54,7 @@ import bo.kadlaginvestment.crm.ui.RenewalsScreen
 import bo.kadlaginvestment.crm.ui.ReportsHub
 import bo.kadlaginvestment.crm.ui.SalesScreen
 import bo.kadlaginvestment.crm.ui.SheetsScreen
+import bo.kadlaginvestment.crm.ui.SimSettingsScreen
 import bo.kadlaginvestment.crm.ui.TeamScreen
 
 @androidx.compose.runtime.Composable
@@ -104,6 +106,8 @@ class ShellActivity : ComponentActivity() {
         super.onResume()
         permTick.intValue++
         reportDeviceStatus()
+        // Single-SIM phones need no choice — auto-select so tracking is scoped.
+        SimHelper.ensureSingleSimConfigured(applicationContext)
     }
 
     /** Bootstraps that used to run in the WebView login's JS: sync the
@@ -176,6 +180,8 @@ class ShellActivity : ComponentActivity() {
             KadlagTheme {
                 var selected by remember { mutableIntStateOf(0) }
                 var permDialogDismissed by remember { mutableStateOf(false) }
+                var simDialogDismissed by remember { mutableStateOf(false) }
+                var pickedSub by remember { mutableIntStateOf(-1) }
 
                 // ── Self-hosted update check ──
                 var update by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
@@ -237,6 +243,42 @@ class ShellActivity : ComponentActivity() {
                         confirmButton = {},
                         dismissButton = {
                             TextButton(onClick = { permDialogDismissed = true }) { Text("Later") }
+                        },
+                    )
+                }
+
+                // ── First-run office-SIM picker (dual-SIM employees) ──
+                if (!simDialogDismissed && !needCalls && SimHelper.needsSetup(this)) {
+                    val sims = SimHelper.getSims(this)
+                    if (pickedSub == -1 && sims.isNotEmpty()) pickedSub = sims[0].subId
+                    AlertDialog(
+                        onDismissRequest = { },
+                        title = { Text("Which SIM is your office SIM?") },
+                        text = {
+                            Column {
+                                Text("Only this SIM's calls will be tracked. Your personal SIM is ignored. You can change it later in Menu → Office SIM.")
+                                sims.forEach { sim ->
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(top = 8.dp)
+                                            .clickable { pickedSub = sim.subId },
+                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    ) {
+                                        androidx.compose.material3.RadioButton(
+                                            selected = pickedSub == sim.subId,
+                                            onClick = { pickedSub = sim.subId },
+                                        )
+                                        Text(sim.label)
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            Button(onClick = {
+                                sims.firstOrNull { it.subId == pickedSub }?.let {
+                                    SimHelper.saveOfficeSim(this, it.subId, it.slot)
+                                }
+                                simDialogDismissed = true
+                            }) { Text("Track this SIM") }
                         },
                     )
                 }
@@ -353,6 +395,11 @@ class ShellActivity : ComponentActivity() {
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
                             onOpenWeb = openWeb,
+                        )
+                        overlay == "sim" -> SimSettingsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
                         )
                         selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = routeLink)
                         selected == 1 -> ClientsScreen(m, onSessionExpired = goLogin, onOpenWeb = openWeb)

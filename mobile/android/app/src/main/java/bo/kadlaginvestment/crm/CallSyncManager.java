@@ -50,12 +50,16 @@ public final class CallSyncManager {
         }
         long since = Math.max(last - OVERLAP_MS, now - MAX_LOOKBACK_MS);
 
+        // Only track the office SIM's calls (dual-SIM employees).
+        SimHelper.SimFilter simFilter = SimHelper.filterFor(ctx);
+
         List<JSONObject> events = new ArrayList<>();
         long newestDate = last;
         Cursor c = ctx.getContentResolver().query(
                 CallLog.Calls.CONTENT_URI,
                 new String[]{CallLog.Calls.NUMBER, CallLog.Calls.TYPE,
-                        CallLog.Calls.DURATION, CallLog.Calls.DATE},
+                        CallLog.Calls.DURATION, CallLog.Calls.DATE,
+                        CallLog.Calls.PHONE_ACCOUNT_ID},
                 CallLog.Calls.DATE + " > ?",
                 new String[]{String.valueOf(since)},
                 CallLog.Calls.DATE + " ASC");
@@ -66,7 +70,9 @@ public final class CallSyncManager {
                     int type = c.getInt(1);
                     long duration = c.getLong(2);
                     long date = c.getLong(3);
+                    String account = c.getString(4);
                     if (number == null || number.isEmpty()) continue;
+                    if (!simFilter.matches(account)) continue;   // skip personal SIM
                     boolean incoming;
                     boolean connected;
                     switch (type) {
