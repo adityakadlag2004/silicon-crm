@@ -70,8 +70,9 @@ fun SectionTitle(text: String) {
 
 @Composable
 fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
+    // Selected: dark text on gold (readable) instead of low-contrast white-on-gold.
     val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val fg = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Box(
         Modifier
             .background(bg, RoundedCornerShape(20.dp))

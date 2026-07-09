@@ -52,10 +52,12 @@ import org.json.JSONObject
 @Composable
 fun TaskDetailScreen(
     taskId: Int,
+    reloadSignal: Int,
     onBack: () -> Unit,
     onSessionExpired: () -> Unit,
     onOpenWeb: (String) -> Unit,
     onChanged: () -> Unit,
+    onEdit: (JSONObject) -> Unit,
 ) {
     BackHandler(onBack = onBack)
     val scope = rememberCoroutineScope()
@@ -66,10 +68,9 @@ fun TaskDetailScreen(
     var newComment by remember { mutableStateOf("") }
     var newChecklist by remember { mutableStateOf("") }
     var showComment by remember { mutableStateOf(false) }
-    var showEdit by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    LaunchedEffect(taskId, reloadKey) {
+    LaunchedEffect(taskId, reloadKey, reloadSignal) {
         when (val r = ApiClient.get("/clients/api/app/tasks/$taskId/")) {
             is ApiClient.Result.Ok -> task = r.json
             is ApiClient.Result.NotLoggedIn -> onSessionExpired()
@@ -129,10 +130,6 @@ fun TaskDetailScreen(
         )
     }
 
-    if (showEdit) TaskEditDialog(t, onDismiss = { showEdit = false }, onSave = { body ->
-        act(body); showEdit = false
-    })
-
     Column(Modifier.fillMaxSize()) {
         // Top bar
         Row(
@@ -158,7 +155,7 @@ fun TaskDetailScreen(
             InfoRow("Assigned", t.optString("assignee").ifBlank { "—" })
             InfoRow("Created by", t.optString("created_by").ifBlank { "—" })
             if (t.optString("due_date").isNotBlank())
-                InfoRow("Due", fmtDate(t.optString("due_date")) + " " + t.optString("due_time"),
+                InfoRow("Due", fmtDate(t.optString("due_date")) + " " + fmt12h(t.optString("due_time")),
                     if (status == "overdue") StatusRed else null)
 
             if (t.optString("description").isNotBlank()) {
@@ -281,7 +278,7 @@ fun TaskDetailScreen(
                 Text("Comment", fontSize = 13.sp)
             }
             if (canEdit) {
-                OutlinedButton(onClick = { showEdit = true }, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { onEdit(t) }, modifier = Modifier.weight(1f)) {
                     Text("Edit", fontSize = 13.sp)
                 }
                 OutlinedButton(onClick = { confirmDelete = true }) {
@@ -298,43 +295,4 @@ private fun InfoRow(label: String, value: String, valueColor: androidx.compose.u
         Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
         Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = valueColor ?: MaterialTheme.colorScheme.onSurface)
     }
-}
-
-/** Edit priority + due date + description. */
-@Composable
-private fun TaskEditDialog(task: JSONObject, onDismiss: () -> Unit, onSave: (JSONObject) -> Unit) {
-    var priority by remember { mutableStateOf(task.optString("priority")) }
-    var due by remember { mutableStateOf(task.optString("due_date")) }
-    var desc by remember { mutableStateOf(task.optString("description")) }
-    val priorities = listOf("low" to "Low", "medium" to "Medium", "high" to "High", "critical" to "Critical")
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit task") },
-        text = {
-            Column {
-                Text("Priority", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    priorities.forEach { (v, l) -> Chip(l, priority == v) { priority = v } }
-                }
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(due, { due = it }, Modifier.fillMaxWidth(),
-                    label = { Text("Due date (YYYY-MM-DD)") }, singleLine = true)
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(desc, { desc = it }, Modifier.fillMaxWidth(),
-                    label = { Text("Description") })
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                // Fire the changed pieces as separate actions.
-                onSave(JSONObject().put("action", "priority").put("priority", priority))
-                if (due != task.optString("due_date"))
-                    onSave(JSONObject().put("action", "due").put("due_date", due))
-                if (desc != task.optString("description"))
-                    onSave(JSONObject().put("action", "description").put("description", desc))
-            }) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }

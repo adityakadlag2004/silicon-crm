@@ -280,12 +280,16 @@ def app_task_detail(request, pk):
         "description": task.description,
         "created_by": task.created_by.username if task.created_by else None,
         "can_edit": _can_edit(request, task),
+        # ids so the edit sheet can pre-select the right options
+        "category_id": task.category_id,
+        "assignee_id": task.assigned_to_id,
         "checklist": [{"id": i.id, "title": i.title, "done": i.is_done}
                       for i in task.checklist_items.all()],
         "comments": [{"author": c.author.username if c.author else "—",
                       "body": c.body, "at": c.created_at.isoformat()}
                      for c in task.comments.select_related("author")],
-        "subscribers": [{"id": s.id, "name": s.user.get_full_name() or s.user.username}
+        "subscribers": [{"id": s.id, "user_id": s.user_id,
+                         "name": s.user.get_full_name() or s.user.username}
                         for s in task.subscribers.select_related("user")],
         "attachments": [{"id": a.id, "filename": a.filename, "is_voice": a.is_voice_note,
                          "url": f"/clients/tasks/attachment/{a.id}/download/"}
@@ -448,6 +452,41 @@ def app_task_action(request, pk):
                                     f"/clients/tasks/{task.pk}/", event="subscriber_added")
     elif action == "remove_subscriber":
         TaskSubscriber.objects.filter(pk=body.get("subscriber_id"), task=task).delete()
+    elif action == "edit":
+        # Update every provided field at once (the native Edit sheet).
+        if body.get("title", "").strip():
+            task.title = body["title"].strip()[:255]
+        if "description" in body:
+            task.description = (body.get("description") or "").strip()
+        if body.get("priority") in dict(Task.PRIORITY_CHOICES):
+            task.priority = body["priority"]
+        if "category_id" in body:
+            cid = body.get("category_id")
+            task.category = TaskCategory.objects.filter(pk=cid).first() if cid else None
+        if "due_date" in body:
+            task.due_date = parse_date_param(body.get("due_date"))
+            task.due_time = _parse_time(body.get("due_time"))
+            if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
+                task.status = Task.STATUS_PENDING
+        if "assigned_to" in body:
+            aid = body.get("assigned_to")
+            task.assigned_to = Employee.objects.filter(pk=aid, active=True).first() if aid else None
+        # Replace subscribers if a list is supplied.
+        if isinstance(body.get("subscribers"), list):
+            task.subscribers.all().delete()
+            for uid in body["subscribers"]:
+                if str(uid).isdigit():
+                    TaskSubscriber.objects.get_or_create(task=task, user_id=int(uid))
+        task.save()
+        # Replace checklist if supplied.
+        if isinstance(body.get("checklist"), list):
+            task.checklist_items.all().delete()
+            for i, ct in enumerate(body["checklist"]):
+                if (ct or "").strip():
+                    TaskChecklistItem.objects.create(task=task, title=ct.strip()[:255], order=i)
+        log_activity(task, request.user, TaskActivity.DESCRIPTION_UPDATED, "Task details updated.")
+        notify_task(task, request.user, "Task updated",
+                    f"“{task.title}” was updated.", event="status_changed")
     elif action == "delete":
         if not (_can_manage_all(request) or task.created_by_id == request.user.id):
             return JsonResponse({"ok": False, "error": "forbidden"}, status=403)

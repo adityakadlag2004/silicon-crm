@@ -43,7 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.net.ApiClient
-import bo.kadlaginvestment.crm.ui.AssignTaskScreen
+import bo.kadlaginvestment.crm.ui.AssignTaskSheet
 import bo.kadlaginvestment.crm.ui.KadlagTheme
 import bo.kadlaginvestment.crm.ui.StatusGreen
 import bo.kadlaginvestment.crm.ui.TaskActivitiesScreen
@@ -72,7 +72,8 @@ class TasksActivity : ComponentActivity() {
                 var detailId by remember {
                     mutableStateOf<Int?>(intent?.getIntExtra("task_id", 0)?.takeIf { it > 0 })
                 }
-                var showAssign by remember { mutableStateOf(false) }
+                var sheetOpen by remember { mutableStateOf(false) }
+                var sheetEdit by remember { mutableStateOf<org.json.JSONObject?>(null) }
                 var reloadSignal by remember { mutableIntStateOf(0) }
                 var role by remember { mutableStateOf("") }
 
@@ -92,32 +93,24 @@ class TasksActivity : ComponentActivity() {
                 }
                 val openWeb: (String) -> Unit = { path -> WebActivity.open(this, path) }
 
-                // Full-screen sub-pages take over the whole activity (no bottom nav).
-                when {
-                    showAssign -> {
-                        AssignTaskScreen(
-                            onBack = { showAssign = false },
-                            onSessionExpired = goLogin,
-                            onCreated = { showAssign = false; reloadSignal++ },
-                        )
-                        return@KadlagTheme
-                    }
-                    detailId != null -> {
-                        TaskDetailScreen(
-                            taskId = detailId!!,
-                            onBack = { detailId = null },
-                            onSessionExpired = goLogin,
-                            onOpenWeb = openWeb,
-                            onChanged = { reloadSignal++ },
-                        )
-                        return@KadlagTheme
-                    }
-                }
-
                 val isAdminOrManager = role == "admin" || role == "manager"
                 val onList = subRoute == "all" ||
                     (subRoute == null && tab in listOf(0, 1, 2, 3))
 
+                val openSheet: (org.json.JSONObject?) -> Unit = { edit -> sheetEdit = edit; sheetOpen = true }
+
+                Box(Modifier.fillMaxSize()) {
+                if (detailId != null) {
+                    TaskDetailScreen(
+                        taskId = detailId!!,
+                        reloadSignal = reloadSignal,
+                        onBack = { detailId = null },
+                        onSessionExpired = goLogin,
+                        onOpenWeb = openWeb,
+                        onChanged = { reloadSignal++ },
+                        onEdit = { openSheet(it) },
+                    )
+                } else
                 Scaffold(
                     topBar = {
                         TopAppBar(
@@ -165,7 +158,7 @@ class TasksActivity : ComponentActivity() {
                     floatingActionButton = {
                         if (onList) {
                             FloatingActionButton(
-                                onClick = { showAssign = true },
+                                onClick = { openSheet(null) },
                                 containerColor = StatusGreen,
                                 contentColor = Color.White,
                             ) { Icon(Icons.Filled.Add, contentDescription = "Assign task") }
@@ -193,6 +186,16 @@ class TasksActivity : ComponentActivity() {
                         }
                     }
                 }
+
+                if (sheetOpen) {
+                    AssignTaskSheet(
+                        editTask = sheetEdit,
+                        onDismiss = { sheetOpen = false },
+                        onDone = { sheetOpen = false; reloadSignal++ },
+                        onSessionExpired = goLogin,
+                    )
+                }
+                } // Box
             }
         }
     }

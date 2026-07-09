@@ -2,7 +2,7 @@ package bo.kadlaginvestment.crm.ui
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
-import androidx.activity.compose.BackHandler
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,21 +12,32 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,240 +60,302 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
 
-private data class Cat(val id: Int, val name: String)
+private data class Opt(val id: Int, val name: String)
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Compact half-height bottom sheet for creating or editing a task.
+ * People / due / priority / category / in-loop are icon chips that open small
+ * dropdowns or pickers, so the form stays short and the Assign button sits
+ * mid-screen (not under the system nav bar). `editTask != null` → edit mode.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun AssignTaskScreen(
-    onBack: () -> Unit,
+fun AssignTaskSheet(
+    editTask: JSONObject?,
+    onDismiss: () -> Unit,
+    onDone: () -> Unit,
     onSessionExpired: () -> Unit,
-    onCreated: () -> Unit,
 ) {
-    BackHandler(onBack = onBack)
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        val isEdit = editTask != null
 
-    var meta by remember { mutableStateOf<JSONObject?>(null) }
-    var metaError by remember { mutableStateOf<String?>(null) }
+        var meta by remember { mutableStateOf<JSONObject?>(null) }
+        var title by remember { mutableStateOf(editTask?.optString("title") ?: "") }
+        var description by remember { mutableStateOf(editTask?.optString("description") ?: "") }
+        val assignees = remember { mutableStateListOf<Opt>() }
+        val subscribers = remember { mutableStateListOf<Opt>() }
+        val categories = remember { mutableStateListOf<Opt>() }
+        var category by remember { mutableStateOf<Opt?>(null) }
+        var priority by remember { mutableStateOf(editTask?.optString("priority")?.ifBlank { "medium" } ?: "medium") }
+        var dueDate by remember { mutableStateOf(editTask?.optString("due_date") ?: "") }
+        var dueTime by remember { mutableStateOf(editTask?.optString("due_time") ?: "") }
+        val checklist = remember { mutableStateListOf<String>() }
+        var repeat by remember { mutableStateOf("") }
+        var openMenu by remember { mutableStateOf("") }
+        var submitting by remember { mutableStateOf(false) }
+        var error by remember { mutableStateOf<String?>(null) }
 
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    val checklist = remember { mutableStateListOf<String>() }
-    val assignees = remember { mutableStateListOf<Pair<Int, String>>() }
-    val subscribers = remember { mutableStateListOf<Pair<Int, String>>() }
-    val categories = remember { mutableStateListOf<Cat>() }
-    var category by remember { mutableStateOf<Cat?>(null) }
-    var priority by remember { mutableStateOf("medium") }
-    var dueDate by remember { mutableStateOf("") }
-    var dueTime by remember { mutableStateOf("") }
-    var repeat by remember { mutableStateOf("") }
-
-    var showNewCat by remember { mutableStateOf(false) }
-    var newCatName by remember { mutableStateOf("") }
-    var submitting by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        when (val r = ApiClient.get("/clients/api/app/tasks/meta/")) {
-            is ApiClient.Result.Ok -> {
-                meta = r.json
-                val cats = r.json.optJSONArray("categories")
-                categories.clear()
-                for (i in 0 until (cats?.length() ?: 0)) {
-                    val c = cats!!.getJSONObject(i)
-                    categories.add(Cat(c.getInt("id"), c.optString("name")))
+        // Prefill edit selections that need the JSON.
+        LaunchedEffect(editTask) {
+            if (editTask != null) {
+                editTask.optInt("assignee_id", 0).takeIf { it > 0 }?.let {
+                    assignees.add(Opt(it, editTask.optString("assignee")))
                 }
+                editTask.optInt("category_id", 0).takeIf { it > 0 }?.let {
+                    category = Opt(it, editTask.optString("category"))
+                }
+                val subs = editTask.optJSONArray("subscribers")
+                for (i in 0 until (subs?.length() ?: 0)) {
+                    val s = subs!!.getJSONObject(i)
+                    subscribers.add(Opt(s.optInt("user_id"), s.optString("name")))
+                }
+                val cl = editTask.optJSONArray("checklist")
+                for (i in 0 until (cl?.length() ?: 0)) checklist.add(cl!!.getJSONObject(i).optString("title"))
             }
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> metaError = r.message
         }
-    }
 
-    if (metaError != null) { ErrorBox(metaError!!) { metaError = null }; return }
-    val m = meta ?: run { LoadingBox(); return }
-    val employees = m.optJSONArray("employees")
-    val users = m.optJSONArray("users")
-
-    // ── date & time pickers ──
-    fun pickDate() {
-        val cal = Calendar.getInstance()
-        DatePickerDialog(context, { _, y, mo, d ->
-            dueDate = String.format("%04d-%02d-%02d", y, mo + 1, d)
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
-    }
-    fun pickTime() {
-        val cal = Calendar.getInstance()
-        TimePickerDialog(context, { _, h, mi ->
-            dueTime = String.format("%02d:%02d", h, mi)
-        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
-    }
-
-    if (showNewCat) {
-        AlertDialog(
-            onDismissRequest = { showNewCat = false },
-            title = { Text("New category") },
-            text = {
-                OutlinedTextField(newCatName, { newCatName = it }, Modifier.fillMaxWidth(),
-                    label = { Text("Category name") }, singleLine = true)
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val name = newCatName.trim()
-                    if (name.isNotBlank()) scope.launch {
-                        val body = JSONObject().put("name", name)
-                        when (val r = ApiClient.post("/clients/api/app/tasks/categories/create/", body)) {
-                            is ApiClient.Result.Ok -> {
-                                val c = Cat(r.json.optInt("id"), r.json.optString("name"))
-                                if (categories.none { it.id == c.id }) categories.add(c)
-                                category = c
-                                newCatName = ""; showNewCat = false
-                            }
-                            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-                            is ApiClient.Result.Error -> { error = r.message; showNewCat = false }
-                        }
+        LaunchedEffect(Unit) {
+            when (val r = ApiClient.get("/clients/api/app/tasks/meta/")) {
+                is ApiClient.Result.Ok -> {
+                    meta = r.json
+                    val cats = r.json.optJSONArray("categories")
+                    categories.clear()
+                    for (i in 0 until (cats?.length() ?: 0)) {
+                        val c = cats!!.getJSONObject(i)
+                        categories.add(Opt(c.getInt("id"), c.optString("name")))
                     }
-                }) { Text("Create") }
-            },
-            dismissButton = { TextButton(onClick = { showNewCat = false }) { Text("Cancel") } },
-        )
-    }
+                }
+                is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                is ApiClient.Result.Error -> error = r.message
+            }
+        }
 
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("← Back", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack))
-            Spacer(Modifier.width(12.dp))
-            Text("Assign Task", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        val employees = meta?.optJSONArray("employees")
+        val users = meta?.optJSONArray("users")
+
+        fun pickDate() {
+            val cal = Calendar.getInstance()
+            DatePickerDialog(context, { _, y, mo, d ->
+                dueDate = String.format("%04d-%02d-%02d", y, mo + 1, d)
+                // chain a 12-hour time picker
+                TimePickerDialog(context, { _, h, mi ->
+                    dueTime = String.format("%02d:%02d", h, mi)
+                }, cal.get(Calendar.HOUR_OF_DAY), 0, false).show()
+            }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+        }
+
+        fun submit() {
+            submitting = true; error = null
+            scope.launch {
+                val body = JSONObject()
+                    .put("title", title).put("description", description)
+                    .put("priority", priority).put("due_date", dueDate).put("due_time", dueTime)
+                category?.let { body.put("category_id", it.id) } ?: body.put("category_id", JSONObject.NULL)
+                body.put("subscribers", JSONArray(subscribers.map { it.id }))
+                body.put("checklist", JSONArray(checklist.filter { it.isNotBlank() }))
+
+                val r = if (isEdit) {
+                    body.put("action", "edit")
+                    body.put("assigned_to", assignees.firstOrNull()?.id ?: JSONObject.NULL)
+                    ApiClient.post("/clients/api/app/tasks/${editTask!!.optInt("id")}/action/", body)
+                } else {
+                    body.put("assignees", JSONArray(assignees.map { it.id }))
+                    body.put("repeat_rule", repeat)
+                    ApiClient.post("/clients/api/app/tasks/create/", body)
+                }
+                when (r) {
+                    is ApiClient.Result.Ok -> onDone()
+                    is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                    is ApiClient.Result.Error -> error = r.message
+                }
+                submitting = false
+            }
         }
 
         Column(
-            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 520.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(),
-                label = { Text("Task title") }, singleLine = true)
-            OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(),
-                label = { Text("Description") })
+            Text(if (isEdit) "Edit Task" else "New Task", fontWeight = FontWeight.Bold, fontSize = 17.sp)
 
-            // Checklist
-            Text("Checklist", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(),
+                label = { Text("Title") }, singleLine = true)
+            OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(),
+                label = { Text("Add description") }, maxLines = 3)
+
+            // Compact icon selectors
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Assignees
+                Box {
+                    SelectorChip(Icons.Filled.Person, if (assignees.isEmpty()) "Assign" else "${assignees.size} assignee(s)",
+                        active = assignees.isNotEmpty()) { openMenu = if (openMenu == "assignees") "" else "assignees" }
+                    MultiMenu(openMenu == "assignees", employees, assignees) { openMenu = "" }
+                }
+                // Due
+                SelectorChip(Icons.Filled.DateRange,
+                    if (dueDate.isBlank()) "Due" else fmtDate(dueDate) + (dueTime.takeIf { it.isNotBlank() }?.let { " " + fmt12h(it) } ?: ""),
+                    active = dueDate.isNotBlank()) { pickDate() }
+                // Priority
+                Box {
+                    PriorityChip(priority) { openMenu = if (openMenu == "priority") "" else "priority" }
+                    DropdownMenu(openMenu == "priority", onDismissRequest = { openMenu = "" }) {
+                        listOf("low" to "Low", "medium" to "Medium", "high" to "High", "critical" to "Critical").forEach { (v, l) ->
+                            DropdownMenuItem(text = { Text(l) }, onClick = { priority = v; openMenu = "" })
+                        }
+                    }
+                }
+                // Category
+                Box {
+                    SelectorChip(null, category?.name ?: "Category", active = category != null,
+                        leadingDot = MaterialTheme.colorScheme.primary) { openMenu = if (openMenu == "category") "" else "category" }
+                    DropdownMenu(openMenu == "category", onDismissRequest = { openMenu = "" }) {
+                        DropdownMenuItem(text = { Text("None") }, onClick = { category = null; openMenu = "" })
+                        categories.forEach { c ->
+                            DropdownMenuItem(text = { Text(c.name) }, onClick = { category = c; openMenu = "" })
+                        }
+                        DropdownMenuItem(
+                            text = { Text("+ Add category", color = MaterialTheme.colorScheme.primary) },
+                            onClick = { openMenu = "newcat" },
+                        )
+                    }
+                }
+                // In Loop
+                Box {
+                    SelectorChip(Icons.Filled.Notifications, if (subscribers.isEmpty()) "In loop" else "${subscribers.size} in loop",
+                        active = subscribers.isNotEmpty()) { openMenu = if (openMenu == "inloop") "" else "inloop" }
+                    MultiMenu(openMenu == "inloop", users, subscribers) { openMenu = "" }
+                }
+            }
+
+            if (openMenu == "newcat") {
+                NewCategoryRow(
+                    onCancel = { openMenu = "" },
+                    onCreate = { name ->
+                        scope.launch {
+                            val b = JSONObject().put("name", name)
+                            when (val r = ApiClient.post("/clients/api/app/tasks/categories/create/", b)) {
+                                is ApiClient.Result.Ok -> {
+                                    val c = Opt(r.json.optInt("id"), r.json.optString("name"))
+                                    if (categories.none { it.id == c.id }) categories.add(c)
+                                    category = c; openMenu = ""
+                                }
+                                is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                                is ApiClient.Result.Error -> { error = r.message; openMenu = "" }
+                            }
+                        }
+                    },
+                )
+            }
+
+            // Checklist (compact, add-on-demand)
             checklist.forEachIndexed { i, item ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(item, { checklist[i] = it }, Modifier.weight(1f),
-                        placeholder = { Text("Item ${i + 1}") }, singleLine = true)
+                        placeholder = { Text("Checklist item") }, singleLine = true)
                     TextButton(onClick = { checklist.removeAt(i) }) { Text("✕") }
                 }
             }
-            TextButton(onClick = { checklist.add("") }) { Text("+ Add checklist item") }
-
-            // Assignees (multi-select chips)
-            Text("Assign to (one or more)", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (i in 0 until (employees?.length() ?: 0)) {
-                    val e = employees!!.getJSONObject(i)
-                    val pair = e.getInt("id") to e.optString("name")
-                    val sel = assignees.any { it.first == pair.first }
-                    Chip(e.optString("name"), sel) {
-                        if (sel) assignees.removeAll { it.first == pair.first } else assignees.add(pair)
-                    }
-                }
+            TextButton(onClick = { checklist.add("") }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                Text("+ Checklist item", fontSize = 13.sp)
             }
 
-            // Subscribers (multi-select chips)
-            Text("Subscribers (In Loop)", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (i in 0 until (users?.length() ?: 0)) {
-                    val u = users!!.getJSONObject(i)
-                    val pair = u.getInt("id") to u.optString("name")
-                    val sel = subscribers.any { it.first == pair.first }
-                    Chip(u.optString("name"), sel) {
-                        if (sel) subscribers.removeAll { it.first == pair.first } else subscribers.add(pair)
-                    }
-                }
-            }
-
-            // Category + add
-            Text("Category", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip("None", category == null) { category = null }
-                categories.forEach { c -> Chip(c.name, category?.id == c.id) { category = c } }
-                Box(
-                    Modifier.clip(RoundedCornerShape(20.dp))
-                        .background(MaterialTheme.colorScheme.primary)
-                        .clickable { showNewCat = true }
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
-                ) { Text("+ Add", color = androidx.compose.ui.graphics.Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
-            }
-
-            Text("Priority", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("low" to "Low", "medium" to "Medium", "high" to "High", "critical" to "Critical")
-                    .forEach { (v, l) -> Chip(l, priority == v) { priority = v } }
-            }
-
-            // Due date & time via native pickers
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PickerBox("Due date", dueDate.ifBlank { "Pick date" }, Modifier.weight(1f)) { pickDate() }
-                PickerBox("Due time", dueTime.ifBlank { "Pick time" }, Modifier.weight(1f)) { pickTime() }
-            }
-
-            // Repeat toggle
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Repeat task", fontSize = 14.sp, modifier = Modifier.weight(1f))
-                Switch(checked = repeat.isNotBlank(), onCheckedChange = { repeat = if (it) "daily" else "" })
-            }
-            if (repeat.isNotBlank()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("daily" to "Daily", "weekly" to "Weekly", "monthly" to "Monthly")
-                        .forEach { (v, l) -> Chip(l, repeat == v) { repeat = v } }
-                }
-            }
-
-            Text("Attachments & voice notes can be added from the task on web.",
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             error?.let { Text(it, color = StatusRed, fontSize = 13.sp) }
-            Spacer(Modifier.height(8.dp))
-        }
 
-        Button(
-            onClick = {
-                submitting = true; error = null
-                scope.launch {
-                    val body = JSONObject()
-                        .put("title", title)
-                        .put("description", description)
-                        .put("priority", priority)
-                        .put("due_date", dueDate)
-                        .put("due_time", dueTime)
-                        .put("repeat_rule", repeat)
-                    category?.let { body.put("category_id", it.id) }
-                    body.put("assignees", JSONArray(assignees.map { it.first }))
-                    body.put("checklist", JSONArray(checklist.filter { it.isNotBlank() }))
-                    body.put("subscribers", JSONArray(subscribers.map { it.first }))
-                    when (val r = ApiClient.post("/clients/api/app/tasks/create/", body)) {
-                        is ApiClient.Result.Ok -> onCreated()
-                        is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-                        is ApiClient.Result.Error -> error = r.message
+            // Bottom row: repeat + attach + voice, and the Assign button in front
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (!isEdit) {
+                    SelectorChip(null, if (repeat.isBlank()) "Repeat" else repeat.replaceFirstChar { it.uppercase() },
+                        active = repeat.isNotBlank()) {
+                        repeat = when (repeat) { "" -> "daily"; "daily" -> "weekly"; "weekly" -> "monthly"; else -> "" }
                     }
-                    submitting = false
                 }
-            },
-            enabled = !submitting && title.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
-        ) {
-            Text(if (submitting) "Assigning…" else "Assign Task", fontSize = 16.sp)
+                IconAction("📎") { Toast.makeText(context, "Attach files from the task on web", Toast.LENGTH_SHORT).show() }
+                IconAction("🎙") { Toast.makeText(context, "Add voice notes from the task on web", Toast.LENGTH_SHORT).show() }
+                Spacer(Modifier.weight(1f))
+                Button(onClick = { submit() }, enabled = !submitting && title.isNotBlank()) {
+                    Text(if (submitting) "…" else if (isEdit) "Save" else "Assign")
+                }
+            }
+        }
+    }
+}
+
+/** A pill selector with an optional leading icon or colored dot. Returns Unit so
+ *  callers can chain `.also { DropdownMenu(...) }` for an anchored menu. */
+@Composable
+private fun SelectorChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector?,
+    label: String,
+    active: Boolean,
+    leadingDot: Color? = null,
+    onClick: () -> Unit,
+) {
+    val bg = if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    Row(
+        Modifier.clip(RoundedCornerShape(20.dp)).background(bg).clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) { Icon(icon, null, Modifier.size(16.dp), tint = fg); Spacer(Modifier.width(5.dp)) }
+        if (leadingDot != null) { Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(leadingDot)); Spacer(Modifier.width(5.dp)) }
+        Text(label, color = fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun PriorityChip(priority: String, onClick: () -> Unit) {
+    SelectorChip(null, "Priority: " + priority.replaceFirstChar { it.uppercase() },
+        active = true, leadingDot = priorityColor(priority), onClick = onClick)
+}
+
+/** Multi-select dropdown that toggles items without closing, syncing `selected`. */
+@Composable
+private fun MultiMenu(
+    expanded: Boolean,
+    options: JSONArray?,
+    selected: androidx.compose.runtime.snapshots.SnapshotStateList<Opt>,
+    onClose: () -> Unit,
+) {
+    DropdownMenu(expanded, onDismissRequest = onClose) {
+        for (i in 0 until (options?.length() ?: 0)) {
+            val o = options!!.getJSONObject(i)
+            val opt = Opt(o.getInt("id"), o.optString("name"))
+            val isSel = selected.any { it.id == opt.id }
+            DropdownMenuItem(
+                text = { Text((if (isSel) "✓ " else "   ") + opt.name) },
+                onClick = { if (isSel) selected.removeAll { it.id == opt.id } else selected.add(opt) },
+            )
         }
     }
 }
 
 @Composable
-private fun PickerBox(label: String, value: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier) {
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .clickable(onClick = onClick).padding(14.dp),
-        ) { Text(value) }
+private fun NewCategoryRow(onCancel: () -> Unit, onCreate: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(name, { name = it }, Modifier.weight(1f), placeholder = { Text("New category") }, singleLine = true)
+        Button(onClick = { if (name.isNotBlank()) onCreate(name.trim()) }) { Icon(Icons.Filled.Check, "Create") }
+        TextButton(onClick = onCancel) { Text("✕") }
     }
+}
+
+@Composable
+private fun IconAction(emoji: String, onClick: () -> Unit) {
+    Box(
+        Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(emoji, fontSize = 16.sp) }
 }

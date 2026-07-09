@@ -282,6 +282,28 @@ class NativeApiTests(_Base):
         assignees = set(Task.objects.filter(id__in=ids).values_list("assigned_to_id", flat=True))
         self.assertEqual(assignees, {self.assignee.id, e2.id})
 
+    def test_app_task_edit_action(self):
+        u2 = User.objects.create_user(username="p2_ed", password="pw", first_name="Ed")
+        e2 = Employee.objects.create(user=u2, role="employee", salary=0, active=True)
+        cat = TaskCategory.objects.create(name="EdCat")
+        task = Task.objects.create(title="Old", created_by=self.users["admin"],
+                                   assigned_to=self.assignee, priority="low")
+        c = self.c("admin")
+        c.post(reverse("clients:app_task_action", args=[task.pk]),
+               data=json.dumps({"action": "edit", "title": "New title", "priority": "high",
+                                "category_id": cat.id, "assigned_to": e2.id,
+                                "due_date": "2027-05-05", "checklist": ["x", "y"],
+                                "subscribers": [self.users["admin"].id]}),
+               content_type="application/json")
+        task.refresh_from_db()
+        self.assertEqual(task.title, "New title")
+        self.assertEqual(task.priority, "high")
+        self.assertEqual(task.category_id, cat.id)
+        self.assertEqual(task.assigned_to_id, e2.id)
+        self.assertEqual(task.due_date.isoformat(), "2027-05-05")
+        self.assertEqual(task.checklist_items.count(), 2)
+        self.assertEqual(task.subscribers.count(), 1)
+
     def test_app_task_category_create(self):
         resp = self.c("admin").post(reverse("clients:app_task_category_create"),
                                     data=json.dumps({"name": "Ops2", "color": "#111111"}),

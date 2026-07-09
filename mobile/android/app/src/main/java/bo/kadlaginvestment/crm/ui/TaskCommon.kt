@@ -68,6 +68,19 @@ fun fmtDate(iso: String?): String {
     }
 }
 
+private val hm24 = SimpleDateFormat("HH:mm", Locale.US)
+private val hm12 = SimpleDateFormat("hh:mm a", Locale.US)
+
+/** "17:00" → "05:00 PM". Returns input unchanged if unparseable. */
+fun fmt12h(hhmm: String?): String {
+    if (hhmm.isNullOrBlank()) return ""
+    return try {
+        hm12.format(hm24.parse(hhmm)!!)
+    } catch (_: Exception) {
+        hhmm
+    }
+}
+
 @Composable
 fun Pill(text: String, color: Color) {
     Box(
