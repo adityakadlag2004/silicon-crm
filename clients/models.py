@@ -25,6 +25,10 @@ class Employee(models.Model):
     active = models.BooleanField(default=True)
     salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     employee_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    phone = models.CharField(
+        max_length=20, blank=True,
+        help_text="WhatsApp number for task notifications (with or without +91).",
+    )
 
     def __str__(self):
         return self.user.username
@@ -229,157 +233,6 @@ class Expense(models.Model):
         if self.end_on is not None and self.end_on < month_start:
             return False
         return True
-
-
-class MFProjectionSettings(models.Model):
-    """Singleton forward-projection assumptions for the MF Revenue Engine.
-
-    Historical snapshots store actuals only; forward assumptions live here so
-    the same numbers don't get re-entered on every period.
-    """
-
-    annual_market_growth_pct = models.DecimalField(max_digits=6, decimal_places=2,
-                                                   default=Decimal("12.00"))
-    redemption_rate_pct = models.DecimalField(max_digits=6, decimal_places=2,
-                                              default=Decimal("0.00"),
-                                              validators=[MinValueValidator(0)])
-    sip_stoppage_rate_pct = models.DecimalField(max_digits=6, decimal_places=2,
-                                                default=Decimal("0.00"),
-                                                validators=[MinValueValidator(0)])
-    projection_trail_pct = models.DecimalField(max_digits=6, decimal_places=3,
-                                               default=Decimal("0.750"),
-                                               validators=[MinValueValidator(0)])
-    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
-                                   on_delete=models.SET_NULL)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "MF Projection Settings"
-        verbose_name_plural = "MF Projection Settings"
-
-    def __str__(self):
-        return f"MF projection · growth {self.annual_market_growth_pct}% · trail {self.projection_trail_pct}%"
-
-    @classmethod
-    def current(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
-        return obj
-
-
-class MFSnapshot(models.Model):
-    """Time-range business record for the MF Revenue Engine.
-
-    Each row covers an arbitrary date range (typically one calendar month
-    but quarters, years, or backfill periods are allowed). All values are
-    actuals aggregated over that range — forward assumptions live on
-    `MFProjectionSettings`.
-    """
-
-    start_date = models.DateField(db_index=True)
-    end_date = models.DateField(db_index=True)
-
-    opening_aum = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True,
-                                      validators=[MinValueValidator(0)],
-                                      help_text="Leave blank if unknown for old periods — AUM-based metrics skip blanks gracefully.")
-    closing_aum = models.DecimalField(max_digits=18, decimal_places=2, null=True, blank=True,
-                                      validators=[MinValueValidator(0)],
-                                      help_text="Leave blank if unknown — projection uses the latest snapshot that does have a closing AUM.")
-
-    gross_sip_registered = models.DecimalField(max_digits=16, decimal_places=2,
-                                               default=Decimal("0.00"),
-                                               validators=[MinValueValidator(0)],
-                                               help_text="New monthly SIP value registered during this period.")
-    active_sip_book = models.DecimalField(max_digits=16, decimal_places=2,
-                                          default=Decimal("0.00"),
-                                          validators=[MinValueValidator(0)],
-                                          help_text="Total active monthly SIP inflow at period end (₹/month).")
-    stopped_sip_amount = models.DecimalField(max_digits=16, decimal_places=2,
-                                             default=Decimal("0.00"),
-                                             validators=[MinValueValidator(0)],
-                                             help_text="Monthly SIP value stopped/discontinued during this period.")
-
-    new_lumpsum = models.DecimalField(max_digits=16, decimal_places=2,
-                                      default=Decimal("0.00"),
-                                      validators=[MinValueValidator(0)])
-    redemptions = models.DecimalField(max_digits=16, decimal_places=2,
-                                      default=Decimal("0.00"),
-                                      validators=[MinValueValidator(0)])
-    trail_income = models.DecimalField(max_digits=16, decimal_places=2,
-                                       default=Decimal("0.00"),
-                                       validators=[MinValueValidator(0)],
-                                       help_text="Total trail commission received during this period.")
-    insurance_new_business = models.DecimalField(max_digits=16, decimal_places=2,
-                                                 default=Decimal("0.00"),
-                                                 validators=[MinValueValidator(0)])
-    insurance_renewals = models.DecimalField(max_digits=16, decimal_places=2,
-                                             default=Decimal("0.00"),
-                                             validators=[MinValueValidator(0)])
-
-    notes = models.CharField(max_length=255, blank=True, default="")
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
-                                   on_delete=models.SET_NULL)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        verbose_name = "MF Snapshot"
-        verbose_name_plural = "MF Snapshots"
-        ordering = ["-start_date", "-end_date"]
-        unique_together = ("start_date", "end_date")
-
-    def __str__(self):
-        return f"MF {self.start_date:%d-%b-%Y} → {self.end_date:%d-%b-%Y} · close ₹{self.closing_aum}"
-
-    def clean(self):
-        from django.core.exceptions import ValidationError
-        if self.end_date and self.start_date and self.end_date < self.start_date:
-            raise ValidationError({"end_date": "End date cannot be before start date."})
-
-    @property
-    def days_in_period(self):
-        return (self.end_date - self.start_date).days + 1
-
-    @property
-    def months_in_period(self):
-        """Float number of months covered (average month length)."""
-        return Decimal(str(self.days_in_period)) / Decimal("30.4375")
-
-    @property
-    def sip_collected(self):
-        """Estimated SIP money collected in the period = active_sip_book × months."""
-        return (self.active_sip_book * self.months_in_period).quantize(Decimal("0.01"))
-
-    @property
-    def operational_inflow(self):
-        """Operational money flowing into the book this period (pre-market)."""
-        return (self.sip_collected + self.new_lumpsum - self.redemptions).quantize(Decimal("0.01"))
-
-    @property
-    def expected_operational_aum(self):
-        if self.opening_aum is None:
-            return None
-        return (self.opening_aum + self.operational_inflow).quantize(Decimal("0.01"))
-
-    @property
-    def market_impact(self):
-        if self.opening_aum is None or self.closing_aum is None:
-            return None
-        return (self.closing_aum - self.expected_operational_aum).quantize(Decimal("0.01"))
-
-    @property
-    def net_aum_growth(self):
-        if self.opening_aum is None or self.closing_aum is None:
-            return None
-        return (self.closing_aum - self.opening_aum).quantize(Decimal("0.01"))
-
-    @property
-    def net_sip_growth(self):
-        return (self.gross_sip_registered - self.stopped_sip_amount).quantize(Decimal("0.01"))
-
-    @property
-    def total_recurring_revenue(self):
-        return (self.trail_income + self.insurance_renewals).quantize(Decimal("0.01"))
-
 
 
 class Client(models.Model):
@@ -2304,6 +2157,11 @@ class TaskReminderSetting(models.Model):
     remind_same_day = models.BooleanField(default=True)
     same_day_hour = models.PositiveSmallIntegerField(
         default=9, help_text="Hour (0-23) to send the same-day / day-before reminder.")
+    send_daily_digest = models.BooleanField(
+        default=True,
+        help_text="Send each employee a morning WhatsApp summary of their open tasks.")
+    digest_hour = models.PositiveSmallIntegerField(
+        default=9, help_text="Hour (0-23) to send the daily task digest.")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

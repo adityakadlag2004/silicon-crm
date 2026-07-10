@@ -36,7 +36,9 @@ from ..models import (
     TaskReminderSetting,
     TaskSubscriber,
 )
-from ..services.tasks import create_notification, log_activity, notify_task
+from ..services.tasks import (
+    create_notification, log_activity, notify_task, whatsapp_task_assigned,
+)
 from .helpers import parse_date_param
 
 # Priority order used for the "Priority" sort (Critical first).
@@ -523,6 +525,7 @@ def task_create(request):
         _maybe_create_recurrence(request, task)
         notify_task(task, request.user, "New task assigned",
                     f"{request.user.username} assigned you “{task.title}”.", event="assigned")
+        whatsapp_task_assigned(task, request.user)
 
     if warnings:
         messages.warning(request, " ".join(warnings))
@@ -963,6 +966,10 @@ def task_settings(request):
             hour = request.POST.get("same_day_hour")
             if hour and hour.isdigit() and 0 <= int(hour) <= 23:
                 reminder.same_day_hour = int(hour)
+            reminder.send_daily_digest = request.POST.get("send_daily_digest") == "on"
+            digest_hour = request.POST.get("digest_hour")
+            if digest_hour and digest_hour.isdigit() and 0 <= int(digest_hour) <= 23:
+                reminder.digest_hour = int(digest_hour)
             reminder.save()
             messages.success(request, "Reminder settings saved.")
         return redirect("clients:task_settings")

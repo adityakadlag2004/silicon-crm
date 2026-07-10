@@ -21,16 +21,16 @@ from .models import (
     ProductMarginSlab,
     ExpenseCategory,
     Expense,
-    MFSnapshot,
-    MFProjectionSettings,
     Campaign,
     CampaignProduct,
     CampaignSlab,
 )
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ("user", "role", "salary")
-    search_fields = ("user__username", "user__email")
+    list_display = ("user", "role", "phone", "active", "salary")
+    list_editable = ("phone",)
+    search_fields = ("user__username", "user__email", "phone")
+    list_filter = ("role", "active")
 
 @admin.register(Client)
 class ClientAdmin(ImportExportModelAdmin):
@@ -314,22 +314,6 @@ class ExpenseAdmin(admin.ModelAdmin):
     search_fields = ("category__name", "note")
     date_hierarchy = "spent_on"
     ordering = ("-spent_on",)
-
-
-@admin.register(MFSnapshot)
-class MFSnapshotAdmin(admin.ModelAdmin):
-    list_display = ("start_date", "end_date", "opening_aum", "closing_aum",
-                    "active_sip_book", "trail_income")
-    list_filter = ("start_date",)
-    date_hierarchy = "start_date"
-    ordering = ("-start_date",)
-
-
-@admin.register(MFProjectionSettings)
-class MFProjectionSettingsAdmin(admin.ModelAdmin):
-    list_display = ("annual_market_growth_pct", "redemption_rate_pct",
-                    "sip_stoppage_rate_pct", "projection_trail_pct", "updated_at")
-
 
 
 class CampaignSlabInline(admin.TabularInline):

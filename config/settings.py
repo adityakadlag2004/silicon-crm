@@ -161,6 +161,8 @@ CRONJOBS = [
     ('20 0 * * *', 'django.core.management.call_command', ['tasks_generate_recurring']),
     # Send day-before / same-day task reminders (gated to the configured hour), hourly
     ('0 * * * *', 'django.core.management.call_command', ['tasks_send_reminders']),
+    # Send each employee their daily WhatsApp task digest (gated to configured hour), hourly
+    ('0 * * * *', 'django.core.management.call_command', ['tasks_send_daily_digest']),
     # Alert admins about employees with no synced calls for 3+ days (likely app uninstall), daily 9:15 AM
     ('15 9 * * *', 'django.core.management.call_command', ['detect_silent_devices']),
 ]

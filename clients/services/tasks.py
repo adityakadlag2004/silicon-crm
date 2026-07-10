@@ -94,6 +94,50 @@ def notify_task(task, actor, title, body, event=None):
     return sent
 
 
+def _due_label(task):
+    """Human due date/time for a template, e.g. '07-Aug-26 12:47 PM' or '—'."""
+    if not task.due_date:
+        return "—"
+    if task.due_time:
+        return f"{task.due_date:%d-%b-%y} {task.due_time:%I:%M %p}"
+    return f"{task.due_date:%d-%b-%y}"
+
+
+def whatsapp_task_assigned(task, actor):
+    """WhatsApp the assignee that a task was assigned (mirrors the app push).
+
+    No-op when the task has no assignee, the assignee has no phone, WhatsApp
+    isn't configured, or the assignee is the actor (no self-notify). Best-effort
+    — never raises into the request that created the task.
+    """
+    from .whatsapp import send_template, TEMPLATE_TASK_ASSIGNED
+
+    emp = task.assigned_to
+    if not emp or not getattr(emp, "phone", ""):
+        return False
+    if actor is not None and emp.user_id == getattr(actor, "id", None):
+        return False
+
+    assigner = ""
+    if actor is not None:
+        assigner = actor.get_full_name() or actor.username
+    variables = [
+        emp.user.get_full_name() or emp.user.username,  # {{1}} recipient
+        assigner or "Your manager",                      # {{2}} assigned by
+        task.category.name if task.category else "General",  # {{3}} category
+        task.title,                                      # {{4}} task
+        task.get_priority_display(),                     # {{5}} priority
+        _due_label(task),                                # {{6}} due date
+    ]
+    try:
+        return send_template(emp.phone, TEMPLATE_TASK_ASSIGNED, variables,
+                             created_by=actor)
+    except Exception:  # pragma: no cover — defensive
+        import logging
+        logging.getLogger(__name__).exception("WhatsApp task-assigned failed")
+        return False
+
+
 # ─────────────────────────── recurrence engine ───────────────────────────
 
 def _add_months(d, n):
