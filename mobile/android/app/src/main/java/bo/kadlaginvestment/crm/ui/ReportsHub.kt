@@ -88,7 +88,6 @@ fun ReportsHub(
                 item { ReportCard("🧾", "Monthly Report", "Product-wise + employee-wise for a month") { sub = "monthly" } }
                 item { Spacer(Modifier.height(4.dp)); Text("Detailed tools (open on web)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
                 item { ReportCard("💹", "Business Analytics", "Revenue vs expenses, margins", web = true) { onOpenWeb("/clients/reports/business-analytics/") } }
-                item { ReportCard("🧮", "MF Revenue Engine", "Mutual-fund revenue projections", web = true) { onOpenWeb("/clients/reports/mf-revenue-engine/") } }
                 item { ReportCard("💰", "Net Business", "Sales minus redemptions", web = true) { onOpenWeb("/clients/dashboard/net-business/") } }
                 item { ReportCard("🔁", "Net SIP", "SIP fresh vs stopped", web = true) { onOpenWeb("/clients/dashboard/net-sip/") } }
             }
