@@ -4,7 +4,8 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Virtual environment
+# Virtual environments (the active one is .venv, Python 3.12)
+.venv/
 venv/
 env/
 venv_new/
@@ -26,6 +27,8 @@ install_log.txt
 # Environment secrets — NEVER commit
 .env
 .env.*
+# …but the template documenting required vars IS tracked
+!.env.example
 secrets/
 
 # VS Code
