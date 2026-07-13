@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('clients', '0081_employee_phone_taskremindersetting_digest_hour_and_more'),
+        ('clients', '0080_taskremindersetting_task_reminded_day_before_and_more'),
     ]
 
     operations = [

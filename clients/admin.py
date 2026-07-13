@@ -27,10 +27,8 @@ from .models import (
 )
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ("user", "role", "phone", "active", "salary")
-    list_editable = ("phone",)
-    search_fields = ("user__username", "user__email", "phone")
-    list_filter = ("role", "active")
+    list_display = ("user", "role", "salary")
+    search_fields = ("user__username", "user__email")
 
 @admin.register(Client)
 class ClientAdmin(ImportExportModelAdmin):

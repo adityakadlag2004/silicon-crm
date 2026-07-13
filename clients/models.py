@@ -25,10 +25,6 @@ class Employee(models.Model):
     active = models.BooleanField(default=True)
     salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     employee_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
-    phone = models.CharField(
-        max_length=20, blank=True,
-        help_text="WhatsApp number for task notifications (with or without +91).",
-    )
 
     def __str__(self):
         return self.user.username
@@ -2157,11 +2153,6 @@ class TaskReminderSetting(models.Model):
     remind_same_day = models.BooleanField(default=True)
     same_day_hour = models.PositiveSmallIntegerField(
         default=9, help_text="Hour (0-23) to send the same-day / day-before reminder.")
-    send_daily_digest = models.BooleanField(
-        default=True,
-        help_text="Send each employee a morning WhatsApp summary of their open tasks.")
-    digest_hour = models.PositiveSmallIntegerField(
-        default=9, help_text="Hour (0-23) to send the daily task digest.")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
