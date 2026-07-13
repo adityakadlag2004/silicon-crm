@@ -1596,6 +1596,14 @@ class CallTrackingSettings(models.Model):
         max_length=20, default="0,1,2,3,4,5,6",
         help_text="Weekdays the post-call popup appears. Default every day.",
     )
+    # Which quick-timing chips the popup shows, comma-separated keys from
+    # views.calls.FOLLOWUP_CATALOG in display order. Admin edits this from the
+    # app Settings screen; the popup reads it via /api/calls/config/.
+    popup_choices = models.CharField(
+        max_length=250,
+        default="10m,15m,30m,1h,2h,3h,4h,1d,5d,10d,1w,2w,1mo,2mo",
+        help_text="Comma-separated quick-chip keys shown on the post-call popup.",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1625,6 +1633,11 @@ class CallTrackingSettings(models.Model):
 
     def popup_day_list(self):
         return self._parse_days(self.popup_days)
+
+    def popup_choice_list(self):
+        """Enabled quick-chip keys in display order (unvalidated — the view
+        intersects with its catalog so stale keys degrade gracefully)."""
+        return [p.strip() for p in (self.popup_choices or "").split(",") if p.strip()]
 
     @staticmethod
     def _to_django_week_days(day_list):

@@ -72,6 +72,13 @@ def call_config(request):
         "popup_start_minutes": _mins(cfg.popup_start),
         "popup_end_minutes": _mins(cfg.popup_end),
         "popup_days": cfg.popup_day_list(),
+        # Quick-chips the popup shows, admin-configured order. Keys unknown to
+        # this server build are silently dropped so a stale setting can't
+        # render a chip the create endpoint would reject.
+        "popup_choices": [
+            {"key": k, "label": _CATALOG_LABELS[k]}
+            for k in cfg.popup_choice_list() if k in _CATALOG_LABELS
+        ],
     })
 
 
@@ -137,7 +144,8 @@ def calls_sync(request):
 
 # Quick-choice → delay from now. Server-side so phone clock skew doesn't
 # matter. Minute/hour choices fire at the exact offset; day+ choices fire at
-# 10:00 on the target day (calling someone "in 10 days" at 9 PM is wrong).
+# 10:00 on the target day (calling someone "in 10 days" at 9 PM is wrong);
+# semantic choices resolve to a human moment ("today evening", "Monday").
 _FOLLOWUP_MINUTES = {
     "10m": 10, "15m": 15, "30m": 30,
     "1h": 60, "2h": 120, "3h": 180, "4h": 240,
@@ -148,14 +156,53 @@ _FOLLOWUP_DAYS = {
     # Legacy keys from app v3.x popups still in the field:
     "tomorrow": 1, "week": 7,
 }
-_FOLLOWUP_CHOICES = {**_FOLLOWUP_MINUTES, **_FOLLOWUP_DAYS}
+
+
+def _sem_evening(now):
+    """Today 6 PM; already evening (≥5:30 PM) → tomorrow 6 PM."""
+    target = now.replace(hour=18, minute=0, second=0, microsecond=0)
+    if now.hour > 17 or (now.hour == 17 and now.minute >= 30):
+        target += timedelta(days=1)
+    return target
+
+
+def _sem_tomorrow_morning(now):
+    return (now + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+
+
+def _sem_monday_morning(now):
+    days_ahead = (7 - now.weekday()) % 7 or 7  # today is Monday → next Monday
+    return (now + timedelta(days=days_ahead)).replace(hour=10, minute=0, second=0, microsecond=0)
+
+
+_FOLLOWUP_SEMANTIC = {
+    "eve": _sem_evening,
+    "tom_am": _sem_tomorrow_morning,
+    "mon_am": _sem_monday_morning,
+}
+
+_FOLLOWUP_CHOICES = {**_FOLLOWUP_MINUTES, **_FOLLOWUP_DAYS, **_FOLLOWUP_SEMANTIC}
+
+# Full chip catalog in canonical display order: (key, label). The admin picks
+# a subset/order via CallTrackingSettings.popup_choices (app Settings screen);
+# the popup renders whatever call_config sends. Legacy keys stay accepted by
+# call_followup_create but are not offered here.
+FOLLOWUP_CATALOG = [
+    ("10m", "10 min"), ("15m", "15 min"), ("30m", "30 min"),
+    ("1h", "1 hr"), ("2h", "2 hr"), ("3h", "3 hr"), ("4h", "4 hr"),
+    ("eve", "Today 6 PM"), ("tom_am", "Tmrw 10 AM"), ("mon_am", "Mon 10 AM"),
+    ("1d", "1 day"), ("5d", "5 days"), ("10d", "10 days"),
+    ("1w", "1 week"), ("2w", "2 weeks"), ("1mo", "1 month"), ("2mo", "2 months"),
+]
+_CATALOG_LABELS = dict(FOLLOWUP_CATALOG)
 
 
 @login_required
 @require_POST
 def call_followup_create(request):
     """Create a follow-up from the post-call popup.
-    Body: {"phone": "...", "choice": "15m"|"1h"|"tomorrow"|"week", "note": "..."}"""
+    Body: {"phone": "...", "choice": "15m"|"eve"|…, "note": "..."} — or, for
+    the popup's date/time picker, {"phone": "...", "custom_at": ISO-8601}."""
     emp = _user_emp(request)
     if emp is None:
         return JsonResponse({"ok": False, "error": "no employee account"}, status=403)
@@ -167,12 +214,26 @@ def call_followup_create(request):
 
     phone = str(data.get("phone") or "").strip()[:32]
     choice = data.get("choice")
-    if not phone or choice not in _FOLLOWUP_CHOICES:
+    custom_at = data.get("custom_at")
+    if not phone or (choice not in _FOLLOWUP_CHOICES and not custom_at):
         return JsonResponse({"ok": False, "error": "phone and valid choice required"}, status=400)
 
     now = timezone.localtime()
-    if choice in _FOLLOWUP_MINUTES:
+    if custom_at:
+        # Exact moment picked on the phone. Naive timestamps are the user's
+        # wall-clock intent → interpret in server-local time (IST).
+        try:
+            scheduled = datetime.fromisoformat(str(custom_at).replace("Z", "+00:00"))
+        except ValueError:
+            return JsonResponse({"ok": False, "error": "invalid custom_at"}, status=400)
+        if timezone.is_naive(scheduled):
+            scheduled = timezone.make_aware(scheduled)
+        if scheduled <= now or scheduled > now + timedelta(days=400):
+            return JsonResponse({"ok": False, "error": "custom_at must be in the future"}, status=400)
+    elif choice in _FOLLOWUP_MINUTES:
         scheduled = now + timedelta(minutes=_FOLLOWUP_MINUTES[choice])
+    elif choice in _FOLLOWUP_SEMANTIC:
+        scheduled = _FOLLOWUP_SEMANTIC[choice](now)
     else:
         scheduled = (now + timedelta(days=_FOLLOWUP_DAYS[choice])).replace(
             hour=10, minute=0, second=0, microsecond=0

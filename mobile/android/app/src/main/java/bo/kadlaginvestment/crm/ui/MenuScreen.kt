@@ -53,6 +53,7 @@ private val ENTRIES = listOf(
     MenuEntry("📊", "Client Analysis", webPath = "/clients/analysis/"),
     MenuEntry("📈", "Past Performance", webPath = "/clients/past-performance/"),
     MenuEntry("📞", "Call Analytics", native = "call_analytics", adminOnly = true),
+    MenuEntry("⚙️", "App Settings", native = "settings", adminOnly = true),
     MenuEntry("✅", "Approve Sales (web)", webPath = "/clients/sales/approve/", adminOnly = true),
     MenuEntry("👥", "Team", native = "team", adminOnly = true),
     MenuEntry("🏆", "Incentives & Campaigns", native = "incentives", adminOnly = true),

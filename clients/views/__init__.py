@@ -25,3 +25,4 @@ from .app_api import *  # noqa: F401,F403
 from . import tasks  # noqa: F401  (task views referenced as views.tasks.* in urls)
 from . import links  # noqa: F401  (link views referenced as views.links.* in urls)
 from . import app_tasks_api  # noqa: F401  (native JSON endpoints as views.app_tasks_api.*)
+from . import app_settings_api  # noqa: F401  (native Settings screen as views.app_settings_api.*)

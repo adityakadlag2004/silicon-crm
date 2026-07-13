@@ -281,6 +281,125 @@ class AppCallAnalyticsTests(_CallSetup):
         self.assertEqual(emp_row["connected"], 1)  # outgoing+connected
 
 
+class FollowupChoicesAndCustomTests(_CallSetup):
+    """New popup abilities: server-driven chip grid, semantic choices,
+    exact custom date/time, and the note field."""
+
+    def test_config_returns_admin_configured_grid(self):
+        from clients.models import CallTrackingSettings
+        cfg = CallTrackingSettings.current()
+        cfg.popup_choices = "15m,eve,1d,bogus_key"
+        cfg.save()
+        data = self.employee.get(reverse("clients:call_config")).json()
+        chips = data["popup_choices"]
+        self.assertEqual([c["key"] for c in chips], ["15m", "eve", "1d"])  # bogus dropped
+        self.assertEqual(chips[1]["label"], "Today 6 PM")
+
+    def _create(self, body):
+        return self.employee.post(
+            reverse("clients:call_followup_create"),
+            data=json.dumps(body), content_type="application/json")
+
+    def test_semantic_choices_schedule_correctly(self):
+        resp = self._create({"phone": "9876543210", "choice": "tom_am"}).json()
+        self.assertTrue(resp["ok"])
+        fu = CallFollowUp.objects.get(pk=resp["id"])
+        sched = timezone.localtime(fu.scheduled_at)
+        self.assertEqual(sched.date(), timezone.localdate() + timedelta(days=1))
+        self.assertEqual((sched.hour, sched.minute), (10, 0))
+
+        resp = self._create({"phone": "9876543210", "choice": "mon_am"}).json()
+        sched = timezone.localtime(CallFollowUp.objects.get(pk=resp["id"]).scheduled_at)
+        self.assertEqual(sched.weekday(), 0)  # Monday
+        self.assertGreater(sched, timezone.localtime())
+
+        resp = self._create({"phone": "9876543210", "choice": "eve"}).json()
+        sched = timezone.localtime(CallFollowUp.objects.get(pk=resp["id"]).scheduled_at)
+        self.assertEqual((sched.hour, sched.minute), (18, 0))
+        self.assertGreater(sched, timezone.localtime())
+
+    def test_custom_datetime_and_note(self):
+        target = (timezone.localtime() + timedelta(days=3)).replace(
+            hour=16, minute=30, second=0, microsecond=0)
+        resp = self._create({
+            "phone": "9876543210",
+            "custom_at": target.strftime("%Y-%m-%dT%H:%M"),
+            "note": "discuss SIP top-up",
+        }).json()
+        self.assertTrue(resp["ok"])
+        fu = CallFollowUp.objects.get(pk=resp["id"])
+        self.assertEqual(timezone.localtime(fu.scheduled_at), target)
+        self.assertEqual(fu.note, "discuss SIP top-up")
+
+    def test_custom_datetime_must_be_future(self):
+        past = (timezone.localtime() - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+        resp = self._create({"phone": "9876543210", "custom_at": past})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_legacy_keys_still_accepted(self):
+        resp = self._create({"phone": "9876543210", "choice": "tomorrow"})
+        self.assertEqual(resp.status_code, 200)
+
+
+class AppSettingsApiTests(_CallSetup):
+    """GET/POST /api/app/settings/ — the native Settings screen backend."""
+
+    def test_admin_only(self):
+        self.assertEqual(
+            self.employee.get(reverse("clients:app_settings")).status_code, 403)
+
+    def test_get_returns_all_sections(self):
+        data = self.admin.get(reverse("clients:app_settings")).json()
+        self.assertIn("call_tracking", data)
+        self.assertIn("popup", data)
+        self.assertIn("tasks", data)
+        self.assertEqual(data["call_tracking"]["work_start"], "10:00")
+        self.assertIn({"key": "eve", "label": "Today 6 PM"}, data["popup"]["catalog"])
+
+    def _post(self, body):
+        return self.admin.post(
+            reverse("clients:app_settings"),
+            data=json.dumps(body), content_type="application/json")
+
+    def test_update_call_tracking_section(self):
+        from clients.models import CallTrackingSettings
+        data = self._post({
+            "section": "call_tracking", "enabled": False,
+            "work_start": "09:30", "work_end": "19:00", "work_days": [0, 1, 2],
+        }).json()
+        self.assertTrue(data["ok"])
+        cfg = CallTrackingSettings.current()
+        cfg.refresh_from_db()
+        self.assertFalse(cfg.enabled)
+        self.assertEqual(cfg.work_start.strftime("%H:%M"), "09:30")
+        self.assertEqual(cfg.work_days, "0,1,2")
+
+    def test_update_popup_choices_filters_invalid(self):
+        from clients.models import CallTrackingSettings
+        self._post({"section": "popup", "popup_choices": ["eve", "nope", "15m"]})
+        cfg = CallTrackingSettings.current()
+        cfg.refresh_from_db()
+        self.assertEqual(cfg.popup_choices, "eve,15m")
+        # An all-invalid list must not wipe the grid
+        self._post({"section": "popup", "popup_choices": ["zzz"]})
+        cfg.refresh_from_db()
+        self.assertEqual(cfg.popup_choices, "eve,15m")
+
+    def test_update_tasks_section(self):
+        from clients.models import TaskReminderSetting
+        self._post({"section": "tasks", "remind_day_before": False, "same_day_hour": 8})
+        r = TaskReminderSetting.current()
+        r.refresh_from_db()
+        self.assertFalse(r.remind_day_before)
+        self.assertEqual(r.same_day_hour, 8)
+
+    def test_bad_hhmm_and_section_rejected(self):
+        resp = self._post({"section": "call_tracking", "work_start": "25:99"})
+        self.assertTrue(resp.json()["ok"])  # bad time ignored, keeps current
+        self.assertEqual(resp.json()["call_tracking"]["work_start"], "10:00")
+        self.assertEqual(self._post({"section": "nope"}).status_code, 400)
+
+
 class WorkDayAndPopupSettingsTests(TestCase):
     """Tracking excludes non-work days (e.g. Sunday); popup window is independent."""
 

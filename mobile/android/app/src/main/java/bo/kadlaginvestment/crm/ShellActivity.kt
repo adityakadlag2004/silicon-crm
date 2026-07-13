@@ -67,6 +67,7 @@ import bo.kadlaginvestment.crm.ui.NotificationsScreen
 import bo.kadlaginvestment.crm.ui.RenewalsScreen
 import bo.kadlaginvestment.crm.ui.ReportsHub
 import bo.kadlaginvestment.crm.ui.SalesScreen
+import bo.kadlaginvestment.crm.ui.SettingsScreen
 import bo.kadlaginvestment.crm.ui.SheetsScreen
 import bo.kadlaginvestment.crm.ui.SimSettingsScreen
 import bo.kadlaginvestment.crm.ui.TeamScreen
@@ -129,42 +130,53 @@ class ShellActivity : ComponentActivity() {
         SimHelper.ensureSingleSimConfigured(applicationContext)
     }
 
+    /** Fetch /api/calls/config/ and cache it in SharedPreferences — read by
+     * CallTrackerReceiver (windows) and FollowupActivity (quick-chip grid).
+     * Blocking; call off the main thread. Re-run after the admin saves the
+     * app Settings screen so changes apply without an app restart. */
+    fun syncCallConfigBlocking() {
+        try {
+            val cookies = android.webkit.CookieManager.getInstance().getCookie(BackendClient.BASE_URL)
+            if (cookies != null && cookies.contains("sessionid=")) {
+                val url = java.net.URL(BackendClient.BASE_URL + "/clients/api/calls/config/")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.setRequestProperty("Cookie", cookies)
+                conn.setRequestProperty("Accept", "application/json")
+                conn.connectTimeout = 8000; conn.readTimeout = 8000
+                if (conn.responseCode == 200) {
+                    val cfg = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
+                    fun daysCsv(key: String, fallback: String): String {
+                        val arr = cfg.optJSONArray(key) ?: return fallback
+                        return (0 until arr.length()).joinToString(",") { arr.getInt(it).toString() }
+                    }
+                    getSharedPreferences("call_tracking", MODE_PRIVATE).edit()
+                        // tracking window
+                        .putBoolean("enabled", cfg.optBoolean("enabled", true))
+                        .putInt("work_start_minutes", cfg.optInt("work_start_minutes", 600))
+                        .putInt("work_end_minutes", cfg.optInt("work_end_minutes", 1080))
+                        .putString("work_days", daysCsv("work_days", "0,1,2,3,4,5"))
+                        // follow-up popup window (independent)
+                        .putBoolean("popup_enabled", cfg.optBoolean("popup_enabled", true))
+                        .putInt("popup_start_minutes", cfg.optInt("popup_start_minutes", 540))
+                        .putInt("popup_end_minutes", cfg.optInt("popup_end_minutes", 1260))
+                        .putString("popup_days", daysCsv("popup_days", "0,1,2,3,4,5,6"))
+                        // admin-configured quick-chip grid for FollowupActivity
+                        .putString("popup_choices",
+                            (cfg.optJSONArray("popup_choices") ?: org.json.JSONArray()).toString())
+                        .apply()
+                }
+                conn.disconnect()
+            }
+        } catch (_: Exception) {}
+    }
+
     /** Bootstraps that used to run in the WebView login's JS: sync the
      * admin call-tracking window to the device, and register this device's
      * FCM push token. Best-effort, off the main thread. */
     private fun bootstrapNative() {
         Thread {
             // 1) Call-tracking config → SharedPreferences (read by CallTrackerReceiver)
-            try {
-                val cookies = android.webkit.CookieManager.getInstance().getCookie(BackendClient.BASE_URL)
-                if (cookies != null && cookies.contains("sessionid=")) {
-                    val url = java.net.URL(BackendClient.BASE_URL + "/clients/api/calls/config/")
-                    val conn = url.openConnection() as java.net.HttpURLConnection
-                    conn.setRequestProperty("Cookie", cookies)
-                    conn.setRequestProperty("Accept", "application/json")
-                    conn.connectTimeout = 8000; conn.readTimeout = 8000
-                    if (conn.responseCode == 200) {
-                        val cfg = org.json.JSONObject(conn.inputStream.bufferedReader().readText())
-                        fun daysCsv(key: String, fallback: String): String {
-                            val arr = cfg.optJSONArray(key) ?: return fallback
-                            return (0 until arr.length()).joinToString(",") { arr.getInt(it).toString() }
-                        }
-                        getSharedPreferences("call_tracking", MODE_PRIVATE).edit()
-                            // tracking window
-                            .putBoolean("enabled", cfg.optBoolean("enabled", true))
-                            .putInt("work_start_minutes", cfg.optInt("work_start_minutes", 600))
-                            .putInt("work_end_minutes", cfg.optInt("work_end_minutes", 1080))
-                            .putString("work_days", daysCsv("work_days", "0,1,2,3,4,5"))
-                            // follow-up popup window (independent)
-                            .putBoolean("popup_enabled", cfg.optBoolean("popup_enabled", true))
-                            .putInt("popup_start_minutes", cfg.optInt("popup_start_minutes", 540))
-                            .putInt("popup_end_minutes", cfg.optInt("popup_end_minutes", 1260))
-                            .putString("popup_days", daysCsv("popup_days", "0,1,2,3,4,5,6"))
-                            .apply()
-                    }
-                    conn.disconnect()
-                }
-            } catch (_: Exception) {}
+            syncCallConfigBlocking()
 
             // 2) FCM push token → register with the server (needs Firebase configured)
             try {
@@ -458,6 +470,14 @@ class ShellActivity : ComponentActivity() {
                             modifier = m,
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
+                        )
+                        overlay == "settings" -> SettingsScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
+                            onOpenSim = { overlay = "sim" },
+                            // re-cache the popup grid/windows so changes apply now
+                            onSaved = { Thread { syncCallConfigBlocking() }.start() },
                         )
                         overlay == "clients" -> ClientsScreen(
                             modifier = m,
