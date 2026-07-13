@@ -250,6 +250,36 @@ class AppCallAnalyticsTests(_CallSetup):
         self.assertEqual(emp_row["connected"], 1)
         self.assertEqual(emp_row["serious"], 1)  # 200s > 150s
 
+    def test_app_matches_web_definitions(self):
+        """Regression: app "Connected" / per-employee "calls" must use the web's
+        outgoing-only definitions. The app previously counted connected calls of
+        both directions (and all calls in the team table), so web and app showed
+        different numbers for the same day."""
+        base = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
+        mk = CallLogEntry.objects.create
+        mk(employee=self.emp, phone="1", direction="outgoing",
+           connected=True, duration_seconds=60, started_at=base)
+        mk(employee=self.emp, phone="2", direction="outgoing",
+           connected=False, duration_seconds=0, started_at=base)
+        mk(employee=self.emp, phone="3", direction="incoming",
+           connected=True, duration_seconds=120, started_at=base)  # inflated app before
+        mk(employee=self.emp, phone="4", direction="incoming",
+           connected=False, duration_seconds=0, started_at=base)
+
+        app = self.admin.get(reverse("clients:app_call_analytics"), {"range": "today"}).json()
+        web = self.admin.get(reverse("clients:call_analytics")).context["totals"]
+
+        self.assertEqual(app["totals"]["dialed"], 2)
+        self.assertEqual(app["totals"]["connected"], 1)  # outgoing+connected only
+        self.assertEqual(app["totals"]["connected"], web["dialed_connected"])
+        self.assertEqual(app["totals"]["received"], web["received"])
+        self.assertEqual(app["totals"]["missed"], web["missed"])
+        self.assertEqual(app["totals"]["talk_minutes"], web["talk_minutes"])
+
+        emp_row = next(r for r in app["by_employee"] if r["id"] == self.emp.id)
+        self.assertEqual(emp_row["calls"], 2)      # dialed, not all 4 directions
+        self.assertEqual(emp_row["connected"], 1)  # outgoing+connected
+
 
 class WorkDayAndPopupSettingsTests(TestCase):
     """Tracking excludes non-work days (e.g. Sunday); popup window is independent."""

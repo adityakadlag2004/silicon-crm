@@ -403,8 +403,10 @@ def _today_call_stats(emp):
         started_at__week_day__in=cfg.work_week_days_django(),
     )
     agg = qs.aggregate(
-        calls=Count("id"),
-        connected_count=Count("id", filter=Q(connected=True)),
+        # Outgoing-only, same definition as the web/app Call Analytics
+        # "Dialed"/"Connected" columns so all surfaces agree.
+        calls=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_OUTGOING)),
+        connected_count=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_OUTGOING, connected=True)),
         talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
         serious=Count("id", filter=Q(duration_seconds__gt=_SERIOUS_CALL_SECONDS)),
     )
@@ -1215,7 +1217,10 @@ def app_call_analytics(request):
 
     totals = qs.aggregate(
         dialed=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_OUTGOING)),
-        connected_calls=Count("id", filter=Q(connected=True)),
+        # Outgoing-and-connected, matching the web call_analytics "Connected"
+        # card — the app previously counted connected calls of BOTH directions,
+        # which made web and app disagree for the same day.
+        connected_calls=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_OUTGOING, connected=True)),
         received=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_INCOMING, connected=True)),
         missed=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_INCOMING, connected=False)),
         talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
@@ -1239,8 +1244,10 @@ def app_call_analytics(request):
     per_emp = {
         row["employee_id"]: row
         for row in breakdown_qs.values("employee_id").annotate(
-            calls=Count("id"),
-            connected_count=Count("id", filter=Q(connected=True)),
+            # Outgoing-only, matching the web per-employee "Dialed"/"Connected"
+            # columns (previously counted every direction incl. missed).
+            calls=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_OUTGOING)),
+            connected_count=Count("id", filter=Q(direction=CallLogEntry.DIRECTION_OUTGOING, connected=True)),
             talk_seconds=Sum("duration_seconds", filter=Q(connected=True)),
             serious=Count("id", filter=Q(duration_seconds__gt=_SERIOUS_CALL_SECONDS)),
         )

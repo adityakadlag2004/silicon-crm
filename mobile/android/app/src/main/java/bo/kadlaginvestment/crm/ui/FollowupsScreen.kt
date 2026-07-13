@@ -112,7 +112,7 @@ fun FollowupsScreen(
         if (stats != null) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatBlock("Calls", "${stats.optInt("calls")}", Modifier.weight(1f))
+                    StatBlock("Dialed", "${stats.optInt("calls")}", Modifier.weight(1f))
                     StatBlock(
                         "Talk time",
                         formatMinutes(stats.optDouble("talk_minutes", 0.0)),

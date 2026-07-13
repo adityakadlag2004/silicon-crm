@@ -758,7 +758,9 @@ class AppFollowupStatsTests(TestCase):
 
         data = self._http().get(reverse("clients:app_followups")).json()
         s = data["stats"]
-        self.assertEqual(s["calls"], 3)          # after-hours excluded
+        # "calls"/"connected" are outgoing-only (Dialed), matching Call
+        # Analytics — the incoming missed call is excluded, as is after-hours.
+        self.assertEqual(s["calls"], 2)
         self.assertEqual(s["connected"], 2)
         self.assertEqual(s["serious"], 1)        # only the 200s call
         self.assertAlmostEqual(s["talk_minutes"], round(260 / 60, 1))
