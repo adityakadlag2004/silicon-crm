@@ -29,45 +29,40 @@ public class CallTrackerReceiver extends BroadcastReceiver {
     private static final String TAG = "CallTracker";
     private static final String CHANNEL_ID = "call_followups";
 
-    // Call-session state machine (receiver instances are recreated per broadcast,
-    // so state must be static).
-    private static boolean callActive = false;
-    private static boolean sawRinging = false;
-    private static long lastHandledCallDate = 0;
+    // Only calls that ended within this window are processed, so a stray IDLE
+    // broadcast (boot, radio events) can't pop up an old historical call.
+    private static final long RECENT_CALL_WINDOW_MS = 10 * 60 * 1000;
 
     @Override
     public void onReceive(Context context, Intent intent) {
         if (!TelephonyManager.ACTION_PHONE_STATE_CHANGED.equals(intent.getAction())) return;
         String state = intent.getStringExtra(TelephonyManager.EXTRA_STATE);
-        if (state == null) return;
 
-        if (TelephonyManager.EXTRA_STATE_RINGING.equals(state)) {
-            sawRinging = true;
-            callActive = true;
-        } else if (TelephonyManager.EXTRA_STATE_OFFHOOK.equals(state)) {
-            callActive = true;
-        } else if (TelephonyManager.EXTRA_STATE_IDLE.equals(state) && callActive) {
-            callActive = false;
-            sawRinging = false;
-            final PendingResult pending = goAsync();
-            new Thread(() -> {
-                try {
-                    // Give the OS a moment to write the call-log row.
-                    Thread.sleep(2500);
-                    handleCallEnded(context.getApplicationContext());
-                } catch (Exception e) {
-                    Log.w(TAG, "handleCallEnded failed: " + e);
-                } finally {
-                    pending.finish();
-                }
-            }).start();
-        }
+        // Process on IDLE only, with NO in-memory "was there a call?" state:
+        // Android routinely kills this process during a call (statics reset),
+        // which used to make the IDLE event look call-less and silently eat
+        // the popup. The call-log row itself + a persisted last-handled marker
+        // (in handleCallEnded) provide the dedup instead.
+        if (!TelephonyManager.EXTRA_STATE_IDLE.equals(state)) return;
+
+        final PendingResult pending = goAsync();
+        new Thread(() -> {
+            try {
+                // Give the OS a moment to write the call-log row.
+                Thread.sleep(2500);
+                handleCallEnded(context.getApplicationContext());
+            } catch (Exception e) {
+                Log.w(TAG, "handleCallEnded failed: " + e);
+            } finally {
+                pending.finish();
+            }
+        }).start();
     }
 
     private void handleCallEnded(Context ctx) {
-        Log.i(TAG, "call ended — processing");
         if (ctx.checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "skip: READ_CALL_LOG not granted");
+            notePopup(ctx, "call log permission off");
             return;
         }
 
@@ -96,8 +91,19 @@ public class CallTrackerReceiver extends BroadcastReceiver {
             c.close();
         }
         if (number == null || number.isEmpty() || dateMillis == 0) return;
-        if (dateMillis == lastHandledCallDate) return; // duplicate broadcast
-        lastHandledCallDate = dateMillis;
+
+        // Dedup + staleness gate, persisted so it survives process death.
+        SharedPreferences track = ctx.getSharedPreferences("call_tracking", Context.MODE_PRIVATE);
+        synchronized (CallTrackerReceiver.class) {
+            if (dateMillis <= track.getLong("last_handled_call_date", 0)) return; // already handled / no new call
+            long endedAt = dateMillis + durationSec * 1000;
+            if (endedAt < System.currentTimeMillis() - RECENT_CALL_WINDOW_MS) return; // old history
+            track.edit()
+                    .putLong("last_handled_call_date", dateMillis)
+                    .putLong("last_call_handled_at", System.currentTimeMillis())
+                    .apply();
+        }
+        Log.i(TAG, "call ended — processing " + number);
 
         boolean incoming = type == CallLog.Calls.INCOMING_TYPE
                 || type == CallLog.Calls.MISSED_TYPE

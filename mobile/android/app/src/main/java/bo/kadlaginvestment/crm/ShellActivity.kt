@@ -132,6 +132,8 @@ class ShellActivity : ComponentActivity() {
                     .put("sim_configured", ct.getBoolean("sim_configured", false))
                     .put("last_popup_result", ct.getString("last_popup_result", ""))
                     .put("last_popup_at", ct.getLong("last_popup_at", 0L))
+                    // Proof the call-end receiver runs at all on this device.
+                    .put("last_call_handled_at", ct.getLong("last_call_handled_at", 0L))
                     .put("exact_alarms", FollowupAlarmScheduler.canScheduleExact(this))
                     .put("fullscreen_alarms", fullScreenAlarmsGranted())
                 val body = org.json.JSONObject()
