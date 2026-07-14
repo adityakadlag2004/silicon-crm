@@ -9,11 +9,17 @@ Schema differences handled:
 - Extra source columns (organization_id, proof_image, review_notes, lifecycle,
   renewal_period_months, eligibility_predicate) are dropped; they don't exist in this schema.
 """
-import psycopg2
-import psycopg2.extras
+import os
 
-SOURCE = dict(dbname="crmdb", user="crmuser", password="***REMOVED***", host="localhost", port=5432)
-TARGET = dict(dbname="silicondb", user="crmuser", password="***REMOVED***", host="localhost", port=5432)
+import psycopg
+from psycopg.rows import dict_row
+
+_DB_PASSWORD = os.environ.get("DB_PASSWORD") or ""
+if not _DB_PASSWORD:
+    raise SystemExit("Set DB_PASSWORD in the environment before running this script.")
+
+SOURCE = dict(dbname="crmdb", user="crmuser", password=_DB_PASSWORD, host="localhost", port=5432)
+TARGET = dict(dbname="silicondb", user="crmuser", password=_DB_PASSWORD, host="localhost", port=5432)
 
 
 def copy_rows(src_cur, dst_cur, select_sql, insert_sql, transform=None, label=""):
@@ -29,11 +35,11 @@ def copy_rows(src_cur, dst_cur, select_sql, insert_sql, transform=None, label=""
 
 
 def main():
-    src = psycopg2.connect(**SOURCE)
-    dst = psycopg2.connect(**TARGET)
+    src = psycopg.connect(**SOURCE)
+    dst = psycopg.connect(**TARGET)
     src.autocommit = False
     dst.autocommit = False
-    src_cur = src.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    src_cur = src.cursor(row_factory=dict_row)
     dst_cur = dst.cursor()
 
     # Wipe target tables (children first). Keep django_migrations / content types etc.
