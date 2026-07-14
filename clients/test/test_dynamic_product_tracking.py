@@ -27,7 +27,7 @@ class DynamicProductTrackingTests(TestCase):
             display_order=1,
         )
 
-        response = self.client.get(reverse("clients:all_clients"), HTTP_HOST="127.0.0.1")
+        response = self.client.get(reverse("clients:all_clients"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f'name="product_{product.id}_status"')
@@ -36,7 +36,7 @@ class DynamicProductTrackingTests(TestCase):
     def test_all_clients_is_blank_when_no_active_products(self):
         Product.objects.all().update(is_active=False)
 
-        response = self.client.get(reverse("clients:all_clients"), HTTP_HOST="127.0.0.1")
+        response = self.client.get(reverse("clients:all_clients"))
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'name="product_')
@@ -73,7 +73,6 @@ class DynamicProductTrackingTests(TestCase):
         response = self.client.get(
             reverse("clients:all_clients"),
             {status_param: "yes"},
-            HTTP_HOST="127.0.0.1",
         )
 
         self.assertEqual(response.status_code, 200)
@@ -89,7 +88,6 @@ class DynamicProductTrackingTests(TestCase):
                 "renewal_tracked": "yes",
                 "display_order": "10",
             },
-            HTTP_HOST="127.0.0.1",
         )
         self.assertEqual(add_response.status_code, 302)
 
@@ -106,7 +104,6 @@ class DynamicProductTrackingTests(TestCase):
                 "renewal_tracked": "no",
                 "display_order": "11",
             },
-            HTTP_HOST="127.0.0.1",
         )
         self.assertEqual(update_response.status_code, 302)
 

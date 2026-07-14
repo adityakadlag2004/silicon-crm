@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -269,8 +270,13 @@ LOGGING = {
 
 # ── Production Security Settings ──────────────────────────────────────
 # These only take effect when DEBUG=False (production).
+# The Django test client speaks plain HTTP, so under `manage.py test` the
+# SSL redirect would turn every request into a 301 and mask real assertions
+# (this is why CI runs the suite with DEBUG=False). Redirect stays on for
+# every real serving path.
+_testing = len(sys.argv) > 1 and sys.argv[1] == "test"
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = not _testing
     SECURE_HSTS_SECONDS = 31536000          # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
