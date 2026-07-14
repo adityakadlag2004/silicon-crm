@@ -157,7 +157,10 @@ object FollowupAlarmScheduler {
      * the admin's popup days (default every day). Replaces any prior one. */
     fun scheduleDigest(context: Context) {
         val cfg = context.getSharedPreferences("call_tracking", Context.MODE_PRIVATE)
+        // A 24×7 popup window starts at 00:00 — nobody wants the digest at
+        // midnight, so anything before 6:00 falls back to 9:00.
         val startMinutes = cfg.getInt("popup_start_minutes", 540)
+            .let { if (it < 360) 540 else it }
         val days = (cfg.getString("popup_days", null) ?: "0,1,2,3,4,5,6")
             .split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
             .ifEmpty { setOf(0, 1, 2, 3, 4, 5, 6) }

@@ -1589,9 +1589,11 @@ class CallTrackingSettings(models.Model):
     )
 
     # ── Follow-up popup window (independent of tracking) ──
+    # 24×7 by default (owner decision 2026-07-14: a missed follow-up prompt is
+    # worse than a late-night popup). Admin can still narrow it in App Settings.
     popup_enabled = models.BooleanField(default=True)
-    popup_start = models.TimeField(default=datetime_time(9, 0))
-    popup_end = models.TimeField(default=datetime_time(21, 0))
+    popup_start = models.TimeField(default=datetime_time(0, 0))
+    popup_end = models.TimeField(default=datetime_time(23, 59))
     popup_days = models.CharField(
         max_length=20, default="0,1,2,3,4,5,6",
         help_text="Weekdays the post-call popup appears. Default every day.",

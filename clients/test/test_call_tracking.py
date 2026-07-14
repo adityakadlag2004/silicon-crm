@@ -162,6 +162,15 @@ class FollowUpTests(_CallSetup):
         ]
         self.assertEqual([f.pk for f in pending], [second["id"]])
 
+    def test_popup_window_defaults_to_24x7(self):
+        """Owner decision: the post-call popup is available 24×7 by default
+        (migration 0085 also forces the live row to this)."""
+        cfg = CallTrackingSettings()
+        self.assertTrue(cfg.popup_enabled)
+        self.assertEqual((cfg.popup_start.hour, cfg.popup_start.minute), (0, 0))
+        self.assertEqual((cfg.popup_end.hour, cfg.popup_end.minute), (23, 59))
+        self.assertEqual(cfg.popup_days, "0,1,2,3,4,5,6")
+
     def test_legacy_choices_still_work(self):
         resp = self.employee.post(
             reverse("clients:call_followup_create"),
