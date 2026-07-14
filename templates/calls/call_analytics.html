@@ -147,7 +147,7 @@
   </h3>
   <div class="table-responsive">
     <table class="table align-middle" style="font-size:.9rem;">
-      <thead><tr><th>Employee</th><th>Call tracking</th><th>Follow-up popup</th><th>Notifications</th><th>App version</th><th>Last seen</th></tr></thead>
+      <thead><tr><th>Employee</th><th>Call tracking</th><th>Follow-up popup</th><th>Notifications</th><th>Last popup</th><th>App version</th><th>Last seen</th></tr></thead>
       <tbody>
         {% for row in device_roster %}
         <tr>
@@ -156,10 +156,24 @@
             <td>{% if row.status.calls_granted %}<span class="badge bg-success">✓ Allowed</span>{% else %}<span class="badge bg-danger">✗ Missing</span>{% endif %}</td>
             <td>{% if row.status.overlay_granted %}<span class="badge bg-success">✓ Allowed</span>{% else %}<span class="badge bg-warning text-dark">✗ Missing</span>{% endif %}</td>
             <td>{% if row.status.notifications_granted %}<span class="badge bg-success">✓ Allowed</span>{% else %}<span class="badge bg-warning text-dark">✗ Missing</span>{% endif %}</td>
+            {# Why the last post-call popup did / didn't appear on this device #}
+            {% with pr=row.status.diagnostics.last_popup_result %}
+            <td>
+              {% if pr == "shown" %}<span class="badge bg-success">✓ Shown</span>
+              {% elif pr %}<span class="badge bg-warning text-dark" title="Reason reported by the device">✗ {{ pr }}</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+              {% if row.status.diagnostics.popup_enabled == False %}
+                <span class="badge bg-danger" title="Device has cached popup_enabled=off from admin App Settings">popup off</span>
+              {% endif %}
+              {% if row.status.diagnostics.sim_configured == False %}
+                <span class="badge bg-secondary" title="Office SIM not chosen yet on this device">no SIM set</span>
+              {% endif %}
+            </td>
+            {% endwith %}
             <td>{{ row.status.app_version|default:"—" }}</td>
             <td>{{ row.status.updated_at|date:"d M, h:i A" }}</td>
           {% else %}
-            <td colspan="5"><span class="badge bg-secondary">App not installed / never opened</span></td>
+            <td colspan="6"><span class="badge bg-secondary">App not installed / never opened</span></td>
           {% endif %}
         </tr>
         {% endfor %}

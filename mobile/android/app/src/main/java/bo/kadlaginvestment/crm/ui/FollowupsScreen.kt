@@ -63,7 +63,14 @@ fun FollowupsScreen(
 
     LaunchedEffect(reloadKey) {
         when (val r = ApiClient.get("/clients/api/app/followups/")) {
-            is ApiClient.Result.Ok -> data = r.json
+            is ApiClient.Result.Ok -> {
+                data = r.json
+                // Keep on-device alarms matched to the server list (arms new
+                // follow-ups, drops ones completed on another device/web).
+                r.json.optJSONArray("pending")?.let {
+                    bo.kadlaginvestment.crm.FollowupAlarmScheduler.syncFromPending(context, it)
+                }
+            }
             is ApiClient.Result.NotLoggedIn -> onSessionExpired()
             is ApiClient.Result.Error -> error = r.message
         }

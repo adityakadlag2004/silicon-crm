@@ -379,6 +379,8 @@ def _fu_row(fu, now):
         "client": fu.client.name if fu.client_id else "",
         "client_id": fu.client_id,
         "scheduled_at": timezone.localtime(fu.scheduled_at).strftime("%d %b, %I:%M %p"),
+        # Epoch millis so the app can schedule an exact on-device alarm.
+        "scheduled_at_ms": int(fu.scheduled_at.timestamp() * 1000),
         "overdue": fu.scheduled_at <= now,
         "note": fu.note or "",
         "status": fu.status,
@@ -1118,6 +1120,9 @@ def app_device_status(request):
         body = json.loads(request.body.decode("utf-8"))
     except Exception:
         return JsonResponse({"ok": False}, status=400)
+    diagnostics = body.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        diagnostics = {}
     AppDeviceStatus.objects.update_or_create(
         user=request.user,
         defaults={
@@ -1125,6 +1130,7 @@ def app_device_status(request):
             "overlay_granted": bool(body.get("overlay_granted")),
             "notifications_granted": bool(body.get("notifications_granted")),
             "app_version": str(body.get("app_version") or "")[:20],
+            "diagnostics": diagnostics,
         },
     )
     return JsonResponse({"ok": True})

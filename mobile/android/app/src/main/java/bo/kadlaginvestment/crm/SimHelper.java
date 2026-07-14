@@ -132,7 +132,9 @@ public final class SimHelper {
             this.sims = getSims(ctx);
         }
 
-        /** Whether a call on `phoneAccountId` belongs to the office SIM. */
+        /** Whether a call on `phoneAccountId` belongs to the office SIM.
+         * Strict: unknown accounts on dual-SIM devices are excluded — used for
+         * call SYNC, where counting personal calls would corrupt analytics. */
         public boolean matches(String phoneAccountId) {
             if (!configured) return true;           // track all until the user chooses
             int sub = resolveSub(phoneAccountId);
@@ -143,6 +145,21 @@ public final class SimHelper {
                 if (s.subId == sub) return s.slot == officeSlot;
             }
             return false;
+        }
+
+        /** Popup gate: only skip when the call is POSITIVELY on a non-office
+         * SIM. Unknown / unresolvable accounts fail OPEN — some OEMs write
+         * call-log PHONE_ACCOUNT_IDs we can't map to a subscription, and a
+         * silently missed follow-up prompt is worse than an occasional popup
+         * for a personal call. (Analytics stay strict via {@link #matches}.) */
+        public boolean matchesForPopup(String phoneAccountId) {
+            if (!configured) return true;
+            int sub = resolveSub(phoneAccountId);
+            if (sub == -1 || sub == officeSub) return true;
+            for (SimInfo s : sims) {
+                if (s.subId == sub) return s.slot == officeSlot;
+            }
+            return true; // resolved to a SIM we can't map → benefit of the doubt
         }
 
         private int resolveSub(String acc) {

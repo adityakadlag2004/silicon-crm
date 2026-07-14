@@ -87,3 +87,38 @@ def send_push_to_user(user, title, body, link=""):
         except Exception:
             logger.exception("FCM send failed for device %s", device.pk)
     return sent
+
+
+def send_data_push_to_user(user, data):
+    """Send a high-priority data-only message to every device of `user`.
+
+    Unlike notification messages (which the system tray draws when the app is
+    backgrounded), data-only messages always reach KadlagMessagingService's
+    onMessageReceived — the app uses them to ring the full-screen follow-up
+    alarm. FCM requires every data value to be a string."""
+    if _get_app() is None:
+        return 0
+
+    from firebase_admin import messaging
+    from ..models import PushDevice
+
+    devices = list(PushDevice.objects.filter(user=user))
+    if not devices:
+        return 0
+
+    payload = {str(k): str(v) for k, v in data.items()}
+    sent = 0
+    for device in devices:
+        message = messaging.Message(
+            token=device.token,
+            data=payload,
+            android=messaging.AndroidConfig(priority="high"),
+        )
+        try:
+            messaging.send(message)
+            sent += 1
+        except messaging.UnregisteredError:
+            device.delete()  # token expired / app uninstalled
+        except Exception:
+            logger.exception("FCM data send failed for device %s", device.pk)
+    return sent

@@ -14,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -96,5 +97,30 @@ fun SimSettingsScreen(
                 ) { Text(if (saved) "Saved ✓" else "Save office SIM") }
             }
         }
+
+        Spacer(Modifier.height(24.dp))
+
+        // Fires FollowupActivity with a fake call so anyone can verify in two
+        // seconds that the post-call popup works on this phone (permissions,
+        // rendering) — separating device problems from SIM/window config.
+        Text("Not seeing the popup after calls?", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(6.dp))
+        OutlinedButton(
+            onClick = {
+                context.startActivity(
+                    android.content.Intent(context, bo.kadlaginvestment.crm.FollowupActivity::class.java)
+                        .putExtra("phone", "9876543210")
+                        .putExtra("duration", 65L)
+                        .putExtra("connected", true)
+                        .putExtra("incoming", false)
+                        .putExtra("test", true)
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("▶ Test the follow-up popup") }
+        Text(
+            "If a popup appears, the app is fine — check the office SIM above and the popup hours in App Settings.",
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

@@ -111,9 +111,11 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         // trigger retries.
         CallSyncManager.syncRecentCalls(ctx);
 
-        // Only prompt a follow-up for office-SIM calls (dual-SIM employees).
-        if (!SimHelper.filterFor(ctx).matches(account)) {
+        // Only prompt a follow-up for calls positively on another SIM
+        // (fail-open: unresolvable accounts still get the popup).
+        if (!SimHelper.filterFor(ctx).matchesForPopup(account)) {
             Log.i(TAG, "popup skip: call was on a non-office SIM");
+            notePopup(ctx, "non-office SIM");
             return;
         }
 
@@ -122,6 +124,7 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         SharedPreferences prefs = ctx.getSharedPreferences("call_tracking", Context.MODE_PRIVATE);
         if (!prefs.getBoolean("popup_enabled", true)) {
             Log.i(TAG, "popup skip: popup disabled by admin config");
+            notePopup(ctx, "disabled in App Settings");
             return;
         }
         Calendar now = Calendar.getInstance();
@@ -131,6 +134,7 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         if (minutesNow < popupStart || minutesNow >= popupEnd) {
             Log.i(TAG, "popup skip: outside popup hours (" + minutesNow + " not in "
                     + popupStart + "-" + popupEnd + ")");
+            notePopup(ctx, "outside popup hours");
             return;
         }
         // Weekday check. Calendar: SUNDAY=1..SATURDAY=7 → our 0=Mon..6=Sun.
@@ -139,6 +143,7 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         String popupDays = prefs.getString("popup_days", "0,1,2,3,4,5,6");
         if (!dayEnabled(popupDays, myDay)) {
             Log.i(TAG, "popup skip: not a popup day (" + myDay + " not in " + popupDays + ")");
+            notePopup(ctx, "not a popup day");
             return;
         }
 
@@ -153,14 +158,26 @@ public class CallTrackerReceiver extends BroadcastReceiver {
             try {
                 ctx.startActivity(popup);
                 Log.i(TAG, "popup shown for " + number);
+                notePopup(ctx, "shown");
                 return;
             } catch (Exception e) {
                 Log.w(TAG, "popup start failed, falling back to notification: " + e);
+                notePopup(ctx, "launch blocked - notification shown");
             }
         } else {
             Log.i(TAG, "popup skip: overlay permission missing — using notification");
+            notePopup(ctx, "overlay permission off - notification shown");
         }
         showFollowupNotification(ctx, popup, number);
+    }
+
+    /** Record why the last popup did / didn't appear; the app reports it in
+     * device-status so the admin's Call Analytics roster shows it per device. */
+    private static void notePopup(Context ctx, String result) {
+        ctx.getSharedPreferences("call_tracking", Context.MODE_PRIVATE).edit()
+                .putString("last_popup_result", result)
+                .putLong("last_popup_at", System.currentTimeMillis())
+                .apply();
     }
 
     /** True if `day` (0=Mon..6=Sun) appears in a comma-separated day string. */

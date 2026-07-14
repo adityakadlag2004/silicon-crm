@@ -36,8 +36,12 @@ def update_client_status(sender, instance, **kwargs):
 @receiver(post_save, sender=Notification)
 def push_on_notification(sender, instance, created, **kwargs):
     """Mirror every new in-app notification as an FCM push to the recipient's
-    registered devices (Android app). No-op when Firebase isn't configured."""
-    if not created:
+    registered devices (Android app). No-op when Firebase isn't configured.
+
+    Senders that deliver their own push (e.g. send_followup_reminders' ringing
+    alarm) set `_skip_push` on the instance before save to avoid a duplicate
+    tray notification while keeping the in-app Notification row."""
+    if not created or getattr(instance, "_skip_push", False):
         return
     try:
         from .services.push import send_push_to_user

@@ -246,7 +246,34 @@ def call_followup_create(request):
         scheduled_at=scheduled,
         note=str(data.get("note") or "").strip()[:255],
     )
-    return JsonResponse({"ok": True, "id": fu.id, "scheduled_at": fu.scheduled_at.isoformat()})
+
+    # One number = one reminder: the new follow-up supersedes any older
+    # pending ones for the same employee + number (matched on the last 10
+    # digits, so "+91XXXXXXXXXX" and "0XXXXXXXXXX" collapse). The app cancels
+    # the superseded on-device alarms from the ids returned below.
+    superseded_ids = []
+    digits = _normalize_digits(phone)
+    if digits:
+        superseded_ids = [
+            old.id
+            for old in CallFollowUp.objects.filter(
+                employee=emp, status=CallFollowUp.STATUS_PENDING
+            ).exclude(pk=fu.pk)
+            if _normalize_digits(old.phone) == digits
+        ]
+        if superseded_ids:
+            CallFollowUp.objects.filter(pk__in=superseded_ids).delete()
+
+    return JsonResponse({
+        "ok": True,
+        "id": fu.id,
+        "scheduled_at": fu.scheduled_at.isoformat(),
+        # Epoch millis so the popup can arm an exact on-device alarm.
+        "scheduled_at_ms": int(fu.scheduled_at.timestamp() * 1000),
+        "client": fu.client.name if fu.client_id else "",
+        "note": fu.note,
+        "superseded_ids": superseded_ids,
+    })
 
 
 # ── Employee-facing follow-up list ───────────────────────────────────────────

@@ -1736,6 +1736,10 @@ class AppDeviceStatus(models.Model):
     overlay_granted = models.BooleanField(default=False)    # display-over-other-apps (popup)
     notifications_granted = models.BooleanField(default=False)
     app_version = models.CharField(max_length=20, blank=True, default="")
+    # Free-form popup/alarm health snapshot from the device: cached popup
+    # config, SIM state, last popup shown/skipped + reason, alarm permissions.
+    # Lets the admin see from Call Analytics WHY a device shows no popups.
+    diagnostics = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

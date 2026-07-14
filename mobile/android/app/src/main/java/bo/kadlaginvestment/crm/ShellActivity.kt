@@ -108,15 +108,38 @@ class ShellActivity : ComponentActivity() {
         Build.VERSION.SDK_INT < 33 ||
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
+    /** Android 14+ lets the user revoke full-screen intents (the ringing
+     * follow-up alarm screen); below 14 the manifest permission is enough. */
+    private fun fullScreenAlarmsGranted(): Boolean =
+        Build.VERSION.SDK_INT < 34 ||
+            (getSystemService(android.app.NotificationManager::class.java)?.canUseFullScreenIntent() ?: true)
+
     private fun reportDeviceStatus() {
         Thread {
             try {
                 val version = packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+                // Popup/alarm health snapshot — shown per device on the admin's
+                // Call Analytics roster, so "why is the popup not appearing?"
+                // is answerable without touching the phone.
+                val ct = getSharedPreferences("call_tracking", MODE_PRIVATE)
+                val diagnostics = org.json.JSONObject()
+                    .put("popup_enabled", ct.getBoolean("popup_enabled", true))
+                    .put(
+                        "popup_window",
+                        "${ct.getInt("popup_start_minutes", 540)}-${ct.getInt("popup_end_minutes", 1260)}",
+                    )
+                    .put("popup_days", ct.getString("popup_days", "0,1,2,3,4,5,6"))
+                    .put("sim_configured", ct.getBoolean("sim_configured", false))
+                    .put("last_popup_result", ct.getString("last_popup_result", ""))
+                    .put("last_popup_at", ct.getLong("last_popup_at", 0L))
+                    .put("exact_alarms", FollowupAlarmScheduler.canScheduleExact(this))
+                    .put("fullscreen_alarms", fullScreenAlarmsGranted())
                 val body = org.json.JSONObject()
                     .put("calls_granted", callsGranted())
                     .put("overlay_granted", Settings.canDrawOverlays(this))
                     .put("notifications_granted", notificationsGranted())
                     .put("app_version", version)
+                    .put("diagnostics", diagnostics)
                 BackendClient.postJson("/clients/api/app/device-status/", body.toString())
             } catch (_: Exception) {}
         }.start()
@@ -178,6 +201,16 @@ class ShellActivity : ComponentActivity() {
             // 1) Call-tracking config → SharedPreferences (read by CallTrackerReceiver)
             syncCallConfigBlocking()
 
+            // 1b) Arm on-device alarms for every pending follow-up + the daily
+            // digest, so reminders ring even if FCM never arrives.
+            try {
+                BackendClient.getJson("/clients/api/app/followups/")?.let { body ->
+                    org.json.JSONObject(body).optJSONArray("pending")?.let {
+                        FollowupAlarmScheduler.syncFromPending(applicationContext, it)
+                    }
+                }
+            } catch (_: Exception) {}
+
             // 2) FCM push token → register with the server (needs Firebase configured)
             try {
                 com.google.firebase.messaging.FirebaseMessaging.getInstance().token
@@ -201,6 +234,8 @@ class ShellActivity : ComponentActivity() {
 
         // Ensure the push notification channel exists before any FCM arrives.
         KadlagMessagingService.ensureChannel(this)
+        // …and the ringing follow-up alarm channel before any alarm fires.
+        FollowupAlarmNotifier.ensureChannel(this)
 
         // Catch-up sync: uploads any calls that couldn't be synced when they
         // ended (no internet at the time). Server-side dedup makes this safe.
@@ -242,13 +277,17 @@ class ShellActivity : ComponentActivity() {
                 val needCalls = !callsGranted()
                 val needOverlay = !Settings.canDrawOverlays(this)
                 val needNotifications = !notificationsGranted()
+                val needExactAlarms = !FollowupAlarmScheduler.canScheduleExact(this)
+                val needFullScreen = !fullScreenAlarmsGranted()
 
                 // Full-screen permission gate. A plain AlertDialog clipped the
                 // Allow buttons on some devices (they sat inside the scrolling
                 // text slot); this uses a wide, scrollable Surface with
                 // full-width buttons that are always visible. It reappears on
                 // every launch while any permission is still missing.
-                if (!permDialogDismissed && (needCalls || needOverlay || needNotifications)) {
+                if (!permDialogDismissed &&
+                    (needCalls || needOverlay || needNotifications || needExactAlarms || needFullScreen)
+                ) {
                     Dialog(
                         onDismissRequest = { permDialogDismissed = true },
                         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -299,6 +338,34 @@ class ShellActivity : ComponentActivity() {
                                 ) {
                                     if (Build.VERSION.SDK_INT >= 33) {
                                         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+                                    }
+                                }
+                                if (needExactAlarms) PermCard(
+                                    "Follow-up alarms",
+                                    "Alarms & reminders — makes follow-up reminders ring exactly on time, like an alarm clock.",
+                                    "Open settings",
+                                ) {
+                                    if (Build.VERSION.SDK_INT >= 31) {
+                                        startActivity(
+                                            Intent(
+                                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                                Uri.parse("package:$packageName"),
+                                            )
+                                        )
+                                    }
+                                }
+                                if (needFullScreen) PermCard(
+                                    "Ring on lock screen",
+                                    "Full-screen reminders — shows the ringing follow-up alarm even when the phone is locked.",
+                                    "Open settings",
+                                ) {
+                                    if (Build.VERSION.SDK_INT >= 34) {
+                                        startActivity(
+                                            Intent(
+                                                Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                                Uri.parse("package:$packageName"),
+                                            )
+                                        )
                                     }
                                 }
                                 Spacer(Modifier.height(6.dp))

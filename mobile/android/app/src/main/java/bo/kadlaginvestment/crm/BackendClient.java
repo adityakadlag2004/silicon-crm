@@ -22,12 +22,18 @@ public final class BackendClient {
 
     /** POST a JSON body to BASE_URL+path with the WebView session. Returns HTTP status or -1. */
     public static int postJson(String path, String json) {
+        String body = postJsonForBody(path, json);
+        return body != null ? 200 : -1;
+    }
+
+    /** Like {@link #postJson} but returns the 200 response body, or null on any failure. */
+    public static String postJsonForBody(String path, String json) {
         HttpURLConnection conn = null;
         try {
             String cookies = CookieManager.getInstance().getCookie(BASE_URL);
             if (cookies == null || !cookies.contains("sessionid=")) {
                 Log.w(TAG, "No session cookie; user not logged in — skipping " + path);
-                return -1;
+                return null;
             }
             String csrf = extractCookie(cookies, "csrftoken");
 
@@ -51,16 +57,57 @@ public final class BackendClient {
             os.close();
 
             int code = conn.getResponseCode();
-            if (code >= 400) {
+            if (code != 200) {
                 Log.w(TAG, "POST " + path + " -> " + code);
+                return null;
             }
-            return code;
+            return readBody(conn);
         } catch (Exception e) {
             Log.w(TAG, "POST " + path + " failed: " + e);
-            return -1;
+            return null;
         } finally {
             if (conn != null) conn.disconnect();
         }
+    }
+
+    /** GET BASE_URL+path with the WebView session. Returns the 200 response
+     * body, or null when logged out / non-200 / offline. */
+    public static String getJson(String path) {
+        HttpURLConnection conn = null;
+        try {
+            String cookies = CookieManager.getInstance().getCookie(BASE_URL);
+            if (cookies == null || !cookies.contains("sessionid=")) {
+                return null;
+            }
+            URL url = new URL(BASE_URL + path);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("Cookie", cookies);
+            conn.setInstanceFollowRedirects(false); // login redirect ≠ JSON
+            if (conn.getResponseCode() != 200) {
+                return null;
+            }
+            return readBody(conn);
+        } catch (Exception e) {
+            Log.w(TAG, "GET " + path + " failed: " + e);
+            return null;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    private static String readBody(HttpURLConnection conn) throws java.io.IOException {
+        java.io.InputStream in = conn.getInputStream();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            out.write(buf, 0, n);
+        }
+        in.close();
+        return out.toString("UTF-8");
     }
 
     private static String extractCookie(String cookies, String name) {

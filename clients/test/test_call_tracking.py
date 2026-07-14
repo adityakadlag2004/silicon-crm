@@ -4,6 +4,7 @@ Run: venv_new/bin/python manage.py test clients.test.test_call_tracking -v 2
 """
 import json
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
@@ -98,6 +99,11 @@ class FollowUpTests(_CallSetup):
         self.assertAlmostEqual(
             (fu.scheduled_at - timezone.now()).total_seconds(), 15 * 60, delta=30
         )
+        # The app arms an exact on-device alarm from these fields.
+        data = resp.json()
+        self.assertEqual(data["id"], fu.id)
+        self.assertEqual(data["scheduled_at_ms"], int(fu.scheduled_at.timestamp() * 1000))
+        self.assertEqual(data["client"], self.customer.name)
 
 
     def test_new_grid_choices(self):
@@ -123,6 +129,38 @@ class FollowUpTests(_CallSetup):
         local = timezone.localtime(fu.scheduled_at)
         self.assertEqual(local.hour, 10)
         self.assertEqual((local.date() - timezone.localdate()).days, 60)
+
+    def test_new_followup_supersedes_older_pending_for_same_number(self):
+        """One number = one reminder: creating a follow-up deletes older
+        PENDING ones for the same employee + number (any +91/0 format),
+        returns their ids so the app drops their alarms, and leaves other
+        numbers and completed history untouched."""
+        def create(phone):
+            return self.employee.post(
+                reverse("clients:call_followup_create"),
+                data=json.dumps({"phone": phone, "choice": "15m"}),
+                content_type="application/json",
+            ).json()
+
+        first = create("9876543210")
+        other = create("9000000001")  # different number — must survive
+        done = CallFollowUp.objects.create(  # completed history — must survive
+            employee=self.emp, phone="9876543210",
+            scheduled_at=timezone.now(), status=CallFollowUp.STATUS_DONE,
+        )
+
+        second = create("+91 98765 43210")  # same number, different format
+        self.assertEqual(second["superseded_ids"], [first["id"]])
+        self.assertFalse(CallFollowUp.objects.filter(pk=first["id"]).exists())
+        self.assertTrue(CallFollowUp.objects.filter(pk=other["id"]).exists())
+        self.assertTrue(CallFollowUp.objects.filter(pk=done.pk).exists())
+        # Exactly one pending reminder remains for this number.
+        pending = [
+            f for f in CallFollowUp.objects.filter(
+                employee=self.emp, status=CallFollowUp.STATUS_PENDING
+            ) if f.phone.replace(" ", "").endswith("9876543210")
+        ]
+        self.assertEqual([f.pk for f in pending], [second["id"]])
 
     def test_legacy_choices_still_work(self):
         resp = self.employee.post(
@@ -152,6 +190,30 @@ class FollowUpTests(_CallSetup):
         self.assertTrue(fu.reminded)
         # Second run must not duplicate
         call_command("send_followup_reminders")
+        self.assertEqual(Notification.objects.filter(recipient=self.emp_user).count(), 1)
+
+    def test_reminder_command_sends_alarm_push_not_plain_mirror(self):
+        """Due follow-ups ring via one data-only alarm push; the generic
+        Notification→FCM mirror must stay silent to avoid a duplicate."""
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="9876543210", client=self.customer,
+            scheduled_at=timezone.now() - timedelta(minutes=1), note="discuss SIP",
+        )
+        with mock.patch(
+            "clients.management.commands.send_followup_reminders.send_data_push_to_user"
+        ) as data_push, mock.patch("clients.services.push.send_push_to_user") as plain_push:
+            call_command("send_followup_reminders")
+
+        data_push.assert_called_once()
+        user, payload = data_push.call_args.args
+        self.assertEqual(user, self.emp_user)
+        self.assertEqual(payload["kind"], "followup_alarm")
+        self.assertEqual(payload["followup_id"], fu.id)
+        self.assertEqual(payload["client"], self.customer.name)
+        self.assertEqual(payload["note"], "discuss SIP")
+        self.assertEqual(payload["phone"], "9876543210")
+        plain_push.assert_not_called()
+        # The in-app Notification row still exists for the Notifications screen.
         self.assertEqual(Notification.objects.filter(recipient=self.emp_user).count(), 1)
 
     def test_mark_done(self):

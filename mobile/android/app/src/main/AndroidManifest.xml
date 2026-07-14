@@ -81,6 +81,31 @@
             android:launchMode="singleInstance"
             android:exported="false" />
 
+        <!-- Full-screen ringing follow-up reminder (shows over the lockscreen). -->
+        <activity
+            android:name=".AlarmRingActivity"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:launchMode="singleTop"
+            android:exported="false" />
+
+        <!-- Exact on-device alarms for follow-up reminders. -->
+        <receiver
+            android:name=".FollowupAlarmReceiver"
+            android:exported="false" />
+
+        <!-- Re-arm follow-up alarms after reboot / app update. -->
+        <receiver
+            android:name=".FollowupBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- Firebase Cloud Messaging: task/business push notifications. -->
         <service
             android:name=".KadlagMessagingService"
@@ -103,6 +128,15 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Follow-up alarms: exact, reboot-surviving, ringing over the lockscreen.
+         SCHEDULE_EXACT_ALARM covers Android 12–12L (user-revocable app-op);
+         USE_EXACT_ALARM auto-grants on 13+ (fine here — self-hosted APK, and
+         reminding about scheduled calls is exactly its intended alarm use). -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Self-hosted updates: open the package installer for downloaded APKs. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>

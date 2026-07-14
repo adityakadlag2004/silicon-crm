@@ -191,11 +191,44 @@ public class FollowupActivity extends Activity {
     }
 
     private void send(String json, String label) {
+        // Test mode ("▶ Test the follow-up popup" in Office SIM settings):
+        // prove the popup renders and responds — never save anything.
+        if (getIntent().getBooleanExtra("test", false)) {
+            Toast.makeText(this, "✓ Popup works — this was a test, nothing saved", Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
         new Thread(() -> {
-            final int code = BackendClient.postJson("/clients/api/calls/followup/", json);
+            final String body = BackendClient.postJsonForBody("/clients/api/calls/followup/", json);
+            // Arm the on-device alarm right away so the reminder rings at the
+            // scheduled time even if the phone is offline or FCM is delayed.
+            if (body != null) {
+                try {
+                    JSONObject r = new JSONObject(body);
+                    // The server deleted older pending follow-ups for this same
+                    // number — drop their on-device alarms so only the new one rings.
+                    JSONArray superseded = r.optJSONArray("superseded_ids");
+                    if (superseded != null) {
+                        for (int i = 0; i < superseded.length(); i++) {
+                            int oldId = superseded.optInt(i, 0);
+                            if (oldId > 0) FollowupAlarmScheduler.cancel(this, oldId);
+                        }
+                    }
+                    long at = r.optLong("scheduled_at_ms", 0);
+                    int id = r.optInt("id", 0);
+                    if (id > 0 && at > 0) {
+                        String phone = getIntent().getStringExtra("phone");
+                        String name = r.optString("client");
+                        if (name.isEmpty()) name = phone;
+                        FollowupAlarmScheduler.schedule(this, new FollowupAlarm(
+                                id, name, r.optString("note"), phone, at));
+                    }
+                } catch (Exception ignored) {
+                }
+            }
             runOnUiThread(() -> {
                 Toast.makeText(this,
-                        code == 200 ? "✓ Reminder set — " + label
+                        body != null ? "✓ Reminder set — " + label
                                 : "Could not save — check internet and retry from the app",
                         Toast.LENGTH_LONG).show();
                 finish();

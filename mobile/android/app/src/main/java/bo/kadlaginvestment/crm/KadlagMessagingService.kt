@@ -51,6 +51,27 @@ class KadlagMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        // Follow-up reminders arrive as data-only messages (so this runs even
+        // when the app is backgrounded) and ring like an alarm clock instead
+        // of showing a plain tray notification. The locally-scheduled alarm
+        // usually fires first — FollowupAlarmNotifier dedupes by id.
+        if (message.data["kind"] == "followup_alarm") {
+            val id = message.data["followup_id"]?.toIntOrNull() ?: 0
+            if (id > 0) {
+                FollowupAlarmNotifier.ring(
+                    this,
+                    FollowupAlarm(
+                        id,
+                        (message.data["client"] ?: "").ifEmpty { message.data["phone"] ?: "" },
+                        message.data["note"] ?: "",
+                        message.data["phone"] ?: "",
+                        System.currentTimeMillis(),
+                    ),
+                )
+            }
+            return
+        }
+
         val title = message.notification?.title ?: message.data["title"] ?: "Kadlag Investment"
         val bodyText = message.notification?.body ?: message.data["body"] ?: ""
         val link = message.data["link"].orEmpty()

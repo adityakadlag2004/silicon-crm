@@ -187,6 +187,10 @@ class AppScreenApiTests(TestCase):
         fu = CallFollowUp.objects.create(employee=self.emp, phone="123", scheduled_at=tz.now())
         data = self._http(self.emp_user).get(reverse("clients:app_followups")).json()
         self.assertEqual(len(data["pending"]), 1)
+        # Epoch millis drive the app's exact on-device alarms.
+        self.assertEqual(
+            data["pending"][0]["scheduled_at_ms"], int(fu.scheduled_at.timestamp() * 1000)
+        )
         resp = self._http(self.emp_user).post(
             reverse("clients:app_followup_action", args=[fu.id]),
             data=_json.dumps({"action": "done"}), content_type="application/json",
@@ -443,6 +447,33 @@ class DeviceStatusTests(TestCase):
         self.assertEqual(AppDeviceStatus.objects.filter(user=user).count(), 1)
         s.refresh_from_db()
         self.assertTrue(s.overlay_granted)
+
+    def test_diagnostics_stored_and_bad_shape_ignored(self):
+        import json as _json
+        user = User.objects.create_user(username="ds_diag", password="x")
+        Employee.objects.create(user=user, role="employee", salary=0, active=True)
+        http = TestClient()
+        http.force_login(user)
+        diag = {"popup_enabled": True, "sim_configured": False,
+                "last_popup_result": "shown", "exact_alarms": True}
+        http.post(
+            reverse("clients:app_device_status"),
+            data=_json.dumps({"calls_granted": True, "app_version": "4.12.0",
+                              "diagnostics": diag}),
+            content_type="application/json",
+        )
+        from clients.models import AppDeviceStatus
+        s = AppDeviceStatus.objects.get(user=user)
+        self.assertEqual(s.diagnostics["last_popup_result"], "shown")
+        self.assertFalse(s.diagnostics["sim_configured"])
+        # Non-dict diagnostics (old app version sends none) → stored as {}
+        http.post(
+            reverse("clients:app_device_status"),
+            data=_json.dumps({"calls_granted": True, "diagnostics": "garbage"}),
+            content_type="application/json",
+        )
+        s.refresh_from_db()
+        self.assertEqual(s.diagnostics, {})
 
 
 class AppUpdateEndpointTests(TestCase):
