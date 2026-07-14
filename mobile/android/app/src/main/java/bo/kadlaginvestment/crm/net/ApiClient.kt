@@ -21,9 +21,25 @@ object ApiClient {
         data class Error(val message: String) : Result()
     }
 
+    /** True when a session cookie is *present*. It may still be rejected by the
+     * server (expired, or invalidated by a SECRET_KEY rotation) — callers must
+     * treat [Result.NotLoggedIn] as the authority and call [clearSession]. */
     fun hasSession(): Boolean {
         val cookies = CookieManager.getInstance().getCookie(BackendClient.BASE_URL)
         return cookies?.contains("sessionid=") == true
+    }
+
+    /** Drop the session + CSRF cookies.
+     *
+     * Must be called on every path that sends the user back to the login
+     * screen. A cookie the server has rejected still makes [hasSession] true,
+     * and LoginActivity skips straight to the shell when it sees one — so
+     * leaving it in place turns one rejected request into an endless
+     * Shell → login → Shell bounce. */
+    fun clearSession() {
+        val cm = CookieManager.getInstance()
+        cm.removeAllCookies(null)
+        cm.flush()
     }
 
     /** Native login: posts credentials, then writes the returned session +

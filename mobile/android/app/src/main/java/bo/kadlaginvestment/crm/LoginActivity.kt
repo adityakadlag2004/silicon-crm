@@ -42,18 +42,38 @@ import kotlinx.coroutines.launch
  * with the whole app) and control passes to the native shell. */
 class LoginActivity : ComponentActivity() {
 
+    companion object {
+        private const val EXTRA_SESSION_EXPIRED = "session_expired"
+
+        /** Intent for "the server rejected our session" — clears the dead
+         * cookie and forces the login form even if a cookie is still around. */
+        fun expiredIntent(ctx: android.content.Context): Intent =
+            Intent(ctx, LoginActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                .putExtra(EXTRA_SESSION_EXPIRED, true)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val expired = intent?.getBooleanExtra(EXTRA_SESSION_EXPIRED, false) == true
+        if (expired) {
+            // Belt and braces: the caller clears the cookie too, but if a stale
+            // one survives here we must NOT bounce back to the shell — that is
+            // the loop.
+            ApiClient.clearSession()
+        }
+
         // Already signed in (e.g. relaunched) — skip straight to the shell.
-        if (ApiClient.hasSession()) {
+        // Never taken on the expired path, however stale cookies look.
+        if (!expired && ApiClient.hasSession()) {
             goShell()
             return
         }
 
         setContent {
             KadlagTheme {
-                LoginForm(onLoggedIn = { goShell() })
+                LoginForm(sessionExpired = expired, onLoggedIn = { goShell() })
             }
         }
     }
@@ -68,12 +88,16 @@ class LoginActivity : ComponentActivity() {
 }
 
 @androidx.compose.runtime.Composable
-private fun LoginForm(onLoggedIn: () -> Unit) {
+private fun LoginForm(sessionExpired: Boolean = false, onLoggedIn: () -> Unit) {
     val scope = rememberCoroutineScope()
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember {
+        mutableStateOf<String?>(
+            if (sessionExpired) "Your session ended. Please sign in again." else null
+        )
+    }
 
     fun submit() {
         if (username.isBlank() || password.isBlank()) return

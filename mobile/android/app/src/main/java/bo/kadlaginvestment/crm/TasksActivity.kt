@@ -85,10 +85,8 @@ class TasksActivity : ComponentActivity() {
                 }
 
                 val goLogin: () -> Unit = {
-                    startActivity(
-                        Intent(this, LoginActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    )
+                    ApiClient.clearSession()
+                    startActivity(LoginActivity.expiredIntent(this))
                     finish()
                 }
                 val openWeb: (String) -> Unit = { path -> WebActivity.open(this, path) }

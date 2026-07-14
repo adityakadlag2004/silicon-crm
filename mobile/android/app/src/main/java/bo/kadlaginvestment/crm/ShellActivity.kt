@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -53,6 +52,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
+import bo.kadlaginvestment.crm.net.ApiClient
 import bo.kadlaginvestment.crm.ui.AddSaleScreen
 import bo.kadlaginvestment.crm.ui.CallAnalyticsScreen
 import bo.kadlaginvestment.crm.ui.ClientsScreen
@@ -350,18 +350,15 @@ class ShellActivity : ComponentActivity() {
                 // "renewals", "notifications".
                 var overlay by remember { mutableStateOf<String?>(null) }
 
+                // Session rejected by the server: drop the dead cookie before
+                // leaving, or LoginActivity sees it, bounces back here, this
+                // screen fails again… (the v4.11.0 reload loop).
                 val goLogin: () -> Unit = {
-                    startActivity(
-                        Intent(this, LoginActivity::class.java)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    )
+                    ApiClient.clearSession()
+                    startActivity(LoginActivity.expiredIntent(this))
                     finish()
                 }
-                val logout: () -> Unit = {
-                    CookieManager.getInstance().removeAllCookies(null)
-                    CookieManager.getInstance().flush()
-                    goLogin()
-                }
+                val logout: () -> Unit = goLogin
                 val openWeb: (String) -> Unit = { path -> WebActivity.open(this, path) }
                 // Route a notification/shortcut link to the right destination —
                 // native screens where they exist, else the web page or dialer.
