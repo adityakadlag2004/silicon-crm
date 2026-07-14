@@ -98,6 +98,66 @@ public final class BackendClient {
         }
     }
 
+    /** POST one file as multipart/form-data (field {@code fieldName}) with the
+     * WebView session + CSRF, asking for a JSON response. Returns the response
+     * body on 200, or null on any failure. Used for task attachments. */
+    public static String postMultipart(String path, String fieldName, String filename,
+                                       String mime, java.io.InputStream data) {
+        HttpURLConnection conn = null;
+        try {
+            String cookies = CookieManager.getInstance().getCookie(BASE_URL);
+            if (cookies == null || !cookies.contains("sessionid=")) {
+                return null;
+            }
+            String csrf = extractCookie(cookies, "csrftoken");
+            String boundary = "----ki" + System.currentTimeMillis();
+
+            URL url = new URL(BASE_URL + path);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(60000);
+            conn.setDoOutput(true);
+            conn.setChunkedStreamingMode(64 * 1024);
+            conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("Cookie", cookies);
+            conn.setRequestProperty("Origin", BASE_URL);
+            conn.setRequestProperty("Referer", BASE_URL + "/");
+            if (csrf != null) {
+                conn.setRequestProperty("X-CSRFToken", csrf);
+            }
+
+            OutputStream os = conn.getOutputStream();
+            String head = "--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"" + fieldName
+                    + "\"; filename=\"" + filename.replace("\"", "_") + "\"\r\n"
+                    + "Content-Type: " + (mime == null || mime.isEmpty() ? "application/octet-stream" : mime)
+                    + "\r\n\r\n";
+            os.write(head.getBytes(StandardCharsets.UTF_8));
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = data.read(buf)) != -1) {
+                os.write(buf, 0, n);
+            }
+            os.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+            os.flush();
+            os.close();
+
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                Log.w(TAG, "MULTIPART " + path + " -> " + code);
+                return null;
+            }
+            return readBody(conn);
+        } catch (Exception e) {
+            Log.w(TAG, "MULTIPART " + path + " failed: " + e);
+            return null;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
     private static String readBody(HttpURLConnection conn) throws java.io.IOException {
         java.io.InputStream in = conn.getInputStream();
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();

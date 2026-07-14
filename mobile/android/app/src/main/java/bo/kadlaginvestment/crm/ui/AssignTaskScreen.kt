@@ -97,7 +97,9 @@ fun AssignTaskSheet(
         var dueDate by remember { mutableStateOf(editTask?.optString("due_date") ?: "") }
         var dueTime by remember { mutableStateOf(editTask?.optString("due_time") ?: "") }
         val checklist = remember { mutableStateListOf<String>() }
-        var repeat by remember { mutableStateOf("") }
+        var repeat by remember { mutableStateOf(editTask?.optString("repeat_rule") ?: "") }
+        var client by remember { mutableStateOf<Opt?>(null) }
+        val templates = remember { mutableStateListOf<JSONObject>() }
         var openMenu by remember { mutableStateOf("") }
         var submitting by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
@@ -107,6 +109,9 @@ fun AssignTaskSheet(
             if (editTask != null) {
                 editTask.optInt("assignee_id", 0).takeIf { it > 0 }?.let {
                     assignees.add(Opt(it, editTask.optString("assignee")))
+                }
+                editTask.optInt("client_id", 0).takeIf { it > 0 }?.let {
+                    client = Opt(it, editTask.optString("client"))
                 }
                 editTask.optInt("category_id", 0).takeIf { it > 0 }?.let {
                     category = Opt(it, editTask.optString("category"))
@@ -135,6 +140,17 @@ fun AssignTaskSheet(
                 is ApiClient.Result.NotLoggedIn -> onSessionExpired()
                 is ApiClient.Result.Error -> error = r.message
             }
+            // Templates power the 📋 chip (create mode only).
+            if (!isEdit) {
+                when (val r = ApiClient.get("/clients/api/app/tasks/templates/")) {
+                    is ApiClient.Result.Ok -> {
+                        val arr = r.json.optJSONArray("templates")
+                        templates.clear()
+                        for (i in 0 until (arr?.length() ?: 0)) templates.add(arr!!.getJSONObject(i))
+                    }
+                    else -> {}
+                }
+            }
         }
 
         val employees = meta?.optJSONArray("employees")
@@ -158,8 +174,10 @@ fun AssignTaskSheet(
                     .put("title", title).put("description", description)
                     .put("priority", priority).put("due_date", dueDate).put("due_time", dueTime)
                 category?.let { body.put("category_id", it.id) } ?: body.put("category_id", JSONObject.NULL)
+                client?.let { body.put("client_id", it.id) } ?: body.put("client_id", JSONObject.NULL)
                 body.put("subscribers", JSONArray(subscribers.map { it.id }))
                 body.put("checklist", JSONArray(checklist.filter { it.isNotBlank() }))
+                body.put("repeat_rule", repeat)
 
                 val r = if (isEdit) {
                     body.put("action", "edit")
@@ -167,7 +185,6 @@ fun AssignTaskSheet(
                     ApiClient.post("/clients/api/app/tasks/${editTask!!.optInt("id")}/action/", body)
                 } else {
                     body.put("assignees", JSONArray(assignees.map { it.id }))
-                    body.put("repeat_rule", repeat)
                     ApiClient.post("/clients/api/app/tasks/create/", body)
                 }
                 when (r) {
@@ -236,6 +253,72 @@ fun AssignTaskSheet(
                         active = subscribers.isNotEmpty()) { openMenu = if (openMenu == "inloop") "" else "inloop" }
                     MultiMenu(openMenu == "inloop", users, subscribers) { openMenu = "" }
                 }
+                // Client the task is about (optional; searchable)
+                SelectorChip(null, client?.name ?: "Client", active = client != null) {
+                    openMenu = if (openMenu == "client") "" else "client"
+                }
+                // Template: prefill from a saved blueprint (create mode)
+                if (!isEdit && templates.isNotEmpty()) {
+                    Box {
+                        SelectorChip(null, "📋 Template", active = false) {
+                            openMenu = if (openMenu == "template") "" else "template"
+                        }
+                        DropdownMenu(openMenu == "template", onDismissRequest = { openMenu = "" }) {
+                            templates.forEach { tpl ->
+                                DropdownMenuItem(text = { Text(tpl.optString("name")) }, onClick = {
+                                    title = tpl.optString("title")
+                                    description = tpl.optString("description")
+                                    priority = tpl.optString("priority").ifBlank { "medium" }
+                                    tpl.optInt("category_id", 0).takeIf { it > 0 }?.let { cid ->
+                                        categories.firstOrNull { it.id == cid }?.let { category = it }
+                                    }
+                                    checklist.clear()
+                                    val cl = tpl.optJSONArray("checklist")
+                                    for (i in 0 until (cl?.length() ?: 0)) checklist.add(cl!!.optString(i))
+                                    openMenu = ""
+                                })
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Inline client search (name / phone / PAN) — appears below the chips.
+            if (openMenu == "client") {
+                var cq by remember { mutableStateOf("") }
+                var results by remember { mutableStateOf(listOf<Opt>()) }
+                LaunchedEffect(cq) {
+                    if (cq.trim().length < 2) { results = emptyList(); return@LaunchedEffect }
+                    kotlinx.coroutines.delay(250)  // debounce typing
+                    when (val r = ApiClient.get(
+                        "/clients/api/app/clients/?scope=all&q=" + java.net.URLEncoder.encode(cq.trim(), "UTF-8")
+                    )) {
+                        is ApiClient.Result.Ok -> {
+                            val arr = r.json.optJSONArray("results")
+                            results = (0 until (arr?.length() ?: 0))
+                                .map { arr!!.getJSONObject(it) }
+                                .map { Opt(it.optInt("id"), it.optString("name")) }
+                        }
+                        is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                        is ApiClient.Result.Error -> {}
+                    }
+                }
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(cq, { cq = it }, Modifier.weight(1f),
+                            placeholder = { Text("Search client…") }, singleLine = true)
+                        if (client != null) TextButton(onClick = { client = null; openMenu = "" }) { Text("Clear") }
+                        TextButton(onClick = { openMenu = "" }) { Text("✕") }
+                    }
+                    results.take(6).forEach { c ->
+                        Text(
+                            "•  ${c.name}", fontSize = 14.sp,
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { client = c; openMenu = "" }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                        )
+                    }
+                }
             }
 
             if (openMenu == "newcat") {
@@ -272,16 +355,42 @@ fun AssignTaskSheet(
 
             error?.let { Text(it, color = StatusRed, fontSize = 13.sp) }
 
-            // Bottom row: repeat + attach + voice, and the Assign button in front
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (!isEdit) {
-                    SelectorChip(null, if (repeat.isBlank()) "Repeat" else repeat.replaceFirstChar { it.uppercase() },
-                        active = repeat.isNotBlank()) {
-                        repeat = when (repeat) { "" -> "daily"; "daily" -> "weekly"; "weekly" -> "monthly"; else -> "" }
-                    }
+            // Save the current fields as a reusable template (admins/managers).
+            if (openMenu == "savetpl") {
+                var tplName by remember { mutableStateOf("") }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(tplName, { tplName = it }, Modifier.weight(1f),
+                        placeholder = { Text("Template name — e.g. Onboarding") }, singleLine = true)
+                    Button(onClick = {
+                        if (tplName.isNotBlank()) scope.launch {
+                            val b = JSONObject().put("name", tplName.trim()).put("title", title)
+                                .put("description", description).put("priority", priority)
+                                .put("checklist", JSONArray(checklist.filter { it.isNotBlank() }))
+                            category?.let { b.put("category_id", it.id) }
+                            when (val r = ApiClient.post("/clients/api/app/tasks/templates/save/", b)) {
+                                is ApiClient.Result.Ok -> {
+                                    Toast.makeText(context, "✓ Template saved", Toast.LENGTH_SHORT).show()
+                                    openMenu = ""
+                                }
+                                is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                                is ApiClient.Result.Error -> error = r.message
+                            }
+                        }
+                    }) { Icon(Icons.Filled.Check, "Save template") }
+                    TextButton(onClick = { openMenu = "" }) { Text("✕") }
                 }
-                IconAction("📎") { Toast.makeText(context, "Attach files from the task on web", Toast.LENGTH_SHORT).show() }
-                IconAction("🎙") { Toast.makeText(context, "Add voice notes from the task on web", Toast.LENGTH_SHORT).show() }
+            }
+
+            // Bottom row: repeat + save-template + attach hints, Assign in front
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SelectorChip(null, if (repeat.isBlank()) "Repeat" else repeat.replaceFirstChar { it.uppercase() },
+                    active = repeat.isNotBlank()) {
+                    repeat = when (repeat) { "" -> "daily"; "daily" -> "weekly"; "weekly" -> "monthly"; else -> "" }
+                }
+                if (!isEdit) {
+                    IconAction("💾") { openMenu = if (openMenu == "savetpl") "" else "savetpl" }
+                }
+                IconAction("📎") { Toast.makeText(context, "Attach files from the task detail screen", Toast.LENGTH_SHORT).show() }
                 Spacer(Modifier.weight(1f))
                 Button(onClick = { submit() }, enabled = !submitting && title.isNotBlank()) {
                     Text(if (submitting) "…" else if (isEdit) "Save" else "Assign")

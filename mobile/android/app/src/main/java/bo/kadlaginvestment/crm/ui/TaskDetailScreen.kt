@@ -1,6 +1,10 @@
 package bo.kadlaginvestment.crm.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -93,6 +97,34 @@ fun TaskDetailScreen(
         }
     }
 
+    // Attach a file/photo from the phone: system picker → multipart upload to
+    // the same endpoint the web uses (session cookie + CSRF).
+    var uploading by remember { mutableStateOf(false) }
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        uploading = true
+        Thread {
+            try {
+                val cr = context.contentResolver
+                var name = "attachment"
+                cr.query(uri, null, null, null, null)?.use { cur ->
+                    val i = cur.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (cur.moveToFirst() && i >= 0) name = cur.getString(i) ?: name
+                }
+                cr.openInputStream(uri)?.use { stream ->
+                    bo.kadlaginvestment.crm.BackendClient.postMultipart(
+                        "/clients/tasks/$taskId/attachment/upload/",
+                        "attachments", name, cr.getType(uri) ?: "", stream,
+                    )
+                }
+            } catch (_: Exception) {
+            } finally {
+                uploading = false
+                reloadKey++
+            }
+        }.start()
+    }
+
     if (error != null) { ErrorBox(error!!) { error = null; reloadKey++ }; return }
     val t = task ?: run { LoadingBox(); return }
     val canEdit = t.optBoolean("can_edit")
@@ -181,7 +213,28 @@ fun TaskDetailScreen(
             }
             Spacer(Modifier.height(10.dp))
             InfoRow("Assigned", t.optString("assignee").ifBlank { "—" })
+            if (t.optString("assignee").isNotBlank() && !done) {
+                InfoRow(
+                    "Seen",
+                    if (t.optBoolean("acknowledged")) "✓ Acknowledged" else "Awaiting acknowledgement",
+                    if (t.optBoolean("acknowledged")) StatusGreen else StatusAmber,
+                )
+            }
             InfoRow("Created by", t.optString("created_by").ifBlank { "—" })
+            // Linked client — tap to dial straight from the task.
+            if (t.optString("client").isNotBlank()) {
+                val clientPhone = t.optString("client_phone")
+                Box(Modifier.clickable(enabled = clientPhone.isNotBlank()) {
+                    context.startActivity(
+                        Intent(Intent.ACTION_DIAL, Uri.parse("tel:$clientPhone"))
+                    )
+                }) {
+                    InfoRow(
+                        "Client",
+                        t.optString("client") + if (clientPhone.isNotBlank()) "  📞" else "",
+                    )
+                }
+            }
             // Due row is always visible and, for editors, tap-to-change —
             // date picker then time picker, saved via action=due.
             fun pickDue() {
@@ -254,10 +307,18 @@ fun TaskDetailScreen(
                 }
             }
 
-            // Attachments
+            // Attachments — list + add from the phone (file or photo).
             val atts = t.optJSONArray("attachments")
-            if ((atts?.length() ?: 0) > 0) {
+            if ((atts?.length() ?: 0) > 0 || canEdit) {
                 SectionTitle("Attachments")
+                if (canEdit) {
+                    OutlinedButton(
+                        onClick = { if (!uploading) pickFile.launch("*/*") },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (uploading) "Uploading…" else "📎 Attach file / photo", fontSize = 13.sp) }
+                }
+            }
+            if ((atts?.length() ?: 0) > 0) {
                 for (i in 0 until atts!!.length()) {
                     val a = atts.getJSONObject(i)
                     Card(
@@ -312,6 +373,19 @@ fun TaskDetailScreen(
                 }
             }
             Spacer(Modifier.height(16.dp))
+        }
+
+        // Acknowledge: the assignee's "I have seen this" — stops the 4-hour
+        // re-rings on high/critical tasks and shows up for the assigner.
+        if (t.optBoolean("is_assignee") && !t.optBoolean("acknowledged") && !done) {
+            Button(
+                onClick = { act(JSONObject().put("action", "acknowledge")) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = StatusAmber,
+                    contentColor = androidx.compose.ui.graphics.Color.White,
+                ),
+            ) { Text("✋ Acknowledge — I've seen this task", fontSize = 14.sp, fontWeight = FontWeight.Bold) }
         }
 
         // Bottom actions

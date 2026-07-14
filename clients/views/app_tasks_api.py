@@ -16,18 +16,27 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from ..models import (
+    Client,
     Employee,
     Link,
     LinkCategory,
     LinkFavorite,
+    RecurringTaskRule,
     Task,
     TaskActivity,
     TaskCategory,
     TaskChecklistItem,
     TaskComment,
     TaskSubscriber,
+    TaskTemplate,
 )
-from ..services.tasks import build_recurrence, create_notification, log_activity, notify_task
+from ..services.tasks import (
+    build_recurrence,
+    create_notification,
+    log_activity,
+    notify_mentions,
+    notify_task,
+)
 from .helpers import parse_date_param
 
 
@@ -74,6 +83,15 @@ def _visible_or_404(request, pk):
     return task
 
 
+def _due_at_ms(task):
+    """Epoch millis of the exact due moment (date + time) so the app can arm
+    an on-device alarm; None when the task has no due time."""
+    if not (task.due_date and task.due_time):
+        return None
+    dt = timezone.make_aware(datetime.combine(task.due_date, task.due_time))
+    return int(dt.timestamp() * 1000)
+
+
 def _task_row(task):
     return {
         "id": task.pk,
@@ -86,8 +104,14 @@ def _task_row(task):
         "category_color": task.category.color if task.category else None,
         "assignee": (task.assigned_to.user.get_full_name() or task.assigned_to.user.username)
         if task.assigned_to else None,
+        "assignee_user_id": task.assigned_to.user_id if task.assigned_to else None,
+        "client": task.client.name if task.client_id else None,
+        "client_id": task.client_id,
         "due_date": task.due_date.isoformat() if task.due_date else None,
         "due_time": task.due_time.strftime("%H:%M") if task.due_time else None,
+        "due_at_ms": _due_at_ms(task),
+        "acknowledged": task.acknowledged_at is not None,
+        "repeat_rule": task.repeat_rule or "",
         "checklist_percent": task.checklist_percent,
     }
 
@@ -242,6 +266,16 @@ def app_task_scorecard(request):
         completed = qs.filter(status=Task.STATUS_COMPLETED).count()
         overdue = qs.filter(status=Task.STATUS_OVERDUE).count()
         pct = round(completed * 100 / total) if total else 0
+        # Timeliness: of completed tasks that HAD a deadline, how many were
+        # done by their due date? This measures discipline, not just volume.
+        on_time = late = 0
+        for t in qs.filter(status=Task.STATUS_COMPLETED, due_date__isnull=False,
+                           completed_at__isnull=False):
+            if timezone.localtime(t.completed_at).date() <= t.due_date:
+                on_time += 1
+            else:
+                late += 1
+        dated = on_time + late
         rows.append({
             "name": e.user.get_full_name() or e.user.username,
             "total": total,
@@ -249,9 +283,69 @@ def app_task_scorecard(request):
             "overdue": overdue,
             "completed_pct": pct,
             "not_completed_pct": 100 - pct if total else 0,
+            "on_time": on_time,
+            "late": late,
+            "on_time_pct": round(on_time * 100 / dated) if dated else None,
         })
     rows.sort(key=lambda r: (-r["completed_pct"], -r["total"]))
     return JsonResponse({"period": period, "scorecard": rows})
+
+
+# ─────────────────────────── task templates ───────────────────────────
+
+@login_required
+@require_GET
+def app_task_templates(request):
+    """Reusable blueprints for the Assign sheet's Template picker."""
+    return JsonResponse({"templates": [
+        {
+            "id": t.pk,
+            "name": t.name,
+            "title": t.title,
+            "description": t.description,
+            "priority": t.priority,
+            "category_id": t.category_id,
+            "category": t.category.name if t.category_id else None,
+            "checklist": t.checklist_items(),
+        }
+        for t in TaskTemplate.objects.filter(is_active=True).select_related("category")
+    ]})
+
+
+@login_required
+@require_POST
+def app_task_template_save(request):
+    """Save the Assign sheet's current fields as a named template
+    (admin/manager only, so the shared list stays curated)."""
+    if not _can_manage_all(request):
+        return JsonResponse({"ok": False, "error": "Admins/managers only."}, status=403)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "invalid payload"}, status=400)
+
+    name = (body.get("name") or "").strip()[:120]
+    title = (body.get("title") or "").strip()[:255]
+    if not name or not title:
+        return JsonResponse({"ok": False, "error": "name and title required"}, status=400)
+    priority = body.get("priority")
+    if priority not in dict(Task.PRIORITY_CHOICES):
+        priority = Task.PRIORITY_MEDIUM
+    template, _created = TaskTemplate.objects.update_or_create(
+        name=name,
+        defaults={
+            "title": title,
+            "description": (body.get("description") or "").strip(),
+            "priority": priority,
+            "category": TaskCategory.objects.filter(pk=body.get("category_id")).first(),
+            "checklist": "\n".join(
+                c.strip() for c in (body.get("checklist") or []) if (c or "").strip()
+            ),
+            "created_by": request.user,
+            "is_active": True,
+        },
+    )
+    return JsonResponse({"ok": True, "id": template.pk})
 
 
 @login_required
@@ -280,6 +374,9 @@ def app_task_detail(request, pk):
         "description": task.description,
         "created_by": task.created_by.username if task.created_by else None,
         "can_edit": _can_edit(request, task),
+        # Only the assignee acknowledges — drives the app's Acknowledge button.
+        "is_assignee": bool(task.assigned_to and task.assigned_to.user_id == request.user.id),
+        "client_phone": task.client.phone if task.client_id else None,
         # ids so the edit sheet can pre-select the right options
         "category_id": task.category_id,
         "assignee_id": task.assigned_to_id,
@@ -330,13 +427,14 @@ def app_task_create(request):
     checklist = [c for c in (body.get("checklist") or []) if (c or "").strip()]
     subs = [int(u) for u in (body.get("subscribers") or []) if str(u).isdigit()]
     freq = (body.get("repeat_rule") or "").strip()
+    client = Client.objects.filter(pk=body.get("client_id")).first() if body.get("client_id") else None
 
     created_ids = []
     for assignee in assignees:
         task = Task.objects.create(
             title=title[:255], description=description, category=category,
             priority=priority, created_by=request.user, assigned_to=assignee,
-            due_date=due_date, due_time=due_time,
+            due_date=due_date, due_time=due_time, client=client,
         )
         for i, ct in enumerate(checklist):
             TaskChecklistItem.objects.create(task=task, title=ct.strip()[:255], order=i)
@@ -374,9 +472,14 @@ def app_task_action(request, pk):
         if new in dict(Task.STATUS_CHOICES) and new != task.status:
             old = task.get_status_display()
             task.status = new
-            if new == Task.STATUS_COMPLETED:
-                task.completed_at = timezone.now()
-            task.save(update_fields=["status", "completed_at", "updated_at"])
+            # completed_at reflects the LATEST completion — cleared on reopen
+            # so timeliness reports never show a stale first-completion date.
+            task.completed_at = timezone.now() if new == Task.STATUS_COMPLETED else None
+            # Touching the status proves the assignee has seen the task.
+            if (task.acknowledged_at is None and task.assigned_to
+                    and task.assigned_to.user_id == request.user.id):
+                task.acknowledged_at = timezone.now()
+            task.save(update_fields=["status", "completed_at", "acknowledged_at", "updated_at"])
             if new == Task.STATUS_COMPLETED:
                 log_activity(task, request.user, TaskActivity.COMPLETED, "Marked completed.")
                 notify_task(task, request.user, "Task completed",
@@ -387,6 +490,18 @@ def app_task_action(request, pk):
                 notify_task(task, request.user, "Task status changed",
                             f"“{task.title}”: {old} → {task.get_status_display()}.",
                             event="status_changed")
+    elif action == "acknowledge":
+        # Only the assignee can acknowledge — it means "I have seen this".
+        if not (task.assigned_to and task.assigned_to.user_id == request.user.id):
+            return JsonResponse({"ok": False, "error": "Only the assignee can acknowledge."}, status=403)
+        if task.acknowledged_at is None:
+            task.acknowledged_at = timezone.now()
+            task.save(update_fields=["acknowledged_at", "updated_at"])
+            log_activity(task, request.user, TaskActivity.ACKNOWLEDGED, "Acknowledged the task.")
+            if task.created_by and task.created_by != request.user:
+                create_notification(task.created_by, "Task acknowledged",
+                                    f"{request.user.username} acknowledged “{task.title}”.",
+                                    f"/clients/tasks/{task.pk}/", event="status_changed")
     elif action == "priority":
         new = body.get("priority")
         if new in dict(Task.PRIORITY_CHOICES) and new != task.priority:
@@ -402,9 +517,12 @@ def app_task_action(request, pk):
         if text:
             TaskComment.objects.create(task=task, author=request.user, body=text)
             log_activity(task, request.user, TaskActivity.COMMENT_ADDED, text[:200])
+            # @mentioned users get a personal ring (and join the loop);
+            # everyone else watching gets the generic comment ring.
+            mentioned = notify_mentions(task, request.user, text)
             notify_task(task, request.user, "New comment on a task",
                         f"{request.user.username} commented on “{task.title}”.",
-                        event="comment_added")
+                        event="comment_added", exclude_users=mentioned)
     elif action == "checklist_toggle":
         item = TaskChecklistItem.objects.filter(pk=body.get("item_id"), task=task).first()
         if item:
@@ -425,7 +543,12 @@ def app_task_action(request, pk):
         task.due_time = _parse_time(body.get("due_time"))
         if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
             task.status = Task.STATUS_PENDING
-        task.save(update_fields=["due_date", "due_time", "status", "updated_at"])
+        # New deadline → reminders and the due-time ring must fire again.
+        task.reminded_day_before = False
+        task.reminded_same_day = False
+        task.due_alarm_sent_at = None
+        task.save(update_fields=["due_date", "due_time", "status", "reminded_day_before",
+                                 "reminded_same_day", "due_alarm_sent_at", "updated_at"])
         log_activity(task, request.user, TaskActivity.DUE_CHANGED, f"Due {task.due_date or '—'}.")
         notify_task(task, request.user, "Task due date changed",
                     f"“{task.title}” is now due {task.due_date or '—'}.", event="due_changed")
@@ -464,13 +587,42 @@ def app_task_action(request, pk):
             cid = body.get("category_id")
             task.category = TaskCategory.objects.filter(pk=cid).first() if cid else None
         if "due_date" in body:
-            task.due_date = parse_date_param(body.get("due_date"))
-            task.due_time = _parse_time(body.get("due_time"))
+            new_date = parse_date_param(body.get("due_date"))
+            new_time = _parse_time(body.get("due_time"))
+            if new_date != task.due_date or new_time != task.due_time:
+                task.reminded_day_before = False
+                task.reminded_same_day = False
+                task.due_alarm_sent_at = None
+            task.due_date = new_date
+            task.due_time = new_time
             if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
                 task.status = Task.STATUS_PENDING
+        if "client_id" in body:
+            cid = body.get("client_id")
+            task.client = Client.objects.filter(pk=cid).first() if cid else None
         if "assigned_to" in body:
             aid = body.get("assigned_to")
-            task.assigned_to = Employee.objects.filter(pk=aid, active=True).first() if aid else None
+            new_assignee = Employee.objects.filter(pk=aid, active=True).first() if aid else None
+            if new_assignee != task.assigned_to:
+                task.acknowledged_at = None  # a new assignee must acknowledge afresh
+                task.ack_last_rung_at = None
+            task.assigned_to = new_assignee
+        if "repeat_rule" in body:
+            freq = (body.get("repeat_rule") or "").strip()
+            if freq != (task.repeat_rule or ""):
+                task.repeat_rule = freq
+                rule = task.recurring_rule
+                if not freq:
+                    # Repeat switched off — stop generating future instances.
+                    if rule:
+                        rule.is_active = False
+                        rule.save(update_fields=["is_active"])
+                elif rule:
+                    rule.frequency = freq
+                    rule.is_active = True
+                    rule.save(update_fields=["frequency", "is_active"])
+                elif freq in dict(RecurringTaskRule.FREQ_CHOICES):
+                    build_recurrence(task, freq, request.user)
         # Replace subscribers if a list is supplied.
         if isinstance(body.get("subscribers"), list):
             task.subscribers.all().delete()

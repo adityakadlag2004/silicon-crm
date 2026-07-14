@@ -14,6 +14,7 @@ audit trail and notifications stay consistent.
 from __future__ import annotations
 
 import calendar
+import re
 from datetime import date, timedelta
 
 from django.urls import reverse
@@ -98,20 +99,57 @@ def _task_link(task):
         return ""
 
 
-def notify_task(task, actor, title, body, event=None):
+def notify_task(task, actor, title, body, event=None, exclude_users=None):
     """Fan out an in-app (+push) notification to everyone watching `task`.
 
-    `actor` is excluded so the person who made the change is not pinged. Each
-    recipient's NotificationPreference for `event` is respected. Deep links to
-    the task detail page (the Android app routes /clients/tasks/… ).
+    `actor` is excluded so the person who made the change is not pinged, as is
+    anyone in `exclude_users` (e.g. @mentioned users who already got a more
+    specific ping). Each recipient's NotificationPreference for `event` is
+    respected. Deep links to the task detail page (the Android app routes
+    /clients/tasks/… ).
     """
     link = _task_link(task)
     recipients = task_recipients(task, exclude_user=actor)
+    excluded = {u.pk for u in (exclude_users or [])}
     sent = 0
     for user in recipients:
+        if user.pk in excluded:
+            continue
         if create_notification(user, title, body, link, event):
             sent += 1
     return sent
+
+
+_MENTION_RE = re.compile(r"@([A-Za-z0-9_.@+-]+)")
+
+
+def notify_mentions(task, actor, text):
+    """Ring every user @mentioned in a comment and loop them into the task.
+
+    Matches @username tokens against real usernames; mentioned users are added
+    as subscribers (so they see what follows) and get a personal ringing
+    notification. Returns the mentioned users so the caller can exclude them
+    from the generic comment fan-out (no double ring).
+    """
+    from django.contrib.auth.models import User
+    from ..models import TaskSubscriber
+
+    names = set(_MENTION_RE.findall(text or ""))
+    if not names:
+        return []
+    mentioned = list(
+        User.objects.filter(username__in=names, is_active=True)
+        .exclude(pk=getattr(actor, "pk", None))
+    )
+    link = _task_link(task)
+    for user in mentioned:
+        TaskSubscriber.objects.get_or_create(task=task, user=user)
+        create_notification(
+            user, "You were mentioned",
+            f"{actor.username} mentioned you on “{task.title}”.",
+            link, event="comment_added",
+        )
+    return mentioned
 
 
 # ─────────────────────────── recurrence engine ───────────────────────────

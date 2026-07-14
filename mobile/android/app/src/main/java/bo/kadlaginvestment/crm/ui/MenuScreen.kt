@@ -40,6 +40,7 @@ private data class MenuEntry(
 )
 
 private val ENTRIES = listOf(
+    MenuEntry("📅", "Today (tasks · follow-ups · renewals)", native = "today"),
     MenuEntry("👥", "Clients", native = "clients"),
     MenuEntry("📶", "Office SIM (call tracking)", native = "sim"),
     MenuEntry("🔔", "Notifications", native = "notifications"),

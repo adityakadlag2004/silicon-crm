@@ -438,6 +438,54 @@ def app_followups(request):
 
 
 @login_required
+@require_GET
+def app_today(request):
+    """One agenda for the signed-in employee: today's (and overdue) tasks,
+    pending call follow-ups due by tonight, and renewals that have come due.
+    Powers the app's "Today" screen — the one place to start the day from."""
+    from ..models import Renewal, Task
+    from .app_tasks_api import _task_row
+
+    emp = _emp(request)
+    today = timezone.localdate()
+    now = timezone.now()
+    end_of_day = timezone.make_aware(
+        timezone.datetime.combine(today, timezone.datetime.max.time())
+    )
+
+    tasks = Task.objects.filter(
+        is_deleted=False, assigned_to=emp, due_date__lte=today,
+        status__in=[Task.STATUS_PENDING, Task.STATUS_IN_PROGRESS, Task.STATUS_OVERDUE],
+    ).select_related("category", "assigned_to__user", "client").order_by("due_date", "due_time")[:100] if emp else []
+
+    followups = CallFollowUp.objects.filter(
+        employee=emp, status=CallFollowUp.STATUS_PENDING, scheduled_at__lte=end_of_day,
+    ).select_related("client").order_by("scheduled_at")[:100] if emp else []
+
+    renewals = Renewal.objects.filter(
+        employee=emp, renewal_date__lte=today, renewal_date__gte=today - timedelta(days=30),
+    ).select_related("client").order_by("renewal_date")[:50] if emp else []
+
+    return JsonResponse({
+        "date": today.isoformat(),
+        "tasks": [_task_row(t) for t in tasks],
+        "followups": [_fu_row(f, now) for f in followups],
+        "renewals": [
+            {
+                "id": r.pk,
+                "client": r.client.name if r.client_id else "",
+                "client_phone": r.client.phone if r.client_id else "",
+                "product": r.product_ref.name if r.product_ref_id else (r.product_name or r.product_type),
+                "renewal_date": r.renewal_date.isoformat(),
+                "premium": float(r.premium_amount or 0),
+                "overdue": r.renewal_date < today,
+            }
+            for r in renewals
+        ],
+    })
+
+
+@login_required
 @require_POST
 def app_followup_action(request, followup_id):
     emp = _emp(request)

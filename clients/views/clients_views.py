@@ -395,10 +395,19 @@ def client_profile(request, client_id):
     )
     sales_summary = sales.aggregate(total_amount=Sum("amount"), total_points=Sum("points"))
 
+    # Work about this client: open tasks first, recent history below.
+    from ..models import Task
+    open_tasks = (
+        Task.objects.filter(client=client, is_deleted=False)
+        .exclude(status__in=[Task.STATUS_COMPLETED, Task.STATUS_CANCELLED])
+        .select_related("assigned_to__user").order_by("due_date", "due_time")
+    )
+
     return render(request, "clients/client_profile.html", {
         "client": client,
         "sales": sales,
         "renewals": renewals,
+        "open_tasks": open_tasks,
         "sales_total_amount": sales_summary.get("total_amount") or 0,
         "sales_total_points": sales_summary.get("total_points") or 0,
     })

@@ -194,17 +194,22 @@ object FollowupAlarmScheduler {
     }
 
     // ── Ring dedupe (local alarm vs. server FCM push) ────────────────────────
+    // String keys so task alarms ("t42") share the ledger with follow-ups ("42").
 
     /** True when this follow-up already rang recently on either path. */
-    fun alreadyRang(context: Context, id: Int): Boolean {
+    fun alreadyRang(context: Context, id: Int): Boolean = alreadyRangKey(context, id.toString())
+
+    fun markRang(context: Context, id: Int) = markRangKey(context, id.toString())
+
+    fun alreadyRangKey(context: Context, key: String): Boolean {
         val rang = try { JSONObject(prefs(context).getString(KEY_RANG, "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
-        return System.currentTimeMillis() - rang.optLong(id.toString(), 0L) < DEDUPE_WINDOW_MS
+        return System.currentTimeMillis() - rang.optLong(key, 0L) < DEDUPE_WINDOW_MS
     }
 
-    fun markRang(context: Context, id: Int) {
+    fun markRangKey(context: Context, key: String) {
         val p = prefs(context)
         val rang = try { JSONObject(p.getString(KEY_RANG, "{}") ?: "{}") } catch (_: Exception) { JSONObject() }
-        rang.put(id.toString(), System.currentTimeMillis())
+        rang.put(key, System.currentTimeMillis())
         // Prune entries older than a day so the ledger can't grow unbounded.
         val cutoff = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
         rang.keys().asSequence().toList()

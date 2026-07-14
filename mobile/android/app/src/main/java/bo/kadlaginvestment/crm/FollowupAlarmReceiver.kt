@@ -28,6 +28,21 @@ class FollowupAlarmReceiver : BroadcastReceiver() {
                 FollowupAlarm.fromIntent(intent)?.let { FollowupAlarmNotifier.ring(context, it) }
             }
 
+            TaskAlarmScheduler.ACTION_TASK_ALARM -> {
+                val id = intent.getIntExtra("task_id", 0)
+                if (id > 0 && !FollowupAlarmScheduler.alreadyRangKey(context, "t$id")) {
+                    FollowupAlarmScheduler.markRangKey(context, "t$id")
+                    val client = intent.getStringExtra("task_client").orEmpty()
+                    FollowupAlarmNotifier.ringTask(
+                        context,
+                        "⏰ Task due now",
+                        (intent.getStringExtra("task_title") ?: "Task") +
+                            if (client.isNotEmpty()) " · $client" else "",
+                        "/clients/tasks/$id/",
+                    )
+                }
+            }
+
             ACTION_DONE -> {
                 val alarm = FollowupAlarm.fromIntent(intent) ?: return
                 FollowupAlarmNotifier.silence(context, alarm.id)

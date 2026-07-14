@@ -72,8 +72,15 @@ class KadlagMessagingService : FirebaseMessagingService() {
             return
         }
 
-        // Task assignments / comments ring like an alarm too (data-only push).
+        // Task assignments / comments / due-time alerts ring like an alarm too
+        // (data-only push). Due-time pushes carry task_id — dedupe against the
+        // locally-scheduled due alarm so one deadline never rings twice.
         if (message.data["kind"] == "task_alarm") {
+            val taskId = message.data["task_id"]?.toIntOrNull() ?: 0
+            if (taskId > 0) {
+                if (FollowupAlarmScheduler.alreadyRangKey(this, "t$taskId")) return
+                FollowupAlarmScheduler.markRangKey(this, "t$taskId")
+            }
             FollowupAlarmNotifier.ringTask(
                 this,
                 message.data["title"] ?: "Task update",

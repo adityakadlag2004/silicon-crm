@@ -11,8 +11,10 @@ import android.content.Intent
 class FollowupBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED ->
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 FollowupAlarmScheduler.rescheduleAll(context)
+                TaskAlarmScheduler.rescheduleAll(context)
+            }
         }
     }
 }

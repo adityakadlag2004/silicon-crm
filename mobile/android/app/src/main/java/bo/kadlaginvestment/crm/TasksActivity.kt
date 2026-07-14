@@ -65,6 +65,8 @@ class TasksActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Keep due-time task alarms matched to the server whenever the module opens.
+        Thread { TaskAlarmScheduler.syncBlocking(applicationContext) }.start()
         setContent {
             KadlagTheme {
                 var tab by remember { mutableIntStateOf(0) }       // 0 Dash 1 My 2 Delegated 3 Subscribed 4 More

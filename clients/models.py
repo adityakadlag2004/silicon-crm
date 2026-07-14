@@ -1895,10 +1895,22 @@ class Task(models.Model):
                                    on_delete=models.SET_NULL, related_name="tasks_created")
     assigned_to = models.ForeignKey("Employee", null=True, blank=True,
                                     on_delete=models.SET_NULL, related_name="tasks_assigned")
+    # Optional client this task is about — surfaces the task on the client's
+    # profile and gives the assignee a tap-to-call number on the task.
+    client = models.ForeignKey("Client", null=True, blank=True,
+                               on_delete=models.SET_NULL, related_name="tasks")
 
     due_date = models.DateField(null=True, blank=True)
     due_time = models.TimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Accountability: the assignee taps "Acknowledge" (or changes status) to
+    # confirm they've seen the task. tasks_ring_due re-rings unacknowledged
+    # high/critical tasks every few hours (ack_last_rung_at is the marker).
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    ack_last_rung_at = models.DateTimeField(null=True, blank=True)
+    # Exact due-time ring dispatched by tasks_ring_due (cleared on due change).
+    due_alarm_sent_at = models.DateTimeField(null=True, blank=True)
 
     # Soft delete → recycle bin.
     is_deleted = models.BooleanField(default=False, db_index=True)
@@ -2051,6 +2063,7 @@ class TaskActivity(models.Model):
     COMPLETED = "completed"
     DELETED = "deleted"
     RESTORED = "restored"
+    ACKNOWLEDGED = "acknowledged"
     ACTION_CHOICES = [
         (CREATED, "Task Created"),
         (ASSIGNED, "Task Assigned"),
@@ -2067,6 +2080,7 @@ class TaskActivity(models.Model):
         (COMPLETED, "Completed"),
         (DELETED, "Deleted"),
         (RESTORED, "Restored"),
+        (ACKNOWLEDGED, "Acknowledged"),
     ]
 
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="activities")
@@ -2082,6 +2096,36 @@ class TaskActivity(models.Model):
 
     def __str__(self):
         return f"{self.get_action_display()} on {self.task_id}"
+
+
+class TaskTemplate(models.Model):
+    """Reusable task blueprint ("New client onboarding", "Month-end closing"):
+    picking one in the Assign sheet prefills title, description, priority,
+    category and checklist, instead of retyping the same procedure each time.
+    Created by admins/managers ("Save as template" in the Assign sheet)."""
+
+    name = models.CharField(max_length=120, unique=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    priority = models.CharField(max_length=10, choices=Task.PRIORITY_CHOICES,
+                                default=Task.PRIORITY_MEDIUM)
+    category = models.ForeignKey(TaskCategory, null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name="+")
+    checklist = models.TextField(blank=True, default="",
+                                 help_text="One checklist item per line.")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="+")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def checklist_items(self):
+        return [line.strip() for line in (self.checklist or "").splitlines() if line.strip()]
 
 
 class RecurringTaskRule(models.Model):

@@ -36,7 +36,7 @@ from ..models import (
     TaskReminderSetting,
     TaskSubscriber,
 )
-from ..services.tasks import create_notification, log_activity, notify_task
+from ..services.tasks import create_notification, log_activity, notify_mentions, notify_task
 from .helpers import parse_date_param
 
 # Priority order used for the "Priority" sort (Critical first).
@@ -564,9 +564,14 @@ def task_set_status(request, pk):
         return _back(request, task)
     old = task.get_status_display()
     task.status = new
-    if new == Task.STATUS_COMPLETED:
-        task.completed_at = timezone.now()
-    task.save(update_fields=["status", "completed_at", "updated_at"])
+    # completed_at reflects the LATEST completion — cleared on reopen so
+    # timeliness reports never show a stale first-completion date.
+    task.completed_at = timezone.now() if new == Task.STATUS_COMPLETED else None
+    # Touching the status proves the assignee has seen the task.
+    if (task.acknowledged_at is None and task.assigned_to
+            and task.assigned_to.user_id == request.user.id):
+        task.acknowledged_at = timezone.now()
+    task.save(update_fields=["status", "completed_at", "acknowledged_at", "updated_at"])
     if new == Task.STATUS_COMPLETED:
         log_activity(task, request.user, TaskActivity.COMPLETED, "Marked completed.")
         notify_task(task, request.user, "Task completed",
@@ -683,9 +688,11 @@ def task_add_comment(request, pk):
     if body:
         TaskComment.objects.create(task=task, author=request.user, body=body)
         log_activity(task, request.user, TaskActivity.COMMENT_ADDED, body[:200])
+        # @mentioned users get a personal ring; the rest the generic one.
+        mentioned = notify_mentions(task, request.user, body)
         notify_task(task, request.user, "New comment on a task",
                     f"{request.user.username} commented on “{task.title}”.",
-                    event="comment_added")
+                    event="comment_added", exclude_users=mentioned)
     return _back(request, task)
 
 
@@ -753,6 +760,10 @@ def task_upload_attachment(request, pk):
                         event="voicenote_added" if is_voice else "attachment_added")
     if warnings:
         messages.warning(request, " ".join(warnings))
+    # The Android app posts here too (multipart with the session cookie) and
+    # needs JSON instead of the web redirect.
+    if request.headers.get("Accept") == "application/json":
+        return JsonResponse({"ok": not warnings, "warnings": warnings})
     return _back(request, task)
 
 

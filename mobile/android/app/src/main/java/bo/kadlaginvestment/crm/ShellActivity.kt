@@ -213,6 +213,9 @@ class ShellActivity : ComponentActivity() {
                 }
             } catch (_: Exception) {}
 
+            // 1c) …and exact due-time alarms for the user's open tasks.
+            TaskAlarmScheduler.syncBlocking(applicationContext)
+
             // 2) FCM push token → register with the server (needs Firebase configured)
             try {
                 com.google.firebase.messaging.FirebaseMessaging.getInstance().token
@@ -550,6 +553,11 @@ class ShellActivity : ComponentActivity() {
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
                             onOpenWeb = openWeb,
+                        )
+                        overlay == "today" -> bo.kadlaginvestment.crm.ui.TodayScreen(
+                            modifier = m,
+                            onBack = { overlay = null },
+                            onSessionExpired = goLogin,
                         )
                         selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = routeLink)
                         selected == 2 -> AddSaleScreen(m, onSessionExpired = goLogin)

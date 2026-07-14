@@ -66,9 +66,25 @@ fun TaskPagerScreen(
 ) {
     val scope = rememberCoroutineScope()
     val pager = rememberPagerState(pageCount = { STATUS_TABS.size })
+    var query by remember { mutableStateOf("") }
 
     Column(Modifier.fillMaxSize()) {
         if (showScorecard) Scorecard(reloadSignal, onSessionExpired)
+
+        // Search: title, description, category, or #id.
+        androidx.compose.material3.OutlinedTextField(
+            query, { query = it },
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+            placeholder = { Text("Search tasks…", fontSize = 13.sp) },
+            singleLine = true,
+            trailingIcon = {
+                if (query.isNotEmpty()) Text(
+                    "✕",
+                    Modifier.clickable { query = "" }.padding(8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+        )
 
         ScrollableTabRow(
             selectedTabIndex = pager.currentPage,
@@ -85,7 +101,7 @@ fun TaskPagerScreen(
         }
 
         HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
-            StatusTaskList(tab, STATUS_TABS[page].first, reloadSignal, onOpenTask, onSessionExpired)
+            StatusTaskList(tab, STATUS_TABS[page].first, query, reloadSignal, onOpenTask, onSessionExpired)
         }
     }
 }
@@ -167,6 +183,14 @@ private fun ScoreCardItem(s: JSONObject) {
                 (s.optInt("overdue").takeIf { it > 0 }?.let { " · $it overdue" } ?: ""),
             fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // Timeliness: % of dated completions finished by their due date.
+        if (!s.isNull("on_time_pct")) {
+            Text(
+                "⏱ ${s.optInt("on_time_pct")}% on time",
+                fontSize = 10.sp,
+                color = if (s.optInt("on_time_pct") >= 70) StatusGreen else StatusAmber,
+            )
+        }
     }
 }
 
@@ -175,6 +199,7 @@ private fun ScoreCardItem(s: JSONObject) {
 private fun StatusTaskList(
     tab: String,
     status: String,
+    query: String,
     reloadSignal: Int,
     onOpenTask: (Int) -> Unit,
     onSessionExpired: () -> Unit,
@@ -185,9 +210,11 @@ private fun StatusTaskList(
     var error by remember { mutableStateOf<String?>(null) }
     var localReload by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(tab, status, reloadSignal, localReload) {
+    LaunchedEffect(tab, status, query, reloadSignal, localReload) {
+        if (query.isNotBlank()) kotlinx.coroutines.delay(300)  // debounce typing
         loading = true; error = null
-        val q = if (status.isBlank()) "?tab=$tab" else "?tab=$tab&status=$status"
+        var q = if (status.isBlank()) "?tab=$tab" else "?tab=$tab&status=$status"
+        if (query.isNotBlank()) q += "&q=" + java.net.URLEncoder.encode(query.trim(), "UTF-8")
         when (val r = ApiClient.get("/clients/api/app/tasks/$q")) {
             is ApiClient.Result.Ok -> {
                 val arr = r.json.optJSONArray("tasks")
