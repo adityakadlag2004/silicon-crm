@@ -114,6 +114,41 @@ object FollowupAlarmNotifier {
             .cancel(notifId(followupId))
     }
 
+    private const val TASK_RING_TIMEOUT_MS = 60 * 1000L
+
+    /** Ring for a task event (assignment, new comment): same alarm-clock
+     * urgency as follow-ups — alarm sound looping up to a minute — but
+     * tap-to-open the task instead of the full-screen call card. */
+    fun ringTask(context: Context, title: String, body: String, link: String) {
+        ensureChannel(context)
+        val tap = PendingIntent.getActivity(
+            context, link.hashCode(),
+            Intent(context, RouterActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                .putExtra("link", link),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(context.applicationInfo.icon)
+            .setContentTitle("🔔 $title")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setColor(0xFFE5B740.toInt())
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setAutoCancel(true)
+            .setContentIntent(tap)
+            .setTimeoutAfter(TASK_RING_TIMEOUT_MS)
+            .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM))
+            .setVibrate(longArrayOf(0, 700, 400, 700))
+            .build()
+        // Loop the alarm sound until opened/dismissed (capped by the timeout).
+        n.flags = n.flags or Notification.FLAG_INSISTENT
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify((link + title).hashCode(), n)
+    }
+
     /** Morning digest: one alarm-toned (but not looping) notification listing
      * today's follow-ups, so the day starts with the full picture. */
     fun digest(context: Context, todays: List<FollowupAlarm>) {

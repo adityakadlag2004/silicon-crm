@@ -72,6 +72,17 @@ class KadlagMessagingService : FirebaseMessagingService() {
             return
         }
 
+        // Task assignments / comments ring like an alarm too (data-only push).
+        if (message.data["kind"] == "task_alarm") {
+            FollowupAlarmNotifier.ringTask(
+                this,
+                message.data["title"] ?: "Task update",
+                message.data["body"] ?: "",
+                message.data["link"] ?: "/clients/tasks/",
+            )
+            return
+        }
+
         val title = message.notification?.title ?: message.data["title"] ?: "Kadlag Investment"
         val bodyText = message.notification?.body ?: message.data["body"] ?: ""
         val link = message.data["link"].orEmpty()

@@ -43,14 +43,34 @@ def user_wants(user, event):
     return bool(getattr(pref, f"notify_{event}", True))
 
 
+# Task events that must RING on the phone like an alarm clock instead of a
+# plain tray push (owner decision 2026-07-14, same as call follow-ups: the
+# team misses silent notifications).
+RINGING_EVENTS = {"assigned", "comment_added"}
+
+
 def create_notification(user, title, body, link="", event=None):
     """Create a Notification for `user` unless their prefs mute `event`.
 
     Returns the Notification, or None when muted / no user. Creating a
-    Notification auto-mirrors an FCM push via signals.push_on_notification.
+    Notification auto-mirrors an FCM push via signals.push_on_notification —
+    except for RINGING_EVENTS, which suppress the plain mirror and send a
+    data-only `task_alarm` push that the app turns into a ringing alert.
     """
     if not user or not user_wants(user, event):
         return None
+    if event in RINGING_EVENTS:
+        notification = Notification(recipient=user, title=title, body=body, link=link)
+        notification._skip_push = True  # the ringing push below replaces the mirror
+        notification.save()
+        from .push import send_data_push_to_user
+        send_data_push_to_user(user, {
+            "kind": "task_alarm",
+            "title": title,
+            "body": body,
+            "link": link or "",
+        })
+        return notification
     return Notification.objects.create(recipient=user, title=title, body=body, link=link)
 
 

@@ -25,6 +25,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -42,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,6 +64,7 @@ fun TaskDetailScreen(
 ) {
     BackHandler(onBack = onBack)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var task by remember { mutableStateOf<JSONObject?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -69,6 +73,7 @@ fun TaskDetailScreen(
     var newChecklist by remember { mutableStateOf("") }
     var showComment by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var statusMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(taskId, reloadKey, reloadSignal) {
         when (val r = ApiClient.get("/clients/api/app/tasks/$taskId/")) {
@@ -139,7 +144,30 @@ fun TaskDetailScreen(
             Text("← Back", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack))
             Spacer(Modifier.weight(1f))
-            Pill(t.optString("status_label"), statusColor(status))
+            // Status pill doubles as the status picker for anyone who can edit.
+            Box {
+                Box(Modifier.clickable(enabled = canEdit) { statusMenu = true }) {
+                    Pill(t.optString("status_label") + if (canEdit) " ▾" else "", statusColor(status))
+                }
+                DropdownMenu(expanded = statusMenu, onDismissRequest = { statusMenu = false }) {
+                    listOf(
+                        "pending" to "Pending",
+                        "in_progress" to "In Progress",
+                        "completed" to "Completed",
+                        "cancelled" to "Cancelled",
+                    ).forEach { (value, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label, color = statusColor(value)) },
+                            onClick = {
+                                statusMenu = false
+                                if (value != status) {
+                                    act(JSONObject().put("action", "status").put("status", value))
+                                }
+                            },
+                        )
+                    }
+                }
+            }
         }
 
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
@@ -154,9 +182,34 @@ fun TaskDetailScreen(
             Spacer(Modifier.height(10.dp))
             InfoRow("Assigned", t.optString("assignee").ifBlank { "—" })
             InfoRow("Created by", t.optString("created_by").ifBlank { "—" })
-            if (t.optString("due_date").isNotBlank())
-                InfoRow("Due", fmtDate(t.optString("due_date")) + " " + fmt12h(t.optString("due_time")),
-                    if (status == "overdue") StatusRed else null)
+            // Due row is always visible and, for editors, tap-to-change —
+            // date picker then time picker, saved via action=due.
+            fun pickDue() {
+                val cal = java.util.Calendar.getInstance()
+                android.app.DatePickerDialog(context, { _, y, mo, d ->
+                    val date = String.format(java.util.Locale.US, "%04d-%02d-%02d", y, mo + 1, d)
+                    android.app.TimePickerDialog(context, { _, h, mi ->
+                        act(
+                            JSONObject().put("action", "due").put("due_date", date)
+                                .put("due_time", String.format(java.util.Locale.US, "%02d:%02d", h, mi))
+                        )
+                    }, 10, 0, false).show()
+                }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH),
+                    cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+            }
+            Box(Modifier.clickable(enabled = canEdit) { pickDue() }) {
+                val due = t.optString("due_date")
+                InfoRow(
+                    "Due",
+                    when {
+                        due.isNotBlank() -> fmtDate(due) + " " + fmt12h(t.optString("due_time")) +
+                            (if (canEdit) "  ✎" else "")
+                        canEdit -> "Set due date…"
+                        else -> "—"
+                    },
+                    if (status == "overdue") StatusRed else null,
+                )
+            }
 
             if (t.optString("description").isNotBlank()) {
                 Spacer(Modifier.height(10.dp))

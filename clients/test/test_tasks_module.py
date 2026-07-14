@@ -163,3 +163,60 @@ class TaskModuleTests(TestCase):
         c.post(reverse("clients:task_categories"), {"action": "toggle", "id": cat.id})
         cat.refresh_from_db()
         self.assertFalse(cat.is_active)
+
+    # ---- ringing task alarms + app status/due editing (v4.13) ----
+
+    def test_assignment_and_comment_ring_as_task_alarm(self):
+        """Task assignment and comments send one data-only task_alarm push
+        (the app rings it like an alarm); the plain FCM mirror stays silent
+        so nobody gets a duplicate tray notification."""
+        import json
+        from unittest import mock
+
+        with mock.patch("clients.services.push.send_data_push_to_user") as data_push, \
+                mock.patch("clients.services.push.send_push_to_user") as plain_push:
+            task = self._create_task()
+            # Assignee + subscribed manager both ring.
+            rung = {call.args[0] for call in data_push.call_args_list}
+            self.assertIn(self.other, rung)
+            payload = data_push.call_args_list[0].args[1]
+            self.assertEqual(payload["kind"], "task_alarm")
+            self.assertIn(task.title, payload["body"])
+            plain_push.assert_not_called()
+
+            data_push.reset_mock()
+            resp = self.client_for("admin").post(
+                reverse("clients:app_task_action", args=[task.pk]),
+                data=json.dumps({"action": "comment", "body": "please prioritise"}),
+                content_type="application/json",
+            )
+            self.assertTrue(resp.json()["ok"])
+            self.assertTrue(data_push.called)
+            self.assertEqual(data_push.call_args.args[1]["kind"], "task_alarm")
+            plain_push.assert_not_called()
+        # In-app notification rows still exist for the Notifications screen.
+        self.assertTrue(Notification.objects.filter(recipient=self.other).exists())
+
+    def test_app_action_status_and_due_update(self):
+        """The phone can move a task through any status and change its due
+        date/time via the action endpoint (assignee permissions suffice)."""
+        import json
+        task = self._create_task()
+        c = Client()
+        c.force_login(self.other)  # the assignee, a plain employee
+
+        resp = c.post(reverse("clients:app_task_action", args=[task.pk]),
+                      data=json.dumps({"action": "status", "status": "in_progress"}),
+                      content_type="application/json")
+        self.assertEqual(resp.json()["status"], "in_progress")
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_IN_PROGRESS)
+
+        new_due = (timezone.localdate() + timedelta(days=7)).isoformat()
+        resp = c.post(reverse("clients:app_task_action", args=[task.pk]),
+                      data=json.dumps({"action": "due", "due_date": new_due, "due_time": "15:30"}),
+                      content_type="application/json")
+        self.assertTrue(resp.json()["ok"])
+        task.refresh_from_db()
+        self.assertEqual(task.due_date.isoformat(), new_due)
+        self.assertEqual(task.due_time.strftime("%H:%M"), "15:30")

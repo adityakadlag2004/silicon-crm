@@ -46,7 +46,7 @@ in the WebView.
 | 13 | Lead sheets (mobile card view over dynamic columns, add/edit rows) | `/api/app/sheets/…` | **v3.8** |
 | 14 | Native login (session-cookie capture, native push + call-config bootstrap) | `/api/app/login/` | **v4.0** |
 | 15 | Task Management module (own bottom nav: Dashboard/My/My Apps/Delegated/More; list+filters+status tabs, detail w/ checklist·comments·activity·actions, full-screen Assign form, Activities) | `/api/app/tasks/…` | **native done, unreleased** |
-| 16 | Follow-up alarms (exact on-device alarms + full-screen ringing AlarmRingActivity, daily digest, FCM `followup_alarm` data push; one pending reminder per number — new follow-up supersedes older ones; popup SIM gate fails open + per-device popup diagnostics on Call Analytics roster + test-popup button in Office SIM) | `/api/app/followups/…` (`scheduled_at_ms`, `superseded_ids`), device-status `diagnostics` | **v4.12** |
+| 16 | Follow-up alarms (exact on-device alarms + full-screen ringing AlarmRingActivity, daily digest, FCM `followup_alarm` data push;  one pending reminder per number — new follow-up supersedes older ones; popup SIM gate fails open + per-device popup diagnostics on Call Analytics roster + test-popup button in Office SIM; v4.13: task assignments/comments ring via `task_alarm` data push, status picker + tap-to-edit due date on task detail) | `/api/app/followups/…` (`scheduled_at_ms`, `superseded_ids`), device-status `diagnostics` | **v4.12** |
 | — | Business Links (My Apps tab) | opens web `/clients/links/` for now; native screens later | |
 | — | Financial planner | stays WebView (calc engine is fine there) | |
 
