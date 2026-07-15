@@ -34,9 +34,12 @@ class Command(BaseCommand):
         local = timezone.localtime(now)
         if local.hour < ESCALATION_HOUR:
             return 0
+        # Overdue rows AND in-progress tasks whose deadline blew past 2+ days
+        # ago — "I started it" must not exempt work from escalation.
         stale = (
             Task.objects.filter(
-                is_deleted=False, status=Task.STATUS_OVERDUE,
+                is_deleted=False,
+                status__in=[Task.STATUS_OVERDUE, Task.STATUS_IN_PROGRESS],
                 due_date__lte=local.date() - timedelta(days=ESCALATE_AFTER_DAYS),
             ).select_related("assigned_to__user", "created_by")
         )
@@ -84,10 +87,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         now = timezone.now()
+        # Only PENDING flips to Overdue. In Progress means someone is actively
+        # on it — flipping it back made "start working on an overdue task"
+        # impossible (the cron kept reverting the status within 15 minutes).
+        # Late in-progress tasks stay visible via the `late` flag and the
+        # escalation digest below.
         candidates = (
             Task.objects.filter(
                 is_deleted=False,
-                status__in=[Task.STATUS_PENDING, Task.STATUS_IN_PROGRESS],
+                status=Task.STATUS_PENDING,
                 due_date__isnull=False,
             )
             .select_related("assigned_to__user")

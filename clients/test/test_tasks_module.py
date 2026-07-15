@@ -457,3 +457,52 @@ class TaskV414Tests(TestCase):
         self.assertEqual(row["on_time"], 1)
         self.assertEqual(row["late"], 1)
         self.assertEqual(row["on_time_pct"], 50)
+
+    # ── v4.14.1: overdue is deadline truth; In Progress must stick ──
+
+    def test_pending_past_due_reports_and_filters_as_overdue_without_cron(self):
+        """A pending task past its due moment shows as Overdue in the app
+        immediately — even if tasks_mark_overdue hasn't run."""
+        task = self._task(title="Blown deadline", priority="low",
+                          due_date=timezone.localdate() - timedelta(days=1))
+        c = self._client(self.emp_user)
+        rows = c.get(reverse("clients:app_tasks") + "?tab=my&status=overdue").json()["tasks"]
+        self.assertIn(task.pk, [r["id"] for r in rows])
+        row = next(r for r in rows if r["id"] == task.pk)
+        self.assertEqual(row["status"], "overdue")
+        self.assertTrue(row["late"])
+        # …and it is NOT in the Pending tab.
+        rows = c.get(reverse("clients:app_tasks") + "?tab=my&status=pending").json()["tasks"]
+        self.assertNotIn(task.pk, [r["id"] for r in rows])
+        # DB row untouched (the cron will persist the flip later).
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_PENDING)
+
+    def test_in_progress_sticks_on_past_due_tasks(self):
+        """Marking an overdue task In Progress must survive the cron —
+        previously it flipped back to Overdue within 15 minutes."""
+        import json as _json
+        task = self._task(due_date=timezone.localdate() - timedelta(days=1))
+        Task.objects.filter(pk=task.pk).update(status=Task.STATUS_OVERDUE)
+        self._client(self.emp_user).post(
+            reverse("clients:app_task_action", args=[task.pk]),
+            data=_json.dumps({"action": "status", "status": "in_progress"}),
+            content_type="application/json")
+        call_command("tasks_mark_overdue")
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_IN_PROGRESS)
+        # The row still carries the deadline truth for the UI.
+        detail = self._client(self.emp_user).get(
+            reverse("clients:app_task_detail", args=[task.pk])).json()
+        self.assertTrue(detail["late"])
+
+    def test_reset_to_pending_past_due_stores_overdue(self):
+        import json as _json
+        task = self._task(due_date=timezone.localdate() - timedelta(days=1))
+        Task.objects.filter(pk=task.pk).update(status=Task.STATUS_IN_PROGRESS)
+        self._client(self.emp_user).post(
+            reverse("clients:app_task_action", args=[task.pk]),
+            data=_json.dumps({"action": "status", "status": "pending"}),
+            content_type="application/json")
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_OVERDUE)

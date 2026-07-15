@@ -244,7 +244,9 @@ fun TaskCard(
                     Text(
                         meta,
                         fontSize = 11.sp,
-                        color = if (status == "overdue") StatusRed else MaterialTheme.colorScheme.onSurfaceVariant,
+                        // `late` also reddens In Progress rows past their deadline.
+                        color = if (status == "overdue" || task.optBoolean("late")) StatusRed
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

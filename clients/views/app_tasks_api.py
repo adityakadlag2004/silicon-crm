@@ -92,12 +92,25 @@ def _due_at_ms(task):
     return int(dt.timestamp() * 1000)
 
 
+def _effective_status(task):
+    """Overdue is a fact of the deadline, not of the cron's last run: a
+    PENDING task past its due moment reports as Overdue immediately, even if
+    tasks_mark_overdue hasn't flipped the row yet. In Progress keeps its
+    status (someone is on it) — the `late` flag carries the deadline state."""
+    if task.status == Task.STATUS_PENDING and task.is_overdue:
+        return Task.STATUS_OVERDUE
+    return task.status
+
+
 def _task_row(task):
+    effective = _effective_status(task)
     return {
         "id": task.pk,
         "title": task.title,
-        "status": task.status,
-        "status_label": task.get_status_display(),
+        "status": effective,
+        "status_label": dict(Task.STATUS_CHOICES)[effective],
+        # Past the deadline and still open — red-flags In Progress rows too.
+        "late": task.is_overdue,
         "priority": task.priority,
         "priority_label": task.get_priority_display(),
         "category": task.category.name if task.category else None,
@@ -139,8 +152,18 @@ def app_tasks(request):
     else:
         qs = _scoped(request)
 
+    # Deadline truth at read time (don't wait for the overdue cron): a
+    # pending task past its due moment belongs in Overdue, not Pending.
+    _today = timezone.localdate()
+    _now_t = timezone.localtime().time()
+    past_due = Q(due_date__lt=_today) | Q(due_date=_today, due_time__isnull=False, due_time__lt=_now_t)
+
     status = request.GET.get("status")
-    if status in dict(Task.STATUS_CHOICES):
+    if status == Task.STATUS_OVERDUE:
+        qs = qs.filter(Q(status=Task.STATUS_OVERDUE) | (Q(status=Task.STATUS_PENDING) & past_due))
+    elif status == Task.STATUS_PENDING:
+        qs = qs.filter(status=Task.STATUS_PENDING).exclude(past_due)
+    elif status in dict(Task.STATUS_CHOICES):
         qs = qs.filter(status=status)
     q = (request.GET.get("q") or "").strip()
     if q:
@@ -178,13 +201,13 @@ def app_tasks(request):
         if start:
             qs = qs.filter(due_date__gte=start, due_date__lte=end)
 
-    qs = qs.select_related("category", "assigned_to__user").order_by("-created_at")
+    qs = qs.select_related("category", "assigned_to__user", "client").order_by("-created_at")
     counts = _scoped(request).aggregate(
         total=Count("id"),
-        pending=Count("id", filter=Q(status=Task.STATUS_PENDING)),
+        pending=Count("id", filter=Q(status=Task.STATUS_PENDING) & ~past_due),
         in_progress=Count("id", filter=Q(status=Task.STATUS_IN_PROGRESS)),
         completed=Count("id", filter=Q(status=Task.STATUS_COMPLETED)),
-        overdue=Count("id", filter=Q(status=Task.STATUS_OVERDUE)),
+        overdue=Count("id", filter=Q(status=Task.STATUS_OVERDUE) | (Q(status=Task.STATUS_PENDING) & past_due)),
     )
     return JsonResponse({
         "counts": counts,
@@ -469,6 +492,10 @@ def app_task_action(request, pk):
 
     if action == "status":
         new = body.get("status")
+        # "Pending" on a task already past its deadline is really Overdue —
+        # never let a reopen/reset hide a blown due date.
+        if (new == Task.STATUS_PENDING and task.due_at and task.due_at < timezone.now()):
+            new = Task.STATUS_OVERDUE
         if new in dict(Task.STATUS_CHOICES) and new != task.status:
             old = task.get_status_display()
             task.status = new

@@ -560,6 +560,10 @@ def task_set_status(request, pk):
     if guard:
         return guard
     new = request.POST.get("status")
+    # "Pending" past the deadline is really Overdue — a reopen/reset must
+    # never hide a blown due date.
+    if new == Task.STATUS_PENDING and task.due_at and task.due_at < timezone.now():
+        new = Task.STATUS_OVERDUE
     if new not in dict(Task.STATUS_CHOICES) or new == task.status:
         return _back(request, task)
     old = task.get_status_display()

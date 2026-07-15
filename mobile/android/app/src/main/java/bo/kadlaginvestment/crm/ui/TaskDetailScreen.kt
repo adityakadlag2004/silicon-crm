@@ -256,11 +256,12 @@ fun TaskDetailScreen(
                     "Due",
                     when {
                         due.isNotBlank() -> fmtDate(due) + " " + fmt12h(t.optString("due_time")) +
+                            (if (t.optBoolean("late")) "  · LATE" else "") +
                             (if (canEdit) "  ✎" else "")
                         canEdit -> "Set due date…"
                         else -> "—"
                     },
-                    if (status == "overdue") StatusRed else null,
+                    if (status == "overdue" || t.optBoolean("late")) StatusRed else null,
                 )
             }
 
@@ -393,6 +394,14 @@ fun TaskDetailScreen(
             Modifier.fillMaxWidth().padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (canEdit && (status == "pending" || status == "overdue")) {
+                OutlinedButton(
+                    onClick = {
+                        act(JSONObject().put("action", "status").put("status", "in_progress"))
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text("▶ Start", fontSize = 13.sp) }
+            }
             if (canEdit) {
                 Button(
                     onClick = {
