@@ -191,6 +191,8 @@ def _password_candidates():
     for candidate in (p.strip() for p in extra.split(",")):
         if candidate and candidate not in candidates:
             candidates.append(candidate)
+    # Zip passwords are case-sensitive; users type ARNs in either case.
+    candidates += [c.lower() for c in candidates if c and c.lower() not in candidates]
     return candidates
 
 

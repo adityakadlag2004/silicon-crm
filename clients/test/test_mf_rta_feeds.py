@@ -115,6 +115,12 @@ class ParserTests(TestCase):
         self.assertEqual(files[0][0], "WBR2_data.csv")
         self.assertEqual(files[0][1], CAMS_CSV)
 
+    def test_password_candidates_include_case_variants(self):
+        ArnAccount.objects.create(label="Direct (NSE)", arn_code="ARN-152880")
+        candidates = rta_feed._password_candidates()
+        for expected in ("ARN-152880", "ARN152880", "152880", "arn-152880", "arn152880"):
+            self.assertIn(expected, candidates)
+
     def test_zip_with_wrong_password_reports_clearly(self):
         import pyzipper
 
