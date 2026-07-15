@@ -261,6 +261,10 @@ class MailboxFetchTests(TestCase):
         self.assertEqual(imports[0].rta, RTA_CAMS)
         self.assertEqual(imports[0].source, RTAFeedImport.SOURCE_EMAIL)
         self.assertEqual(MutualFundTransaction.objects.count(), 3)
+        # Search must be scoped server-side (per sender, recent window).
+        first_search = imap.search.call_args_list[0].args[1]
+        self.assertIn("FROM", first_search)
+        self.assertIn("SINCE", first_search)
         # Scanning must PEEK (no implicit read-marking)…
         for call in imap.fetch.call_args_list:
             self.assertIn("PEEK", call.args[1])

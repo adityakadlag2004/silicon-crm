@@ -22,7 +22,7 @@ import logging
 import os
 import re
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from email import message_from_bytes
 from email.utils import parseaddr
@@ -434,19 +434,24 @@ def fetch_from_mailbox():
     try:
         mail.login(user, password)
         mail.select(folder)
-        # Busy personal mailboxes hold thousands of unread mails — search
-        # server-side per RTA sender so only feed emails are ever fetched.
+        # A long-lived AMFI-registered inbox can hold years of unread RTA
+        # mail — automation only needs the fresh files, so scope the search
+        # to recent days per sender and cap how many messages one run eats.
+        days = int(os.environ.get("RTA_FEED_SINCE_DAYS", "7"))
+        max_messages = int(os.environ.get("RTA_FEED_MAX_MESSAGES", "50"))
+        since = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
         message_ids = []
         if senders:
             for sender in senders:
-                _, data = mail.search(None, f'(UNSEEN FROM "{sender}")')
+                _, data = mail.search(None, f'(UNSEEN FROM "{sender}" SINCE "{since}")')
                 for num in (data[0] or b"").split():
                     if num not in message_ids:
                         message_ids.append(num)
         else:
-            _, data = mail.search(None, "UNSEEN")
+            _, data = mail.search(None, f'(UNSEEN SINCE "{since}")')
             message_ids = list((data[0] or b"").split())
-        for num in message_ids:
+        message_ids.sort(key=int)
+        for num in message_ids[-max_messages:]:
             # PEEK so scanning never marks mail read — only messages we actually
             # process get flagged Seen below. Keeps shared mailboxes untouched.
             _, msg_data = mail.fetch(num, "(BODY.PEEK[])")
