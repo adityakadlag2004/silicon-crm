@@ -436,7 +436,9 @@ def fetch_from_mailbox():
         mail.select(folder)
         _, data = mail.search(None, "UNSEEN")
         for num in data[0].split():
-            _, msg_data = mail.fetch(num, "(RFC822)")
+            # PEEK so scanning never marks mail read — only messages we actually
+            # process get flagged Seen below. Keeps shared mailboxes untouched.
+            _, msg_data = mail.fetch(num, "(BODY.PEEK[])")
             message = message_from_bytes(msg_data[0][1])
             from_addr = parseaddr(message.get("From", ""))[1].lower()
             if senders and not any(s in from_addr for s in senders):
@@ -456,6 +458,7 @@ def fetch_from_mailbox():
                 imports.append(import_feed_container(
                     file_name, payload, source="email", rta_hint=rta_hint,
                 ))
+            mail.store(num, "+FLAGS", "\\Seen")
     finally:
         try:
             mail.logout()

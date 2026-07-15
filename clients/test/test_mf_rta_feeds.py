@@ -224,6 +224,50 @@ class ImporterTests(TestCase):
         self.assertIsNone(MutualFundFolio.objects.get(folio_number="1234567/89").client)
 
 
+class MailboxFetchTests(TestCase):
+    """fetch_from_mailbox against a mocked IMAP server: only RTA senders are
+    processed and marked read; other unread mail is left untouched."""
+
+    def _email_bytes(self, from_addr, attach_name=None, attach_bytes=None):
+        from email.message import EmailMessage
+
+        msg = EmailMessage()
+        msg["From"] = from_addr
+        msg["Subject"] = "test"
+        msg.set_content("body")
+        if attach_name:
+            msg.add_attachment(attach_bytes, maintype="text", subtype="csv",
+                               filename=attach_name)
+        return bytes(msg)
+
+    def test_fetch_processes_rta_mail_only_and_peeks(self):
+        from unittest.mock import MagicMock, patch
+
+        cams_msg = self._email_bytes("CAMS <donotreply@camsonline.com>",
+                                     "WBR2_160726.csv", CAMS_CSV)
+        personal_msg = self._email_bytes("Friend <friend@example.com>")
+
+        imap = MagicMock()
+        imap.search.return_value = ("OK", [b"1 2"])
+        imap.fetch.side_effect = lambda num, spec: ("OK", [(num, cams_msg if num == b"1" else personal_msg)])
+
+        env = {"RTA_FEED_IMAP_HOST": "imap.test", "RTA_FEED_IMAP_USER": "u",
+               "RTA_FEED_IMAP_PASSWORD": "p"}
+        with patch.dict("os.environ", env), \
+             patch("clients.services.rta_feed.imaplib.IMAP4_SSL", return_value=imap):
+            imports = rta_feed.fetch_from_mailbox()
+
+        self.assertEqual(len(imports), 1)
+        self.assertEqual(imports[0].rta, RTA_CAMS)
+        self.assertEqual(imports[0].source, RTAFeedImport.SOURCE_EMAIL)
+        self.assertEqual(MutualFundTransaction.objects.count(), 3)
+        # Scanning must PEEK (no implicit read-marking)…
+        for call in imap.fetch.call_args_list:
+            self.assertIn("PEEK", call.args[1])
+        # …and only the CAMS message gets marked Seen.
+        imap.store.assert_called_once_with(b"1", "+FLAGS", "\\Seen")
+
+
 class CommandTests(TestCase):
     def test_command_noops_without_imap_config(self):
         out = io.StringIO()
