@@ -365,9 +365,13 @@
 
             <div class="kn-dropdown">
               <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-graph-up-arrow"></i> Reports <i class="bi bi-chevron-down kn-caret"></i>
+                <i class="bi bi-graph-up"></i> Mutual Funds <i class="bi bi-chevron-down kn-caret"></i>
               </button>
               <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-cloud-arrow-down"></i> RTA Feeds</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:mf_folios' %}"><i class="bi bi-folder2-open"></i> Folios</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:mf_transactions' %}"><i class="bi bi-list-columns"></i> Transactions</a></li>
+                <li><div class="kn-menu-divider"></div></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
@@ -375,40 +379,6 @@
                 <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:business_analytics' %}"><i class="bi bi-percent"></i> Business Analytics</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:call_analytics' %}"><i class="bi bi-telephone-fill"></i> Call Analytics</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-graph-up"></i> Mutual Funds <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-cloud-arrow-down"></i> RTA Feeds</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_folios' %}"><i class="bi bi-folder2-open"></i> Folios</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_transactions' %}"><i class="bi bi-list-columns"></i> Transactions</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-people"></i> Team <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}"><i class="bi bi-people-fill"></i> All Members</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}?add=1"><i class="bi bi-person-plus-fill"></i> Add Member</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:employee_management' %}"><i class="bi bi-shield-lock-fill"></i> Manager Rights</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-gear-fill"></i> Settings <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:product_management' %}"><i class="bi bi-box-seam"></i> Products</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:target_management' %}"><i class="bi bi-bullseye"></i> Targets</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:audit_log' %}"><i class="bi bi-journal-text"></i> Audit Log</a></li>
               </ul>
             </div>
 
@@ -442,6 +412,23 @@
             <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
               <i class="bi bi-link-45deg"></i> Links
             </a>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-gear-fill"></i> Settings <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:product_management' %}"><i class="bi bi-box-seam"></i> Products</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:target_management' %}"><i class="bi bi-bullseye"></i> Targets</a></li>
+                <li><div class="kn-menu-divider"></div></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}"><i class="bi bi-people-fill"></i> Team Members</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}?add=1"><i class="bi bi-person-plus-fill"></i> Add Member</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:employee_management' %}"><i class="bi bi-shield-lock-fill"></i> Manager Rights</a></li>
+                <li><div class="kn-menu-divider"></div></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:audit_log' %}"><i class="bi bi-journal-text"></i> Audit Log</a></li>
+              </ul>
+            </div>
 
           {# ─── MANAGER ─── #}
           {% elif request.user.employee.role == "manager" %}
