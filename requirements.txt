@@ -18,3 +18,5 @@ tablib==3.9.0
 whitenoise==6.11.0
 firebase-admin==6.5.0
 qrcode==8.2
+dbfread==2.0.7
+pyzipper==0.3.6

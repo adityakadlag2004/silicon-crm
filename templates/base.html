@@ -380,6 +380,17 @@
 
             <div class="kn-dropdown">
               <button class="kn-dropdown-toggle" type="button">
+                <i class="bi bi-graph-up"></i> Mutual Funds <i class="bi bi-chevron-down kn-caret"></i>
+              </button>
+              <ul class="kn-menu">
+                <li><a class="kn-menu-item" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-cloud-arrow-down"></i> RTA Feeds</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:mf_folios' %}"><i class="bi bi-folder2-open"></i> Folios</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:mf_transactions' %}"><i class="bi bi-list-columns"></i> Transactions</a></li>
+              </ul>
+            </div>
+
+            <div class="kn-dropdown">
+              <button class="kn-dropdown-toggle" type="button">
                 <i class="bi bi-people"></i> Team <i class="bi bi-chevron-down kn-caret"></i>
               </button>
               <ul class="kn-menu">

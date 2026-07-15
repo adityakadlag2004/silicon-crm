@@ -284,6 +284,17 @@ urlpatterns = [
     path("reports/monthly-business/", views.monthly_business_report, name="monthly_business_report"),
     path("reports/business-analytics/", views.business_analytics, name="business_analytics"),
 
+    # ───────── Mutual Funds (CAMS/KFintech RTA feeds) ─────────
+    path("mf/", views.mf.mf_dashboard, name="mf_dashboard"),
+    path("mf/upload/", views.mf.mf_upload, name="mf_upload"),
+    path("mf/fetch-now/", views.mf.mf_fetch_now, name="mf_fetch_now"),
+    path("mf/relink/", views.mf.mf_relink, name="mf_relink"),
+    path("mf/arn/save/", views.mf.mf_arn_save, name="mf_arn_save"),
+    path("mf/arn/<int:account_id>/delete/", views.mf.mf_arn_delete, name="mf_arn_delete"),
+    path("mf/folios/", views.mf.mf_folios, name="mf_folios"),
+    path("mf/folios/<int:folio_id>/link/", views.mf.mf_folio_link, name="mf_folio_link"),
+    path("mf/transactions/", views.mf.mf_transactions, name="mf_transactions"),
+
     # financial planner
     path("sales/financial-planner/", views.financial_planner, name="financial_planner"),
     path(

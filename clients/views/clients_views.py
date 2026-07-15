@@ -403,11 +403,19 @@ def client_profile(request, client_id):
         .select_related("assigned_to__user").order_by("due_date", "due_time")
     )
 
+    from django.db.models import Count
+    mf_folios = (
+        client.mf_folios.select_related("arn")
+        .annotate(txn_count=Count("transactions"))
+        .order_by("amc_name", "folio_number")
+    )
+
     return render(request, "clients/client_profile.html", {
         "client": client,
         "sales": sales,
         "renewals": renewals,
         "open_tasks": open_tasks,
+        "mf_folios": mf_folios,
         "sales_total_amount": sales_summary.get("total_amount") or 0,
         "sales_total_points": sales_summary.get("total_points") or 0,
     })
