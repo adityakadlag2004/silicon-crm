@@ -155,7 +155,16 @@ def _excel_rows(file_name, data):
 
     import xlrd
 
-    book = xlrd.open_workbook(file_contents=data)
+    try:
+        book = xlrd.open_workbook(file_contents=data)
+    except xlrd.biffh.XLRDError as exc:
+        # OLE2 container without a readable workbook = password-protected
+        # workbook (some AMC rejection notices). Not worth a decryption
+        # dependency — rejection rows are skipped even when readable.
+        raise ValueError(
+            "Encrypted or unsupported Excel workbook. AMC rejection notices "
+            "can be ignored; if this is a data feed, request CSV or DBF format."
+        ) from exc
     sheet = book.sheet_by_index(0)
     for r in range(sheet.nrows):
         row = []
@@ -226,8 +235,9 @@ def extract_data_files(file_name, data, passwords):
                     continue
             if content is None:
                 raise ValueError(
-                    f"Could not decrypt '{info.filename}' — none of the ARN-based "
-                    f"passwords worked. Check the ARN codes under MF settings."
+                    f"Could not decrypt '{info.filename}' — none of the configured "
+                    f"passwords worked. Add the feed password to RTA_FEED_ZIP_PASSWORDS "
+                    f"(subscription feeds use the password chosen on the RTA portal)."
                 )
             yield info.filename, content
 
