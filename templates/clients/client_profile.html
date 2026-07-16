@@ -238,6 +238,20 @@
     {% if mf_folios %}
     <div class="ki-card mt-3">
       <h3 class="ki-section-title" style="margin-top:0;">Mutual Fund Folios ({{ mf_folios|length }})</h3>
+      {% if mf_summary %}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.6rem;margin-bottom:.8rem;">
+        <div><div style="font-size:.72rem;color:var(--ki-text-muted);text-transform:uppercase;">SIP detected</div>
+          <div style="font-weight:700;">{% if mf_summary.monthly_sip %}₹{{ mf_summary.monthly_sip|floatformat:0 }}/mo{% else %}—{% endif %}</div></div>
+        <div><div style="font-size:.72rem;color:var(--ki-text-muted);text-transform:uppercase;">Est. value</div>
+          <div style="font-weight:700;">{% if mf_summary.est_value %}₹{{ mf_summary.est_value|floatformat:0 }}{% else %}—{% endif %}</div></div>
+        <div><div style="font-size:.72rem;color:var(--ki-text-muted);text-transform:uppercase;">Invested (12m)</div>
+          <div style="font-weight:700;">₹{{ mf_summary.inflow_12m|floatformat:0 }}</div></div>
+        <div><div style="font-size:.72rem;color:var(--ki-text-muted);text-transform:uppercase;">Withdrawn (12m)</div>
+          <div style="font-weight:700;">₹{{ mf_summary.outflow_12m|floatformat:0 }}</div></div>
+        <div><div style="font-size:.72rem;color:var(--ki-text-muted);text-transform:uppercase;">Last activity</div>
+          <div style="font-weight:700;">{{ mf_summary.last_txn_date|date:"d M Y"|default:"—" }}</div></div>
+      </div>
+      {% endif %}
       <div style="overflow-x:auto;">
         <table class="mini-table">
           <thead><tr><th>Folio</th><th>AMC</th><th>ARN</th><th class="text-right">Transactions</th><th></th></tr></thead>
@@ -254,7 +268,10 @@
           </tbody>
         </table>
       </div>
-      <p class="text-muted mb-0" style="font-size:.78rem;margin-top:.4rem;">From CAMS/KFintech feeds, auto-linked by PAN.</p>
+      <p class="text-muted mb-0" style="font-size:.78rem;margin-top:.4rem;">
+        Live from CAMS/KFintech feeds — refreshes as each day's files import.
+        Est. value uses the last NAV seen per scheme; the exact figure comes from the AUM feed.
+      </p>
     </div>
     {% endif %}
 

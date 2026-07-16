@@ -1,0 +1,11 @@
+{% if kyc_missing_count %}
+<div class="ki-card" style="margin-bottom:1rem;border-left:4px solid #b45309;background:#fffbeb;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.7rem 1rem;">
+  <i class="bi bi-person-vcard" style="font-size:1.2rem;color:#b45309;"></i>
+  <span style="flex:1 1 240px;color:#78350f;">
+    <strong>{{ kyc_missing_count }} client{{ kyc_missing_count|pluralize }}</strong>
+    {% if is_admin_dashboard %}across the firm are{% else %}mapped to you {{ kyc_missing_count|pluralize:"is,are" }}{% endif %}
+    missing a PAN — their mutual fund folios can't be linked or verified.
+  </span>
+  <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-pencil-square"></i> Fix in KYC Issues</a>
+</div>
+{% endif %}

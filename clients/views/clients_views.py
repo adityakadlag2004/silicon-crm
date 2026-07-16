@@ -404,11 +404,13 @@ def client_profile(request, client_id):
     )
 
     from django.db.models import Count
+    from ..services import rta_feed
     mf_folios = (
         client.mf_folios.select_related("arn")
         .annotate(txn_count=Count("transactions"))
         .order_by("amc_name", "folio_number")
     )
+    mf_summary = rta_feed.mf_summary_for_client(client)
 
     return render(request, "clients/client_profile.html", {
         "client": client,
@@ -416,6 +418,7 @@ def client_profile(request, client_id):
         "renewals": renewals,
         "open_tasks": open_tasks,
         "mf_folios": mf_folios,
+        "mf_summary": mf_summary,
         "sales_total_amount": sales_summary.get("total_amount") or 0,
         "sales_total_points": sales_summary.get("total_points") or 0,
     })

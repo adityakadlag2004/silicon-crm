@@ -488,6 +488,78 @@ def rta_evidence_for_sale(sale):
     return evidence
 
 
+REDEMPTION_TOKENS = ("REDEMPTION", "REDEEM", "SWITCH OUT", "SWITCHOUT", "SWO", "SELL")
+
+
+def _is_outflow(txn_type):
+    return any(tok in (txn_type or "").upper() for tok in REDEMPTION_TOKENS)
+
+
+def mf_summary_for_client(client):
+    """Live MF snapshot for the client profile, recomputed from the imported
+    feed on every view: detected monthly SIP (SIP-type inflows in the last 35
+    days), 12-month in/outflows, and an *estimated* current value (net units ×
+    the last NAV seen per scheme — the AUM feed, once subscribed, is the exact
+    number). Returns None when the client has no imported transactions."""
+    from collections import defaultdict
+
+    from django.utils import timezone
+
+    from ..models import MutualFundTransaction
+
+    txns = list(
+        MutualFundTransaction.objects.filter(folio__client=client)
+        .select_related("folio").order_by("trade_date", "id")
+    )
+    if not txns:
+        return None
+
+    today = timezone.localdate()
+    sip_cutoff = today - timedelta(days=35)
+    year_cutoff = today - timedelta(days=365)
+
+    monthly_sip = Decimal("0")
+    inflow_12m = Decimal("0")
+    outflow_12m = Decimal("0")
+    units = defaultdict(lambda: Decimal("0"))
+    latest_nav = {}
+
+    for txn in txns:
+        amount = txn.amount or Decimal("0")
+        outflow = _is_outflow(txn.txn_type) or amount < 0
+        if txn.trade_date:
+            if txn.trade_date >= sip_cutoff and not outflow and \
+                    any(tok in (txn.txn_type or "").upper() for tok in SIP_TYPE_TOKENS):
+                monthly_sip += abs(amount)
+            if txn.trade_date >= year_cutoff:
+                if outflow:
+                    outflow_12m += abs(amount)
+                else:
+                    inflow_12m += abs(amount)
+        if txn.units is not None:
+            scheme_key = (txn.folio_id, txn.scheme_name)
+            delta = txn.units
+            if outflow and delta > 0:  # some feeds store redemptions unsigned
+                delta = -delta
+            units[scheme_key] += delta
+            if txn.nav:
+                latest_nav[scheme_key] = txn.nav
+
+    est_value = sum(
+        (held * latest_nav[key] for key, held in units.items() if held > 0 and key in latest_nav),
+        Decimal("0"),
+    )
+
+    return {
+        "monthly_sip": monthly_sip,
+        "inflow_12m": inflow_12m,
+        "outflow_12m": outflow_12m,
+        "est_value": est_value if est_value > 0 else None,
+        "txn_count": len(txns),
+        "last_txn_date": max((t.trade_date for t in txns if t.trade_date), default=None),
+    }
+
+
 # ─── Mailbox fetcher (cron) ─────────────────────────────────────────────────
 
 def _configured_mailboxes():

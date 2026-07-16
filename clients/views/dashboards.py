@@ -45,6 +45,12 @@ from ..forms import (
     FirmSettingsForm,
 )
 from .helpers import get_manager_access
+
+
+def _kyc_missing_count(user):
+    """Missing-PAN count for the dashboard banner (scoped like the KYC page)."""
+    from .kyc import missing_pan_count_for
+    return missing_pan_count_for(user)
 from ..targets import (
     target_employees,
     working_days_in_month,
@@ -390,6 +396,7 @@ def admin_dashboard(request):
         "all_employees": all_employees,
         "month_start": month_start,
         "month_end": month_end,
+        "kyc_missing_count": _kyc_missing_count(request.user),
     }
 
     return render(request, "dashboards/admin_dashboard.html", context)
@@ -888,6 +895,7 @@ def employee_dashboard(request):
         "overdue_lead_followups": overdue_lead_followups,
         "now_ts": now_ts,
         "campaign_challenges": campaign_challenges,
+        "kyc_missing_count": _kyc_missing_count(request.user),
     }
     return render(request, "dashboards/employee_dashboard.html", context)
 

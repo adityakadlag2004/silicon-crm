@@ -1,7 +1,25 @@
+import re
+
 from django import forms
 from django_select2.forms import ModelSelect2Widget
 from django.forms import inlineformset_factory
 from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings, Renewal, Product
+
+# Indian PAN: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).
+PAN_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]")
+
+
+def validate_pan(raw, required=False):
+    """Normalize + validate a PAN. Returns the cleaned value (or None when
+    blank and not required); raises forms.ValidationError otherwise."""
+    value = re.sub(r"\s+", "", (raw or "")).upper()
+    if not value:
+        if required:
+            raise forms.ValidationError("PAN is required — it links the client to their mutual fund folios.")
+        return None
+    if not PAN_RE.fullmatch(value):
+        raise forms.ValidationError("Enter a valid PAN (format: ABCDE1234F).")
+    return value
 
 
 def _is_health_product_name(product_name):
@@ -261,6 +279,7 @@ class ClientForm(forms.ModelForm):
             self.fields["name"].required = True
             self.fields["phone"].required = True
             self.fields["email"].required = True
+            self.fields["pan"].required = True
         if "mapped_to" in self.fields:
             self.fields["mapped_to"].queryset = Employee.objects.filter(active=True)
         for name, field in self.fields.items():
@@ -289,6 +308,13 @@ class ClientForm(forms.ModelForm):
         if not getattr(self.instance, "pk", None) and not value:
             raise forms.ValidationError("Phone is required.")
         return value
+
+    def clean_pan(self):
+        # Required for NEW clients (RTA folio matching runs on PAN); existing
+        # clients without one are surfaced on the KYC Issues screen instead of
+        # blocking every edit.
+        return validate_pan(self.cleaned_data.get("pan"),
+                            required=not getattr(self.instance, "pk", None))
 
     def clean_email(self):
         value = (self.cleaned_data.get("email") or "").strip().upper()

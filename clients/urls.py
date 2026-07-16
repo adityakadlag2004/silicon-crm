@@ -284,6 +284,12 @@ urlpatterns = [
     path("reports/monthly-business/", views.monthly_business_report, name="monthly_business_report"),
     path("reports/business-analytics/", views.business_analytics, name="business_analytics"),
 
+    # ───────── Client KYC issues (missing PANs, duplicate profiles) ─────────
+    path("clients/kyc-issues/", views.kyc.client_kyc_issues, name="client_kyc_issues"),
+    path("clients/<int:client_id>/kyc-pan/", views.kyc.client_kyc_update_pan, name="client_kyc_update_pan"),
+    path("clients/merge/", views.kyc.client_merge_view, name="client_merge"),
+    path("clients/<int:client_id>/safe-delete/", views.kyc.client_safe_delete, name="client_safe_delete"),
+
     # ───────── Mutual Funds (CAMS/KFintech RTA feeds) ─────────
     path("mf/", views.mf.mf_dashboard, name="mf_dashboard"),
     path("mf/upload/", views.mf.mf_upload, name="mf_upload"),

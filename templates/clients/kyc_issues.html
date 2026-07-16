@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Client KYC Issues{% endblock %}
+{% block page_title %}Client KYC Issues{% endblock %}
+
+{% block extra_css %}
+<style>
+  .kyc-table { width: 100%; font-size: .87rem; border-collapse: collapse; }
+  .kyc-table th, .kyc-table td { padding: .5rem .55rem; border-bottom: 1px solid var(--ki-card-border, #e5e7eb); text-align: left; vertical-align: middle; }
+  .kyc-pan-form { display: flex; gap: .4rem; align-items: center; }
+  .kyc-pan-form input { width: 140px; text-transform: uppercase; }
+  .dup-group { border: 1px solid var(--ki-card-border, #e5e7eb); border-radius: 10px; padding: .7rem .9rem; margin-bottom: .8rem; }
+  .dup-tag { display: inline-block; padding: .14rem .5rem; border-radius: 10px; font-size: .74rem; font-weight: 600; background: #fef3c7; color: #b45309; margin-right: .4rem; }
+  .dup-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .35rem 0; border-top: 1px dashed var(--ki-card-border, #e5e7eb); }
+  .dup-row:first-of-type { border-top: none; }
+  .dup-meta { color: var(--ki-text-muted, #6b7280); font-size: .8rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="ki-card" style="margin-bottom:1rem;">
+    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-person-vcard"></i> Clients missing PAN ({{ missing|length }})</span></div>
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <p class="text-muted" style="font-size:.85rem;">
+        Without a PAN the system can't link a client to their mutual-fund folios or verify their
+        sales against the RTA feeds. Enter the PAN here — folios auto-link the moment it's saved.
+      </p>
+      <table class="kyc-table">
+        <thead><tr><th>Client</th><th>Phone</th><th>Mapped to</th><th>Enter PAN</th></tr></thead>
+        <tbody>
+          {% for client in missing %}
+          <tr>
+            <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
+            <td>{{ client.phone|default:"—" }}</td>
+            <td>{% if client.mapped_to %}{{ client.mapped_to.user.get_full_name|default:client.mapped_to.user.username }}{% else %}Unmapped{% endif %}</td>
+            <td>
+              <form method="post" action="{% url 'clients:client_kyc_update_pan' client.id %}" class="kyc-pan-form">
+                {% csrf_token %}
+                <input class="form-control form-control-sm" name="pan" placeholder="ABCDE1234F" maxlength="10" required>
+                <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check-lg"></i> Save</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-muted">🎉 Every client{% if not is_admin %} mapped to you{% endif %} has a PAN.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if is_admin %}
+  <div class="ki-card">
+    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-people"></i> Possible duplicate profiles ({{ duplicate_groups|length }})</span></div>
+    <div class="ki-card-body">
+      <p class="text-muted" style="font-size:.85rem;">
+        Profiles sharing a PAN, phone number, or exact name. <strong>Merge</strong> moves every record
+        (sales, renewals, tasks, folios, follow-ups) onto the profile you keep, then removes the duplicate.
+        <strong>Delete</strong> works only on profiles with no business records.
+      </p>
+      {% for group in duplicate_groups %}
+      <div class="dup-group">
+        <div style="margin-bottom:.3rem;"><span class="dup-tag">{{ group.label }}</span> <code>{{ group.key }}</code></div>
+        {% for client in group.clients %}
+        <div class="dup-row">
+          <span style="flex:1 1 220px;">
+            <a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a>
+            <span class="text-muted">#{{ client.id }}</span>
+            <div class="dup-meta">
+              {{ client.phone|default:"no phone" }} · PAN {{ client.pan|default:"—" }} ·
+              {{ client.record_total }} record(s) · mapped to {{ client.mapped_to.user.username|default:"—" }}
+            </div>
+          </span>
+          <form method="post" action="{% url 'clients:client_merge' %}"
+                onsubmit="return confirm('Keep {{ client.name }} (#{{ client.id }}) and merge the other profile(s) of this group into it?');">
+            {% csrf_token %}
+            <input type="hidden" name="keep_id" value="{{ client.id }}">
+            {% for other in group.clients %}{% if other.id != client.id %}<input type="hidden" name="remove_id" value="{{ other.id }}">{% endif %}{% endfor %}
+            <button class="ki-btn ki-btn-secondary ki-btn-sm" title="Keep this profile, merge the others into it"><i class="bi bi-box-arrow-in-down"></i> Keep this one</button>
+          </form>
+          {% if not client.record_total %}
+          <form method="post" action="{% url 'clients:client_safe_delete' client.id %}"
+                onsubmit="return confirm('Delete empty profile {{ client.name }} (#{{ client.id }})? This cannot be undone.');">
+            {% csrf_token %}
+            <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i> Delete</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% empty %}
+      <p class="text-muted">No duplicate profiles detected.</p>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endblock %}
