@@ -134,16 +134,60 @@ def _read_delimited(data):
     return list(reader.fieldnames or []), rows
 
 
+def _excel_rows(file_name, data):
+    """Yield rows (lists of cell values) from the first sheet of an Excel file."""
+    if file_name.lower().endswith(".xlsx"):
+        import openpyxl
+
+        workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        try:
+            for row in workbook.worksheets[0].iter_rows(values_only=True):
+                yield list(row)
+        finally:
+            workbook.close()
+        return
+
+    import xlrd
+
+    book = xlrd.open_workbook(file_contents=data)
+    sheet = book.sheet_by_index(0)
+    for r in range(sheet.nrows):
+        row = []
+        for c in range(sheet.ncols):
+            cell = sheet.cell(r, c)
+            if cell.ctype == xlrd.XL_CELL_DATE:
+                row.append(xlrd.xldate_as_datetime(cell.value, book.datemode))
+            else:
+                row.append(cell.value)
+        yield row
+
+
+def _read_excel(file_name, data):
+    """Excel → (headers, row dicts). RTA/NJ sheets often start with title rows,
+    so the header is the first row with at least 3 non-empty text cells."""
+    rows = list(_excel_rows(file_name, data))
+    header_idx = None
+    for i, row in enumerate(rows[:15]):
+        texty = [v for v in row if isinstance(v, str) and v.strip()]
+        if len(texty) >= 3:
+            header_idx = i
+            break
+    if header_idx is None:
+        return [], []
+    headers = [str(v).strip() if v is not None else "" for v in rows[header_idx]]
+    dict_rows = []
+    for row in rows[header_idx + 1:]:
+        if not any(v not in (None, "") for v in row):
+            continue
+        dict_rows.append({h: row[i] if i < len(row) else None for i, h in enumerate(headers) if h})
+    return [h for h in headers if h], dict_rows
+
+
 def read_data_file(file_name, data):
-    """Return (headers, raw row dicts) for a .dbf/.csv/.txt payload."""
+    """Return (headers, raw row dicts) for a .dbf/.csv/.txt/.xls(x) payload."""
     lower = file_name.lower()
     if lower.endswith((".xls", ".xlsx")):
-        # Accepted so the failure is visible in the import log rather than the
-        # attachment being silently skipped (NJ Partner Desk exports Excel).
-        raise ValueError(
-            "Excel files aren't supported yet — export the report as CSV, or share "
-            "this file so its format can be added to the importer."
-        )
+        return _read_excel(file_name, data)
     if lower.endswith(".dbf"):
         return _read_dbf(data)
     return _read_delimited(data)
@@ -383,9 +427,12 @@ def import_feed_container(file_name, data, *, source, rta_hint="", user=None):
                 import_rows(rows, header_map, rta=rta, feed_import=feed_import)
                 inner_notes.append(f"{inner_name}: {len(rows)} rows")
             if not found_data_file:
-                inner_notes.append("No .dbf/.csv/.txt data files found inside.")
+                inner_notes.append("No data files (.dbf/.csv/.txt/.xls) found inside.")
             if feed_import.rows_total == 0 and feed_import.rows_imported == 0:
-                feed_import.status = RTAFeedImport.STATUS_FAILED
+                # Parsed fine but nothing importable (e.g. NIGO/brokerage reports
+                # with no folio column) — skipped, not an error. Real parse and
+                # decrypt failures take the except path below and stay 'failed'.
+                feed_import.status = RTAFeedImport.STATUS_SKIPPED
             feed_import.notes = ("\n".join(inner_notes) + feed_import.notes).strip()
             feed_import.save()
     except Exception as exc:  # noqa: BLE001 — one bad file must not kill the batch

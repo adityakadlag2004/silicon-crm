@@ -203,10 +203,10 @@ class ImporterTests(TestCase):
         self.assertEqual(feed_import.folios_created, 1)
         self.assertEqual(MutualFundTransaction.objects.count(), 0)
 
-    def test_unrecognised_headers_fail_with_headers_in_notes(self):
+    def test_unrecognised_headers_skip_with_headers_in_notes(self):
         feed_import = rta_feed.import_feed_container(
             "weird.csv", b"COL_A,COL_B\n1,2\n", source=RTAFeedImport.SOURCE_UPLOAD)
-        self.assertEqual(feed_import.status, RTAFeedImport.STATUS_FAILED)
+        self.assertEqual(feed_import.status, RTAFeedImport.STATUS_SKIPPED)
         self.assertIn("COL_A", feed_import.notes)
 
     def test_relink_after_client_gets_pan(self):
@@ -314,11 +314,29 @@ class MailboxFetchTests(TestCase):
         self.assertEqual(imports, [])
         good.login.assert_called_once_with("b@y", "q")
 
-    def test_excel_attachment_fails_visibly(self):
+    def test_xlsx_with_title_rows_imports(self):
+        import openpyxl
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["Some Report Title"])          # decorative rows before the header
+        ws.append([])
+        ws.append(["FOLIO_NO", "INV_NAME", "PAN", "TRXNTYPE", "TRXNNO", "TRADDATE", "AMOUNT", "BROKCODE"])
+        ws.append(["555777", "Excel Person", "KLMNO9876P", "Purchase", "X9", "01-Jul-2026", 2500, "ARN-777"])
+        buf = io.BytesIO()
+        wb.save(buf)
+
         feed_import = rta_feed.import_feed_container(
-            "nj_report.xlsx", b"fake-excel-bytes", source=RTAFeedImport.SOURCE_UPLOAD)
+            "nj_report.xlsx", buf.getvalue(), source=RTAFeedImport.SOURCE_UPLOAD)
+        self.assertEqual(feed_import.status, RTAFeedImport.STATUS_PROCESSED)
+        folio = MutualFundFolio.objects.get(folio_number="555777")
+        self.assertEqual(folio.pan, "KLMNO9876P")
+        self.assertEqual(folio.transactions.get().amount, 2500)
+
+    def test_corrupt_excel_fails(self):
+        feed_import = rta_feed.import_feed_container(
+            "junk.xlsx", b"not-really-excel", source=RTAFeedImport.SOURCE_UPLOAD)
         self.assertEqual(feed_import.status, RTAFeedImport.STATUS_FAILED)
-        self.assertIn("Excel", feed_import.notes)
 
 
 class SaleCrossCheckTests(TestCase):
