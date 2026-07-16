@@ -13,7 +13,7 @@ from django.utils import timezone
 from import_export.admin import ImportExportModelAdmin
 
 from .models import (
-    Client, Employee, Sale, IncentiveRule, MonthlyIncentive, Target,
+    Client, Employee, Sale, IncentiveRule, Target,
     EmployeeTarget,
     MessageTemplate,
     Renewal,
@@ -278,13 +278,6 @@ class MessageTemplateAdmin(admin.ModelAdmin):
     search_fields = ("name", "content")
 
 
-@admin.register(MonthlyIncentive)
-class MonthlyIncentiveAdmin(admin.ModelAdmin):
-    list_display = ('employee','year','month','total_points','total_amount','created_at')
-    search_fields = ('employee__user__username',)
-    list_filter = ('year','month')
-
-
 @admin.register(Renewal)
 class RenewalAdmin(admin.ModelAdmin):
     list_display = (
@@ -381,13 +374,13 @@ def incentive_report_view(request):
     year = int(request.GET.get("year", date.today().year))
     month = int(request.GET.get("month", date.today().month))
 
-    # Use snapshot if exists, else compute live
-    qs = MonthlyIncentive.objects.filter(year=year, month=month)
-    if not qs.exists():
-        sales = Sale.objects.filter(date__year=year, date__month=month)
-        qs = sales.values("employee__id", "employee__user__username").annotate(
-            total_points=Sum("points"), total_amount=Sum("amount")
-        )
+    # Always computed live from Sale — the MonthlyIncentive snapshot table
+    # was removed 2026-07 (it was never scheduled and could go stale when
+    # sales were edited after snapshotting).
+    sales = Sale.objects.filter(date__year=year, date__month=month)
+    qs = sales.values("employee__id", "employee__user__username").annotate(
+        total_points=Sum("points"), total_amount=Sum("amount")
+    )
 
     # Handle CSV export
     if "export" in request.GET:
@@ -396,10 +389,7 @@ def incentive_report_view(request):
         writer = csv.writer(response)
         writer.writerow(["Employee", "Total Points", "Total Amount"])
         for row in qs:
-            if isinstance(row, dict):
-                writer.writerow([row["employee__user__username"], row["total_points"], row["total_amount"]])
-            else:
-                writer.writerow([row.employee.user.username, row.total_points, row.total_amount])
+            writer.writerow([row["employee__user__username"], row["total_points"], row["total_amount"]])
         return response
 
     context = {

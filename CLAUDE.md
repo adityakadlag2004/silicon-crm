@@ -56,8 +56,7 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 
 ### Red-tag area (suspect items — decide, don't ignore)
 
-- `monthly_snapshot` command: only writer of `MonthlyIncentive`, which the admin
-  incentive report reads as an optional cache ("snapshot if exists, else compute
-  live"). Not in CRONJOBS. Decide: schedule it or delete command + model.
+- (none currently — `monthly_snapshot` + `MonthlyIncentive` deleted 2026-07-16;
+  the admin incentive report always computes live from `Sale` now)
 - Manual tools (intentionally not in CRONJOBS): `prod_readiness_check`,
-  `seed_demo_tasks_links`, `monthly_snapshot` (pending above).
+  `seed_demo_tasks_links`.

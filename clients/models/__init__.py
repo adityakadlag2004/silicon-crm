@@ -37,7 +37,6 @@ from .incentives import (  # noqa: F401
     CampaignProduct,
     CampaignSlab,
     campaign_product_overlaps,
-    MonthlyIncentive,
 )
 from .sales import (  # noqa: F401
     Sale,

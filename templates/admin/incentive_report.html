@@ -21,15 +21,9 @@
   </tr>
   {% for row in qs %}
   <tr>
-    {% if row.employee %}
-      <td>{{ row.employee.user.username }}</td>
-      <td>{{ row.total_points }}</td>
-      <td>{{ row.total_amount }}</td>
-    {% else %}
-      <td>{{ row.employee__user__username }}</td>
-      <td>{{ row.total_points }}</td>
-      <td>{{ row.total_amount }}</td>
-    {% endif %}
+    <td>{{ row.employee__user__username }}</td>
+    <td>{{ row.total_points }}</td>
+    <td>{{ row.total_amount }}</td>
   </tr>
   {% empty %}
   <tr><td colspan="3">No data</td></tr>

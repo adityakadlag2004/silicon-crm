@@ -147,22 +147,3 @@ def campaign_product_overlaps(product_ref, start_date, end_date, exclude_campaig
     if exclude_campaign_id is not None:
         qs = qs.exclude(campaign_id=exclude_campaign_id)
     return qs.exists()
-
-
-class MonthlyIncentive(models.Model):
-    """
-    Snapshot of total points and total sales amount for each employee for a given year+month.
-    """
-    employee = models.ForeignKey('Employee', on_delete=models.CASCADE, related_name='monthly_incentives')
-    year = models.IntegerField()
-    month = models.IntegerField()
-    total_points = models.DecimalField(max_digits=18, decimal_places=3, default=Decimal('0.000'))
-    total_amount = models.DecimalField(max_digits=18, decimal_places=2, default=Decimal('0.00'))
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ('employee', 'year', 'month')
-        ordering = ['-year', '-month']
-
-    def __str__(self):
-        return f"{self.employee} - {self.year}-{str(self.month).zfill(2)} : {self.total_points} pts"
