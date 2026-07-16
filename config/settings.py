@@ -166,9 +166,10 @@ CRONJOBS = [
     ('0 * * * *', 'django.core.management.call_command', ['tasks_send_reminders']),
     # Alert admins about employees with no synced calls for 3+ days (likely app uninstall), daily 9:15 AM
     ('15 9 * * *', 'django.core.management.call_command', ['detect_silent_devices']),
-    # Import CAMS/KFintech distributor mailback files from the feeds mailbox, daily 7:30 AM
-    # (no-op until RTA_FEED_IMAP_* env vars are set — see .env.example)
-    ('30 7 * * *', 'django.core.management.call_command', ['import_rta_feeds']),
+    # Import CAMS/KFintech distributor mailback files from the feeds mailbox,
+    # daily 7:30 AM IST (server cron runs UTC; RTA files land ~6:45 AM IST).
+    # No-op until RTA_FEED_IMAP_* env vars are set — see .env.example.
+    ('0 2 * * *', 'django.core.management.call_command', ['import_rta_feeds']),
 ]
 
 
