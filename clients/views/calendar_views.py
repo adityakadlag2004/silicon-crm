@@ -1,7 +1,7 @@
-"""Calendar views: calendar page, events JSON API, CRUD, task actions."""
+"""Calendar views: calendar page, unified events feed, CRUD, task actions."""
 import json
 import logging
-from datetime import date
+from datetime import datetime, time, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 
 from ..models import CalendarEvent, Client
+from ..services import calendar_feed
 from .helpers import throttle_view
 
 
@@ -47,135 +48,106 @@ def employee_calendar_page(request):
     return render(request, "calendar/employee_calendar.html", context)
 
 
+def _parse_range_param(raw):
+    dt = parse_datetime(raw) if raw else None
+    if dt and timezone.is_naive(dt):
+        dt = timezone.make_aware(dt)
+    return dt
+
+
 @require_GET
 @login_required
 def calendar_events_json(request):
-    """Returns calendar events as JSON for FullCalendar."""
+    """Unified calendar feed for FullCalendar: manual events, birthdays,
+    lead/call follow-ups and due tasks — one common calendar."""
     employee = request.user.employee
-    start = request.GET.get("start")
-    end = request.GET.get("end")
-    types_param = request.GET.get("types")
-    statuses_param = request.GET.get("statuses")
+    start_dt = _parse_range_param(request.GET.get("start"))
+    end_dt = _parse_range_param(request.GET.get("end"))
+
     sources_param = request.GET.get("sources")
+    sources = None
+    if sources_param:
+        # legacy name from the old two-source calendar
+        sources = ["event" if s == "manual" else s for s in sources_param.split(",") if s]
 
-    events_qs = CalendarEvent.objects.filter(employee=employee)
+    items = calendar_feed.feed_items(employee, start=start_dt, end=end_dt, sources=sources)
+
+    types_param = request.GET.get("types")
     if types_param:
-        try:
-            allowed = [t for t in types_param.split(",") if t]
-            if allowed:
-                events_qs = events_qs.filter(type__in=allowed)
-        except Exception:
-            pass
+        allowed_types = {t for t in types_param.split(",") if t}
+        # type filters only constrain manual events (their user-picked type)
+        # and birthdays; other sources have fixed types equal to their source.
+        items = [
+            it for it in items
+            if it["source"] not in ("event", "birthday") or it["event_type"] in allowed_types
+        ]
 
-    start_dt = None
-    end_dt = None
-    if start:
-        try:
-            start_dt = parse_datetime(start)
-            if start_dt and timezone.is_naive(start_dt):
-                start_dt = timezone.make_aware(start_dt)
-            events_qs = events_qs.filter(scheduled_time__gte=start_dt)
-        except Exception:
-            pass
+    statuses_param = request.GET.get("statuses")
+    if statuses_param:
+        allowed_statuses = {s for s in statuses_param.split(",") if s}
+        items = [it for it in items if it["status"] in allowed_statuses]
 
-    if end:
-        try:
-            end_dt = parse_datetime(end)
-            if end_dt and timezone.is_naive(end_dt):
-                end_dt = timezone.make_aware(end_dt)
-            events_qs = events_qs.filter(scheduled_time__lte=end_dt)
-        except Exception:
-            pass
+    return JsonResponse(calendar_feed.to_fullcalendar(items), safe=False)
+
+
+@require_GET
+@login_required
+def dashboard_agenda_json(request):
+    """Unified agenda for the dashboard widget: everything dated, one feed.
+
+    Employees see their own items. Admins/managers see team-wide lead and
+    call follow-ups (optionally narrowed with ?employee_id=) plus their own
+    events, tasks and client birthdays.
+    """
+    emp = getattr(request.user, "employee", None)
+    if emp is None:
+        return JsonResponse({"items": [], "week_dates": [], "today": ""})
+    role = getattr(emp, "role", "")
+    is_admin = request.user.is_superuser or role in ("admin", "manager")
+    employee_id = request.GET.get("employee_id") if is_admin else None
 
     now_ts = timezone.now()
-    allowed_statuses = None
-    if statuses_param:
-        try:
-            allowed_statuses = [s for s in statuses_param.split(",") if s]
-        except Exception:
-            allowed_statuses = None
+    today = timezone.localdate()
+    week_start = today - timedelta(days=today.weekday())
+    week_dates = [(week_start + timedelta(days=i)).isoformat() for i in range(7)]
 
-    allowed_sources = None
-    if sources_param:
-        try:
-            allowed_sources = [s for s in sources_param.split(",") if s]
-        except Exception:
-            allowed_sources = None
+    filter_mode = request.GET.get("filter", "this_week")
+    day_start = timezone.make_aware(datetime.combine(today, time.min))
+    if filter_mode == "today":
+        start, end = day_start, day_start + timedelta(days=1)
+    elif filter_mode == "tomorrow":
+        start, end = day_start + timedelta(days=1), day_start + timedelta(days=2)
+    elif filter_mode == "overdue":
+        start, end = None, now_ts
+    elif filter_mode == "all":
+        start, end = None, day_start + timedelta(days=60)
+    else:  # this_week — the week's items plus anything overdue from before it
+        start = None
+        end = timezone.make_aware(datetime.combine(week_start + timedelta(days=7), time.min))
 
-    events = []
-    for e in events_qs:
-        # Calling component removed — all events are manual now.
-        source = "manual"
+    items = calendar_feed.feed_items(
+        emp, start=start, end=end,
+        team_followups=is_admin, employee_id=employee_id,
+    )
+    if filter_mode == "overdue":
+        items = [it for it in items if it["is_overdue"]]
+    elif filter_mode == "this_week":
+        wk_start_dt = timezone.make_aware(datetime.combine(week_start, time.min))
+        items = [it for it in items if it["start"] >= wk_start_dt or it["is_overdue"]]
+    # pending things only on the dashboard — completed/skipped events stay off,
+    # and past birthdays are history, not agenda items
+    items = [
+        it for it in items
+        if it["status"] in ("pending", "missed")
+        and (it["source"] != "birthday" or it["start"] >= day_start)
+    ]
 
-        status_val = e.status
-        if e.status == "pending" and e.scheduled_time and e.scheduled_time < now_ts:
-            status_val = "missed"
-
-        if allowed_sources is not None and source not in allowed_sources:
-            continue
-        if allowed_statuses is not None and status_val not in allowed_statuses:
-            continue
-
-        events.append({
-            "id": e.id,
-            "title": e.title,
-            "start": e.scheduled_time.isoformat(),
-            "end": e.end_time.isoformat() if e.end_time else None,
-            "extendedProps": {
-                "type": e.type,
-                "notes": e.notes,
-                "status": status_val,
-                "source": source,
-                "related_prospect_id": None,
-                "related_prospect_name": None,
-            },
-        })
-
-    # Include birthdays from Clients and Prospects within the requested range
-    try:
-        if start_dt is None:
-            s_dt = timezone.now() - timezone.timedelta(days=365)
-        else:
-            s_dt = start_dt
-        if end_dt is None:
-            e_dt = timezone.now() + timezone.timedelta(days=365)
-        else:
-            e_dt = end_dt
-
-        def add_birthdays(queryset, label_prefix="Birthday"):
-            for obj in queryset:
-                dob = getattr(obj, "date_of_birth", None)
-                if not dob:
-                    continue
-                for yr in range(s_dt.year, e_dt.year + 1):
-                    try:
-                        bday = date(yr, dob.month, dob.day)
-                    except ValueError:
-                        continue
-                    bday_dt = timezone.make_aware(
-                        timezone.datetime.combine(bday, timezone.datetime.min.time())
-                    )
-                    if s_dt <= bday_dt <= e_dt:
-                        events.append({
-                            "id": f"birth-{obj.__class__.__name__}-{obj.id}-{yr}",
-                            "title": f"{label_prefix}: {getattr(obj, 'name', getattr(obj, 'client', ''))}",
-                            "start": bday_dt.isoformat(),
-                            "end": None,
-                            "extendedProps": {
-                                "type": "birthday",
-                                "status": "pending",
-                                "source": "birthday",
-                                "notes": "Auto-generated birthday call",
-                                "related_prospect_id": None,
-                            },
-                        })
-
-        if not types_param or "birthday" in (types_param or ""):
-            add_birthdays(Client.objects.filter(date_of_birth__isnull=False, mapped_to=employee))
-    except Exception:
-        pass
-
-    return JsonResponse(events, safe=False)
+    return JsonResponse({
+        "items": calendar_feed.to_agenda_json(items),
+        "week_dates": week_dates,
+        "today": today.isoformat(),
+        "overdue_count": sum(1 for it in items if it["is_overdue"]),
+    })
 
 
 @login_required

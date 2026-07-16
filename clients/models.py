@@ -1181,6 +1181,8 @@ class LeadFollowUp(models.Model):
     scheduled_time = models.DateTimeField()
     note = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    # set once send_followup_reminders has notified the assignee
+    reminded = models.BooleanField(default=False)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -1287,6 +1289,8 @@ class CalendarEvent(models.Model):
         default="pending",
         db_index=True,
     )
+    # set once send_followup_reminders has notified the owner at start time
+    reminded = models.BooleanField(default=False)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

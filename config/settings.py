@@ -152,7 +152,7 @@ CRONJOBS = [
     ('5 0 1 * *', 'django.core.management.call_command', ['close_month']),
     # Clean old notifications, message logs, expired sessions every Sunday at 3 AM
     ('0 3 * * 0', 'django.core.management.call_command', ['cleanup_data']),
-    # Push reminders for due call follow-ups (Android app), every minute
+    # Reminders for due call/lead follow-ups + calendar events, every minute
     ('* * * * *', 'django.core.management.call_command', ['send_followup_reminders']),
     # Flip past-due tasks to Overdue and notify, every 15 minutes
     ('*/15 * * * *', 'django.core.management.call_command', ['tasks_mark_overdue']),

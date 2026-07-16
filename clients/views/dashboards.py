@@ -30,7 +30,6 @@ from ..models import (
     NetBusinessEntry,
     NetSipEntry,
     Notification,
-    LeadFollowUp,
     ManagerAccessConfig,
     FirmSettings,
     Campaign,
@@ -137,27 +136,8 @@ def admin_dashboard(request):
 
     now_ts = timezone.now()
     today_date = now_ts.date()
-    week_start = today_date - timedelta(days=today_date.weekday())
-    week_dates = [week_start + timedelta(days=i) for i in range(7)]
-
-    followup_qs = (
-        LeadFollowUp.objects.filter(status="pending")
-        .filter(
-            Q(scheduled_time__lt=now_ts) |
-            Q(scheduled_time__date__gte=week_start, scheduled_time__date__lte=week_start + timedelta(days=6))
-        )
-        .select_related("lead", "assigned_to__user")
-        .order_by("scheduled_time")
-    )
-    followups_by_date = {}
-    overdue_followups = []
-    for f in followup_qs:
-        f.is_overdue = f.scheduled_time < now_ts
-        if f.is_overdue:
-            overdue_followups.append(f)
-        fdate = f.scheduled_time.date()
-        followups_by_date.setdefault(fdate, []).append(f)
-    upcoming_followups = list(followup_qs)
+    # The agenda widget (one common calendar) loads its items client-side
+    # from dashboard_agenda_json; only the employee filter needs context.
     all_employees = Employee.objects.filter(active=True).select_related("user").order_by("user__username")
 
     all_sales_qs = Sale.objects.all()
@@ -384,10 +364,6 @@ def admin_dashboard(request):
         "monthly_summary": monthly_summary,
         "notifications": notifications,
         "unread_notifications": unread_notifications,
-        "upcoming_followups": upcoming_followups,
-        "followups_by_date": followups_by_date,
-        "overdue_followups": overdue_followups,
-        "week_dates": week_dates,
         "today_date": today_date,
         "is_admin_dashboard": True,
         "all_employees": all_employees,
@@ -522,27 +498,7 @@ def employee_dashboard(request):
 
     now_ts = timezone.now()
     today_date = now_ts.date()
-    week_start = today_date - timedelta(days=today_date.weekday())
-    week_dates = [week_start + timedelta(days=i) for i in range(7)]
-
-    followup_qs = (
-        LeadFollowUp.objects.filter(status="pending", assigned_to=emp)
-        .filter(
-            Q(scheduled_time__lt=now_ts) |
-            Q(scheduled_time__date__gte=week_start, scheduled_time__date__lte=week_start + timedelta(days=6))
-        )
-        .select_related("lead")
-        .order_by("scheduled_time")
-    )
-    followups_by_date = {}
-    overdue_followups = []
-    for f in followup_qs:
-        f.is_overdue = f.scheduled_time < now_ts
-        if f.is_overdue:
-            overdue_followups.append(f)
-        fdate = f.scheduled_time.date()
-        followups_by_date.setdefault(fdate, []).append(f)
-    upcoming_followups = list(followup_qs)
+    # Agenda widget items come from dashboard_agenda_json (one common calendar).
 
     products = _ordered_product_names(
         list(
@@ -843,10 +799,6 @@ def employee_dashboard(request):
         "daily_targets": daily_targets_display,
         "monthly_targets": monthly_targets_display,
         "history": history,
-        "upcoming_followups": upcoming_followups,
-        "followups_by_date": followups_by_date,
-        "overdue_followups": overdue_followups,
-        "week_dates": week_dates,
         "today_date": today_date,
         "is_admin_dashboard": False,
         "pending_points": pending_points,

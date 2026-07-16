@@ -1,32 +1,46 @@
-"""Send reminders for due call follow-ups.
+"""Send reminders for everything due on the common calendar.
 
-Runs every minute via CRONJOBS. For each due follow-up it:
-  1. Creates an in-app Notification (for the app's Notifications screen and
-     the web bell) with `_skip_push` set, so the generic FCM mirror stays
-     silent, and
-  2. Sends a high-priority data-only push (kind=followup_alarm) that the
-     Android app turns into a full-screen ringing alarm — client name as the
-     title, the note as the body, with Call / Done / Snooze actions.
+Runs every minute via CRONJOBS. Covers the three reminder sources:
 
-The app also schedules the same alarm locally (AlarmManager) when a follow-up
-is created or synced, so the reminder rings even with no connectivity; the
-device dedupes the two triggers by follow-up id.
+1. Call follow-ups — creates an in-app Notification with `_skip_push` set,
+   then sends a high-priority data-only push (kind=followup_alarm) that the
+   Android app turns into a full-screen ringing alarm — client name as the
+   title, the note as the body, with Call / Done / Snooze actions.
+   (The app also schedules the same alarm locally via AlarmManager, so the
+   reminder rings even with no connectivity; the device dedupes by id.)
+
+2. Lead follow-ups — creates a regular Notification (web bell + app
+   Notifications screen + standard FCM mirror) linking to the lead.
+
+3. Calendar events — creates a regular Notification at the event's start
+   time linking to the calendar.
+
+Each row carries a `reminded` flag so a reminder fires exactly once.
+Tasks are NOT handled here — they have their own reminder pipeline
+(tasks_ring_due / tasks_send_reminders).
 """
 from django.core.management.base import BaseCommand
+from django.urls import reverse
 from django.utils import timezone
 
-from clients.models import CallFollowUp, Notification
+from clients.models import CalendarEvent, CallFollowUp, LeadFollowUp, Notification
 from clients.services.push import send_data_push_to_user
 
 
 class Command(BaseCommand):
-    help = "Send push/in-app reminders for call follow-ups that are due."
+    help = "Send push/in-app reminders for due call/lead follow-ups and calendar events."
 
     def handle(self, *args, **options):
+        now = timezone.now()
+        sent = self._call_followups(now) + self._lead_followups(now) + self._events(now)
+        if sent:
+            self.stdout.write(self.style.SUCCESS(f"Sent {sent} reminder(s)."))
+
+    def _call_followups(self, now):
         due = CallFollowUp.objects.filter(
             status=CallFollowUp.STATUS_PENDING,
             reminded=False,
-            scheduled_at__lte=timezone.now(),
+            scheduled_at__lte=now,
         ).select_related("employee__user", "client")
 
         sent = 0
@@ -55,6 +69,52 @@ class Command(BaseCommand):
             fu.reminded = True
             fu.save(update_fields=["reminded"])
             sent += 1
+        return sent
 
-        if sent:
-            self.stdout.write(self.style.SUCCESS(f"Sent {sent} follow-up reminder(s)."))
+    def _lead_followups(self, now):
+        due = LeadFollowUp.objects.filter(
+            status="pending",
+            reminded=False,
+            scheduled_time__lte=now,
+        ).select_related("assigned_to__user", "lead")
+
+        sent = 0
+        for fu in due:
+            if not fu.assigned_to.user_id:
+                fu.reminded = True
+                fu.save(update_fields=["reminded"])
+                continue
+            Notification.objects.create(
+                recipient=fu.assigned_to.user,
+                title=f"Lead follow-up: {fu.lead.customer_name}",
+                body=fu.note or "Scheduled lead follow-up is due.",
+                link=reverse("clients:lead_detail", args=[fu.lead_id]),
+            )
+            fu.reminded = True
+            fu.save(update_fields=["reminded"])
+            sent += 1
+        return sent
+
+    def _events(self, now):
+        due = CalendarEvent.objects.filter(
+            status="pending",
+            reminded=False,
+            scheduled_time__lte=now,
+        ).select_related("employee__user")
+
+        sent = 0
+        for ev in due:
+            if not ev.employee.user_id:
+                ev.reminded = True
+                ev.save(update_fields=["reminded"])
+                continue
+            Notification.objects.create(
+                recipient=ev.employee.user,
+                title=f"Event: {ev.title}",
+                body=ev.notes or "Calendar event is starting now.",
+                link=reverse("clients:employee_calendar_page"),
+            )
+            ev.reminded = True
+            ev.save(update_fields=["reminded"])
+            sent += 1
+        return sent

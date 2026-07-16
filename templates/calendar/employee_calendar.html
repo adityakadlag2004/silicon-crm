@@ -79,16 +79,24 @@
       <label class="form-check-label badge" style="background:#ff9ccf; color:#641e16;" for="f_bday">Birthday</label>
     </div>
   </div>
-  <!-- Source filters -->
+  <!-- Source filters — one common calendar: everything dated shows here -->
   <div class="d-flex justify-content-center mb-3 gap-2 align-items-center flex-wrap filter-row">
     <label class="small mb-0 me-2">Source:</label>
     <div class="form-check form-check-inline">
-      <input class="form-check-input src-filter" type="checkbox" id="src_manual" value="manual" checked>
-      <label class="form-check-label badge bg-secondary text-white" for="src_manual">Manual</label>
+      <input class="form-check-input src-filter" type="checkbox" id="src_manual" value="event" checked>
+      <label class="form-check-label badge bg-secondary text-white" for="src_manual">My Events</label>
     </div>
     <div class="form-check form-check-inline">
-      <input class="form-check-input src-filter" type="checkbox" id="src_calling" value="calling_list" checked>
-      <label class="form-check-label badge bg-info text-dark" for="src_calling">Calling List</label>
+      <input class="form-check-input src-filter" type="checkbox" id="src_lead" value="lead_followup" checked>
+      <label class="form-check-label badge" style="background:#ede9fe; color:#5b21b6;" for="src_lead">Lead Follow-ups</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input src-filter" type="checkbox" id="src_call" value="call_followup" checked>
+      <label class="form-check-label badge bg-success text-white" for="src_call">Call Follow-ups</label>
+    </div>
+    <div class="form-check form-check-inline">
+      <input class="form-check-input src-filter" type="checkbox" id="src_task" value="task" checked>
+      <label class="form-check-label badge bg-dark text-white" for="src_task">Tasks</label>
     </div>
     <div class="form-check form-check-inline">
       <input class="form-check-input src-filter" type="checkbox" id="src_bday" value="birthday" checked>
@@ -241,6 +249,7 @@ document.addEventListener('DOMContentLoaded', function() {
     eventDidMount: function(info) {
       const colorMap = {
         call_followup: {bg: '#28a745', fg: '#fff'},
+        lead_followup: {bg: '#7c3aed', fg: '#fff'},
         meeting: {bg: '#2563eb', fg: '#fff'},
         reminder: {bg: '#fd7e14', fg: '#fff'},
         task: {bg: '#6c757d', fg: '#fff'},
@@ -265,22 +274,14 @@ document.addEventListener('DOMContentLoaded', function() {
         info.el.title = (info.el.title || '') + ' (Missed)';
       }
 
-      // Add source badge inline
+      // Add source badge inline (skip manual events — they're the default)
       const source = info.event.extendedProps.source;
-      if (source) {
+      if (source && source !== 'event') {
         const badge = document.createElement('span');
         badge.className = 'ms-1 badge badge-sm';
-        if (source === 'calling_list') {
-          badge.className += ' bg-info text-dark';
-          badge.innerText = 'Calling List';
-        } else if (source === 'birthday') {
-          badge.style.background = '#ff9ccf';
-          badge.style.color = '#641e16';
-          badge.innerText = 'Birthday';
-        } else {
-          badge.className += ' bg-secondary text-white';
-          badge.innerText = 'Manual';
-        }
+        badge.style.background = 'rgba(255,255,255,0.85)';
+        badge.style.color = cfg.bg;
+        badge.innerText = info.event.extendedProps.source_label || source;
         const titleEl = info.el.querySelector('.fc-event-title');
         if (titleEl) titleEl.appendChild(badge);
       }
@@ -296,16 +297,22 @@ document.addEventListener('DOMContentLoaded', function() {
       updateEventTime(info.event);
     },
 
-    // Click on event → modal
+    // Click on event → modal (manual events / birthdays) or the item's own
+    // page (lead/call follow-ups, tasks — they live in their own modules)
     eventClick: function(info) {
       const ev = info.event;
       const props = ev.extendedProps || {};
+
+      if (props.url && props.source !== 'event' && props.source !== 'birthday') {
+        window.location.href = props.url;
+        return;
+      }
 
       document.getElementById('modalTitle').innerText = ev.title;
       document.getElementById('modalWhen').innerText = new Date(ev.start).toLocaleString();
       document.getElementById('modalType').innerText = props.type || '—';
       document.getElementById('modalNotes').innerText = props.notes || '—';
-        const sourceText = props.source === 'birthday' ? 'Birthday' : (props.source === 'calling_list' ? 'Calling List' : 'Manual');
+        const sourceText = props.source_label || (props.source === 'birthday' ? 'Birthday' : 'My Event');
         document.getElementById('modalType').innerText = `${props.type || '—'} · ${sourceText}`;
 
       if (props.related_prospect_name) {
@@ -370,8 +377,9 @@ document.addEventListener('DOMContentLoaded', function() {
       // set dataset to indicate event context
       const eid = evEl.getAttribute('data-event-id') || evEl.querySelector('[data-event-id]')?.getAttribute('data-event-id') || '';
       ctxMenu.dataset.eventId = eid;
-      // show delete option only for real events (not synthetic birthdays which start with 'birth-')
-      if (eid && !String(eid).startsWith('birth-')) {
+      // show delete/edit only for manual events (integer ids) — feed items
+      // like lead-5 / call-7 / task-9 are managed in their own modules
+      if (eid && /^\d+$/.test(String(eid))) {
         ctxMenu.querySelector('[data-action="delete_event"]').style.display = 'block';
       } else {
         ctxMenu.querySelector('[data-action="delete_event"]').style.display = 'none';

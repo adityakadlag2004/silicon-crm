@@ -1,12 +1,17 @@
-{% load tz %}
+<!-- Unified agenda widget: one common calendar (events · birthdays ·
+     lead & call follow-ups · due tasks), fed by dashboard_agenda_json. -->
 <div class="followup-calendar-widget" id="followupCalendarWidget">
+  <h3 class="ki-section-title" style="margin-top:0;">
+    <i class="bi bi-calendar3"></i> Agenda
+    <span class="text-muted" style="font-size:0.78rem;font-weight:400;">events · follow-ups · tasks · birthdays</span>
+  </h3>
   <!-- Filter Bar -->
   <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
     <div class="btn-group btn-group-sm" role="group">
       <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary followup-filter active" data-filter="this_week">This Week</button>
       <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary followup-filter" data-filter="today">Today</button>
       <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary followup-filter" data-filter="tomorrow">Tomorrow</button>
-      <button type="button" class="ki-btn ki-btn-sm followup-filter" style="border-color:var(--ki-danger);color:var(--ki-danger);" data-filter="overdue">Overdue{% if overdue_followups %} <span class="badge bg-danger">{{ overdue_followups|length }}</span>{% endif %}</button>
+      <button type="button" class="ki-btn ki-btn-sm followup-filter" style="border-color:var(--ki-danger);color:var(--ki-danger);" data-filter="overdue">Overdue <span class="badge bg-danger" id="agendaOverdueBadge" style="display:none;"></span></button>
       <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary followup-filter" data-filter="all">All</button>
     </div>
     {% if is_admin_dashboard %}
@@ -17,40 +22,14 @@
       {% endfor %}
     </select>
     {% endif %}
+    <a href="{% url 'clients:employee_calendar_page' %}" class="ki-btn ki-btn-sm ki-btn-secondary ms-auto">
+      <i class="bi bi-calendar3"></i> Full Calendar
+    </a>
   </div>
 
-  <!-- Weekly Calendar Grid (server-rendered initial state) -->
+  <!-- Grid rendered client-side from the unified agenda feed -->
   <div class="followup-week-grid" id="followupWeekGrid">
-    <div class="row g-2">
-      {% for wd in week_dates %}
-      <div class="col followup-day-col {% if wd == today_date %}followup-today{% endif %}" data-date="{{ wd|date:'Y-m-d' }}">
-        <div class="followup-day-header">
-          <div class="fw-bold small">{{ wd|date:"D" }}</div>
-          <div class="{% if wd == today_date %}badge bg-primary{% else %}small text-muted{% endif %}">{{ wd|date:"d" }}</div>
-        </div>
-        <div class="followup-day-items">
-          {% with day_items=followups_by_date %}
-            {% for f in day_items %}
-              {% if f.scheduled_time|date:"Y-m-d" == wd|date:"Y-m-d" %}
-              <div class="followup-item {% if f.is_overdue %}followup-overdue{% endif %}" data-followup-id="{{ f.id }}">
-                <a href="{% url 'clients:lead_detail' f.lead.id %}" class="followup-item-link">
-                  <div class="fw-semibold small text-truncate">{{ f.lead.customer_name }}</div>
-                  <div class="text-muted" style="font-size:0.75rem;">{{ f.scheduled_time|date:"H:i" }}{% if f.assigned_to %} &bull; {{ f.assigned_to.user.username }}{% endif %}</div>
-                  {% if f.note %}<div class="text-muted text-truncate" style="font-size:0.7rem;">{{ f.note }}</div>{% endif %}
-                </a>
-                {% if f.is_overdue %}<span class="badge bg-danger" style="font-size:0.6rem;">Overdue</span>{% endif %}
-                <form method="post" action="{% url 'clients:lead_followup_done' f.id %}" class="followup-done-form" style="display:inline;">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm btn-outline-success followup-done-btn" title="Mark done" hx-post="{% url 'clients:lead_followup_done' f.id %}" hx-swap="outerHTML" hx-target="closest .followup-item">&#10003;</button>
-                </form>
-              </div>
-              {% endif %}
-            {% endfor %}
-          {% endwith %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
+    <div class="text-muted text-center py-3">Loading agenda…</div>
   </div>
 </div>
 
@@ -89,9 +68,9 @@
   margin-bottom: 0.3rem;
   position: relative;
   transition: all 0.15s;
-  cursor: grab;
 }
-.followup-item:active { cursor: grabbing; }
+.followup-item[draggable="true"] { cursor: grab; }
+.followup-item[draggable="true"]:active { cursor: grabbing; }
 .followup-item.dragging {
   opacity: 0.4;
   transform: scale(0.95);
@@ -130,6 +109,19 @@
   color: #fff !important;
   border-color: #2d3748 !important;
 }
+.agenda-source-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.agenda-source-lead_followup  { background: #ede9fe; color: #5b21b6; }
+.agenda-source-call_followup  { background: #dcfce7; color: #166534; }
+.agenda-source-event          { background: #dbeafe; color: #1e40af; }
+.agenda-source-task           { background: #f1f5f9; color: #334155; }
+.agenda-source-birthday       { background: #ffe4ef; color: #9d174d; }
 
 @media (max-width: 768px) {
   .followup-week-grid .row {
@@ -147,63 +139,65 @@
   const widget = document.getElementById('followupCalendarWidget');
   if (!widget) return;
 
-  const apiUrl = '{% url "clients:lead_followups_api" %}';
-  const leadDetailBaseUrl = '{% url "clients:lead_detail" 0 %}'.replace('/0/', '/LEAD_ID/');
-  const followupDoneBaseUrl = '{% url "clients:lead_followup_done" 0 %}'.replace('/0/', '/FID/');
+  const apiUrl = '{% url "clients:dashboard_agenda_json" %}';
   const followupRescheduleBaseUrl = '{% url "clients:lead_followup_reschedule" 0 %}'.replace('/0/', '/FID/');
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
     document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
 
   const filterBtns = widget.querySelectorAll('.followup-filter');
   const empFilter = widget.querySelector('#followupEmployeeFilter');
+  const overdueBadge = widget.querySelector('#agendaOverdueBadge');
   const gridEl = document.getElementById('followupWeekGrid');
-
-  // Week dates from server
-  const weekDates = [{% for wd in week_dates %}'{{ wd|date:"Y-m-d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
-  const todayStr = '{{ today_date|date:"Y-m-d" }}';
   const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   let currentFilter = 'this_week';
+  let weekDates = [];
+  let todayStr = '';
 
   filterBtns.forEach(btn => {
     btn.addEventListener('click', function() {
       filterBtns.forEach(b => b.classList.remove('active'));
       this.classList.add('active');
       currentFilter = this.dataset.filter;
-      loadFollowups();
+      loadAgenda();
     });
   });
 
   if (empFilter) {
-    empFilter.addEventListener('change', loadFollowups);
+    empFilter.addEventListener('change', loadAgenda);
   }
 
-  function loadFollowups() {
+  function loadAgenda() {
     let url = `${apiUrl}?filter=${currentFilter}`;
     if (empFilter && empFilter.value) {
       url += `&employee_id=${empFilter.value}`;
     }
     fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
       .then(r => r.json())
-      .then(data => renderGrid(data.followups))
-      .catch(err => console.error('Follow-up fetch error:', err));
+      .then(data => {
+        weekDates = data.week_dates || [];
+        todayStr = data.today || '';
+        if (overdueBadge) {
+          overdueBadge.style.display = data.overdue_count ? '' : 'none';
+          overdueBadge.innerText = data.overdue_count || '';
+        }
+        renderGrid(data.items || []);
+      })
+      .catch(err => console.error('Agenda fetch error:', err));
   }
 
-  function renderGrid(followups) {
-    // Group by date
+  function renderGrid(items) {
     const byDate = {};
-    followups.forEach(f => {
+    items.forEach(f => {
       byDate[f.date] = byDate[f.date] || [];
       byDate[f.date].push(f);
     });
 
-    // For filters that aren't week-based, show a flat list grouped by date
     if (['today', 'tomorrow', 'overdue', 'all'].includes(currentFilter)) {
-      renderFlatList(followups, byDate);
+      renderFlatList(items, byDate);
       return;
     }
 
-    // Week grid
     let html = '<div class="row g-2">';
     weekDates.forEach((dateStr, idx) => {
       const isToday = dateStr === todayStr;
@@ -215,15 +209,13 @@
       html += `<div class="${isToday ? 'badge bg-primary' : 'small text-muted'}">${parseInt(dayNum)}</div></div>`;
       html += '<div class="followup-day-items">';
 
-      dayItems.forEach(f => {
-        html += renderFollowupItem(f);
-      });
+      dayItems.forEach(f => { html += renderAgendaItem(f); });
 
-      // Overdue items for dates before this week
+      // Overdue items from before this week land in Monday's column
       if (idx === 0) {
         Object.keys(byDate).sort().forEach(d => {
           if (d < weekDates[0]) {
-            byDate[d].forEach(f => { html += renderFollowupItem(f); });
+            byDate[d].forEach(f => { html += renderAgendaItem(f); });
           }
         });
       }
@@ -235,9 +227,9 @@
     bindDoneBtns();
   }
 
-  function renderFlatList(followups, byDate) {
-    if (followups.length === 0) {
-      gridEl.innerHTML = '<div class="text-muted text-center py-3">No follow-ups found.</div>';
+  function renderFlatList(items, byDate) {
+    if (items.length === 0) {
+      gridEl.innerHTML = '<div class="text-muted text-center py-3">Nothing scheduled.</div>';
       return;
     }
     const dates = Object.keys(byDate).sort();
@@ -247,27 +239,31 @@
       const label = d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
       html += `<div class="mb-2"><div class="fw-bold small text-muted mb-1">${label}</div>`;
       html += '<div class="d-flex flex-wrap gap-2">';
-      byDate[dateStr].forEach(f => { html += renderFollowupItem(f); });
+      byDate[dateStr].forEach(f => { html += renderAgendaItem(f); });
       html += '</div></div>';
     });
     gridEl.innerHTML = html;
     bindDoneBtns();
   }
 
-  function renderFollowupItem(f) {
-    const detailUrl = leadDetailBaseUrl.replace('LEAD_ID', f.lead_id);
-    const doneUrl = followupDoneBaseUrl.replace('FID', f.id);
+  function renderAgendaItem(f) {
     const overdueClass = f.is_overdue ? 'followup-overdue' : '';
-    let html = `<div class="followup-item ${overdueClass}" data-followup-id="${f.id}" draggable="true">`;
-    html += `<a href="${detailUrl}" class="followup-item-link">`;
-    html += `<div class="fw-semibold small text-truncate">${escHtml(f.lead_name)}</div>`;
+    const draggableAttr = f.draggable ? `draggable="true" data-followup-id="${f.followup_id}"` : '';
+    let html = `<div class="followup-item ${overdueClass}" data-key="${f.key}" ${draggableAttr}>`;
+    html += `<a href="${f.url}" class="followup-item-link">`;
+    html += `<div class="d-flex align-items-center gap-1">`;
+    html += `<span class="agenda-source-badge agenda-source-${f.source}">${f.source_label}</span>`;
+    html += `<span class="fw-semibold small text-truncate">${escHtml(f.title)}</span>`;
+    html += `</div>`;
     html += `<div class="text-muted" style="font-size:0.75rem;">${f.time}`;
     if (f.assigned_to) html += ` &bull; ${escHtml(f.assigned_to)}`;
     html += '</div>';
     if (f.note) html += `<div class="text-muted text-truncate" style="font-size:0.7rem;">${escHtml(f.note)}</div>`;
     html += '</a>';
     if (f.is_overdue) html += '<span class="badge bg-danger" style="font-size:0.6rem;">Overdue</span>';
-    html += `<button class="btn btn-sm btn-outline-success followup-done-btn js-done-btn" data-url="${doneUrl}" title="Mark done">&#10003;</button>`;
+    if (f.done_url) {
+      html += `<button class="btn btn-sm btn-outline-success followup-done-btn js-done-btn" data-url="${f.done_url}" title="Mark done">&#10003;</button>`;
+    }
     html += '</div>';
     return html;
   }
@@ -293,17 +289,15 @@
     bindDragAndDrop();
   }
 
-  /* ---- Drag & Drop ---- */
+  /* ---- Drag & Drop (lead follow-ups only — they carry draggable=true) ---- */
   let draggedEl = null;
   let draggedId = null;
 
   function bindDragAndDrop() {
-    // Make items draggable
-    gridEl.querySelectorAll('.followup-item[draggable]').forEach(item => {
+    gridEl.querySelectorAll('.followup-item[draggable="true"]').forEach(item => {
       item.addEventListener('dragstart', onDragStart);
       item.addEventListener('dragend', onDragEnd);
     });
-    // Make day columns droppable
     gridEl.querySelectorAll('.followup-day-col').forEach(col => {
       col.addEventListener('dragover', onDragOver);
       col.addEventListener('dragenter', onDragEnter);
@@ -318,7 +312,6 @@
     this.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', draggedId);
-    // Prevent link navigation during drag
     this.querySelectorAll('a').forEach(a => a.style.pointerEvents = 'none');
   }
 
@@ -339,13 +332,11 @@
 
   function onDragEnter(e) {
     e.preventDefault();
-    const col = e.currentTarget;
-    col.classList.add('drag-over');
+    e.currentTarget.classList.add('drag-over');
   }
 
   function onDragLeave(e) {
     const col = e.currentTarget;
-    // Only remove if we truly left the column (not entered a child)
     if (!col.contains(e.relatedTarget)) {
       col.classList.remove('drag-over');
     }
@@ -358,14 +349,12 @@
     const targetDate = col.dataset.date;
     if (!targetDate || !draggedId) return;
 
-    // Optimistic move: append the dragged element to the new column's items container
     const itemsContainer = col.querySelector('.followup-day-items');
     if (itemsContainer && draggedEl) {
       draggedEl.classList.remove('dragging');
       itemsContainer.appendChild(draggedEl);
     }
 
-    // Send reschedule request
     const url = followupRescheduleBaseUrl.replace('FID', draggedId);
     fetch(url, {
       method: 'POST',
@@ -378,13 +367,11 @@
       if (!r.ok) throw new Error('Reschedule failed');
       return r.json();
     }).then(data => {
-      // Update the time display in the moved item
       if (draggedEl) {
         const timeEl = draggedEl.querySelector('.text-muted[style]');
         if (timeEl && data.new_time) {
           timeEl.innerHTML = timeEl.innerHTML.replace(/^\d{2}:\d{2}/, data.new_time);
         }
-        // Remove overdue styling if moved to today or future
         const today = new Date();
         today.setHours(0,0,0,0);
         const target = new Date(targetDate + 'T00:00:00');
@@ -395,21 +382,16 @@
         }
       }
     }).catch(() => {
-      // Revert on error — reload the grid
-      loadFollowups();
+      loadAgenda();
     });
   }
 
-  function escHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str || '';
-    return div.innerHTML;
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
   }
 
-  // Initial done-btn binding for server-rendered items
-  bindDoneBtns();
-
-  // Initial API load for full interactivity
-  loadFollowups();
+  loadAgenda();
 })();
 </script>
