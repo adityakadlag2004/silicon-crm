@@ -23,6 +23,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from .. import permissions
 from ..models import (
     Employee,
     NotificationPreference,
@@ -62,7 +63,7 @@ def _role(request):
 
 
 def _is_admin(request):
-    return request.user.is_superuser or _role(request) == "admin"
+    return permissions.is_admin(request.user)
 
 
 def _can_manage_all(request):

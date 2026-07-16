@@ -12,13 +12,13 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from .. import permissions
 from ..models import CallTrackingSettings, TaskReminderSetting
 from .calls import FOLLOWUP_CATALOG
 
 
 def _is_admin(request):
-    emp = getattr(request.user, "employee", None)
-    return request.user.is_superuser or (emp is not None and emp.role == "admin")
+    return permissions.is_admin(request.user)
 
 
 def _hhmm(t):

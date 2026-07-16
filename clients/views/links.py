@@ -11,6 +11,7 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from .. import permissions
 from ..models import Link, LinkCategory, LinkFavorite
 
 
@@ -20,7 +21,7 @@ def _role(request):
 
 
 def _is_admin(request):
-    return request.user.is_superuser or _role(request) == "admin"
+    return permissions.is_admin(request.user)
 
 
 def _can_edit_link(request, link):

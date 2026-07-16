@@ -1,19 +1,13 @@
-"""Read-only audit-log view. Admin-only by default."""
-from django.contrib.auth.decorators import login_required
+"""Read-only audit-log view. Admin-only."""
 from django.core.paginator import Paginator
-from django.http import HttpResponseForbidden
 from django.shortcuts import render
 
 from ..models import AuditLog
+from ..permissions import admin_required
 
 
-@login_required
+@admin_required
 def audit_log(request):
-    emp = getattr(request.user, "employee", None)
-    is_admin = request.user.is_superuser or (emp and emp.role == "admin")
-    if not is_admin:
-        return HttpResponseForbidden("Admins only.")
-
     qs = AuditLog.objects.select_related("actor").all()
 
     # Filters

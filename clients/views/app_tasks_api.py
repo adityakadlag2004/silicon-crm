@@ -38,6 +38,7 @@ from ..services.tasks import (
     notify_task,
 )
 from .helpers import parse_date_param
+from .. import permissions
 
 
 def _emp(request):
@@ -50,7 +51,7 @@ def _role(request):
 
 
 def _can_manage_all(request):
-    return request.user.is_superuser or _role(request) in ("admin", "manager")
+    return permissions.is_admin_or_manager(request.user)
 
 
 def _scoped(request):
@@ -695,7 +696,7 @@ def app_links(request):
         return {"id": l.id, "title": l.title, "url": l.url, "description": l.description,
                 "icon": l.icon or (l.category.icon if l.category else "bi-link-45deg"),
                 "category_id": l.category_id, "is_fav": l.id in fav_ids,
-                "can_edit": request.user.is_superuser or _role(request) == "admin" or l.created_by_id == request.user.id}
+                "can_edit": permissions.is_admin(request.user) or l.created_by_id == request.user.id}
 
     cats = [{"id": c.id, "name": c.name, "color": c.color, "icon": c.icon}
             for c in LinkCategory.objects.filter(is_active=True)]

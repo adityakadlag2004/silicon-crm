@@ -17,6 +17,7 @@ from django.db.models.functions import TruncDay, TruncMonth, TruncYear
 from django.core.exceptions import FieldError
 from django.db import transaction
 
+from .. import permissions
 from ..models import (
     Client,
     Sale,
@@ -103,16 +104,13 @@ def _parse_amount(raw, default=None):
 
 
 def _is_admin_user(user):
-    if user.is_superuser:
-        return True
-    emp = getattr(user, "employee", None)
-    return bool(emp and emp.role == "admin")
+    return permissions.is_admin(user)
 
 
 @login_required
 def admin_dashboard(request):
     emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (emp and emp.role in ("admin", "manager"))):
+    if not permissions.is_admin_or_manager(request.user):
         return redirect("clients:employee_dashboard")
     today = timezone.now().date()
     month = today.month
@@ -490,9 +488,9 @@ def employee_dashboard(request):
     today = now().date()
     role = getattr(emp, "role", "")
     is_manager = role == "manager"
-    is_admin = role == "admin"
+    is_admin = permissions.is_admin(request.user)
     manager_access = get_manager_access() if is_manager else None
-    allow_company_sections = is_admin or (is_manager and manager_access and manager_access.allow_employee_performance)
+    allow_company_sections = permissions.can(request.user, "employee_performance")
     month_start = date(today.year, today.month, 1)
     month_end = date(today.year, today.month, monthrange(today.year, today.month)[1])
 
@@ -824,7 +822,7 @@ def employee_dashboard(request):
 @login_required
 def firm_settings_page(request):
     admin_emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (admin_emp and admin_emp.role == "admin")):
+    if not permissions.is_admin(request.user):
         return HttpResponseForbidden("Admins only.")
 
     settings_obj = FirmSettings.get_settings()
@@ -852,7 +850,7 @@ def firm_settings_page(request):
 @login_required
 def product_management_page(request):
     admin_emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (admin_emp and admin_emp.role == "admin")):
+    if not permissions.is_admin(request.user):
         return HttpResponseForbidden("Admins only.")
 
     if request.method == "POST":
@@ -1059,7 +1057,7 @@ def target_management(request):
     how much each employee has achieved this month.
     """
     admin_emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (admin_emp and admin_emp.role == "admin")):
+    if not permissions.is_admin(request.user):
         return HttpResponseForbidden("Admins only.")
 
     employees = list(target_employees())
@@ -1296,7 +1294,7 @@ def employee_performance(request):
 @login_required
 def net_business(request):
     """Net business dashboard: shows sales minus redemptions/SIP stoppage."""
-    if not (request.user.is_superuser or (hasattr(request.user, 'employee') and request.user.employee.role in ('admin', 'manager'))):
+    if not permissions.is_admin_or_manager(request.user):
         messages.error(request, 'You do not have permission to view Net Business.')
         return redirect('clients:admin_dashboard')
 
@@ -1516,7 +1514,7 @@ def net_business(request):
 @login_required
 def net_sip(request):
     """Net SIP dashboard: SIP fresh minus SIP stopped."""
-    if not (request.user.is_superuser or (hasattr(request.user, 'employee') and request.user.employee.role in ('admin', 'manager'))):
+    if not permissions.is_admin_or_manager(request.user):
         messages.error(request, 'You do not have permission to view Net SIP.')
         return redirect('clients:admin_dashboard')
 

@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
+from .. import permissions
 from ..models import CallFollowUp, CallLogEntry, CallTrackingSettings, Client, Employee
 
 
@@ -26,8 +27,7 @@ def _user_emp(request):
 
 
 def _is_admin(request):
-    emp = _user_emp(request)
-    return request.user.is_superuser or (emp is not None and emp.role == "admin")
+    return permissions.is_admin(request.user)
 
 
 def _normalize_digits(phone):

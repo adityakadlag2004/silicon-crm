@@ -8,8 +8,13 @@ from django.db import models
 
 
 class Employee(models.Model):
+    class Role(models.TextChoices):
+        ADMIN = "admin", "Admin"
+        MANAGER = "manager", "Manager"
+        EMPLOYEE = "employee", "Employee"
+
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    role = models.CharField(max_length=50, choices=(("admin", "Admin"), ("manager", "Manager"), ("employee", "Employee")))
+    role = models.CharField(max_length=50, choices=Role.choices)
     active = models.BooleanField(default=True)
     salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     employee_number = models.CharField(max_length=50, unique=True, null=True, blank=True)

@@ -18,6 +18,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from .. import permissions
 from ..models import (
     Campaign,
     CampaignProduct,
@@ -27,9 +28,10 @@ from ..models import (
 )
 
 
-def _is_admin(request):
-    user_emp = getattr(request.user, "employee", None)
-    return request.user.is_superuser or (user_emp and user_emp.role == "admin")
+def _can_manage(request):
+    """Campaigns follow the incentives right: admins, plus managers who were
+    granted allow_manage_incentives (the nav has always shown them the link)."""
+    return permissions.can(request.user, "manage_incentives")
 
 
 def _parse_date(value):
@@ -51,7 +53,7 @@ def _dec(value):
 @login_required
 def manage_campaigns(request):
     """Campaigns builder page (admin only)."""
-    if not _is_admin(request):
+    if not _can_manage(request):
         messages.error(request, "You do not have permission to access campaigns.")
         return redirect("clients:admin_dashboard")
 
@@ -75,7 +77,7 @@ def manage_campaigns(request):
 @login_required
 @require_POST
 def add_campaign(request):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     try:
         data = json.loads(request.body)
@@ -118,7 +120,7 @@ def add_campaign(request):
 @login_required
 @require_POST
 def update_campaign(request, campaign_id):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     campaign = get_object_or_404(Campaign, id=campaign_id)
     try:
@@ -166,7 +168,7 @@ def update_campaign(request, campaign_id):
 @login_required
 @require_POST
 def delete_campaign(request, campaign_id):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     campaign = get_object_or_404(Campaign, id=campaign_id)
     name = campaign.name
@@ -178,7 +180,7 @@ def delete_campaign(request, campaign_id):
 @login_required
 @require_POST
 def add_campaign_product(request, campaign_id):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     campaign = get_object_or_404(Campaign, id=campaign_id)
     try:
@@ -236,7 +238,7 @@ def add_campaign_product(request, campaign_id):
 @login_required
 @require_POST
 def update_campaign_product(request, product_id):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     cp = get_object_or_404(CampaignProduct, id=product_id)
     try:
@@ -262,7 +264,7 @@ def update_campaign_product(request, product_id):
 @login_required
 @require_POST
 def delete_campaign_product(request, product_id):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     cp = get_object_or_404(CampaignProduct, id=product_id)
     name = cp.product_ref.name
@@ -274,7 +276,7 @@ def delete_campaign_product(request, product_id):
 @login_required
 @require_POST
 def add_campaign_slab(request, product_id):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     cp = get_object_or_404(CampaignProduct, id=product_id)
     try:
@@ -308,7 +310,7 @@ def add_campaign_slab(request, product_id):
 @login_required
 @require_POST
 def update_campaign_slab(request, slab_id):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     slab = get_object_or_404(CampaignSlab, id=slab_id)
     try:
@@ -335,7 +337,7 @@ def update_campaign_slab(request, slab_id):
 @login_required
 @require_POST
 def delete_campaign_slab(request, slab_id):
-    if not _is_admin(request):
+    if not _can_manage(request):
         return JsonResponse({"error": "Permission denied"}, status=403)
     slab = get_object_or_404(CampaignSlab, id=slab_id)
     slab.delete()

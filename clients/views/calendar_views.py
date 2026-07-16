@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 
 
+from .. import permissions
 from ..models import CalendarEvent, Client
 from ..services import calendar_feed
 from .helpers import throttle_view
@@ -102,8 +103,7 @@ def dashboard_agenda_json(request):
     emp = getattr(request.user, "employee", None)
     if emp is None:
         return JsonResponse({"items": [], "week_dates": [], "today": ""})
-    role = getattr(emp, "role", "")
-    is_admin = request.user.is_superuser or role in ("admin", "manager")
+    is_admin = permissions.is_admin_or_manager(request.user)
     employee_id = request.GET.get("employee_id") if is_admin else None
 
     now_ts = timezone.now()

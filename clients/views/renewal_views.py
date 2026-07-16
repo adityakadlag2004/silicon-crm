@@ -10,6 +10,7 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from .. import permissions
 from ..forms import EditRenewalForm, RenewalForm
 from ..models import Client, Renewal, Product
 from .helpers import parse_date_param
@@ -71,7 +72,7 @@ def quick_add_client_for_renewal(request):
 def add_renewal(request, client_id=None):
 	client = get_object_or_404(Client, id=client_id) if client_id else None
 	user_emp = getattr(request.user, "employee", None)
-	is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+	is_admin_user = permissions.is_admin(request.user)
 
 	if request.method == "POST":
 		form = RenewalForm(request.POST)
@@ -132,7 +133,7 @@ def all_renewals(request):
 
 	if user_emp and user_emp.role == "employee":
 		renewals_qs = renewals_qs.filter(employee=user_emp)
-	elif is_manager and manager_access and not manager_access.allow_view_all_sales:
+	elif is_manager and not permissions.can(request.user, "view_all_sales"):
 		renewals_qs = renewals_qs.filter(employee=user_emp)
 
 	scoped_qs = renewals_qs
@@ -205,7 +206,7 @@ def all_renewals(request):
 		"renewals": page_obj,
 		"is_employee": bool(user_emp and user_emp.role == "employee"),
 		"is_manager": is_manager,
-		"manager_can_edit": bool(is_manager and manager_access and manager_access.allow_edit_sales),
+		"manager_can_edit": bool(is_manager and permissions.can(request.user, "edit_sales")),
 		"qstring": qstring,
 		"today_submission_total": today_submission_total,
 		"today_submission_count": today_submission_count,
@@ -224,13 +225,13 @@ def all_renewals(request):
 def edit_renewal(request, renewal_id):
 	renewal = get_object_or_404(Renewal, id=renewal_id)
 	user_emp = getattr(request.user, "employee", None)
-	is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+	is_admin_user = permissions.is_admin(request.user)
 	is_manager = bool(user_emp and user_emp.role == "manager")
 	mgr_access = get_manager_access() if is_manager else None
 
 	if (
 		not is_admin_user
-		and not (is_manager and mgr_access and mgr_access.allow_edit_sales)
+		and not permissions.can(request.user, "edit_sales")
 		and (not user_emp or renewal.employee_id != user_emp.id)
 	):
 		return HttpResponseForbidden("You do not have permission to edit this renewal.")
@@ -261,7 +262,7 @@ def edit_renewal(request, renewal_id):
 def delete_renewal(request, renewal_id):
 	renewal = get_object_or_404(Renewal, id=renewal_id)
 	user_emp = getattr(request.user, "employee", None)
-	is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+	is_admin_user = permissions.is_admin(request.user)
 
 	if not is_admin_user and (not user_emp or renewal.employee_id != user_emp.id):
 		return HttpResponseForbidden("You do not have permission to delete this renewal.")

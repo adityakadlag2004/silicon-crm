@@ -12,6 +12,7 @@ from django.core.paginator import Paginator
 from django.urls import reverse
 from django.conf import settings
 
+from .. import permissions
 from ..models import Client, Employee, MessageTemplate, Product, Renewal, Sale
 from ..forms import ClientForm, ClientReassignForm
 from ..services.google_drive import DriveNotConfigured, get_or_create_client_folder
@@ -346,7 +347,7 @@ def edit_client(request, client_id):
 
     user_emp = getattr(request.user, "employee", None)
     role = getattr(user_emp, "role", None)
-    is_admin = request.user.is_superuser or role == "admin"
+    is_admin = permissions.is_admin(request.user)
     is_employee = bool(user_emp and role == "employee")
     if is_employee and client.mapped_to != user_emp:
         messages.error(request, "You can edit only your assigned clients.")
@@ -464,7 +465,7 @@ def search_clients(request):
 
 
 def _is_admin(user):
-    return hasattr(user, "employee") and user.employee.role == "admin"
+    return permissions.is_admin(user)
 
 
 @user_passes_test(_is_admin)
@@ -493,7 +494,7 @@ def map_client(request, client_id):
 @login_required
 def client_analysis(request):
     user_emp = getattr(request.user, "employee", None)
-    if request.user.is_superuser or (user_emp and user_emp.role == "admin"):
+    if permissions.is_admin(request.user):
         clients = Client.objects.all()
     elif user_emp:
         clients = Client.objects.filter(mapped_to=user_emp)
@@ -572,7 +573,7 @@ def client_reassign_view(request, client_id):
 @login_required
 def bulk_reassign_view(request):
     emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (emp and emp.role in ("admin", "manager"))):
+    if not permissions.is_admin_or_manager(request.user):
         return redirect("clients:employee_dashboard")
 
     employees = Employee.objects.filter(active=True).select_related("user")

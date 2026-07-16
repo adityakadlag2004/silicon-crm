@@ -2,13 +2,9 @@
 pipeline: import dashboard, ARN account management, folio↔client linking and
 the imported transaction ledger. Business logic lives in services/rta_feed.py.
 """
-from functools import wraps
-
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
-from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -20,18 +16,8 @@ from ..models import (
     RTAFeedImport,
     RTA_CHOICES,
 )
+from ..permissions import admin_required as _admin_required
 from ..services import rta_feed
-
-
-def _admin_required(view_func):
-    @wraps(view_func)
-    @login_required
-    def wrapped(request, *args, **kwargs):
-        emp = getattr(request.user, "employee", None)
-        if not (request.user.is_superuser or (emp and emp.role == "admin")):
-            return HttpResponseForbidden("Admins only.")
-        return view_func(request, *args, **kwargs)
-    return wrapped
 
 
 @_admin_required

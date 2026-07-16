@@ -16,6 +16,7 @@ from django.db.models import Sum, Count, Q
 
 from django.db.models import Max
 
+from .. import permissions
 from ..models import AuditLog, Client, Sale, Employee, ManagerAccessConfig
 from ..forms import EmployeeCreateForm, EmployeeDeactivateForm
 
@@ -35,8 +36,7 @@ def _next_employee_number():
 
 
 def _is_admin(request):
-    user_emp = getattr(request.user, "employee", None)
-    return request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    return permissions.is_admin(request.user)
 
 
 @login_required

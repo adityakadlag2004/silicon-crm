@@ -20,6 +20,9 @@ from ..models import (
     Employee,
     ManagerAccessConfig,
 )
+# canonical definition lives in clients/permissions.py; re-exported here
+# because many view modules import it from helpers
+from ..permissions import is_admin  # noqa: F401
 
 
 def get_manager_access():
@@ -46,10 +49,6 @@ def _parse_decimal(val):
         return d if d >= 0 else None
     except Exception:
         return None
-
-
-def is_admin(user):
-    return hasattr(user, "employee") and user.employee.role == "admin"
 
 
 def _last_n_months(today, n=12):

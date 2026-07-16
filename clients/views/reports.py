@@ -12,6 +12,7 @@ from django.http import HttpResponseForbidden
 from django.db.models import Sum, Q, Count
 from django.utils.timezone import now
 
+from .. import permissions
 from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
     Renewal,
@@ -205,12 +206,11 @@ def business_overview(request):
     product mix + employee leaderboard (admins/managers). Mirrors the native
     'Business Overview' screen."""
     emp = getattr(request.user, "employee", None)
-    is_admin = request.user.is_superuser or (emp and emp.role == "admin")
-    if not (is_admin or (emp and emp.role == "manager")):
+    is_admin = permissions.is_admin(request.user)
+    if not permissions.is_admin_or_manager(request.user):
         return HttpResponseForbidden("Access denied")
 
-    firm_wide = bool(is_admin or (emp and emp.role == "manager"
-                                  and get_manager_access().allow_employee_performance))
+    firm_wide = permissions.can(request.user, "employee_performance")
 
     base = Sale.objects.filter(status="approved")
     if not firm_wide and emp:
@@ -381,12 +381,12 @@ def past_month_performance(request, year, month):
 @login_required
 def admin_past_performance(request, n_months=12):
     emp = getattr(request.user, "employee", None)
-    is_admin = bool(emp and emp.role == "admin")
+    is_admin = permissions.is_admin(request.user)
     is_manager = bool(emp and emp.role == "manager")
     mgr_access = get_manager_access() if is_manager else None
     if not (is_admin or is_manager):
         return HttpResponseForbidden("Admins or managers only.")
-    if is_manager and not (mgr_access and mgr_access.allow_employee_performance):
+    if is_manager and not permissions.can(request.user, "employee_performance"):
         return HttpResponseForbidden("Manager not allowed to view performance.")
 
     today = now().date()
@@ -498,10 +498,10 @@ def admin_past_performance(request, n_months=12):
 @login_required
 def admin_past_month_performance(request, year, month):
     emp = getattr(request.user, "employee", None)
-    is_admin_user = request.user.is_superuser or (emp and emp.role == "admin")
+    is_admin_user = permissions.is_admin(request.user)
     is_manager = bool(emp and emp.role == "manager")
     mgr_access = get_manager_access() if is_manager else None
-    if not (is_admin_user or (is_manager and mgr_access and mgr_access.allow_employee_performance)):
+    if not permissions.can(request.user, "employee_performance"):
         return HttpResponseForbidden("Access denied.")
 
     product_sales = (
@@ -627,7 +627,7 @@ def admin_past_month_performance(request, year, month):
 @login_required
 def monthly_business_report(request):
     emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (emp and emp.role in ("admin", "manager"))):
+    if not permissions.is_admin_or_manager(request.user):
         return HttpResponseForbidden("Access denied")
 
     today = date.today()
@@ -909,10 +909,7 @@ def _parse_expense_post(request):
 
 def _is_ba_admin(request):
     """Analytics pages (Business Analytics) are admin-only."""
-    if request.user.is_superuser:
-        return True
-    emp = getattr(request.user, "employee", None)
-    return bool(emp and emp.role == "admin")
+    return permissions.is_admin(request.user)
 
 
 @login_required

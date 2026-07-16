@@ -15,6 +15,7 @@ from django.db import transaction
 from django.db.models import Sum, Q, Count
 from django.core.paginator import Paginator
 
+from .. import permissions
 from ..models import (
     Client,
     Employee,
@@ -134,8 +135,7 @@ def lead_bulk_import(request):
     if not (request.user.is_superuser or emp):
         return HttpResponseForbidden()
 
-    role = getattr(emp, "role", "") if emp else ""
-    is_admin_or_manager = request.user.is_superuser or role in ("admin", "manager")
+    is_admin_or_manager = permissions.is_admin_or_manager(request.user)
     active_employees = list(
         Employee.objects.filter(active=True)
         .select_related("user")
@@ -248,8 +248,8 @@ def lead_management(request):
     base_qs = _lead_queryset_for_request(request)
     emp = getattr(request.user, "employee", None)
     role = getattr(emp, "role", "")
-    show_my_tab = role in ["admin", "manager"]
-    can_see_stats = role in ["admin", "manager"] or request.user.is_superuser
+    show_my_tab = permissions.is_admin_or_manager(request.user)
+    can_see_stats = show_my_tab
 
     view_mode = request.GET.get("view", "current")
     if view_mode == "my" and show_my_tab:
@@ -486,7 +486,7 @@ def lead_followup_reschedule(request, followup_id):
 @login_required
 def lead_progress_overview_admin(request):
     emp = getattr(request.user, "employee", None)
-    if not (request.user.is_superuser or (emp and getattr(emp, "role", "") in ["admin", "manager"])):
+    if not permissions.is_admin_or_manager(request.user):
         return HttpResponseForbidden()
 
     base_qs = Lead.objects.filter(is_discarded=False).select_related("assigned_to__user")

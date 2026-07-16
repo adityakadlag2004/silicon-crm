@@ -15,6 +15,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
+from .. import permissions
 from ..models import (
     CallFollowUp,
     Client,
@@ -33,8 +34,7 @@ def _emp(request):
 
 
 def _is_admin(request):
-    emp = _emp(request)
-    return request.user.is_superuser or (emp is not None and emp.role == "admin")
+    return permissions.is_admin(request.user)
 
 
 def _money(value):
@@ -523,10 +523,10 @@ def app_sales(request):
     is_admin = _is_admin(request)
     is_manager = bool(emp and emp.role == "manager")
     access = get_manager_access() if is_manager else None
-    can_approve = is_admin or bool(access and access.allow_approve_sales)
+    can_approve = permissions.can(request.user, "approve_sales")
 
     qs = Sale.objects.select_related("client", "employee__user").order_by("-date", "-created_at")
-    if not is_admin and not (is_manager and access and access.allow_view_all_sales):
+    if not permissions.can(request.user, "view_all_sales"):
         qs = qs.filter(employee=emp) if emp else qs.none()
 
     status = request.GET.get("status", "")
@@ -577,7 +577,7 @@ def app_sale_action(request, sale_id):
     is_admin = _is_admin(request)
     is_manager = bool(emp and emp.role == "manager")
     access = get_manager_access() if is_manager else None
-    if not (is_admin or (access and access.allow_approve_sales)):
+    if not permissions.can(request.user, "approve_sales"):
         return JsonResponse({"ok": False, "error": "No permission."}, status=403)
 
     sale = get_object_or_404(Sale, pk=sale_id)
@@ -823,8 +823,7 @@ def _lead_qs(request):
 
 
 def _can_assign_leads(request):
-    emp = _emp(request)
-    return request.user.is_superuser or (emp and emp.role in ("admin", "manager"))
+    return permissions.is_admin_or_manager(request.user)
 
 
 @login_required
@@ -1105,7 +1104,7 @@ def app_report_summary(request):
     emp = _emp(request)
     is_admin = _is_admin(request)
     is_manager = bool(emp and emp.role == "manager")
-    firm_wide = is_admin or (is_manager and get_manager_access().allow_employee_performance)
+    firm_wide = permissions.can(request.user, "employee_performance")
 
     base = Sale.objects.filter(status=Sale.STATUS_APPROVED)
     if not firm_wide:
@@ -1832,10 +1831,10 @@ from calendar import month_name as _month_name  # noqa: E402
 def _reports_allowed(request):
     """Admin/superuser, or manager with employee-performance access."""
     emp = _emp(request)
-    if request.user.is_superuser or (emp and emp.role == "admin"):
+    if permissions.is_admin(request.user):
         return True, True  # allowed, firm_wide
     if emp and emp.role == "manager":
-        return bool(get_manager_access().allow_employee_performance), True
+        return permissions.can(request.user, "employee_performance"), True
     return True, False  # plain employee: allowed, own-scope only
 
 

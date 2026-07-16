@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from ..forms import validate_pan
+from .. import permissions
 from ..models import Client
 from ..services import client_merge, rta_feed
 
@@ -28,7 +29,7 @@ def _role(request):
 
 
 def _is_admin(request):
-    return request.user.is_superuser or _role(request) == "admin"
+    return permissions.is_admin(request.user)
 
 
 def _missing_pan_qs(request):

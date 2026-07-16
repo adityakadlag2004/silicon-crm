@@ -15,6 +15,7 @@ from django.db.models import Q, Sum
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 
+from .. import permissions
 from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Product
 from ..forms import AdminSaleForm, EditSaleForm, SaleForm
 from .helpers import get_manager_access, parse_date_param
@@ -59,10 +60,7 @@ def _sale_product_meta():
 @login_required
 def add_sale(request):
     product_meta = _sale_product_meta()
-    is_admin_user = request.user.is_superuser or (
-        hasattr(request.user, "employee")
-        and getattr(request.user.employee, "role", "") == "admin"
-    )
+    is_admin_user = permissions.is_admin(request.user)
     if request.method == "POST":
         form = AdminSaleForm(request.POST)
         if form.is_valid():
@@ -178,7 +176,7 @@ def all_sales(request):
 
     if hasattr(request.user, "employee") and request.user.employee.role == "employee":
         sales_qs = sales_qs.filter(employee=request.user.employee)
-    elif is_manager and manager_access and not manager_access.allow_view_all_sales:
+    elif is_manager and not permissions.can(request.user, "view_all_sales"):
         sales_qs = sales_qs.filter(employee=request.user.employee)
 
     product = request.GET.get("product")
@@ -234,7 +232,7 @@ def all_sales(request):
         "sales": page_obj,
         "is_employee": hasattr(request.user, "employee") and request.user.employee.role == "employee",
         "is_manager": is_manager,
-        "manager_can_edit": bool(is_manager and manager_access and manager_access.allow_edit_sales),
+        "manager_can_edit": bool(is_manager and permissions.can(request.user, "edit_sales")),
         "qstring": qstring,
         "q": q,
         "status": status,
@@ -246,7 +244,7 @@ def all_sales(request):
 @login_required
 def admin_add_sale(request):
     user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+    if not permissions.is_admin(request.user):
         return redirect("clients:employee_dashboard")
 
     if request.method == "POST":
@@ -275,11 +273,11 @@ def admin_add_sale(request):
 @login_required
 def approve_sales(request):
     user_emp = getattr(request.user, "employee", None)
-    is_admin = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    is_admin = permissions.is_admin(request.user)
     is_manager = bool(user_emp and user_emp.role == "manager")
     manager_access = get_manager_access() if is_manager else None
 
-    if not (is_admin or (manager_access and manager_access.allow_approve_sales)):
+    if not permissions.can(request.user, "approve_sales"):
         return HttpResponseForbidden("You do not have permission to approve sales.")
 
     if request.method == "POST":
@@ -314,7 +312,7 @@ def approve_sales(request):
     sales_qs = Sale.objects.filter(status=Sale.STATUS_PENDING).select_related(
         "client", "employee__user", "product_ref"
     )
-    if manager_access and not manager_access.allow_view_all_sales:
+    if is_manager and not permissions.can(request.user, "view_all_sales"):
         sales_qs = sales_qs.filter(employee=user_emp)
     if employee_filter:
         sales_qs = sales_qs.filter(
@@ -347,8 +345,7 @@ def approve_sales(request):
 @login_required
 def manage_incentive_rules(request):
     """Full incentive rules builder/modifier page."""
-    user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+    if not permissions.can(request.user, "manage_incentives"):
         messages.error(request, "You do not have permission to access incentive rules.")
         return redirect("clients:admin_dashboard")
 
@@ -373,8 +370,7 @@ def manage_incentive_rules(request):
 @require_POST
 def update_incentive_rule(request, rule_id):
     """AJAX: Update unit_amount, points_per_unit, active for a rule."""
-    user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+    if not permissions.can(request.user, "manage_incentives"):
         return JsonResponse({"error": "Permission denied"}, status=403)
 
     rule = get_object_or_404(IncentiveRule, id=rule_id)
@@ -416,8 +412,7 @@ def update_incentive_rule(request, rule_id):
 @require_POST
 def add_incentive_rule(request):
     """AJAX: Add a new incentive rule."""
-    user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+    if not permissions.can(request.user, "manage_incentives"):
         return JsonResponse({"error": "Permission denied"}, status=403)
 
     try:
@@ -481,8 +476,7 @@ def add_incentive_rule(request):
 @require_POST
 def delete_incentive_rule(request, rule_id):
     """AJAX: Delete an incentive rule and all its slabs."""
-    user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+    if not permissions.can(request.user, "manage_incentives"):
         return JsonResponse({"error": "Permission denied"}, status=403)
 
     rule = get_object_or_404(IncentiveRule, id=rule_id)
@@ -495,8 +489,7 @@ def delete_incentive_rule(request, rule_id):
 @require_POST
 def add_incentive_slab(request, rule_id):
     """AJAX: Add a slab to a rule."""
-    user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+    if not permissions.can(request.user, "manage_incentives"):
         return JsonResponse({"error": "Permission denied"}, status=403)
 
     rule = get_object_or_404(IncentiveRule, id=rule_id)
@@ -533,8 +526,7 @@ def add_incentive_slab(request, rule_id):
 @require_POST
 def update_incentive_slab(request, slab_id):
     """AJAX: Update an existing slab."""
-    user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+    if not permissions.can(request.user, "manage_incentives"):
         return JsonResponse({"error": "Permission denied"}, status=403)
 
     slab = get_object_or_404(IncentiveSlab, id=slab_id)
@@ -557,8 +549,7 @@ def update_incentive_slab(request, slab_id):
 @require_POST
 def delete_incentive_slab(request, slab_id):
     """AJAX: Delete a slab."""
-    user_emp = getattr(request.user, "employee", None)
-    if not request.user.is_superuser and (not user_emp or user_emp.role != "admin"):
+    if not permissions.can(request.user, "manage_incentives"):
         return JsonResponse({"error": "Permission denied"}, status=403)
 
     slab = get_object_or_404(IncentiveSlab, id=slab_id)
@@ -573,11 +564,11 @@ def recalc_points(request):
     (retroactively changes payouts), so it is POST-only and never open to
     plain employees."""
     user_emp = getattr(request.user, "employee", None)
-    is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    is_admin_user = permissions.is_admin(request.user)
     is_manager = bool(user_emp and user_emp.role == "manager")
     manager_access = get_manager_access() if is_manager else None
 
-    if not (is_admin_user or (manager_access and manager_access.allow_recalc_points)):
+    if not permissions.can(request.user, "recalc_points"):
         return HttpResponseForbidden("You do not have permission to recalculate points.")
 
     count = 0
@@ -593,12 +584,12 @@ def recalc_points(request):
 def edit_sale(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
     user_emp = getattr(request.user, "employee", None)
-    is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    is_admin_user = permissions.is_admin(request.user)
     is_manager = bool(user_emp and user_emp.role == "manager")
     mgr_access = get_manager_access() if is_manager else None
     if (
         not is_admin_user
-        and not (is_manager and mgr_access and mgr_access.allow_edit_sales)
+        and not permissions.can(request.user, "edit_sales")
         and (not user_emp or sale.employee != user_emp)
     ):
         return HttpResponseForbidden("You do not have permission to edit this sale.")
@@ -635,7 +626,7 @@ def edit_sale(request, sale_id):
 def delete_sale(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
     user_emp = getattr(request.user, "employee", None)
-    is_admin_user = request.user.is_superuser or (user_emp and user_emp.role == "admin")
+    is_admin_user = permissions.is_admin(request.user)
     if not is_admin_user and (not user_emp or sale.employee != user_emp):
         return HttpResponseForbidden("You do not have permission to delete this sale.")
     # Non-admins may only withdraw their own sales while still pending;
