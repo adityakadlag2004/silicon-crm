@@ -620,3 +620,16 @@ class KfinLinkAndFormatTests(TestCase):
         self.assertEqual(feed_import.rows_imported, 1)
         self.assertEqual(MutualFundTransaction.objects.count(), 0)
         self.assertEqual(MutualFundFolio.objects.count(), 1)
+
+
+    def test_mfsd201_dbf_variant_headers_map_as_transactions(self):
+        # Real header set from the MFSD201 DBF variant (W0T592.dbf, 2026-07-16)
+        headers = ["FMCODE", "TD_FUND", "TD_ACNO", "FUNDDESC", "TD_TRNO", "INVNAME",
+                   "TD_TRDT", "TD_UNITS", "TD_AMT", "TD_BROKER", "TRDESC", "TD_TRTYPE",
+                   "TD_NAV", "PAN1", "SUBARNCODE"]
+        hm = rta_feed._build_header_map(headers)
+        self.assertEqual(hm["folio"], "TD_ACNO")
+        self.assertEqual(hm["txn_type"], "TRDESC")
+        self.assertEqual(hm["broker"], "TD_BROKER")
+        self.assertEqual(hm["sub_broker"], "SUBARNCODE")
+        self.assertEqual(hm["trade_date"], "TD_TRDT")
