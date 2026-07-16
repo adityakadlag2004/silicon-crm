@@ -139,12 +139,51 @@ def _read_delimited(data):
     return list(reader.fieldnames or []), rows
 
 
+def _decrypt_office(data):
+    """Decrypt a password-protected Excel workbook (legacy XLS or OOXML
+    inside OLE2) with the configured password candidates.
+
+    Returns decrypted bytes, None if the file isn't encrypted, or raises
+    ValueError when it is encrypted but no candidate opens it (CAMS protects
+    its Systematic Registration Status report this way)."""
+    import msoffcrypto
+    from msoffcrypto.exceptions import DecryptionError, InvalidKeyError
+
+    office = msoffcrypto.OfficeFile(io.BytesIO(data))
+    try:
+        if not office.is_encrypted():
+            return None
+    except Exception:  # noqa: BLE001 — treat unreadable metadata as not encrypted
+        return None
+    for pw in _password_candidates():
+        if not pw:
+            continue
+        try:
+            office = msoffcrypto.OfficeFile(io.BytesIO(data))
+            office.load_key(password=pw)
+            out = io.BytesIO()
+            office.decrypt(out)
+            return out.getvalue()
+        except (DecryptionError, InvalidKeyError, Exception):  # noqa: BLE001
+            continue
+    raise ValueError(
+        "Encrypted Excel workbook — none of the configured passwords opened it. "
+        "Add the file password to RTA_FEED_ZIP_PASSWORDS, or ignore if this is "
+        "an AMC rejection notice."
+    )
+
+
 def _excel_rows(file_name, data):
     """Yield rows (lists of cell values) from the first sheet of an Excel file.
 
     The engine is picked from the file's magic bytes, not its extension —
     KFintech routinely names xlsx content ".xls" (zip magic PK.. = xlsx,
-    OLE2 magic = real legacy xls)."""
+    OLE2 magic = real legacy xls). Password-protected workbooks are
+    decrypted first with the configured password candidates."""
+    if data[:4] == b"\xd0\xcf\x11\xe0":
+        decrypted = _decrypt_office(data)
+        if decrypted is not None:
+            data = decrypted
     if data[:4] == b"PK\x03\x04" or file_name.lower().endswith(".xlsx"):
         import openpyxl
 
@@ -161,9 +200,7 @@ def _excel_rows(file_name, data):
     try:
         book = xlrd.open_workbook(file_contents=data)
     except xlrd.biffh.XLRDError as exc:
-        # OLE2 container without a readable workbook = password-protected
-        # workbook (some AMC rejection notices). Not worth a decryption
-        # dependency — rejection rows are skipped even when readable.
+        # e.g. an OLE2 wrapper msoffcrypto couldn't see through
         raise ValueError(
             "Encrypted or unsupported Excel workbook. AMC rejection notices "
             "can be ignored; if this is a data feed, request CSV or DBF format."
