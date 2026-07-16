@@ -633,3 +633,94 @@ class KfinLinkAndFormatTests(TestCase):
         self.assertEqual(hm["broker"], "TD_BROKER")
         self.assertEqual(hm["sub_broker"], "SUBARNCODE")
         self.assertEqual(hm["trade_date"], "TD_TRDT")
+
+
+class SipRegisterTests(TestCase):
+    """SIP register: registration reports route to SipRegistration (never the
+    transaction ledger), upserts are idempotent, cease transitions notify
+    admins, and the screen is admin-only."""
+
+    CAMS_REG_CSV = (
+        "FUNDNAME,FOLIO_NO,PAN,SCHEME_NAME,ARN_CODE,SUB_BROKER_ARN,INVESTOR_NAME,"
+        "AMOUNT,TRANSACTION_TYPE,FROM_DATE,TO_DATE,NO_OF_INSTALMENTS,REGISTRATIONDATE\n"
+        "ICICI Prudential,45375976,ELPPK1234F,Agressive Hybrid,ARN-777,,Paresh K,"
+        "2000,SIP,2026-07-10,2065-09-10,471,2026-06-15\n"
+    ).encode()
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth.models import User
+        cls.admin_user = User.objects.create_user(username="sip_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="sip_emp", password="x")
+        Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+        ArnAccount.objects.create(label="Direct", arn_code="ARN-777")
+
+    def _import(self, name="Systematic_Registration_Status_P_11-Jul-2026.csv", data=None):
+        return rta_feed.import_feed_container(name, data or self.CAMS_REG_CSV, source="upload")
+
+    def test_registration_file_creates_register_rows_not_transactions(self):
+        from clients.models import SipRegistration
+        feed_import = self._import()
+        self.assertEqual(feed_import.status, RTAFeedImport.STATUS_PROCESSED)
+        self.assertEqual(feed_import.rows_imported, 1)
+        self.assertEqual(MutualFundTransaction.objects.count(), 0)
+        reg = SipRegistration.objects.get()
+        self.assertEqual(reg.folio_number, "45375976")
+        self.assertEqual(str(reg.amount), "2000.00")
+        self.assertEqual(reg.txn_type, "SIP")
+        self.assertEqual(str(reg.start_date), "2026-07-10")
+        self.assertEqual(reg.installments, 471)
+        self.assertEqual(reg.broker_code, "ARN-777")
+        self.assertIsNotNone(reg.arn)
+        self.assertEqual(reg.status, SipRegistration.STATUS_ACTIVE)
+
+    def test_reimport_is_idempotent(self):
+        from clients.models import SipRegistration
+        self._import()
+        # next day's report repeats the same registration (different file bytes)
+        feed_import = self._import(
+            name="Systematic_Registration_Status_P_12-Jul-2026.csv",
+            data=self.CAMS_REG_CSV + b"\n",
+        )
+        self.assertEqual(SipRegistration.objects.count(), 1)
+        self.assertEqual(feed_import.rows_duplicate, 1)
+
+    def test_cease_status_notifies_admins(self):
+        from clients.models import Notification, SipRegistration
+        self._import()
+        ceased_csv = self.CAMS_REG_CSV.replace(
+            b"REGISTRATIONDATE\n", b"REGISTRATIONDATE,STATUS\n"
+        ).replace(b",2026-06-15\n", b",2026-06-15,Ceased\n")
+        self._import(name="Systematic_Registration_Status_P_13-Jul-2026.csv", data=ceased_csv)
+        reg = SipRegistration.objects.get()
+        self.assertEqual(reg.status, SipRegistration.STATUS_CEASED)
+        self.assertIsNotNone(reg.ceased_on)
+        note = Notification.objects.get(recipient=self.admin_user)
+        self.assertIn("SIP ceased", note.title)
+
+    def test_mfsd243_routes_by_filename(self):
+        from clients.models import SipRegistration
+        data = (
+            "FOLIO,SCHEME,AMOUNT,FROMDATE,STATUS\n"
+            "777999,Axis Small Cap,1500,01/07/2026,Active\n"
+        ).encode()
+        feed_import = rta_feed.import_feed_container(
+            "MFSD243_WSREG1_1.csv", data, source="upload")
+        self.assertEqual(SipRegistration.objects.count(), 1)
+        self.assertIn("SIP register", feed_import.notes)
+
+    def test_screen_admin_only(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        self.assertEqual(c.get(reverse("clients:mf_sips")).status_code, 200)
+        c2 = TestClient()
+        c2.force_login(self.emp_user)
+        self.assertEqual(c2.get(reverse("clients:mf_sips")).status_code, 403)
+
+    def test_pan_links_client(self):
+        from clients.models import SipRegistration
+        client = Client.objects.create(name="Paresh K", pan="ELPPK1234F")
+        self._import()
+        reg = SipRegistration.objects.get()
+        self.assertEqual(reg.client_id, client.id)

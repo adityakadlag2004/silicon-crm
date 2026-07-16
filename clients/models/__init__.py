@@ -92,4 +92,5 @@ from .mf import (  # noqa: F401
     MutualFundFolio,
     MutualFundTransaction,
     RTAFeedImport,
+    SipRegistration,
 )

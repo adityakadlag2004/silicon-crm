@@ -63,17 +63,40 @@ FIELD_ALIASES = {
 _DATE_FORMATS = ("%d-%b-%Y", "%d-%b-%y", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d",
                  "%d/%m/%y", "%m/%d/%Y", "%d %b %Y")
 
+# Column aliases for SIP/STP/SWP *registration* reports (CAMS 'Systematic
+# Registration Status', KFintech MFSD243). Written from the real CAMS file
+# of 2026-07-11; KFintech names get extended when its first file lands.
+SIP_FIELD_ALIASES = {
+    "folio": FIELD_ALIASES["folio"],
+    "pan": FIELD_ALIASES["pan"],
+    "investor_name": FIELD_ALIASES["investor_name"],
+    "amc": FIELD_ALIASES["amc"],
+    "scheme": ["SCHEMENAME", "SCHEME", "FUNDDESC", "SCHNAME", "SCHEMEDESC"],
+    "txn_type": ["TRANSACTIONTYPE", "TRXNTYPE", "TRNTYPE", "REGTYPE", "SIPTYPE"],
+    "amount": ["AMOUNT", "INSTALMENTAMOUNT", "INSTALLMENTAMOUNT", "SIPAMOUNT", "TDAMT"],
+    "start_date": ["FROMDATE", "STARTDATE", "SIPSTARTDATE", "REGFROMDATE"],
+    "end_date": ["TODATE", "ENDDATE", "SIPENDDATE", "REGTODATE"],
+    "registered_on": ["REGISTRATIONDATE", "REGDATE", "SIPREGDT", "REGISTEREDON"],
+    "installments": ["NOOFINSTALMENTS", "NOOFINSTALLMENTS", "INSTALMENTS", "NOOFINST"],
+    "frequency": ["FREQUENCY", "PERIODICITY", "SIPFREQUENCY"],
+    "status": ["STATUS", "SIPSTATUS", "REGSTATUS", "REGNSTATUS"],
+    "registration_ref": ["UKRN", "SIPREFNO", "REGNO", "SIPREGNO", "XSIPREGNO",
+                         "SIPREFERENCENO", "REGREFNO"],
+    "broker": FIELD_ALIASES["broker"],
+    "sub_broker": ["SUBBROKERARN", "SUBBROKERRMCODE"] + FIELD_ALIASES["sub_broker"],
+}
+
 
 def _norm_header(name):
     return re.sub(r"[^A-Z0-9]", "", str(name or "").upper())
 
 
-def _build_header_map(headers):
+def _build_header_map(headers, aliases=None):
     """{our_field: actual_header} for every alias present in `headers`."""
     normed = {_norm_header(h): h for h in headers}
     mapping = {}
-    for field, aliases in FIELD_ALIASES.items():
-        for alias in aliases:
+    for field, field_aliases in (aliases or FIELD_ALIASES).items():
+        for alias in field_aliases:
             if alias in normed:
                 mapping[field] = normed[alias]
                 break
@@ -463,6 +486,132 @@ def import_rows(rows, header_map, *, rta, feed_import):
         )
 
 
+def _parse_int(value):
+    try:
+        return int(float(str(value).replace(",", "").strip()))
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_sip_registration_file(file_name, headers):
+    """SIP/STP/SWP registration reports get routed to the SIP register, not
+    the transaction ledger (their rows are plans, not executed trades)."""
+    name = (file_name or "").upper()
+    if "MFSD243" in name or "SYSTEMATIC_REGISTRATION" in name:
+        return True
+    normed = {_norm_header(h) for h in headers}
+    return "REGISTRATIONDATE" in normed and ("FROMDATE" in normed or "NOOFINSTALMENTS" in normed)
+
+
+_CEASE_TOKENS = ("cease", "cancel", "terminat", "stop", "reject", "expire")
+
+
+def import_sip_registrations(rows, headers, *, rta, feed_import):
+    """Upsert SipRegistration rows from a registration report. A feed row
+    whose status turns to ceased/cancelled marks the registration ceased and
+    notifies the admins."""
+    from django.contrib.auth.models import User
+    from django.urls import reverse
+    from django.utils import timezone
+
+    from ..models import ArnAccount, MutualFundFolio, Notification, SipRegistration
+
+    header_map = _build_header_map(headers, SIP_FIELD_ALIASES)
+    if "folio" not in header_map:
+        feed_import.notes += (
+            f"\nSIP registration file: no folio column recognised — headers: "
+            f"{', '.join(map(str, headers))}"
+        )
+        return
+
+    accounts = list(ArnAccount.objects.filter(is_active=True))
+    pan_to_client = _client_by_pan()
+    newly_ceased = []
+
+    def get(row, field):
+        header = header_map.get(field)
+        return row.get(header) if header else None
+
+    for row in rows:
+        feed_import.rows_total += 1
+        folio_no = _clean(get(row, "folio"))[:40]
+        if not folio_no:
+            feed_import.rows_skipped += 1
+            continue
+
+        txn_type = (_clean(get(row, "txn_type")) or "SIP").upper()[:20]
+        amount = _parse_decimal(get(row, "amount"))
+        start_date = _parse_date(get(row, "start_date"))
+        scheme = _clean(get(row, "scheme"))[:200]
+        ref = _clean(get(row, "registration_ref"))[:60]
+        key = hashlib.sha1("|".join([
+            rta or "", folio_no, scheme, str(amount or ""), str(start_date or ""),
+            txn_type, ref,
+        ]).encode()).hexdigest()
+
+        status_raw = _clean(get(row, "status")).lower()
+        is_ceased = any(tok in status_raw for tok in _CEASE_TOKENS)
+        pan = _normalize_pan(_clean(get(row, "pan")))[:20]
+        broker = _clean(get(row, "broker"))[:40]
+        sub_broker = _clean(get(row, "sub_broker"))[:40]
+        arn = ArnAccount.resolve(broker, sub_broker, accounts=accounts) if broker else None
+        folio = MutualFundFolio.objects.filter(folio_number=folio_no).first()
+        client_id = (folio.client_id if folio and folio.client_id else None) or pan_to_client.get(pan)
+
+        reg, created = SipRegistration.objects.get_or_create(
+            dedupe_key=key,
+            defaults={
+                "rta": rta or "", "registration_ref": ref, "folio_number": folio_no,
+                "folio": folio, "client_id": client_id, "pan": pan,
+                "investor_name": _clean(get(row, "investor_name"))[:200],
+                "amc_name": _clean(get(row, "amc"))[:120], "scheme_name": scheme,
+                "txn_type": txn_type, "amount": amount,
+                "frequency": _clean(get(row, "frequency"))[:30],
+                "start_date": start_date,
+                "end_date": _parse_date(get(row, "end_date")),
+                "registered_on": _parse_date(get(row, "registered_on")),
+                "installments": _parse_int(get(row, "installments")),
+                "broker_code": broker, "sub_broker_code": sub_broker, "arn": arn,
+                "source_import": feed_import,
+            },
+        )
+        if created:
+            feed_import.rows_imported += 1
+            if is_ceased:
+                reg.status = SipRegistration.STATUS_CEASED
+                reg.ceased_on = timezone.localdate()
+                reg.save(update_fields=["status", "ceased_on", "updated_at"])
+        else:
+            feed_import.rows_duplicate += 1
+            changed = []
+            if is_ceased and reg.status == SipRegistration.STATUS_ACTIVE:
+                reg.status = SipRegistration.STATUS_CEASED
+                reg.ceased_on = timezone.localdate()
+                changed += ["status", "ceased_on"]
+                newly_ceased.append(reg)
+            if client_id and reg.client_id is None:
+                reg.client_id = client_id
+                changed.append("client_id")
+            if folio and reg.folio_id is None:
+                reg.folio = folio
+                changed.append("folio")
+            if changed:
+                reg.save(update_fields=changed + ["updated_at"])
+
+    if newly_ceased:
+        admins = list(User.objects.filter(employee__role="admin", employee__active=True))
+        link = reverse("clients:mf_sips") + "?tab=ceased"
+        for reg in newly_ceased:
+            who = reg.investor_name or f"folio {reg.folio_number}"
+            for admin_user in admins:
+                Notification.objects.create(
+                    recipient=admin_user,
+                    title=f"SIP ceased: {who}",
+                    body=f"{reg.scheme_name} — ₹{reg.amount or 0}/instalment reported ceased by the RTA.",
+                    link=link,
+                )
+
+
 def import_feed_container(file_name, data, *, source, rta_hint="", user=None):
     """Import one container file (zip or bare data file). Returns the
     RTAFeedImport log row; a container already imported is logged as skipped."""
@@ -493,6 +642,10 @@ def import_feed_container(file_name, data, *, source, rta_hint="", user=None):
                 rta = detect_rta(inner_name, headers, rta_hint) or detect_rta(file_name, headers, rta_hint)
                 if not feed_import.rta and rta:
                     feed_import.rta = rta
+                if _is_sip_registration_file(inner_name, headers) or _is_sip_registration_file(file_name, headers):
+                    import_sip_registrations(rows, headers, rta=rta, feed_import=feed_import)
+                    inner_notes.append(f"{inner_name}: {len(rows)} rows (SIP register)")
+                    continue
                 if "folio" not in header_map:
                     inner_notes.append(
                         f"{inner_name}: no folio column recognised — headers: {', '.join(map(str, headers))}"

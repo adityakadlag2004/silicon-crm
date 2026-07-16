@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}SIP Register{% endblock %}
+{% block page_title %}SIP Register{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mf-table { width: 100%; font-size: .85rem; border-collapse: collapse; }
+  .mf-table th, .mf-table td { padding: .45rem .5rem; border-bottom: 1px solid var(--ki-card-border, #e5e7eb); text-align: left; }
+  .mf-pill { display:inline-block; padding:.15rem .5rem; border-radius:10px; font-size:.74rem; font-weight:600; }
+  .mf-pill.active { background:#dcfce7; color:#166534; }
+  .mf-pill.ceased { background:#fee2e2; color:#b91c1c; }
+  .mf-pill.at-risk { background:#fef3c7; color:#92400e; }
+  .sip-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:.75rem; margin-bottom:1rem; }
+  .sip-tile { background:var(--ki-card-bg, #fff); border:1px solid var(--ki-card-border, #e5e7eb); border-radius:10px; padding:.7rem .9rem; }
+  .sip-tile .num { font-size:1.35rem; font-weight:700; }
+  .sip-tile .lbl { font-size:.76rem; color:var(--ki-text-muted, #6b7280); text-transform:uppercase; letter-spacing:.04em; }
+  .sip-tab { text-decoration:none; }
+  .sip-tab.on { background:#2d3748 !important; color:#fff !important; border-color:#2d3748 !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="sip-tiles">
+    <div class="sip-tile"><div class="num">{{ counts.active }}</div><div class="lbl">Active SIPs</div></div>
+    <div class="sip-tile"><div class="num">₹{{ monthly_book|floatformat:0 }}</div><div class="lbl">Monthly book (active)</div></div>
+    <div class="sip-tile"><div class="num">{{ counts.new }}</div><div class="lbl">New (30 days)</div></div>
+    <div class="sip-tile"><div class="num" style="color:#b91c1c;">{{ counts.ceased }}</div><div class="lbl">Ceased</div></div>
+    <div class="sip-tile"><div class="num" style="color:#92400e;">{{ counts.at_risk }}</div><div class="lbl">At risk (no installment 45d)</div></div>
+  </div>
+
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center;">
+    <div class="btn-group btn-group-sm">
+      <a class="ki-btn ki-btn-sm ki-btn-secondary sip-tab {% if tab == 'active' %}on{% endif %}" href="?tab=active">Active</a>
+      <a class="ki-btn ki-btn-sm ki-btn-secondary sip-tab {% if tab == 'new' %}on{% endif %}" href="?tab=new">New</a>
+      <a class="ki-btn ki-btn-sm ki-btn-secondary sip-tab {% if tab == 'at_risk' %}on{% endif %}" href="?tab=at_risk">At risk</a>
+      <a class="ki-btn ki-btn-sm ki-btn-secondary sip-tab {% if tab == 'ceased' %}on{% endif %}" href="?tab=ceased">Ceased</a>
+      <a class="ki-btn ki-btn-sm ki-btn-secondary sip-tab {% if tab == 'all' %}on{% endif %}" href="?tab=all">All</a>
+    </div>
+    <form method="get" style="display:flex;gap:.5rem;flex:1 1 260px;">
+      <input type="hidden" name="tab" value="{{ tab }}">
+      <input type="text" name="q" class="form-control form-control-sm"
+             placeholder="Search folio / investor / scheme / client / PAN…" value="{{ q }}">
+      <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-search"></i></button>
+    </form>
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+
+  <div class="ki-card">
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <table class="mf-table">
+        <thead><tr>
+          <th>Investor / Client</th><th>Scheme</th><th>Folio</th><th>Type</th>
+          <th>Amount</th><th>Start</th><th>End</th><th>Registered</th><th>RTA</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          {% for reg in page %}
+          <tr>
+            <td>
+              {% if reg.client %}
+                <a href="{% url 'clients:client_profile' reg.client.id %}">{{ reg.client.name }}</a>
+              {% else %}
+                {{ reg.investor_name|default:"—" }}
+                <span class="mf-pill" style="background:#f1f5f9;color:#475569;">unlinked</span>
+              {% endif %}
+            </td>
+            <td>{{ reg.scheme_name|truncatechars:40|default:"—" }}</td>
+            <td>{{ reg.folio_number }}</td>
+            <td>{{ reg.txn_type }}</td>
+            <td>{% if reg.amount %}₹{{ reg.amount|floatformat:0 }}{% else %}—{% endif %}</td>
+            <td>{{ reg.start_date|date:"d M Y"|default:"—" }}</td>
+            <td>{{ reg.end_date|date:"M Y"|default:"—" }}</td>
+            <td>{{ reg.registered_on|date:"d M Y"|default:"—" }}</td>
+            <td>{{ reg.get_rta_display|default:"—" }}</td>
+            <td>
+              {% if reg.status == "ceased" %}
+                <span class="mf-pill ceased">Ceased{% if reg.ceased_on %} {{ reg.ceased_on|date:"d M" }}{% endif %}</span>
+              {% elif reg.id in at_risk_ids %}
+                <span class="mf-pill at-risk">At risk</span>
+              {% else %}
+                <span class="mf-pill active">Active</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="10" class="text-muted" style="padding:1.2rem;">
+            No SIP registrations here yet. They arrive automatically with the daily
+            RTA feeds (CAMS Systematic Registration Status + KFintech MFSD243).
+          </td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if page.has_other_pages %}
+    <div style="display:flex;gap:.5rem;justify-content:center;padding:.6rem;">
+      {% if page.has_previous %}<a class="ki-btn ki-btn-sm ki-btn-secondary" href="?tab={{ tab }}&q={{ q|urlencode }}&page={{ page.previous_page_number }}">‹ Prev</a>{% endif %}
+      <span class="text-muted" style="align-self:center;font-size:.85rem;">Page {{ page.number }} / {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}<a class="ki-btn ki-btn-sm ki-btn-secondary" href="?tab={{ tab }}&q={{ q|urlencode }}&page={{ page.next_page_number }}">Next ›</a>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+{% endblock %}

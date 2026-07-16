@@ -230,3 +230,80 @@ def mf_transactions(request):
         "arn_accounts": ArnAccount.objects.all(),
         "rta_choices": RTA_CHOICES,
     })
+
+
+@_admin_required
+def mf_sips(request):
+    """SIP register: every systematic-plan registration from the RTA feeds,
+    with live tabs — active / new (30 days) / ceased / at-risk (active but
+    no installment seen in 45+ days)."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from ..models import MutualFundTransaction, SipRegistration
+
+    today = timezone.localdate()
+    month_ago = today - timedelta(days=30)
+    risk_cutoff = today - timedelta(days=45)
+
+    base = SipRegistration.objects.all()
+
+    # folios that received a systematic installment recently — anything
+    # active and older than the cutoff without one is "at risk"
+    recent_sip_folios = set(
+        MutualFundTransaction.objects.filter(trade_date__gte=risk_cutoff)
+        .filter(
+            Q(txn_type__icontains="sip") | Q(txn_type__icontains="systematic")
+            | Q(txn_type__iexact="sin")
+        )
+        .values_list("folio__folio_number", flat=True)
+    )
+    at_risk_ids = [
+        r.id for r in base.filter(status=SipRegistration.STATUS_ACTIVE,
+                                  start_date__lt=risk_cutoff)
+        if r.folio_number not in recent_sip_folios
+    ]
+
+    counts = {
+        "active": base.filter(status=SipRegistration.STATUS_ACTIVE).count(),
+        "new": base.filter(first_seen_at__date__gte=month_ago).count(),
+        "ceased": base.filter(status=SipRegistration.STATUS_CEASED).count(),
+        "at_risk": len(at_risk_ids),
+    }
+    monthly_book = base.filter(status=SipRegistration.STATUS_ACTIVE).aggregate(
+        total=Sum("amount"))["total"] or 0
+
+    tab = request.GET.get("tab", "active")
+    qs = base.select_related("client", "folio", "arn")
+    if tab == "new":
+        qs = qs.filter(first_seen_at__date__gte=month_ago)
+    elif tab == "ceased":
+        qs = qs.filter(status=SipRegistration.STATUS_CEASED)
+    elif tab == "at_risk":
+        qs = qs.filter(id__in=at_risk_ids)
+    elif tab == "all":
+        pass
+    else:
+        tab = "active"
+        qs = qs.filter(status=SipRegistration.STATUS_ACTIVE)
+
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        qs = qs.filter(
+            Q(folio_number__icontains=q) | Q(investor_name__icontains=q)
+            | Q(scheme_name__icontains=q) | Q(client__name__icontains=q)
+            | Q(pan__icontains=q)
+        )
+
+    page = Paginator(qs, 50).get_page(request.GET.get("page"))
+    return render(request, "mf/sips.html", {
+        "page_title": "SIP Register",
+        "page": page,
+        "tab": tab,
+        "q": q,
+        "counts": counts,
+        "monthly_book": monthly_book,
+        "today": today,
+        "at_risk_ids": set(at_risk_ids),
+    })

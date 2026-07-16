@@ -155,3 +155,69 @@ class RTAFeedImport(models.Model):
 
     def __str__(self):
         return f"{self.file_name} [{self.status}]"
+
+
+class SipRegistration(models.Model):
+    """One systematic-plan registration (SIP/STP/SWP) from RTA registration
+    reports — CAMS 'Systematic Registration Status' and KFintech MFSD243.
+
+    This is the firm's SIP register: new registrations arrive daily by feed,
+    an explicit cease/cancel status in a feed marks the row ceased (and
+    notifies admins), and the SIP-register screen derives 'completed'
+    (end_date passed) and 'at-risk' (active but installments stopped
+    arriving) states live.
+    """
+
+    STATUS_ACTIVE = "active"
+    STATUS_CEASED = "ceased"
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_CEASED, "Ceased"),
+    ]
+
+    rta = models.CharField(max_length=8, choices=RTA_CHOICES, blank=True, default="")
+    # KFintech carries a registration ref; CAMS registration files don't.
+    registration_ref = models.CharField(max_length=60, blank=True, default="")
+    folio_number = models.CharField(max_length=40, db_index=True)
+    folio = models.ForeignKey(MutualFundFolio, null=True, blank=True,
+                              on_delete=models.SET_NULL, related_name="sip_registrations")
+    client = models.ForeignKey("Client", null=True, blank=True,
+                               on_delete=models.SET_NULL, related_name="sip_registrations")
+    pan = models.CharField(max_length=20, blank=True, default="")
+    investor_name = models.CharField(max_length=200, blank=True, default="")
+    amc_name = models.CharField(max_length=120, blank=True, default="")
+    scheme_name = models.CharField(max_length=200, blank=True, default="")
+
+    txn_type = models.CharField(max_length=20, blank=True, default="SIP",
+                                help_text="SIP / STP / SWP as reported by the RTA")
+    amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    frequency = models.CharField(max_length=30, blank=True, default="")
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    registered_on = models.DateField(null=True, blank=True)
+    installments = models.IntegerField(null=True, blank=True)
+
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES,
+                              default=STATUS_ACTIVE, db_index=True)
+    ceased_on = models.DateField(null=True, blank=True)
+
+    arn = models.ForeignKey(ArnAccount, null=True, blank=True,
+                            on_delete=models.SET_NULL, related_name="sip_registrations")
+    broker_code = models.CharField(max_length=40, blank=True, default="")
+    sub_broker_code = models.CharField(max_length=40, blank=True, default="")
+
+    # sha1 over the identity fields so re-imported reports upsert
+    dedupe_key = models.CharField(max_length=40, unique=True)
+    source_import = models.ForeignKey(RTAFeedImport, null=True, blank=True,
+                                      on_delete=models.SET_NULL, related_name="sip_registrations")
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-registered_on", "-first_seen_at"]
+        indexes = [
+            models.Index(fields=["status", "start_date"], name="sipreg_status_start_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.txn_type} {self.scheme_name[:30]} ₹{self.amount} ({self.status})"
