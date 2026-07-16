@@ -724,3 +724,15 @@ class SipRegisterTests(TestCase):
         self._import()
         reg = SipRegistration.objects.get()
         self.assertEqual(reg.client_id, client.id)
+
+
+    def test_relink_links_sip_registrations_after_pan_added(self):
+        from clients.models import SipRegistration
+        self._import()
+        reg = SipRegistration.objects.get()
+        self.assertIsNone(reg.client_id)
+        client = Client.objects.create(name="Paresh K", pan="ELPPK1234F")
+        linked = rta_feed.relink_folios()
+        reg.refresh_from_db()
+        self.assertEqual(reg.client_id, client.id)
+        self.assertGreaterEqual(linked, 1)

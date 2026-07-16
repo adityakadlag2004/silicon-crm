@@ -674,9 +674,10 @@ def import_feed_container(file_name, data, *, source, rta_hint="", user=None):
 
 
 def relink_folios():
-    """Re-run PAN auto-linking over unlinked folios (e.g. after adding client
-    PANs). Returns the number of folios newly linked."""
-    from ..models import MutualFundFolio
+    """Re-run PAN auto-linking over unlinked folios AND unlinked SIP
+    registrations (e.g. after adding client PANs). Returns the number of
+    records newly linked."""
+    from ..models import MutualFundFolio, SipRegistration
 
     pan_to_client = _client_by_pan()
     linked = 0
@@ -685,6 +686,22 @@ def relink_folios():
         if client_id:
             folio.client_id = client_id
             folio.save(update_fields=["client_id", "updated_at"])
+            linked += 1
+
+    for reg in SipRegistration.objects.filter(client__isnull=True).select_related("folio"):
+        client_id = (
+            (reg.folio.client_id if reg.folio_id else None)
+            or pan_to_client.get(reg.pan)
+        )
+        if not client_id and not reg.folio_id:
+            # folio may have been created after the registration was imported
+            folio = MutualFundFolio.objects.filter(folio_number=reg.folio_number).first()
+            if folio:
+                reg.folio = folio
+                client_id = folio.client_id
+        if client_id:
+            reg.client_id = client_id
+            reg.save(update_fields=["client_id", "folio", "updated_at"])
             linked += 1
     return linked
 
