@@ -605,3 +605,18 @@ class KfinLinkAndFormatTests(TestCase):
         headers, rows = rta_feed.read_data_file("MFSD211_WBMST1_1.txt", data)
         self.assertIn("Folio", headers)
         self.assertEqual(rows[0]["Folio"], "99887766")
+
+
+    def test_master_file_never_creates_transactions(self):
+        # MFSD211-style investor master: no txn-type column, but unit-balance
+        # columns that match the amount/units aliases
+        data = (
+            "Product Code~Fund~Folio~Investor Name~PAN No~Units~Amount\n"
+            "1011AID~101~99887766~Suresh Patil~ABCDE1234F~120.5~50000\n"
+        ).encode()
+        feed_import = rta_feed.import_feed_container(
+            "MFSD211_WBMST2_2.txt", data, source="upload")
+        self.assertEqual(feed_import.status, RTAFeedImport.STATUS_PROCESSED)
+        self.assertEqual(feed_import.rows_imported, 1)
+        self.assertEqual(MutualFundTransaction.objects.count(), 0)
+        self.assertEqual(MutualFundFolio.objects.count(), 1)

@@ -322,6 +322,10 @@ def import_rows(rows, header_map, *, rta, feed_import):
     pan_to_client = _client_by_pan()
     unmatched_brokers = set()
     rejection_rows = 0
+    # A file with no transaction-type column is a folio/investor master
+    # (WBR9, MFSD211/311). Masters may still carry unit-balance columns that
+    # match the amount/units aliases — never turn those into transactions.
+    is_master_file = "txn_type" not in header_map
 
     def get(row, field):
         header = header_map.get(field)
@@ -387,7 +391,7 @@ def import_rows(rows, header_map, *, rta, feed_import):
         amount = _parse_decimal(get(row, "amount"))
         units = _parse_decimal(get(row, "units"), places=4)
         txn_type = _clean(get(row, "txn_type"))
-        if amount is None and units is None and not txn_type:
+        if is_master_file or (amount is None and units is None and not txn_type):
             feed_import.rows_imported += 1  # folio-master row
             continue
 
