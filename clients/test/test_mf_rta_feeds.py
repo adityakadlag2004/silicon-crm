@@ -20,7 +20,9 @@ from clients.models import (
     Employee,
     MutualFundFolio,
     MutualFundTransaction,
+    Product,
     RTAFeedImport,
+    Sale,
     RTA_CAMS,
     RTA_KFIN,
 )
@@ -270,6 +272,99 @@ class MailboxFetchTests(TestCase):
             self.assertIn("PEEK", call.args[1])
         # …and only the CAMS message gets marked Seen.
         imap.store.assert_called_once_with(b"1", "+FLAGS", "\\Seen")
+
+
+class SaleCrossCheckTests(TestCase):
+    """rta_evidence_for_sale: pending MF sales verified against feed data."""
+
+    @classmethod
+    def setUpTestData(cls):
+        user = User.objects.create_user(username="crosscheck_emp", password="x")
+        cls.emp = Employee.objects.create(user=user, role="employee", salary=0, active=True)
+        cls.sip_product = Product.objects.create(
+            name="Mutual Fund SIP", code="MF_SIP", rta_match=Product.RTA_MATCH_SIP)
+        cls.lump_product = Product.objects.create(
+            name="MF Lumpsum", code="MF_LUMP", rta_match=Product.RTA_MATCH_LUMPSUM)
+        cls.other_product = Product.objects.create(name="Health Plan", code="HP")
+        cls.client_obj = Client.objects.create(name="Rahul Sharma", pan="ABCDE1234F")
+        cls.folio = MutualFundFolio.objects.create(
+            folio_number="1234567/89", amc_name="H", pan="ABCDE1234F", client=cls.client_obj)
+
+    def _txn(self, **kw):
+        from datetime import date as d
+        defaults = dict(folio=self.folio, txn_type="Systematic Investment (SIP)",
+                        trade_date=d(2026, 7, 10), amount=5000,
+                        scheme_name="HDFC Flexi Cap", dedupe_key=str(MutualFundTransaction.objects.count()))
+        defaults.update(kw)
+        return MutualFundTransaction.objects.create(**defaults)
+
+    def _sale(self, product, amount, sale_date=None):
+        from datetime import date as d
+        return Sale.objects.create(
+            client=self.client_obj, employee=self.emp, product=product.name,
+            product_ref=product, amount=amount, date=sale_date or d(2026, 7, 8))
+
+    def test_unlinked_product_returns_none(self):
+        sale = self._sale(self.other_product, 5000)
+        self.assertIsNone(rta_feed.rta_evidence_for_sale(sale))
+
+    def test_sip_sale_matches_sip_txn(self):
+        self._txn()
+        evidence = rta_feed.rta_evidence_for_sale(self._sale(self.sip_product, 5000))
+        self.assertEqual(evidence["status"], "matched")
+        self.assertEqual(evidence["txns"][0].amount, 5000)
+
+    def test_sip_sale_does_not_match_lumpsum_txn(self):
+        self._txn(txn_type="Purchase")
+        evidence = rta_feed.rta_evidence_for_sale(self._sale(self.sip_product, 5000))
+        self.assertEqual(evidence["status"], "unmatched")
+        self.assertEqual(len(evidence["nearby"]), 1)  # still shown as context
+
+    def test_lumpsum_sale_matches_purchase(self):
+        self._txn(txn_type="Purchase", amount=100000)
+        evidence = rta_feed.rta_evidence_for_sale(self._sale(self.lump_product, 100000))
+        self.assertEqual(evidence["status"], "matched")
+
+    def test_amount_outside_tolerance_is_unmatched(self):
+        self._txn(amount=9000)
+        evidence = rta_feed.rta_evidence_for_sale(self._sale(self.sip_product, 5000))
+        self.assertEqual(evidence["status"], "unmatched")
+
+    def test_txn_outside_window_is_ignored(self):
+        from datetime import date as d
+        self._txn(trade_date=d(2026, 3, 1))
+        evidence = rta_feed.rta_evidence_for_sale(self._sale(self.sip_product, 5000))
+        self.assertEqual(evidence["status"], "unmatched")
+        self.assertEqual(evidence["nearby"], [])
+
+    def test_client_without_pan_or_folio(self):
+        stranger = Client.objects.create(name="No Pan Person")
+        sale = Sale.objects.create(client=stranger, employee=self.emp,
+                                   product="SIP", product_ref=self.sip_product, amount=5000)
+        self.assertEqual(rta_feed.rta_evidence_for_sale(sale)["status"], "no_pan")
+
+    def test_approve_screen_shows_evidence_block(self):
+        admin_user = User.objects.create_user(username="crosscheck_admin", password="x")
+        Employee.objects.create(user=admin_user, role="admin", salary=0, active=True)
+        self._txn()
+        self._sale(self.sip_product, 5000)
+        web = TestClient()
+        web.force_login(admin_user)
+        resp = web.get(reverse("clients:approve_sales"))
+        self.assertContains(resp, "Verified in RTA feed")
+        self.assertContains(resp, "HDFC Flexi Cap")
+
+    def test_product_page_saves_rta_match(self):
+        admin_user = User.objects.create_user(username="crosscheck_admin2", password="x")
+        Employee.objects.create(user=admin_user, role="admin", salary=0, active=True)
+        web = TestClient()
+        web.force_login(admin_user)
+        web.post(reverse("clients:product_management"), {
+            "action": "update", "product_id": self.other_product.id,
+            "name": "Health Plan", "code": "HP", "rta_match": "any",
+        })
+        self.other_product.refresh_from_db()
+        self.assertEqual(self.other_product.rta_match, Product.RTA_MATCH_ANY)
 
 
 class CommandTests(TestCase):

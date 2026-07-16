@@ -971,10 +971,15 @@ def product_management_page(request):
                 messages.error(request, f"Product code '{code}' already exists.")
                 return redirect("clients:product_management")
 
+            rta_match = (request.POST.get("rta_match") or "").strip()
+            if rta_match not in dict(Product.RTA_MATCH_CHOICES):
+                rta_match = Product.RTA_MATCH_NONE
+
             Product.objects.create(
                 name=name,
                 code=code,
                 domain=domain,
+                rta_match=rta_match,
                 display_order=display_order_val,
                 margin_percent=_parse_margin(request.POST.get("margin_percent")),
                 renewal_margin_percent=_parse_margin(request.POST.get("renewal_margin_percent")),
@@ -1013,16 +1018,21 @@ def product_management_page(request):
                 messages.error(request, f"Product code '{code}' already exists.")
                 return redirect("clients:product_management")
 
+            rta_match = (request.POST.get("rta_match") or "").strip()
+            if rta_match not in dict(Product.RTA_MATCH_CHOICES):
+                rta_match = product.rta_match
+
             product.name = name
             product.code = code
             product.domain = domain
+            product.rta_match = rta_match
             product.display_order = display_order_val
             product.margin_percent = _parse_margin(request.POST.get("margin_percent"), product.margin_percent)
             product.renewal_margin_percent = _parse_margin(
                 request.POST.get("renewal_margin_percent"), product.renewal_margin_percent
             )
             product.save(update_fields=[
-                "name", "code", "domain", "display_order",
+                "name", "code", "domain", "rta_match", "display_order",
                 "margin_percent", "renewal_margin_percent", "updated_at",
             ])
             messages.success(request, f"Product '{name}' updated.")

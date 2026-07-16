@@ -407,6 +407,79 @@ def relink_folios():
     return linked
 
 
+# ─── Sale ↔ RTA cross-check (Approve Sales evidence) ────────────────────────
+
+SIP_TYPE_TOKENS = ("SIP", "SYSTEMATIC")
+
+# How far around the sale date a matching RTA transaction may fall. SIPs
+# especially can start weeks after registration.
+SALE_MATCH_DAYS_BEFORE = 7
+SALE_MATCH_DAYS_AFTER = 45
+
+
+def _txn_matches_mode(txn_type, mode):
+    from ..models import Product
+
+    upper = (txn_type or "").upper()
+    if mode == Product.RTA_MATCH_SIP:
+        return any(tok in upper for tok in SIP_TYPE_TOKENS)
+    if mode == Product.RTA_MATCH_LUMPSUM:
+        return not any(tok in upper for tok in SIP_TYPE_TOKENS)
+    return True  # RTA_MATCH_ANY
+
+
+def rta_evidence_for_sale(sale):
+    """Cross-check one pending sale against imported RTA transactions.
+
+    Returns None when the sale's product isn't RTA-linked. Otherwise a dict:
+      status  — 'matched' (amount+type+window hit), 'unmatched' (nothing
+                comparable yet), or 'no_pan' (client has no PAN to match on)
+      txns    — the matching transactions (up to 5)
+      nearby  — when unmatched: the client's other feed transactions in the
+                window, so the approver still sees what the RTA reported
+    Purely advisory: approval stays a human decision.
+    """
+    from django.db.models import Q
+
+    from ..models import MutualFundFolio, MutualFundTransaction
+
+    product = getattr(sale, "product_ref", None)
+    if not product or not product.rta_match:
+        return None
+
+    evidence = {"mode": product.rta_match, "status": "no_pan", "txns": [], "nearby": []}
+    pan = _normalize_pan(getattr(sale.client, "pan", "") or "")
+    folio_filter = Q(client=sale.client)
+    if pan:
+        folio_filter |= Q(pan=pan)
+    folios = MutualFundFolio.objects.filter(folio_filter)
+    if not pan and not folios.exists():
+        return evidence
+
+    window_start = sale.date - timedelta(days=SALE_MATCH_DAYS_BEFORE)
+    window_end = sale.date + timedelta(days=SALE_MATCH_DAYS_AFTER)
+    txns = list(
+        MutualFundTransaction.objects.filter(
+            folio__in=folios, trade_date__range=(window_start, window_end)
+        ).select_related("folio").order_by("trade_date")[:200]
+    )
+
+    tolerance = max(sale.amount * Decimal("0.02"), Decimal("10"))
+    matched, nearby = [], []
+    for txn in txns:
+        type_ok = _txn_matches_mode(txn.txn_type, product.rta_match)
+        amount_ok = txn.amount is not None and abs(txn.amount - sale.amount) <= tolerance
+        if type_ok and amount_ok:
+            matched.append(txn)
+        else:
+            nearby.append(txn)
+
+    evidence["status"] = "matched" if matched else "unmatched"
+    evidence["txns"] = matched[:5]
+    evidence["nearby"] = [] if matched else nearby[:3]
+    return evidence
+
+
 # ─── Mailbox fetcher (cron) ─────────────────────────────────────────────────
 
 def fetch_from_mailbox():
