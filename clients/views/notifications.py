@@ -1,8 +1,12 @@
-"""Notification JSON endpoints for admin dashboard polling."""
+"""Notification JSON endpoints for the topbar bell.
+
+Every logged-in user has notifications (sale approvals, lead follow-up and
+event reminders, task pings) — each endpoint only ever touches
+recipient=request.user, so there is no role gate."""
 import json
 
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponseForbidden, JsonResponse
+from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 
 from ..models import Notification, PushDevice
@@ -10,8 +14,6 @@ from ..models import Notification, PushDevice
 
 @login_required
 def notifications_json(request):
-    if not getattr(request.user, "employee", None) or request.user.employee.role != "admin":
-        return HttpResponseForbidden("Admins only")
     notes = Notification.objects.filter(recipient=request.user).order_by("-created_at")[:20]
     data = [
         {
@@ -30,8 +32,6 @@ def notifications_json(request):
 
 @login_required
 def notifications_mark_all_read(request):
-    if not getattr(request.user, "employee", None) or request.user.employee.role != "admin":
-        return HttpResponseForbidden("Admins only")
     Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
     return JsonResponse({"status": "ok"})
 
@@ -74,7 +74,5 @@ def push_unregister(request):
 
 @login_required
 def notifications_clear(request):
-    if not getattr(request.user, "employee", None) or request.user.employee.role != "admin":
-        return HttpResponseForbidden("Admins only")
     Notification.objects.filter(recipient=request.user).delete()
     return JsonResponse({"status": "ok"})

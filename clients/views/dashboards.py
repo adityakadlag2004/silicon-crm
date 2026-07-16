@@ -375,8 +375,7 @@ def admin_dashboard(request):
 
 @login_required
 def employee_management(request):
-    admin_emp = getattr(request.user, "employee", None)
-    if not admin_emp or admin_emp.role != "admin":
+    if not permissions.is_admin(request.user):
         return HttpResponseForbidden("Admins only.")
 
     create_form = EmployeeCreateForm()
