@@ -2,6 +2,8 @@
 pipeline: import dashboard, ARN account management, folio↔client linking and
 the imported transaction ledger. Business logic lives in services/rta_feed.py.
 """
+import re
+
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
@@ -229,6 +231,71 @@ def mf_transactions(request):
         "gross": totals["gross"] or 0,
         "arn_accounts": ArnAccount.objects.all(),
         "rta_choices": RTA_CHOICES,
+    })
+
+
+_PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+
+
+@_admin_required
+def mf_folio_match(request):
+    """Match Folios screen: name-based suggestions pairing unlinked folios
+    with clients. Per row: adopt the folio's PAN onto the client (and link
+    everything with that PAN), or link the folios without touching PAN."""
+    from ..models import SipRegistration
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        client = get_object_or_404(Client, id=request.POST.get("client_id"))
+        folio_ids = [int(v) for v in request.POST.getlist("folio_ids") if v.isdigit()]
+        folios = list(MutualFundFolio.objects.filter(id__in=folio_ids, client__isnull=True))
+
+        if action == "adopt":
+            pan = (request.POST.get("pan") or "").strip().upper()
+            if not _PAN_RE.match(pan):
+                messages.error(request, f"'{pan}' is not a valid PAN.")
+                return redirect("clients:mf_folio_match")
+            if client.pan and client.pan.strip().upper() != pan:
+                messages.error(
+                    request,
+                    f"{client.name} already has PAN {client.pan} — not overwriting with {pan}. "
+                    f"Use 'Link only' if these folios really belong to them.",
+                )
+                return redirect("clients:mf_folio_match")
+            if not client.pan:
+                client.pan = pan
+                client.save(update_fields=["pan"])
+            linked = rta_feed.relink_folios()
+            for folio in folios:  # folios without a PAN in the group, if any
+                if folio.client_id is None:
+                    folio.client = client
+                    folio.save(update_fields=["client", "updated_at"])
+                    linked += 1
+            messages.success(request, f"{client.name}: PAN saved, {linked} record(s) linked.")
+        elif action == "link":
+            for folio in folios:
+                folio.client = client
+                folio.save(update_fields=["client", "updated_at"])
+            SipRegistration.objects.filter(
+                folio_number__in=[f.folio_number for f in folios], client__isnull=True,
+            ).update(client=client)
+            messages.success(request, f"{len(folios)} folio(s) linked to {client.name}.")
+        return redirect("clients:mf_folio_match")
+
+    suggestions = rta_feed.suggest_folio_matches()
+    q = (request.GET.get("q") or "").strip().lower()
+    if q:
+        suggestions = [
+            s for s in suggestions
+            if q in s["investor_name"].lower() or q in s["client"].name.lower()
+        ]
+    unlinked_total = MutualFundFolio.objects.filter(client__isnull=True).count()
+    return render(request, "mf/folio_match.html", {
+        "page_title": "Match Folios",
+        "suggestions": suggestions[:300],
+        "suggestion_count": len(suggestions),
+        "unlinked_total": unlinked_total,
+        "q": q,
     })
 
 

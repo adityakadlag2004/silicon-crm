@@ -736,3 +736,77 @@ class SipRegisterTests(TestCase):
         reg.refresh_from_db()
         self.assertEqual(reg.client_id, client.id)
         self.assertGreaterEqual(linked, 1)
+
+
+class FolioMatchTests(TestCase):
+    """Match Folios screen: suffix-aware name matching + the two row actions."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="fm_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="fm_emp", password="x")
+        Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+        # CRM names carry routing tags; RTA reports the legal name
+        cls.aditya = Client.objects.create(name="Aditya Kadlag NSE")
+        cls.rahul = Client.objects.create(name="Rahul Sharma NJ")
+        MutualFundFolio.objects.create(folio_number="111", amc_name="HDFC",
+                                       investor_name="ADITYA SUNIL KADLAG", pan="IWSPK1111A")
+        MutualFundFolio.objects.create(folio_number="222", amc_name="Axis",
+                                       investor_name="ADITYA SUNIL KADLAG", pan="IWSPK1111A")
+        MutualFundFolio.objects.create(folio_number="333", amc_name="SBI",
+                                       investor_name="RAHUL SHARMA", pan="ABCDE9999Z")
+
+    def _http(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        return c
+
+    def test_suggestions_match_despite_suffix_and_middle_name(self):
+        suggestions = rta_feed.suggest_folio_matches()
+        by_client = {s["client"].id: s for s in suggestions}
+        self.assertIn(self.aditya.id, by_client)      # first-two-words + middle name
+        self.assertIn(self.rahul.id, by_client)       # exact after NJ suffix strip
+        self.assertEqual(len(by_client[self.aditya.id]["folios"]), 2)  # grouped by PAN
+        self.assertEqual(by_client[self.rahul.id]["level"], 3)
+
+    def test_adopt_sets_pan_and_links_everything(self):
+        folio_ids = list(MutualFundFolio.objects.filter(pan="IWSPK1111A").values_list("id", flat=True))
+        resp = self._http().post(reverse("clients:mf_folio_match"), {
+            "action": "adopt", "client_id": self.aditya.id, "pan": "IWSPK1111A",
+            "folio_ids": folio_ids,
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.aditya.refresh_from_db()
+        self.assertEqual(self.aditya.pan, "IWSPK1111A")
+        self.assertEqual(MutualFundFolio.objects.filter(client=self.aditya).count(), 2)
+
+    def test_adopt_rejects_invalid_pan_and_conflicting_pan(self):
+        self._http().post(reverse("clients:mf_folio_match"), {
+            "action": "adopt", "client_id": self.aditya.id, "pan": "NOT-A-PAN",
+        })
+        self.aditya.refresh_from_db()
+        self.assertEqual(self.aditya.pan or "", "")
+        self.rahul.pan = "ZZZZZ1234Z"
+        self.rahul.save()
+        self._http().post(reverse("clients:mf_folio_match"), {
+            "action": "adopt", "client_id": self.rahul.id, "pan": "ABCDE9999Z",
+        })
+        self.rahul.refresh_from_db()
+        self.assertEqual(self.rahul.pan, "ZZZZZ1234Z")  # not overwritten
+
+    def test_link_only_links_without_pan_change(self):
+        folio = MutualFundFolio.objects.get(folio_number="333")
+        self._http().post(reverse("clients:mf_folio_match"), {
+            "action": "link", "client_id": self.rahul.id, "folio_ids": [folio.id],
+        })
+        folio.refresh_from_db()
+        self.assertEqual(folio.client, self.rahul)
+        self.rahul.refresh_from_db()
+        self.assertEqual(self.rahul.pan or "", "")
+
+    def test_screen_admin_only(self):
+        c = TestClient()
+        c.force_login(self.emp_user)
+        self.assertEqual(c.get(reverse("clients:mf_folio_match")).status_code, 403)
+        self.assertEqual(self._http().get(reverse("clients:mf_folio_match")).status_code, 200)

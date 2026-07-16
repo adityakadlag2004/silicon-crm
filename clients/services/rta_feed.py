@@ -673,6 +673,86 @@ def import_feed_container(file_name, data, *, source, rta_hint="", user=None):
     return feed_import
 
 
+# Client names in this CRM carry routing tags at the end ("Aditya Kadlag NSE",
+# "... NJ"); these are stripped before comparing against RTA investor names.
+_NAME_SUFFIX_TOKENS = {"NSE", "NJ"}
+
+
+def _name_tokens(name):
+    words = re.sub(r"[^A-Z ]", " ", (name or "").upper()).split()
+    while words and words[-1] in _NAME_SUFFIX_TOKENS:
+        words.pop()
+    return words
+
+
+def suggest_folio_matches():
+    """Pair unlinked folios with clients by name for the Match Folios screen.
+
+    Unlinked folios are grouped by (PAN, investor name) — one row per
+    investor identity, so a single action links every folio of that PAN.
+    Match levels: 3 = full name match, 2 = one name contains the other,
+    1 = same first two words. Sorted strongest first.
+    """
+    from ..models import Client, MutualFundFolio
+
+    groups = {}
+    for folio in MutualFundFolio.objects.filter(client__isnull=True).order_by("investor_name"):
+        tokens = _name_tokens(folio.investor_name)
+        if not tokens:
+            continue
+        key = (folio.pan, " ".join(tokens))
+        group = groups.setdefault(key, {
+            "pan": folio.pan, "investor_name": folio.investor_name,
+            "tokens": tokens, "folios": [],
+        })
+        group["folios"].append(folio)
+
+    by_full, by_first = {}, {}
+    for client in Client.objects.all():
+        tokens = _name_tokens(client.name)
+        if not tokens:
+            continue
+        by_full.setdefault(" ".join(tokens), []).append((client, tokens))
+        by_first.setdefault(tokens[0], []).append((client, tokens))
+
+    LEVEL_LABELS = {3: "exact name", 2: "name contains", 1: "first + last name"}
+    suggestions = []
+    for group in groups.values():
+        tokens = group["tokens"]
+        best = None
+        full_hits = by_full.get(" ".join(tokens))
+        if full_hits:
+            best = (3, full_hits[0][0])
+        else:
+            for client, client_tokens in by_first.get(tokens[0], []):
+                folio_set, client_set = set(tokens), set(client_tokens)
+                # middle names: "ADITYA KADLAG" ⊆ "ADITYA SUNIL KADLAG"
+                if len(folio_set & client_set) >= 2 and (
+                        folio_set <= client_set or client_set <= folio_set):
+                    level = 2
+                elif (len(tokens) >= 2 and len(client_tokens) >= 2
+                      and (tokens[:2] == client_tokens[:2]
+                           or tokens[-1] == client_tokens[-1])):
+                    level = 1
+                else:
+                    continue
+                if best is None or level > best[0]:
+                    best = (level, client)
+        if best is None:
+            continue
+        level, client = best
+        suggestions.append({
+            "pan": group["pan"],
+            "investor_name": group["investor_name"],
+            "folios": group["folios"],
+            "client": client,
+            "level": level,
+            "level_label": LEVEL_LABELS[level],
+        })
+    suggestions.sort(key=lambda s: (-s["level"], s["investor_name"]))
+    return suggestions
+
+
 def relink_folios():
     """Re-run PAN auto-linking over unlinked folios AND unlinked SIP
     registrations (e.g. after adding client PANs). Returns the number of
