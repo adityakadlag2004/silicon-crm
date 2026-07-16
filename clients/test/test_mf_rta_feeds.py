@@ -273,6 +273,53 @@ class MailboxFetchTests(TestCase):
         # …and only the CAMS message gets marked Seen.
         imap.store.assert_called_once_with(b"1", "+FLAGS", "\\Seen")
 
+    def test_multiple_mailboxes_are_all_fetched(self):
+        from unittest.mock import MagicMock, patch
+
+        imap = MagicMock()
+        imap.search.return_value = ("OK", [b""])
+
+        env = {"RTA_FEED_IMAP_HOST": "imap.test", "RTA_FEED_IMAP_USER": "primary@x",
+               "RTA_FEED_IMAP_PASSWORD": "p",
+               "RTA_FEED_IMAP_HOST_2": "imap.other", "RTA_FEED_IMAP_USER_2": "nj@y",
+               "RTA_FEED_IMAP_PASSWORD_2": "q"}
+        with patch.dict("os.environ", env), \
+             patch("clients.services.rta_feed.imaplib.IMAP4_SSL", return_value=imap) as ssl:
+            rta_feed.fetch_from_mailbox()
+
+        hosts = [call.args[0] for call in ssl.call_args_list]
+        self.assertEqual(hosts, ["imap.test", "imap.other"])
+        logins = [call.args[0] for call in imap.login.call_args_list]
+        self.assertEqual(logins, ["primary@x", "nj@y"])
+
+    def test_broken_mailbox_does_not_block_the_next(self):
+        from unittest.mock import MagicMock, patch
+
+        good = MagicMock()
+        good.search.return_value = ("OK", [b""])
+
+        def _ssl(host, port):
+            if host == "imap.broken":
+                raise OSError("connection refused")
+            return good
+
+        env = {"RTA_FEED_IMAP_HOST": "imap.broken", "RTA_FEED_IMAP_USER": "a@x",
+               "RTA_FEED_IMAP_PASSWORD": "p",
+               "RTA_FEED_IMAP_HOST_2": "imap.ok", "RTA_FEED_IMAP_USER_2": "b@y",
+               "RTA_FEED_IMAP_PASSWORD_2": "q"}
+        with patch.dict("os.environ", env), \
+             patch("clients.services.rta_feed.imaplib.IMAP4_SSL", side_effect=_ssl):
+            imports = rta_feed.fetch_from_mailbox()
+
+        self.assertEqual(imports, [])
+        good.login.assert_called_once_with("b@y", "q")
+
+    def test_excel_attachment_fails_visibly(self):
+        feed_import = rta_feed.import_feed_container(
+            "nj_report.xlsx", b"fake-excel-bytes", source=RTAFeedImport.SOURCE_UPLOAD)
+        self.assertEqual(feed_import.status, RTAFeedImport.STATUS_FAILED)
+        self.assertIn("Excel", feed_import.notes)
+
 
 class SaleCrossCheckTests(TestCase):
     """rta_evidence_for_sale: pending MF sales verified against feed data."""

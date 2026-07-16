@@ -31,7 +31,7 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-DATA_EXTENSIONS = (".dbf", ".csv", ".txt")
+DATA_EXTENSIONS = (".dbf", ".csv", ".txt", ".xls", ".xlsx")
 CONTAINER_EXTENSIONS = (".zip",) + DATA_EXTENSIONS
 
 # Feed column aliases, keyed by our field name. Headers are compared after
@@ -136,7 +136,15 @@ def _read_delimited(data):
 
 def read_data_file(file_name, data):
     """Return (headers, raw row dicts) for a .dbf/.csv/.txt payload."""
-    if file_name.lower().endswith(".dbf"):
+    lower = file_name.lower()
+    if lower.endswith((".xls", ".xlsx")):
+        # Accepted so the failure is visible in the import log rather than the
+        # attachment being silently skipped (NJ Partner Desk exports Excel).
+        raise ValueError(
+            "Excel files aren't supported yet — export the report as CSV, or share "
+            "this file so its format can be added to the importer."
+        )
+    if lower.endswith(".dbf"):
         return _read_dbf(data)
     return _read_delimited(data)
 
@@ -482,31 +490,49 @@ def rta_evidence_for_sale(sale):
 
 # ─── Mailbox fetcher (cron) ─────────────────────────────────────────────────
 
-def fetch_from_mailbox():
-    """Pull unread RTA mailback emails over IMAP and import their attachments.
+def _configured_mailboxes():
+    """Feed mailboxes from env. The primary uses RTA_FEED_IMAP_*; additional
+    mailboxes (e.g. the NJ-registered email) use the same names suffixed with
+    _2, _3, _4 — see .env.example."""
+    mailboxes = []
+    for suffix in ("", "_2", "_3", "_4"):
+        host = os.environ.get(f"RTA_FEED_IMAP_HOST{suffix}", "").strip()
+        user = os.environ.get(f"RTA_FEED_IMAP_USER{suffix}", "").strip()
+        password = os.environ.get(f"RTA_FEED_IMAP_PASSWORD{suffix}", "").strip()
+        if host and user and password:
+            mailboxes.append({
+                "host": host, "user": user, "password": password,
+                "port": int(os.environ.get(f"RTA_FEED_IMAP_PORT{suffix}", "993")),
+                "folder": os.environ.get(f"RTA_FEED_IMAP_FOLDER{suffix}", "INBOX"),
+            })
+    return mailboxes
 
-    Silently no-ops unless RTA_FEED_IMAP_HOST/USER/PASSWORD are configured.
-    Returns the list of RTAFeedImport rows created.
-    """
+
+def fetch_from_mailbox():
+    """Pull unread feed emails from every configured mailbox and import their
+    attachments. Silently no-ops when no RTA_FEED_IMAP_* mailbox is configured.
+    Returns the list of RTAFeedImport rows created."""
+    imports = []
+    for box in _configured_mailboxes():
+        try:
+            imports.extend(_fetch_one_mailbox(box))
+        except Exception:  # noqa: BLE001 — one broken mailbox must not block the rest
+            logger.exception("RTA feed mailbox fetch failed for %s", box["user"])
+    return imports
+
+
+def _fetch_one_mailbox(box):
     from ..models import RTA_CAMS, RTA_KFIN
 
-    host = os.environ.get("RTA_FEED_IMAP_HOST", "").strip()
-    user = os.environ.get("RTA_FEED_IMAP_USER", "").strip()
-    password = os.environ.get("RTA_FEED_IMAP_PASSWORD", "").strip()
-    if not (host and user and password):
-        return []
-
-    port = int(os.environ.get("RTA_FEED_IMAP_PORT", "993"))
-    folder = os.environ.get("RTA_FEED_IMAP_FOLDER", "INBOX")
     senders = [s.strip().lower() for s in
                os.environ.get("RTA_FEED_SENDERS", "camsonline.com,kfintech.com,karvy.com").split(",")
                if s.strip()]
 
     imports = []
-    mail = imaplib.IMAP4_SSL(host, port)
+    mail = imaplib.IMAP4_SSL(box["host"], box["port"])
     try:
-        mail.login(user, password)
-        mail.select(folder)
+        mail.login(box["user"], box["password"])
+        mail.select(box["folder"])
         # A long-lived AMFI-registered inbox can hold years of unread RTA
         # mail — automation only needs the fresh files, so scope the search
         # to recent days per sender and cap how many messages one run eats.
