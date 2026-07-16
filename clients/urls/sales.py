@@ -1,0 +1,23 @@
+"""Sales CRUD/approval, incentive rules, performance, financial planner."""
+from django.urls import path
+
+from ..views import sales
+
+urlpatterns = [
+    path("sales/add/", sales.add_sale, name="add_sale"),
+    path("sales/admin_add/", sales.admin_add_sale, name="admin_add_sale"),
+    path("sales/approve/", sales.approve_sales, name="approve_sales"),
+    path("sales/<int:sale_id>/edit/", sales.edit_sale, name="edit_sale"),
+    path("sales/<int:sale_id>/delete/", sales.delete_sale, name="delete_sale"),
+    path("sales/recalc/", sales.recalc_points, name="recalc_points"),
+    path("sales/all/", sales.all_sales, name="all_sales"),
+    path("incentives/manage/", sales.manage_incentive_rules, name="manage_incentive_rules"),
+    path("incentives/rule/add/", sales.add_incentive_rule, name="add_incentive_rule"),
+    path("incentives/rule/<int:rule_id>/update/", sales.update_incentive_rule, name="update_incentive_rule"),
+    path("incentives/rule/<int:rule_id>/delete/", sales.delete_incentive_rule, name="delete_incentive_rule"),
+    path("incentives/rule/<int:rule_id>/slab/add/", sales.add_incentive_slab, name="add_incentive_slab"),
+    path("incentives/slab/<int:slab_id>/update/", sales.update_incentive_slab, name="update_incentive_slab"),
+    path("incentives/slab/<int:slab_id>/delete/", sales.delete_incentive_slab, name="delete_incentive_slab"),
+    path("sales/financial-planner/", sales.financial_planner, name="financial_planner"),
+    path("sales/financial-planner/download-report/", sales.financial_planner_download_report, name="financial_planner_download_report"),
+]
