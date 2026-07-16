@@ -809,9 +809,14 @@ def _fetch_one_mailbox(box):
                     file_name, payload, source="email", rta_hint=rta_hint,
                 ))
                 message_imports += 1
-            # KFintech subscription feeds come as download links, not
+            # KFintech mailback reports come as download links, not
             # attachments — follow them when the mail carried no file.
-            if rta_hint == RTA_KFIN and message_imports == 0:
+            # 'Subscribed ...' mails are the series-3 subscription feeds:
+            # password-locked and redundant with the series-2 mailback
+            # reports (decision 2026-07-16) — not followed.
+            subject = str(message.get("Subject") or "").lower()
+            if (rta_hint == RTA_KFIN and message_imports == 0
+                    and not subject.startswith("subscribed")):
                 for url in _kfin_report_links(message):
                     imports.append(_import_kfin_link(url))
             mail.store(num, "+FLAGS", "\\Seen")
