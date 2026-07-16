@@ -866,16 +866,20 @@
           return;
         }
 
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         body.innerHTML = data.notifications.map(n => {
-          const targetLink = '{% url "clients:approve_sales" %}';
+          // Each notification carries its own destination (task, lead, sale, tel:…).
+          // Only fall back to the sales screen for legacy rows without a link.
+          const raw = n.link || '';
+          const targetLink = /^(\/|tel:|https?:)/.test(raw) ? raw : '{% url "clients:approve_sales" %}';
           return `
           <div class="ki-event-item mb-2" style="background:${n.is_read ? 'var(--ki-card-bg)' : 'var(--ki-primary-bg)'};">
             <div style="flex:1;">
-              <div style="font-weight:700;color:var(--ki-text-primary);">${n.title}</div>
-              <div style="color:var(--ki-text-secondary);font-size:0.9rem;">${n.body}</div>
-              <div style="color:var(--ki-text-muted);font-size:0.8rem;margin-top:0.25rem;">${n.created_at}</div>
+              <div style="font-weight:700;color:var(--ki-text-primary);">${esc(n.title)}</div>
+              <div style="color:var(--ki-text-secondary);font-size:0.9rem;">${esc(n.body)}</div>
+              <div style="color:var(--ki-text-muted);font-size:0.8rem;margin-top:0.25rem;">${esc(n.created_at)}</div>
             </div>
-            <a class="ki-btn ki-btn-primary ki-btn-sm" href="${targetLink}">Open</a>
+            <a class="ki-btn ki-btn-primary ki-btn-sm" href="${esc(targetLink)}">Open</a>
           </div>
         `;}).join('');
       }
