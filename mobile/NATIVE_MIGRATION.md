@@ -43,7 +43,7 @@ in the WebView.
 | 10 | Reports (trend chart, product mix, leaderboard) | `/api/app/reports/summary/` | **v3.3** |
 | 11 | Team management (roster, edit, activate/deactivate, reset password, add) | `/api/app/team/…` | **v3.6** |
 | 12 | Incentives & Campaigns builders (rules, slabs, campaigns, products) | `/api/app/incentives|campaigns/` + web AJAX writes | **v3.7** |
-| 13 | Lead sheets (mobile card view over dynamic columns, add/edit rows) | `/api/app/sheets/…` | **v3.8** |
+| 13 | ~~Lead sheets~~ — **module removed 2026-07** (screen deleted from app; `/api/app/sheets/…` stays as empty stubs until all devices update) | `/api/app/sheets/…` (stubs) | removed |
 | 14 | Native login (session-cookie capture, native push + call-config bootstrap) | `/api/app/login/` | **v4.0** |
 | 15 | Task Management module (own bottom nav: Dashboard/My/My Apps/Delegated/More; list+filters+status tabs, detail w/ checklist·comments·activity·actions, full-screen Assign form, Activities) | `/api/app/tasks/…` | **native done, unreleased** |
 | 16 | Follow-up alarms (exact on-device alarms + full-screen ringing AlarmRingActivity, daily digest, FCM `followup_alarm` data push;  one pending reminder per number — new follow-up supersedes older ones; popup SIM gate fails open + per-device popup diagnostics on Call Analytics roster + test-popup button in Office SIM; v4.13: task assignments/comments ring via `task_alarm` data push, status picker + tap-to-edit due date on task detail) | `/api/app/followups/…` (`scheduled_at_ms`, `superseded_ids`), device-status `diagnostics` | **v4.12** |

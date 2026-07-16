@@ -19,7 +19,6 @@ from .notifications import *  # noqa: F401,F403
 from .team import *  # noqa: F401,F403
 from .renewal_views import *  # noqa: F401,F403
 from .audit import *  # noqa: F401,F403
-from .lead_records import *  # noqa: F401,F403
 from .calls import *  # noqa: F401,F403
 from .app_api import *  # noqa: F401,F403
 from . import tasks  # noqa: F401  (task views referenced as views.tasks.* in urls)

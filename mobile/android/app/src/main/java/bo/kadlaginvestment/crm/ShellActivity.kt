@@ -68,7 +68,6 @@ import bo.kadlaginvestment.crm.ui.RenewalsScreen
 import bo.kadlaginvestment.crm.ui.ReportsHub
 import bo.kadlaginvestment.crm.ui.SalesScreen
 import bo.kadlaginvestment.crm.ui.SettingsScreen
-import bo.kadlaginvestment.crm.ui.SheetsScreen
 import bo.kadlaginvestment.crm.ui.SimSettingsScreen
 import bo.kadlaginvestment.crm.ui.TeamScreen
 
@@ -528,12 +527,6 @@ class ShellActivity : ComponentActivity() {
                             modifier = m,
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
-                        )
-                        overlay == "sheets" -> SheetsScreen(
-                            modifier = m,
-                            onBack = { overlay = null },
-                            onSessionExpired = goLogin,
-                            onOpenWeb = openWeb,
                         )
                         overlay == "sim" -> SimSettingsScreen(
                             modifier = m,
