@@ -501,3 +501,97 @@ class ViewTests(TestCase):
         resp = self.admin.get(reverse("clients:client_profile", args=[client.id]))
         self.assertContains(resp, "Mutual Fund Folios")
         self.assertContains(resp, "F-1")
+
+
+class KfinLinkAndFormatTests(TestCase):
+    """Fixes discovered from the first real KFintech mail (2026-07-16):
+    xlsx content named .xls, link-delivered subscription feeds, and AMC
+    rejection notices that must never import as transactions."""
+
+    def _tracker(self, real_url):
+        import urllib.parse
+        shifted = "".join(chr(ord(c) + 1) for c in real_url)
+        return ("https://scdelivery.kfintech.com/c/?u="
+                + urllib.parse.quote(shifted, safe="") + "&p=track&e=s1")
+
+    def test_xlsx_content_named_xls_is_parsed(self):
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["FMCODE", "TD_ACNO", "INVNAME", "TRNDESC", "TD_AMT"])
+        ws.append(["102", "777888", "Rahul Sharma", "Systematic", "3000.00"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        headers, rows = rta_feed.read_data_file("ARN-295541 16072026.xls", buf.getvalue())
+        self.assertIn("TD_ACNO", headers)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(str(rows[0]["TD_ACNO"]), "777888")
+
+    def test_rejection_rows_are_skipped_with_note(self):
+        csv_data = (
+            "FMCODE,TD_ACNO,INVNAME,TRNDESC,TD_TRNO,TD_TRDT,TD_AMT,TD_UNITS,BRCODE\n"
+            "102,111222,Meena Joshi,STP OUT Rejection,R1,14/07/2026,0,0,ARN-777\n"
+            "102,333444,Meena Joshi,Purchase Rejection,R2,14/07/2026,0,0,ARN-777\n"
+        ).encode()
+        feed_import = rta_feed.import_feed_container(
+            "ARN-295541 16072026.csv", csv_data, source="upload")
+        self.assertEqual(feed_import.rows_imported, 0)
+        self.assertEqual(feed_import.rows_skipped, 2)
+        self.assertEqual(MutualFundTransaction.objects.count(), 0)
+        self.assertEqual(MutualFundFolio.objects.count(), 0)
+        self.assertIn("rejection", feed_import.notes.lower())
+
+    def test_decode_kfin_tracking_link(self):
+        real = "https://mfs.kfintech.com/mfs/Distributor/Requests/Req_allrptslink.aspx?qrytype=Uz=="
+        self.assertEqual(rta_feed._decode_kfin_tracking_link(self._tracker(real)), real)
+        self.assertIsNone(rta_feed._decode_kfin_tracking_link(
+            "https://scdelivery.kfintech.com/c/?u=undefined&p=x"))
+        self.assertIsNone(rta_feed._decode_kfin_tracking_link("https://example.com/?u=abc"))
+
+    def test_kfin_report_links_ignores_funcodes_and_marketing(self):
+        from email import message_from_bytes
+        from email.message import EmailMessage
+        report = "https://mfs.kfintech.com/mfs/Distributor/Requests/Req_allrptslink.aspx?qrytype=Uz=="
+        funcodes = "https://mfs.kfintech.com/mfs/distributor/downloads/FUNCODES-PRODCODE.xls"
+        html = (f'<a href="{self._tracker(report)}">Click Here</a>'
+                f'<a href="{self._tracker(funcodes)}">codes</a>'
+                f'<a href="https://marketing.kfintech.com/quiz">quiz</a>')
+        msg = EmailMessage()
+        msg["From"] = "distributorcare@kfintech.com"
+        msg["Subject"] = "Subscribed Transaction Feeds Report"
+        msg.set_content("plain")
+        msg.add_alternative(html, subtype="html")
+        links = rta_feed._kfin_report_links(message_from_bytes(bytes(msg)))
+        self.assertEqual(links, [report])
+
+    def test_import_kfin_link_expired_records_failure(self):
+        from unittest.mock import MagicMock, patch
+        response = MagicMock()
+        response.read.return_value = b"Invalid Request"
+        response.headers = {"Content-Disposition": ""}
+        response.headers = MagicMock()
+        response.headers.get.return_value = ""
+        cm = MagicMock()
+        cm.__enter__.return_value = response
+        with patch.object(rta_feed.urllib.request, "urlopen", return_value=cm):
+            feed_import = rta_feed._import_kfin_link("https://mfs.kfintech.com/x")
+        self.assertEqual(feed_import.status, RTAFeedImport.STATUS_FAILED)
+        self.assertIn("expired link", feed_import.notes)
+
+    def test_import_kfin_link_zip_payload_imports(self):
+        import zipfile
+        from unittest.mock import MagicMock, patch
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("MFSD307_WBTRN1_1.csv", KFIN_CSV)
+        response = MagicMock()
+        response.read.return_value = buf.getvalue()
+        response.headers = MagicMock()
+        response.headers.get.return_value = ""
+        cm = MagicMock()
+        cm.__enter__.return_value = response
+        with patch.object(rta_feed.urllib.request, "urlopen", return_value=cm):
+            feed_import = rta_feed._import_kfin_link("https://mfs.kfintech.com/x")
+        self.assertEqual(feed_import.status, RTAFeedImport.STATUS_PROCESSED)
+        self.assertEqual(feed_import.rows_imported, 1)
+        self.assertEqual(feed_import.rta, RTA_KFIN)

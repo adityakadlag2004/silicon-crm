@@ -22,6 +22,8 @@ import logging
 import os
 import re
 import tempfile
+import urllib.parse
+import urllib.request
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from email import message_from_bytes
@@ -135,8 +137,12 @@ def _read_delimited(data):
 
 
 def _excel_rows(file_name, data):
-    """Yield rows (lists of cell values) from the first sheet of an Excel file."""
-    if file_name.lower().endswith(".xlsx"):
+    """Yield rows (lists of cell values) from the first sheet of an Excel file.
+
+    The engine is picked from the file's magic bytes, not its extension —
+    KFintech routinely names xlsx content ".xls" (zip magic PK.. = xlsx,
+    OLE2 magic = real legacy xls)."""
+    if data[:4] == b"PK\x03\x04" or file_name.lower().endswith(".xlsx"):
         import openpyxl
 
         workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
@@ -304,6 +310,7 @@ def import_rows(rows, header_map, *, rta, feed_import):
     accounts = list(ArnAccount.objects.filter(is_active=True))
     pan_to_client = _client_by_pan()
     unmatched_brokers = set()
+    rejection_rows = 0
 
     def get(row, field):
         header = header_map.get(field)
@@ -315,6 +322,14 @@ def import_rows(rows, header_map, *, rta, feed_import):
         folio_no = _clean(get(row, "folio"))[:40]
         if not folio_no:
             feed_import.rows_skipped += 1
+            continue
+
+        # AMC "Transaction Rejections" notices carry folio columns but list
+        # transactions that did NOT happen — importing them would corrupt
+        # the ledger, so they're counted and skipped.
+        if "reject" in _clean(get(row, "txn_type")).lower():
+            feed_import.rows_skipped += 1
+            rejection_rows += 1
             continue
 
         amc = _clean(get(row, "amc"))[:120]
@@ -387,6 +402,11 @@ def import_rows(rows, header_map, *, rta, feed_import):
     if unmatched_brokers:
         listing = ", ".join(sorted(unmatched_brokers)[:20])
         feed_import.notes += f"\nUnmatched broker codes (add under MF → ARN codes?): {listing}"
+    if rejection_rows:
+        feed_import.notes += (
+            f"\n{rejection_rows} rejection-notice row(s) skipped — AMC rejection "
+            f"reports are informational, not transactions."
+        )
 
 
 def import_feed_container(file_name, data, *, source, rta_hint="", user=None):
@@ -640,6 +660,84 @@ def fetch_from_mailbox():
     return imports
 
 
+def _decode_kfin_tracking_link(href):
+    """KFintech wraps real URLs in an scdelivery.kfintech.com tracker whose
+    `u=` param is the target URL with every character shifted +1
+    ("https://" → "iuuqt;00"). Returns the decoded URL, or None."""
+    try:
+        parsed = urllib.parse.urlparse(href)
+    except ValueError:
+        return None
+    if "scdelivery.kfintech.com" not in (parsed.netloc or ""):
+        return None
+    wrapped = urllib.parse.parse_qs(parsed.query).get("u", [""])[0]
+    if not wrapped or wrapped == "undefined":
+        return None
+    decoded = "".join(chr(ord(c) - 1) for c in wrapped)
+    return decoded if decoded.startswith("http") else None
+
+
+def _kfin_report_links(message):
+    """Download links for subscribed KFintech reports.
+
+    KFintech subscription feeds (e.g. MFSD307 Transaction Feeds) arrive as a
+    'Click Here' link, not an attachment. Only report-request URLs on
+    mfs.kfintech.com qualify — the FUNCODES-PRODCODE scheme master and
+    marketing links are ignored."""
+    links = []
+    for part in message.walk():
+        if part.get_content_type() not in ("text/html", "text/plain"):
+            continue
+        payload = part.get_payload(decode=True)
+        if not payload:
+            continue
+        text = payload.decode("utf-8", "ignore")
+        for href in re.findall(r'https?://[^\s"\'<>]+', text):
+            real = _decode_kfin_tracking_link(href)
+            if not real:
+                continue
+            host = urllib.parse.urlparse(real).netloc.lower()
+            if host != "mfs.kfintech.com" or "funcodes" in real.lower():
+                continue
+            if "/requests/" in real.lower() and real not in links:
+                links.append(real)
+    return links
+
+
+def _import_kfin_link(url):
+    """Download one KFintech report link and run it through the importer.
+    Failures (expired link, HTML error page) land in the import log."""
+    from ..models import RTAFeedImport, RTA_KFIN
+
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(request, timeout=90) as response:
+            disposition = response.headers.get("Content-Disposition", "")
+            payload = response.read()
+    except Exception as exc:  # noqa: BLE001 — one dead link must not kill the batch
+        return RTAFeedImport.objects.create(
+            source=RTAFeedImport.SOURCE_EMAIL, file_name=url[:255], file_sha256="",
+            rta=RTA_KFIN, status=RTAFeedImport.STATUS_FAILED,
+            notes=f"Report link download failed: {exc}",
+        )
+
+    name_match = re.search(r'filename="?([^";]+)', disposition)
+    if name_match:
+        file_name = name_match.group(1).strip()
+    elif payload[:2] == b"PK":
+        file_name = "kfin_report.zip"
+    else:
+        return RTAFeedImport.objects.create(
+            source=RTAFeedImport.SOURCE_EMAIL, file_name=url[:255],
+            file_sha256=hashlib.sha256(payload).hexdigest(),
+            rta=RTA_KFIN, status=RTAFeedImport.STATUS_FAILED,
+            notes=("Report link did not return a data file (expired link?): "
+                   + payload[:80].decode("utf-8", "replace")),
+        )
+    return import_feed_container(file_name, payload, source=RTAFeedImport.SOURCE_EMAIL,
+                                 rta_hint=RTA_KFIN)
+
+
 def _fetch_one_mailbox(box):
     from ..models import RTA_CAMS, RTA_KFIN
 
@@ -682,6 +780,7 @@ def _fetch_one_mailbox(box):
                 rta_hint = RTA_CAMS
             elif "kfin" in from_addr or "karvy" in from_addr:
                 rta_hint = RTA_KFIN
+            message_imports = 0
             for part in message.walk():
                 file_name = part.get_filename() or ""
                 if not file_name.lower().endswith(CONTAINER_EXTENSIONS):
@@ -692,6 +791,12 @@ def _fetch_one_mailbox(box):
                 imports.append(import_feed_container(
                     file_name, payload, source="email", rta_hint=rta_hint,
                 ))
+                message_imports += 1
+            # KFintech subscription feeds come as download links, not
+            # attachments — follow them when the mail carried no file.
+            if rta_hint == RTA_KFIN and message_imports == 0:
+                for url in _kfin_report_links(message):
+                    imports.append(_import_kfin_link(url))
             mail.store(num, "+FLAGS", "\\Seen")
     finally:
         try:
