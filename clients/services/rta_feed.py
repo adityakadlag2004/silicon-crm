@@ -127,10 +127,11 @@ def _read_dbf(data):
 
 
 def _read_delimited(data):
-    """CSV/TXT bytes → (headers, row dicts). Sniffs , ; | or tab."""
+    """CSV/TXT bytes → (headers, row dicts). Sniffs , ; | ~ or tab
+    (KFintech's MFSD211 investor master is tilde-delimited)."""
     text = data.decode("utf-8-sig", errors="replace")
     sample = text[:4096]
-    delimiter = max(",;|\t", key=sample.count)
+    delimiter = max(",;|~\t", key=sample.count)
     reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
     rows = [row for row in reader if any((v or "").strip() for v in row.values())]
     return list(reader.fieldnames or []), rows

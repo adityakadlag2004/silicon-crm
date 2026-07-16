@@ -595,3 +595,13 @@ class KfinLinkAndFormatTests(TestCase):
         self.assertEqual(feed_import.status, RTAFeedImport.STATUS_PROCESSED)
         self.assertEqual(feed_import.rows_imported, 1)
         self.assertEqual(feed_import.rta, RTA_KFIN)
+
+
+    def test_tilde_delimited_kfin_master_parses(self):
+        data = (
+            "Product Code~Fund~Folio~Investor Name~PAN No~Dividend Option\n"
+            "1011AID~101~99887766~Suresh Patil~ABCDE1234F~G\n"
+        ).encode()
+        headers, rows = rta_feed.read_data_file("MFSD211_WBMST1_1.txt", data)
+        self.assertIn("Folio", headers)
+        self.assertEqual(rows[0]["Folio"], "99887766")
