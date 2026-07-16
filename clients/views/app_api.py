@@ -25,6 +25,7 @@ from ..models import (
     Renewal,
     Sale,
 )
+from ..services import sales as sales_service
 from .helpers import get_manager_access
 from .reports import business_overview_data
 
@@ -280,12 +281,7 @@ def app_sale_create(request):
         client=client, employee=sale_emp, product=product.name, product_ref=product,
         amount=amount, cover_amount=cover_amount, policy_type=policy_type,
     )
-    if is_admin:
-        sale.status = Sale.STATUS_APPROVED
-        sale.approved_by = request.user
-        sale.approved_at = timezone.now()
-    sale._audit_actor = request.user
-    sale.save()
+    sales_service.finalize_new_sale(sale, request.user, auto_approve=is_admin)
     return JsonResponse({"ok": True, "id": sale.id, "status": sale.status})
 
 
@@ -571,12 +567,7 @@ def app_sales(request):
 @require_POST
 def app_sale_action(request, sale_id):
     """Approve or reject a sale — same permissions as the web approve page."""
-    from .sales import _recompute_sibling_sales
-
-    emp = _emp(request)
     is_admin = _is_admin(request)
-    is_manager = bool(emp and emp.role == "manager")
-    access = get_manager_access() if is_manager else None
     if not permissions.can(request.user, "approve_sales"):
         return JsonResponse({"ok": False, "error": "No permission."}, status=403)
 
@@ -591,25 +582,16 @@ def app_sale_action(request, sale_id):
         # Admins/superusers only (matches the web delete_sale admin path).
         if not is_admin:
             return JsonResponse({"ok": False, "error": "Only an admin can delete a sale."}, status=403)
-        sale._audit_actor = request.user
-        sale.delete()
-        _recompute_sibling_sales(sale)
+        sales_service.delete_sale(sale, request.user)
         return JsonResponse({"ok": True, "deleted": True})
 
     if action == "approve":
-        sale.status = Sale.STATUS_APPROVED
-        sale.rejection_reason = ""
+        sales_service.approve_sale(sale, request.user)
     elif action == "reject":
-        sale.status = Sale.STATUS_REJECTED
-        sale.rejection_reason = (body.get("reason") or "").strip()
+        sales_service.reject_sale(sale, request.user, body.get("reason"))
     else:
         return JsonResponse({"ok": False, "error": "Unknown action."}, status=400)
 
-    sale.approved_by = request.user
-    sale.approved_at = timezone.now()
-    sale._audit_actor = request.user
-    sale.save()
-    _recompute_sibling_sales(sale)
     return JsonResponse({"ok": True, "status": sale.status})
 
 

@@ -101,62 +101,7 @@ def notify_admins_on_sale(sender, instance, created, **kwargs):
             related_sale=instance,
         )
 
-from django.db.models import Sum
-from django.utils.timezone import now
-from django.core.cache import cache
-import logging
-
-from .models import Employee, Sale, Target, MonthlyTargetHistory
-
-logger = logging.getLogger(__name__)
-
-def close_month_targets(year: int, month: int, *, dry_run=False):
-    """
-    Close the month for year/month by storing employee performance vs target.
-    Called by the 'close_month' management command via cron (see CRONJOBS in settings).
-    """
-    from .targets import baseline_monthly_map, employee_target_map, resolve_monthly_target
-
-    monthly_targets = Target.objects.filter(target_type="monthly")
-    products = [t.product for t in monthly_targets]
-    employees = Employee.objects.all()
-
-    baseline_map = baseline_monthly_map()
-    emp_map = employee_target_map()
-
-    for emp in employees:
-        month_sales = (
-            Sale.objects.filter(employee=emp, date__year=year, date__month=month)
-            .values("product").annotate(total=Sum("amount"))
-        )
-        month_sales_dict = {s["product"]: s["total"] for s in month_sales}
-
-        # Union of baseline products and any product this employee has an
-        # explicit target for, so per-employee overrides are always recorded.
-        emp_products = set(products) | {
-            prod for (eid, prod) in emp_map if eid == emp.id
-        }
-
-        for product in emp_products:
-            achieved = month_sales_dict.get(product, 0) or 0
-            target_value = resolve_monthly_target(emp.id, product, emp_map=emp_map, baseline_map=baseline_map)
-            MonthlyTargetHistory.objects.update_or_create(
-                employee=emp,
-                product=product,
-                year=year,
-                month=month,
-                defaults={
-                    "target_value": target_value,
-                    "achieved_value": achieved,
-                },
-            )
-
-    if dry_run:
-        logger.info("Dry run complete for %s/%s", month, year)
-
-# NOTE: The request_started signal handler (run_monthly_close) has been removed.
-# Monthly close is handled by the 'close_month' management command via CRONJOBS in settings.py.
-# This avoids adding overhead to every HTTP request on the 1st of each month.
+# NOTE: month-close moved to services/targets.py (close_month command wraps it).
 
 
 # ────────────────────────────────────────────────────────────────────────────

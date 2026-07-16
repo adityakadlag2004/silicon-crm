@@ -11,7 +11,7 @@ Production: **bo.kadlaginvestment.com** (DigitalOcean droplet `ubuntu@139.59.28.
 | `clients/models/` | Models split by domain (`hr.py`, `sales.py`, `leads.py`, …), all re-exported in `__init__.py` — always import via `clients.models` |
 | `clients/views/` | One module per domain (`tasks.py`, `sales.py`, `messaging.py`, `app_*.py` = mobile JSON APIs) |
 | `clients/urls/` | URL patterns split by domain, assembled in `__init__.py` under the single `clients` namespace |
-| `clients/services/` | Business logic shared by web + app views (`tasks.py`, `push.py`, `calendar_feed.py`, `google_drive.py`) |
+| `clients/services/` | Business logic shared by web + app views (`sales.py`, `targets.py`, `tasks.py`, `calendar_feed.py`, `push.py`, `rta_feed.py`, `google_drive.py`) |
 | `clients/management/commands/` | Cron jobs — every command here must be in `CRONJOBS` (config/settings.py) or documented as a manual tool |
 | `clients/test/` | All tests (`manage.py test clients`) |
 | `config/settings.py` | Settings incl. `CRONJOBS`; env read from `.env` (template: `.env.example`) |

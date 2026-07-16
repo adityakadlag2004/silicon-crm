@@ -48,7 +48,7 @@ def _kyc_missing_count(user):
     """Missing-PAN count for the dashboard banner (scoped like the KYC page)."""
     from .kyc import missing_pan_count_for
     return missing_pan_count_for(user)
-from ..targets import (
+from ..services.targets import (
     target_employees,
     working_days_in_month,
     baseline_monthly_map,

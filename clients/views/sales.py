@@ -18,26 +18,10 @@ from django.views.decorators.http import require_POST
 from .. import permissions
 from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Product
 from ..forms import AdminSaleForm, EditSaleForm, SaleForm
+from ..services import sales as sales_service
 from .helpers import get_manager_access, parse_date_param
 
 logger = logging.getLogger(__name__)
-
-
-def _recompute_sibling_sales(sale):
-    """Re-run points on sales that share this sale's slab pool (same employee +
-    product within the slab month, or the campaign window). Needed after a
-    status change or delete so slab-delta payouts stay consistent."""
-    qs = Sale.objects.filter(employee=sale.employee).exclude(pk=sale.pk)
-    if sale.campaign_id:
-        qs = qs.filter(date__range=[sale.campaign.start_date, sale.campaign.end_date])
-    elif sale.date:
-        qs = qs.filter(date__year=sale.date.year, date__month=sale.date.month)
-    if sale.product_ref_id:
-        qs = qs.filter(product_ref_id=sale.product_ref_id)
-    else:
-        qs = qs.filter(product=sale.product)
-    for sibling in qs.order_by("date", "id"):
-        sibling.save()  # save() recomputes points
 
 
 def _sale_product_meta():
@@ -123,23 +107,7 @@ def add_sale(request):
                         },
                     )
 
-            sale.compute_points()
-
-            if sale.product:
-                sale.product_ref = Product.objects.filter(name=sale.product).first()
-
-            if is_admin_user:
-                sale.status = Sale.STATUS_APPROVED
-                sale.approved_by = request.user
-                sale.approved_at = timezone.now()
-                sale.rejection_reason = ""
-            else:
-                sale.status = Sale.STATUS_PENDING
-                sale.approved_by = None
-                sale.approved_at = None
-                sale.rejection_reason = ""
-
-            sale.save()
+            sales_service.finalize_new_sale(sale, request.user, auto_approve=is_admin_user)
             messages.success(request, "Sale added successfully!")
             return redirect("clients:all_sales")
     else:
@@ -254,14 +222,7 @@ def admin_add_sale(request):
             if not sale.employee_id:
                 form.add_error("employee", "Please select an employee for this sale.")
             else:
-                sale.compute_points()
-                if sale.product:
-                    sale.product_ref = Product.objects.filter(name=sale.product).first()
-                sale.status = Sale.STATUS_APPROVED
-                sale.approved_by = request.user
-                sale.approved_at = timezone.now()
-                sale.rejection_reason = ""
-                sale.save()
+                sales_service.finalize_new_sale(sale, request.user, auto_approve=True)
                 messages.success(request, "Sale added successfully!")
                 return redirect("clients:all_sales")
     else:
@@ -286,22 +247,10 @@ def approve_sales(request):
         reason = (request.POST.get("reason") or "").strip()
         sale = get_object_or_404(Sale, id=sale_id)
         if action == "approve":
-            sale.status = Sale.STATUS_APPROVED
-            sale.approved_by = request.user
-            sale.approved_at = timezone.now()
-            sale.rejection_reason = ""
-            sale._audit_actor = request.user   # picked up by AuditLog signal
-            sale.save()
-            _recompute_sibling_sales(sale)
+            sales_service.approve_sale(sale, request.user)
             messages.success(request, f"Approved sale #{sale.id}.")
         elif action == "reject":
-            sale.status = Sale.STATUS_REJECTED
-            sale.approved_by = request.user
-            sale.approved_at = timezone.now()
-            sale.rejection_reason = reason
-            sale._audit_actor = request.user   # picked up by AuditLog signal
-            sale.save()
-            _recompute_sibling_sales(sale)
+            sales_service.reject_sale(sale, request.user, reason)
             messages.info(request, f"Rejected sale #{sale.id}.")
         return redirect("clients:approve_sales")
 
@@ -610,7 +559,7 @@ def edit_sale(request, sale_id):
                 updated.rejection_reason = ""
             updated._audit_actor = request.user
             updated.save()
-            _recompute_sibling_sales(updated)
+            sales_service.recompute_sibling_sales(updated)
             if needs_reapproval:
                 messages.success(request, "Sale updated — it is pending approval again.")
             else:
@@ -634,9 +583,7 @@ def delete_sale(request, sale_id):
     if not is_admin_user and sale.status != Sale.STATUS_PENDING:
         return HttpResponseForbidden("Only an admin can delete a sale that has already been reviewed.")
     if request.method == "POST":
-        sale._audit_actor = request.user
-        sale.delete()
-        _recompute_sibling_sales(sale)
+        sales_service.delete_sale(sale, request.user)
         messages.success(request, "Sale deleted successfully!")
         return redirect("clients:admin_dashboard")
     return render(request, "sales/delete_sale.html", {"sale": sale})
