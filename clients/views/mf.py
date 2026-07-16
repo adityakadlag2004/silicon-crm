@@ -301,20 +301,28 @@ def mf_folio_match(request):
 
 @_admin_required
 def mf_sips(request):
-    """SIP register: every systematic-plan registration from the RTA feeds,
-    with live tabs — active / new (30 days) / ceased / at-risk (active but
-    no installment seen in 45+ days)."""
+    """SIP register dashboard: the firm's systematic book at a glance —
+    headline tiles, monthly starts-vs-stops flow, leak watch (real
+    terminations + at-risk plans), scheme concentration, and the register
+    itself with tabs."""
     from datetime import timedelta
 
+    from django.db.models import Count
     from django.utils import timezone
 
     from ..models import MutualFundTransaction, SipRegistration
 
     today = timezone.localdate()
+    month_start = today.replace(day=1)
     month_ago = today - timedelta(days=30)
     risk_cutoff = today - timedelta(days=45)
 
     base = SipRegistration.objects.all()
+    active_qs = base.filter(status=SipRegistration.STATUS_ACTIVE)
+    # a stoppage is a LEAK only when the RTA says terminated (or our own
+    # transition detected it) — natural expiry/rejections are not leaks
+    leak_qs = base.filter(status=SipRegistration.STATUS_CEASED).exclude(
+        Q(rta_status__icontains="expire") | Q(rta_status__icontains="reject"))
 
     # folios that received a systematic installment recently — anything
     # active and older than the cutoff without one is "at risk"
@@ -326,29 +334,74 @@ def mf_sips(request):
         )
         .values_list("folio__folio_number", flat=True)
     )
-    at_risk_ids = [
-        r.id for r in base.filter(status=SipRegistration.STATUS_ACTIVE,
-                                  start_date__lt=risk_cutoff)
+    at_risk_regs = [
+        r for r in active_qs.filter(start_date__lt=risk_cutoff)
         if r.folio_number not in recent_sip_folios
     ]
+    at_risk_ids = [r.id for r in at_risk_regs]
 
-    counts = {
-        "active": base.filter(status=SipRegistration.STATUS_ACTIVE).count(),
-        "new": base.filter(first_seen_at__date__gte=month_ago).count(),
-        "ceased": base.filter(status=SipRegistration.STATUS_CEASED).count(),
-        "at_risk": len(at_risk_ids),
+    def _bundle(qs):
+        agg = qs.aggregate(n=Count("id"), total=Sum("amount"))
+        return {"n": agg["n"] or 0, "total": agg["total"] or 0}
+
+    tiles = {
+        "active": _bundle(active_qs),
+        "new_month": _bundle(base.filter(Q(registered_on__gte=month_start)
+                                         | Q(registered_on__isnull=True,
+                                             first_seen_at__date__gte=month_start))),
+        "stopped_month": _bundle(leak_qs.filter(ceased_on__gte=month_start)),
+        "at_risk": {"n": len(at_risk_regs),
+                    "total": sum((r.amount or 0) for r in at_risk_regs)},
+        "expired": _bundle(base.filter(status=SipRegistration.STATUS_CEASED,
+                                       rta_status__icontains="expire")),
     }
-    monthly_book = base.filter(status=SipRegistration.STATUS_ACTIVE).aggregate(
-        total=Sum("amount"))["total"] or 0
+    tiles["net_month"] = tiles["new_month"]["total"] - tiles["stopped_month"]["total"]
+
+    # monthly flow, last 6 months: new by registration date, stopped by
+    # (real) terminate date
+    months = []
+    cursor = month_start
+    for _ in range(6):
+        months.append(cursor)
+        cursor = (cursor - timedelta(days=1)).replace(day=1)
+    months.reverse()
+    flow = []
+    for m_start in months:
+        m_end = (m_start + timedelta(days=32)).replace(day=1)
+        new = _bundle(base.filter(registered_on__gte=m_start, registered_on__lt=m_end))
+        stopped = _bundle(leak_qs.filter(ceased_on__gte=m_start, ceased_on__lt=m_end))
+        flow.append({
+            "month": m_start, "new": new, "stopped": stopped,
+            "net": (new["total"] or 0) - (stopped["total"] or 0),
+        })
+    flow_max = max([f["new"]["total"] for f in flow]
+                   + [f["stopped"]["total"] for f in flow] + [1])
+    for f in flow:
+        f["new_pct"] = round(100 * (f["new"]["total"] or 0) / flow_max)
+        f["stopped_pct"] = round(100 * (f["stopped"]["total"] or 0) / flow_max)
+
+    # leak watch lists
+    recent_stopped = list(
+        leak_qs.select_related("client").order_by("-ceased_on", "-updated_at")[:15])
+    at_risk_top = sorted(at_risk_regs, key=lambda r: r.amount or 0, reverse=True)[:15]
+
+    # concentration: active book by scheme
+    scheme_rows = list(
+        active_qs.exclude(scheme_name="").values("scheme_name")
+        .annotate(n=Count("id"), total=Sum("amount")).order_by("-total")[:10])
+    scheme_max = max([s["total"] or 0 for s in scheme_rows] + [1])
+    for s in scheme_rows:
+        s["pct"] = round(100 * (s["total"] or 0) / scheme_max)
 
     tab = request.GET.get("tab", "active")
     qs = base.select_related("client", "folio", "arn")
     if tab == "new":
-        qs = qs.filter(first_seen_at__date__gte=month_ago)
+        qs = qs.filter(Q(registered_on__gte=month_ago)
+                       | Q(registered_on__isnull=True, first_seen_at__date__gte=month_ago))
     elif tab == "ceased":
-        qs = qs.filter(status=SipRegistration.STATUS_CEASED)
+        qs = qs.filter(status=SipRegistration.STATUS_CEASED).order_by("-ceased_on")
     elif tab == "at_risk":
-        qs = qs.filter(id__in=at_risk_ids)
+        qs = qs.filter(id__in=at_risk_ids).order_by("-amount")
     elif tab == "all":
         pass
     else:
@@ -369,8 +422,11 @@ def mf_sips(request):
         "page": page,
         "tab": tab,
         "q": q,
-        "counts": counts,
-        "monthly_book": monthly_book,
+        "tiles": tiles,
+        "flow": flow,
+        "recent_stopped": recent_stopped,
+        "at_risk_top": at_risk_top,
+        "scheme_rows": scheme_rows,
         "today": today,
         "at_risk_ids": set(at_risk_ids),
     })

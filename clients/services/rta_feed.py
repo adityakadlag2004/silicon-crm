@@ -80,6 +80,7 @@ SIP_FIELD_ALIASES = {
     "installments": ["NOOFINSTALMENTS", "NOOFINSTALLMENTS", "INSTALMENTS", "NOOFINST"],
     "frequency": ["FREQUENCY", "PERIODICITY", "SIPFREQUENCY"],
     "status": ["STATUS", "SIPSTATUS", "REGSTATUS", "REGNSTATUS"],
+    "cease_date": ["TERMINATEDATE", "TERMINATIONDATE", "CEASEDATE", "STOPDATE"],
     "registration_ref": ["UKRN", "SIPREFNO", "REGNO", "SIPREGNO", "XSIPREGNO",
                          "SIPREFERENCENO", "REGREFNO"],
     "broker": FIELD_ALIASES["broker"],
@@ -549,8 +550,9 @@ def import_sip_registrations(rows, headers, *, rta, feed_import):
             txn_type, ref,
         ]).encode()).hexdigest()
 
-        status_raw = _clean(get(row, "status")).lower()
-        is_ceased = any(tok in status_raw for tok in _CEASE_TOKENS)
+        rta_status = _clean(get(row, "status"))[:40]
+        is_ceased = any(tok in rta_status.lower() for tok in _CEASE_TOKENS)
+        cease_date = _parse_date(get(row, "cease_date"))
         pan = _normalize_pan(_clean(get(row, "pan")))[:20]
         broker = _clean(get(row, "broker"))[:40]
         sub_broker = _clean(get(row, "sub_broker"))[:40]
@@ -572,6 +574,7 @@ def import_sip_registrations(rows, headers, *, rta, feed_import):
                 "registered_on": _parse_date(get(row, "registered_on")),
                 "installments": _parse_int(get(row, "installments")),
                 "broker_code": broker, "sub_broker_code": sub_broker, "arn": arn,
+                "rta_status": rta_status,
                 "source_import": feed_import,
             },
         )
@@ -579,16 +582,23 @@ def import_sip_registrations(rows, headers, *, rta, feed_import):
             feed_import.rows_imported += 1
             if is_ceased:
                 reg.status = SipRegistration.STATUS_CEASED
-                reg.ceased_on = timezone.localdate()
+                reg.ceased_on = cease_date or timezone.localdate()
                 reg.save(update_fields=["status", "ceased_on", "updated_at"])
         else:
             feed_import.rows_duplicate += 1
             changed = []
+            if rta_status and reg.rta_status != rta_status:
+                reg.rta_status = rta_status
+                changed.append("rta_status")
             if is_ceased and reg.status == SipRegistration.STATUS_ACTIVE:
                 reg.status = SipRegistration.STATUS_CEASED
-                reg.ceased_on = timezone.localdate()
+                reg.ceased_on = cease_date or timezone.localdate()
                 changed += ["status", "ceased_on"]
                 newly_ceased.append(reg)
+            elif is_ceased and cease_date and reg.ceased_on != cease_date:
+                # feed carries the authoritative terminate date — correct ours
+                reg.ceased_on = cease_date
+                changed.append("ceased_on")
             if client_id and reg.client_id is None:
                 reg.client_id = client_id
                 changed.append("client_id")

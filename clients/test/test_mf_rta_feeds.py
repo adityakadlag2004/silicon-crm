@@ -810,3 +810,68 @@ class FolioMatchTests(TestCase):
         c.force_login(self.emp_user)
         self.assertEqual(c.get(reverse("clients:mf_folio_match")).status_code, 403)
         self.assertEqual(self._http().get(reverse("clients:mf_folio_match")).status_code, 200)
+
+
+class SipLeakTrackingTests(TestCase):
+    """TerminateDate + raw status capture, and the register dashboard's
+    terminated-vs-expired distinction."""
+
+    MFSD243_CSV = (
+        "Folio,Investor Name,RegistrationDate,Start Date,End Date,Amount,"
+        "Scheme Name,PAN,SipType,Frequency,TerminateDate,Status,AgentCode\n"
+        "9001,Asha Verma,01/02/2026,10/02/2026,10/02/2036,5000,"
+        "Axis Small Cap,ASHAV1234K,SIP,Monthly,,Live SIP,ARN-777\n"
+        "9002,Vikram Rao,01/01/2026,10/01/2026,10/01/2036,3000,"
+        "HDFC Flexi Cap,VIKRR5678L,SIP,Monthly,05/06/2026,Terminated,ARN-777\n"
+        "9003,Sita Iyer,01/01/2025,10/01/2025,10/06/2026,2000,"
+        "SBI Bluechip,SITAI9012M,SIP,Monthly,,Expired,ARN-777\n"
+    ).encode()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="lk_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+
+    def _import(self, name="MFSD243_WSREG9_1.csv", data=None):
+        return rta_feed.import_feed_container(name, data or self.MFSD243_CSV, source="upload")
+
+    def test_terminate_date_and_raw_status_captured(self):
+        from clients.models import SipRegistration
+        self._import()
+        live = SipRegistration.objects.get(folio_number="9001")
+        self.assertEqual(live.status, SipRegistration.STATUS_ACTIVE)
+        self.assertEqual(live.rta_status, "Live SIP")
+
+        terminated = SipRegistration.objects.get(folio_number="9002")
+        self.assertEqual(terminated.status, SipRegistration.STATUS_CEASED)
+        self.assertEqual(str(terminated.ceased_on), "2026-06-05")  # TerminateDate, not today
+
+        expired = SipRegistration.objects.get(folio_number="9003")
+        self.assertEqual(expired.status, SipRegistration.STATUS_CEASED)
+        self.assertEqual(expired.rta_status, "Expired")
+
+    def test_reimport_backfills_cease_date(self):
+        from clients.models import SipRegistration
+        # first file had no terminate date; a later one carries it
+        first = self.MFSD243_CSV.replace(b"05/06/2026,Terminated", b",Terminated")
+        self._import(data=first)
+        reg = SipRegistration.objects.get(folio_number="9002")
+        self.assertNotEqual(str(reg.ceased_on), "2026-06-05")
+        self._import(name="MFSD243_WSREG9_2.csv")
+        reg.refresh_from_db()
+        self.assertEqual(str(reg.ceased_on), "2026-06-05")
+
+    def test_dashboard_counts_leaks_not_expiries(self):
+        self._import()
+        c = TestClient()
+        c.force_login(self.admin_user)
+        resp = c.get(reverse("clients:mf_sips"))
+        self.assertEqual(resp.status_code, 200)
+        tiles = resp.context["tiles"]
+        self.assertEqual(tiles["active"]["n"], 1)
+        self.assertEqual(tiles["expired"]["n"], 1)
+        # terminated shows in leak lists; expired doesn't
+        stopped_folios = [r.folio_number for r in resp.context["recent_stopped"]]
+        self.assertIn("9002", stopped_folios)
+        self.assertNotIn("9003", stopped_folios)
+        self.assertEqual(len(resp.context["flow"]), 6)

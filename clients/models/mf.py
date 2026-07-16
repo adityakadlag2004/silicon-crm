@@ -200,6 +200,9 @@ class SipRegistration(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES,
                               default=STATUS_ACTIVE, db_index=True)
     ceased_on = models.DateField(null=True, blank=True)
+    # verbatim feed status ("Live SIP", "Terminated", "Expired", ...) — lets
+    # the register tell a real stoppage (leak) from natural expiry
+    rta_status = models.CharField(max_length=40, blank=True, default="")
 
     arn = models.ForeignKey(ArnAccount, null=True, blank=True,
                             on_delete=models.SET_NULL, related_name="sip_registrations")

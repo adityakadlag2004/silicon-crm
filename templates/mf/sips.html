@@ -9,25 +9,171 @@
   .mf-pill { display:inline-block; padding:.15rem .5rem; border-radius:10px; font-size:.74rem; font-weight:600; }
   .mf-pill.active { background:#dcfce7; color:#166534; }
   .mf-pill.ceased { background:#fee2e2; color:#b91c1c; }
+  .mf-pill.expired { background:#f1f5f9; color:#475569; }
   .mf-pill.at-risk { background:#fef3c7; color:#92400e; }
-  .sip-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:.75rem; margin-bottom:1rem; }
+
+  .sip-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:.75rem; margin-bottom:1rem; }
   .sip-tile { background:var(--ki-card-bg, #fff); border:1px solid var(--ki-card-border, #e5e7eb); border-radius:10px; padding:.7rem .9rem; }
-  .sip-tile .num { font-size:1.35rem; font-weight:700; }
-  .sip-tile .lbl { font-size:.76rem; color:var(--ki-text-muted, #6b7280); text-transform:uppercase; letter-spacing:.04em; }
+  .sip-tile .num { font-size:1.3rem; font-weight:700; }
+  .sip-tile .sub { font-size:.82rem; color:var(--ki-text-secondary, #4b5563); }
+  .sip-tile .lbl { font-size:.74rem; color:var(--ki-text-muted, #6b7280); text-transform:uppercase; letter-spacing:.04em; margin-top:.15rem; }
+
+  .sip-grid-2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:1rem; margin-bottom:1rem; }
+  .sip-section-title { font-size:.85rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ki-text-secondary, #4b5563); margin:0 0 .6rem; }
+
+  /* inline bars: value text carries the number, the bar is supportive */
+  .bar-track { background:var(--ki-card-border, #eef1f5); border-radius:4px; height:10px; min-width:60px; flex:1; }
+  .bar-fill { height:10px; border-radius:4px; }
+  /* validated palette (CVD-safe): blue = new, red = stopped, teal = book */
+  .bar-new { background:#1d4ed8; }
+  .bar-stop { background:#b91c1c; }
+  .bar-book { background:#0d9488; }
+  .bar-cell { display:flex; align-items:center; gap:.5rem; }
+  .bar-cell .val { font-variant-numeric: tabular-nums; white-space:nowrap; font-size:.82rem; }
+  .net-pos { color:#15803d; font-weight:700; }
+  .net-neg { color:#b91c1c; font-weight:700; }
+
+  .leak-list { list-style:none; margin:0; padding:0; }
+  .leak-list li { display:flex; justify-content:space-between; gap:.6rem; padding:.4rem 0; border-bottom:1px solid var(--ki-card-border, #eef1f5); font-size:.84rem; }
+  .leak-list .who { min-width:0; }
+  .leak-list .who .scheme { color:var(--ki-text-muted, #6b7280); font-size:.76rem; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
+  .leak-list .amt { white-space:nowrap; font-variant-numeric:tabular-nums; }
+
   .sip-tab { text-decoration:none; }
   .sip-tab.on { background:#2d3748 !important; color:#fff !important; border-color:#2d3748 !important; }
 </style>
 {% endblock %}
 
 {% block content %}
+  <!-- ── Headline tiles ─────────────────────────────────────────────── -->
   <div class="sip-tiles">
-    <div class="sip-tile"><div class="num">{{ counts.active }}</div><div class="lbl">Active SIPs</div></div>
-    <div class="sip-tile"><div class="num">₹{{ monthly_book|floatformat:0 }}</div><div class="lbl">Monthly book (active)</div></div>
-    <div class="sip-tile"><div class="num">{{ counts.new }}</div><div class="lbl">New (30 days)</div></div>
-    <div class="sip-tile"><div class="num" style="color:#b91c1c;">{{ counts.ceased }}</div><div class="lbl">Ceased</div></div>
-    <div class="sip-tile"><div class="num" style="color:#92400e;">{{ counts.at_risk }}</div><div class="lbl">At risk (no installment 45d)</div></div>
+    <div class="sip-tile">
+      <div class="num">₹{{ tiles.active.total|floatformat:0 }}</div>
+      <div class="sub">{{ tiles.active.n }} SIPs running</div>
+      <div class="lbl">Active monthly book</div>
+    </div>
+    <div class="sip-tile">
+      <div class="num" style="color:#1d4ed8;">+₹{{ tiles.new_month.total|floatformat:0 }}</div>
+      <div class="sub">{{ tiles.new_month.n }} new registrations</div>
+      <div class="lbl">New this month</div>
+    </div>
+    <div class="sip-tile">
+      <div class="num" style="color:#b91c1c;">−₹{{ tiles.stopped_month.total|floatformat:0 }}</div>
+      <div class="sub">{{ tiles.stopped_month.n }} terminated</div>
+      <div class="lbl">Stopped this month</div>
+    </div>
+    <div class="sip-tile">
+      <div class="num {% if tiles.net_month >= 0 %}net-pos{% else %}net-neg{% endif %}">
+        {% if tiles.net_month >= 0 %}+{% endif %}₹{{ tiles.net_month|floatformat:0 }}</div>
+      <div class="sub">new − stopped</div>
+      <div class="lbl">Net flow this month</div>
+    </div>
+    <div class="sip-tile">
+      <div class="num" style="color:#92400e;">₹{{ tiles.at_risk.total|floatformat:0 }}</div>
+      <div class="sub">{{ tiles.at_risk.n }} SIPs, no installment 45d+</div>
+      <div class="lbl">At risk — call these</div>
+    </div>
   </div>
 
+  <!-- ── Monthly flow ───────────────────────────────────────────────── -->
+  <div class="ki-card" style="margin-bottom:1rem;">
+    <div class="ki-card-body">
+      <h3 class="sip-section-title">Monthly SIP flow — starts vs stoppages (last 6 months)</h3>
+      <div style="overflow-x:auto;">
+        <table class="mf-table">
+          <thead><tr>
+            <th style="width:90px;">Month</th>
+            <th>New <span class="text-muted">(count · ₹/mo)</span></th>
+            <th>Stopped <span class="text-muted">(count · ₹/mo)</span></th>
+            <th style="width:110px;">Net</th>
+          </tr></thead>
+          <tbody>
+            {% for f in flow %}
+            <tr>
+              <td>{{ f.month|date:"M Y" }}</td>
+              <td><div class="bar-cell">
+                <span class="val">{{ f.new.n }} · ₹{{ f.new.total|floatformat:0 }}</span>
+                <div class="bar-track"><div class="bar-fill bar-new" style="width:{{ f.new_pct }}%;"></div></div>
+              </div></td>
+              <td><div class="bar-cell">
+                <span class="val">{{ f.stopped.n }} · ₹{{ f.stopped.total|floatformat:0 }}</span>
+                <div class="bar-track"><div class="bar-fill bar-stop" style="width:{{ f.stopped_pct }}%;"></div></div>
+              </div></td>
+              <td class="{% if f.net >= 0 %}net-pos{% else %}net-neg{% endif %}">
+                {% if f.net >= 0 %}+{% endif %}₹{{ f.net|floatformat:0 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="text-muted" style="font-size:.76rem;margin-top:.4rem;">
+        Stoppages count real terminations only — natural expiries ({{ tiles.expired.n }} plans,
+        ₹{{ tiles.expired.total|floatformat:0 }}/mo lifetime) and rejections are excluded.
+        Stop dates come from the RTA's TerminateDate.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Leak watch ─────────────────────────────────────────────────── -->
+  <div class="sip-grid-2">
+    <div class="ki-card"><div class="ki-card-body">
+      <h3 class="sip-section-title" style="color:#b91c1c;">🔻 Recent stoppages — win-back calls</h3>
+      <ul class="leak-list">
+        {% for reg in recent_stopped %}
+        <li>
+          <span class="who">
+            {% if reg.client %}<a href="{% url 'clients:client_profile' reg.client.id %}">{{ reg.client.name }}</a>
+            {% else %}{{ reg.investor_name|default:reg.folio_number }}{% endif %}
+            <span class="scheme">{{ reg.scheme_name }}</span>
+          </span>
+          <span class="amt">₹{{ reg.amount|floatformat:0 }}<br>
+            <span class="text-muted" style="font-size:.74rem;">{{ reg.ceased_on|date:"d M Y" }}</span></span>
+        </li>
+        {% empty %}<li class="text-muted">No terminations recorded yet.</li>{% endfor %}
+      </ul>
+      <div style="margin-top:.5rem;"><a class="ki-btn ki-btn-sm ki-btn-secondary" href="?tab=ceased">All ceased →</a></div>
+    </div></div>
+
+    <div class="ki-card"><div class="ki-card-body">
+      <h3 class="sip-section-title" style="color:#92400e;">⚠️ At risk — installments stopped arriving</h3>
+      <ul class="leak-list">
+        {% for reg in at_risk_top %}
+        <li>
+          <span class="who">
+            {% if reg.client %}<a href="{% url 'clients:client_profile' reg.client.id %}">{{ reg.client.name }}</a>
+            {% else %}{{ reg.investor_name|default:reg.folio_number }}{% endif %}
+            <span class="scheme">{{ reg.scheme_name }}</span>
+          </span>
+          <span class="amt">₹{{ reg.amount|floatformat:0 }}<br>
+            <span class="text-muted" style="font-size:.74rem;">since {{ reg.start_date|date:"M Y" }}</span></span>
+        </li>
+        {% empty %}<li class="text-muted">Nothing at risk right now 🎉</li>{% endfor %}
+      </ul>
+      <div style="margin-top:.5rem;"><a class="ki-btn ki-btn-sm ki-btn-secondary" href="?tab=at_risk">All at-risk →</a></div>
+    </div></div>
+  </div>
+
+  <!-- ── Book concentration ─────────────────────────────────────────── -->
+  <div class="ki-card" style="margin-bottom:1rem;">
+    <div class="ki-card-body">
+      <h3 class="sip-section-title">Active book by scheme (top 10, ₹/month)</h3>
+      <table class="mf-table">
+        <tbody>
+          {% for s in scheme_rows %}
+          <tr>
+            <td style="max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ s.scheme_name }}</td>
+            <td style="width:55%;"><div class="bar-cell">
+              <span class="val">{{ s.n }} · ₹{{ s.total|floatformat:0 }}</span>
+              <div class="bar-track"><div class="bar-fill bar-book" style="width:{{ s.pct }}%;"></div></div>
+            </div></td>
+          </tr>
+          {% empty %}<tr><td class="text-muted">No active SIPs yet.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Register ───────────────────────────────────────────────────── -->
   <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;align-items:center;">
     <div class="btn-group btn-group-sm">
       <a class="ki-btn ki-btn-sm ki-btn-secondary sip-tab {% if tab == 'active' %}on{% endif %}" href="?tab=active">Active</a>
@@ -50,7 +196,7 @@
       <table class="mf-table">
         <thead><tr>
           <th>Investor / Client</th><th>Scheme</th><th>Folio</th><th>Type</th>
-          <th>Amount</th><th>Start</th><th>End</th><th>Registered</th><th>RTA</th><th>Status</th>
+          <th>Amount</th><th>Start</th><th>End</th><th>RTA status</th><th>Status</th>
         </tr></thead>
         <tbody>
           {% for reg in page %}
@@ -63,17 +209,20 @@
                 <span class="mf-pill" style="background:#f1f5f9;color:#475569;">unlinked</span>
               {% endif %}
             </td>
-            <td>{{ reg.scheme_name|truncatechars:40|default:"—" }}</td>
+            <td>{{ reg.scheme_name|truncatechars:38|default:"—" }}</td>
             <td>{{ reg.folio_number }}</td>
             <td>{{ reg.txn_type }}</td>
             <td>{% if reg.amount %}₹{{ reg.amount|floatformat:0 }}{% else %}—{% endif %}</td>
             <td>{{ reg.start_date|date:"d M Y"|default:"—" }}</td>
             <td>{{ reg.end_date|date:"M Y"|default:"—" }}</td>
-            <td>{{ reg.registered_on|date:"d M Y"|default:"—" }}</td>
-            <td>{{ reg.get_rta_display|default:"—" }}</td>
+            <td class="text-muted" style="font-size:.78rem;">{{ reg.rta_status|default:"—" }}</td>
             <td>
               {% if reg.status == "ceased" %}
-                <span class="mf-pill ceased">Ceased{% if reg.ceased_on %} {{ reg.ceased_on|date:"d M" }}{% endif %}</span>
+                {% if "xpire" in reg.rta_status %}
+                  <span class="mf-pill expired">Expired</span>
+                {% else %}
+                  <span class="mf-pill ceased">Ceased{% if reg.ceased_on %} {{ reg.ceased_on|date:"d M y" }}{% endif %}</span>
+                {% endif %}
               {% elif reg.id in at_risk_ids %}
                 <span class="mf-pill at-risk">At risk</span>
               {% else %}
@@ -82,9 +231,8 @@
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="10" class="text-muted" style="padding:1.2rem;">
-            No SIP registrations here yet. They arrive automatically with the daily
-            RTA feeds (CAMS Systematic Registration Status + KFintech MFSD243).
+          <tr><td colspan="9" class="text-muted" style="padding:1.2rem;">
+            Nothing here. SIP registrations arrive automatically with the RTA feeds.
           </td></tr>
           {% endfor %}
         </tbody>
