@@ -64,3 +64,25 @@ def indian_number(value, decimal_places=2):
         int_part = f"{int_part}.{dec_part}"
 
     return f"-{int_part}" if is_negative else int_part
+
+
+@register.filter
+def inr(value):
+    """Indian digit grouping: 2063297 -> '20,63,297' (last 3 digits, then
+    pairs). Rounds decimals, keeps the minus sign, blanks stay 0."""
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        return "0"
+    sign = "-" if n < 0 else ""
+    s = str(abs(n))
+    if len(s) <= 3:
+        return sign + s
+    head, tail = s[:-3], s[-3:]
+    pairs = []
+    while len(head) > 2:
+        pairs.insert(0, head[-2:])
+        head = head[:-2]
+    if head:
+        pairs.insert(0, head)
+    return sign + ",".join(pairs) + "," + tail

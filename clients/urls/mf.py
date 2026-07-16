@@ -15,4 +15,5 @@ urlpatterns = [
     path("mf/folios/<int:folio_id>/link/", mf.mf_folio_link, name="mf_folio_link"),
     path("mf/transactions/", mf.mf_transactions, name="mf_transactions"),
     path("mf/sips/", mf.mf_sips, name="mf_sips"),
+    path("mf/sips/month/<int:year>/<int:month>/", mf.mf_sips_month, name="mf_sips_month"),
 ]

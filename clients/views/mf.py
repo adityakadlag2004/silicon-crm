@@ -299,6 +299,58 @@ def mf_folio_match(request):
     })
 
 
+def _sip_leak_qs():
+    """Ceased registrations that are real terminations — the AUM leaks.
+    Natural expiries and process rejections are not leaks."""
+    from ..models import SipRegistration
+
+    return SipRegistration.objects.filter(status=SipRegistration.STATUS_CEASED).exclude(
+        Q(rta_status__icontains="expire") | Q(rta_status__icontains="reject"))
+
+
+@_admin_required
+def mf_sips_month(request, year, month):
+    """Month drill-down from the SIP flow table: every registration started,
+    terminated, or naturally expired in that month."""
+    from datetime import date as date_cls, timedelta
+
+    from django.http import Http404
+
+    from ..models import SipRegistration
+
+    try:
+        m_start = date_cls(year, month, 1)
+    except ValueError:
+        raise Http404("No such month")
+    m_end = (m_start + timedelta(days=32)).replace(day=1)
+
+    base = SipRegistration.objects.select_related("client")
+    new_regs = list(base.filter(registered_on__gte=m_start,
+                                registered_on__lt=m_end).order_by("-amount"))
+    stopped_regs = list(_sip_leak_qs().select_related("client")
+                        .filter(ceased_on__gte=m_start, ceased_on__lt=m_end)
+                        .order_by("-amount"))
+    expired_regs = list(base.filter(status=SipRegistration.STATUS_CEASED,
+                                    rta_status__icontains="expire",
+                                    end_date__gte=m_start, end_date__lt=m_end)
+                        .order_by("-amount"))
+
+    new_total = sum((r.amount or 0) for r in new_regs)
+    stopped_total = sum((r.amount or 0) for r in stopped_regs)
+    net = new_total - stopped_total
+    return render(request, "mf/sips_month.html", {
+        "page_title": f"SIP flow — {m_start:%B %Y}",
+        "m_start": m_start,
+        "new_regs": new_regs,
+        "stopped_regs": stopped_regs,
+        "expired_regs": expired_regs,
+        "new_total": new_total,
+        "stopped_total": stopped_total,
+        "net": net,
+        "net_abs": abs(net),
+    })
+
+
 @_admin_required
 def mf_sips(request):
     """SIP register dashboard: the firm's systematic book at a glance —
@@ -319,10 +371,7 @@ def mf_sips(request):
 
     base = SipRegistration.objects.all()
     active_qs = base.filter(status=SipRegistration.STATUS_ACTIVE)
-    # a stoppage is a LEAK only when the RTA says terminated (or our own
-    # transition detected it) — natural expiry/rejections are not leaks
-    leak_qs = base.filter(status=SipRegistration.STATUS_CEASED).exclude(
-        Q(rta_status__icontains="expire") | Q(rta_status__icontains="reject"))
+    leak_qs = _sip_leak_qs()
 
     # folios that received a systematic installment recently — anything
     # active and older than the cutoff without one is "at risk"
@@ -356,6 +405,7 @@ def mf_sips(request):
                                        rta_status__icontains="expire")),
     }
     tiles["net_month"] = tiles["new_month"]["total"] - tiles["stopped_month"]["total"]
+    tiles["net_month_abs"] = abs(tiles["net_month"])
 
     # monthly flow, last 6 months: new by registration date, stopped by
     # (real) terminate date
@@ -370,9 +420,10 @@ def mf_sips(request):
         m_end = (m_start + timedelta(days=32)).replace(day=1)
         new = _bundle(base.filter(registered_on__gte=m_start, registered_on__lt=m_end))
         stopped = _bundle(leak_qs.filter(ceased_on__gte=m_start, ceased_on__lt=m_end))
+        net_val = (new["total"] or 0) - (stopped["total"] or 0)
         flow.append({
             "month": m_start, "new": new, "stopped": stopped,
-            "net": (new["total"] or 0) - (stopped["total"] or 0),
+            "net": net_val, "net_abs": abs(net_val),
         })
     flow_max = max([f["new"]["total"] for f in flow]
                    + [f["stopped"]["total"] for f in flow] + [1])

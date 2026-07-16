@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}SIP flow — {{ m_start|date:"F Y" }}{% endblock %}
+{% block page_title %}SIP flow — {{ m_start|date:"F Y" }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mf-table { width: 100%; font-size: .85rem; border-collapse: collapse; }
+  .mf-table th, .mf-table td { padding: .45rem .5rem; border-bottom: 1px solid var(--ki-card-border, #e5e7eb); text-align: left; }
+  .sip-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:.75rem; margin-bottom:1rem; }
+  .sip-tile { background:var(--ki-card-bg, #fff); border:1px solid var(--ki-card-border, #e5e7eb); border-radius:10px; padding:.7rem .9rem; }
+  .sip-tile .num { font-size:1.3rem; font-weight:700; }
+  .sip-tile .sub { font-size:.82rem; color:var(--ki-text-secondary, #4b5563); }
+  .sip-tile .lbl { font-size:.74rem; color:var(--ki-text-muted, #6b7280); text-transform:uppercase; letter-spacing:.04em; margin-top:.15rem; }
+  .sip-section-title { font-size:.85rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ki-text-secondary, #4b5563); margin:0 0 .6rem; }
+  .net-pos { color:#15803d; font-weight:700; }
+  .net-neg { color:#b91c1c; font-weight:700; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div style="margin-bottom:1rem;">
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_sips' %}"><i class="bi bi-arrow-left"></i> SIP Register</a>
+  </div>
+
+  <div class="sip-tiles">
+    <div class="sip-tile">
+      <div class="num" style="color:#1d4ed8;">+₹{{ new_total|inr }}</div>
+      <div class="sub">{{ new_regs|length }} registrations</div>
+      <div class="lbl">New in {{ m_start|date:"M Y" }}</div>
+    </div>
+    <div class="sip-tile">
+      <div class="num" style="color:#b91c1c;">−₹{{ stopped_total|inr }}</div>
+      <div class="sub">{{ stopped_regs|length }} terminated</div>
+      <div class="lbl">Stopped in {{ m_start|date:"M Y" }}</div>
+    </div>
+    <div class="sip-tile">
+      <div class="num {% if net >= 0 %}net-pos{% else %}net-neg{% endif %}">
+        {% if net >= 0 %}+₹{{ net|inr }}{% else %}−₹{{ net_abs|inr }}{% endif %}</div>
+      <div class="sub">new − stopped</div>
+      <div class="lbl">Net flow</div>
+    </div>
+    <div class="sip-tile">
+      <div class="num" style="color:#475569;">{{ expired_regs|length }}</div>
+      <div class="sub">reached their end date</div>
+      <div class="lbl">Natural expiries</div>
+    </div>
+  </div>
+
+  <div class="ki-card" style="margin-bottom:1rem;">
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <h3 class="sip-section-title" style="color:#1d4ed8;">＋ New registrations ({{ new_regs|length }})</h3>
+      <table class="mf-table">
+        <thead><tr><th>Investor / Client</th><th>Scheme</th><th>Folio</th><th>Type</th><th>₹/month</th><th>Registered</th><th>Start</th><th>Status now</th></tr></thead>
+        <tbody>
+          {% for reg in new_regs %}
+          <tr>
+            <td>{% if reg.client %}<a href="{% url 'clients:client_profile' reg.client.id %}">{{ reg.client.name }}</a>{% else %}{{ reg.investor_name|default:"—" }}{% endif %}</td>
+            <td>{{ reg.scheme_name|truncatechars:38 }}</td>
+            <td>{{ reg.folio_number }}</td>
+            <td>{{ reg.txn_type }}</td>
+            <td>₹{{ reg.amount|inr }}</td>
+            <td>{{ reg.registered_on|date:"d M Y" }}</td>
+            <td>{{ reg.start_date|date:"d M Y"|default:"—" }}</td>
+            <td>{{ reg.rta_status|default:reg.get_status_display }}</td>
+          </tr>
+          {% empty %}<tr><td colspan="8" class="text-muted">No new registrations this month.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ki-card" style="margin-bottom:1rem;" id="stopped">
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <h3 class="sip-section-title" style="color:#b91c1c;">🔻 Terminations ({{ stopped_regs|length }}) — win-back candidates</h3>
+      <table class="mf-table">
+        <thead><tr><th>Investor / Client</th><th>Scheme</th><th>Folio</th><th>₹/month lost</th><th>Ran since</th><th>Stopped on</th><th>RTA status</th></tr></thead>
+        <tbody>
+          {% for reg in stopped_regs %}
+          <tr>
+            <td>{% if reg.client %}<a href="{% url 'clients:client_profile' reg.client.id %}">{{ reg.client.name }}</a>{% else %}{{ reg.investor_name|default:"—" }}{% endif %}</td>
+            <td>{{ reg.scheme_name|truncatechars:38 }}</td>
+            <td>{{ reg.folio_number }}</td>
+            <td>₹{{ reg.amount|inr }}</td>
+            <td>{{ reg.start_date|date:"M Y"|default:"—" }}</td>
+            <td>{{ reg.ceased_on|date:"d M Y" }}</td>
+            <td class="text-muted">{{ reg.rta_status|default:"—" }}</td>
+          </tr>
+          {% empty %}<tr><td colspan="7" class="text-muted">No terminations this month 🎉</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ki-card">
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <h3 class="sip-section-title" style="color:#475569;">Natural expiries ({{ expired_regs|length }}) — completed their term</h3>
+      <table class="mf-table">
+        <thead><tr><th>Investor / Client</th><th>Scheme</th><th>Folio</th><th>₹/month</th><th>Ran since</th><th>End date</th></tr></thead>
+        <tbody>
+          {% for reg in expired_regs %}
+          <tr>
+            <td>{% if reg.client %}<a href="{% url 'clients:client_profile' reg.client.id %}">{{ reg.client.name }}</a>{% else %}{{ reg.investor_name|default:"—" }}{% endif %}</td>
+            <td>{{ reg.scheme_name|truncatechars:38 }}</td>
+            <td>{{ reg.folio_number }}</td>
+            <td>₹{{ reg.amount|inr }}</td>
+            <td>{{ reg.start_date|date:"M Y"|default:"—" }}</td>
+            <td>{{ reg.end_date|date:"d M Y" }}</td>
+          </tr>
+          {% empty %}<tr><td colspan="6" class="text-muted">No expiries this month.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+      <div class="text-muted" style="font-size:.76rem;margin-top:.4rem;">
+        Expiries completed their planned term — renewal conversations, not leaks.
+      </div>
+    </div>
+  </div>
+{% endblock %}

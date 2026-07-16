@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}SIP Register{% endblock %}
 {% block page_title %}SIP Register{% endblock %}
 
@@ -13,7 +14,8 @@
   .mf-pill.at-risk { background:#fef3c7; color:#92400e; }
 
   .sip-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:.75rem; margin-bottom:1rem; }
-  .sip-tile { background:var(--ki-card-bg, #fff); border:1px solid var(--ki-card-border, #e5e7eb); border-radius:10px; padding:.7rem .9rem; }
+  .sip-tile { background:var(--ki-card-bg, #fff); border:1px solid var(--ki-card-border, #e5e7eb); border-radius:10px; padding:.7rem .9rem; display:block; color:inherit; text-decoration:none; }
+  a.sip-tile:hover { border-color:#94a3b8; box-shadow:0 1px 4px rgba(0,0,0,.08); color:inherit; }
   .sip-tile .num { font-size:1.3rem; font-weight:700; }
   .sip-tile .sub { font-size:.82rem; color:var(--ki-text-secondary, #4b5563); }
   .sip-tile .lbl { font-size:.74rem; color:var(--ki-text-muted, #6b7280); text-transform:uppercase; letter-spacing:.04em; margin-top:.15rem; }
@@ -47,32 +49,32 @@
 {% block content %}
   <!-- ── Headline tiles ─────────────────────────────────────────────── -->
   <div class="sip-tiles">
-    <div class="sip-tile">
-      <div class="num">₹{{ tiles.active.total|floatformat:0 }}</div>
+    <a class="sip-tile" href="?tab=active" title="Open the active register">
+      <div class="num">₹{{ tiles.active.total|inr }}</div>
       <div class="sub">{{ tiles.active.n }} SIPs running</div>
       <div class="lbl">Active monthly book</div>
-    </div>
-    <div class="sip-tile">
-      <div class="num" style="color:#1d4ed8;">+₹{{ tiles.new_month.total|floatformat:0 }}</div>
+    </a>
+    <a class="sip-tile" href="{% url 'clients:mf_sips_month' today.year today.month %}" title="Open this month's detail">
+      <div class="num" style="color:#1d4ed8;">+₹{{ tiles.new_month.total|inr }}</div>
       <div class="sub">{{ tiles.new_month.n }} new registrations</div>
       <div class="lbl">New this month</div>
-    </div>
-    <div class="sip-tile">
-      <div class="num" style="color:#b91c1c;">−₹{{ tiles.stopped_month.total|floatformat:0 }}</div>
+    </a>
+    <a class="sip-tile" href="{% url 'clients:mf_sips_month' today.year today.month %}#stopped" title="Open this month's stoppages">
+      <div class="num" style="color:#b91c1c;">−₹{{ tiles.stopped_month.total|inr }}</div>
       <div class="sub">{{ tiles.stopped_month.n }} terminated</div>
       <div class="lbl">Stopped this month</div>
-    </div>
-    <div class="sip-tile">
+    </a>
+    <a class="sip-tile" href="{% url 'clients:mf_sips_month' today.year today.month %}" title="Open this month's detail">
       <div class="num {% if tiles.net_month >= 0 %}net-pos{% else %}net-neg{% endif %}">
-        {% if tiles.net_month >= 0 %}+{% endif %}₹{{ tiles.net_month|floatformat:0 }}</div>
+        {% if tiles.net_month >= 0 %}+₹{{ tiles.net_month|inr }}{% else %}−₹{{ tiles.net_month_abs|inr }}{% endif %}</div>
       <div class="sub">new − stopped</div>
       <div class="lbl">Net flow this month</div>
-    </div>
-    <div class="sip-tile">
-      <div class="num" style="color:#92400e;">₹{{ tiles.at_risk.total|floatformat:0 }}</div>
+    </a>
+    <a class="sip-tile" href="?tab=at_risk" title="Open the at-risk list">
+      <div class="num" style="color:#92400e;">₹{{ tiles.at_risk.total|inr }}</div>
       <div class="sub">{{ tiles.at_risk.n }} SIPs, no installment 45d+</div>
       <div class="lbl">At risk — call these</div>
-    </div>
+    </a>
   </div>
 
   <!-- ── Monthly flow ───────────────────────────────────────────────── -->
@@ -90,17 +92,18 @@
           <tbody>
             {% for f in flow %}
             <tr>
-              <td>{{ f.month|date:"M Y" }}</td>
+              <td><a href="{% url 'clients:mf_sips_month' f.month.year f.month.month %}"
+                     title="Open {{ f.month|date:'F Y' }} detail">{{ f.month|date:"M Y" }} <i class="bi bi-box-arrow-up-right" style="font-size:.7rem;"></i></a></td>
               <td><div class="bar-cell">
-                <span class="val">{{ f.new.n }} · ₹{{ f.new.total|floatformat:0 }}</span>
+                <span class="val">{{ f.new.n }} · ₹{{ f.new.total|inr }}</span>
                 <div class="bar-track"><div class="bar-fill bar-new" style="width:{{ f.new_pct }}%;"></div></div>
               </div></td>
               <td><div class="bar-cell">
-                <span class="val">{{ f.stopped.n }} · ₹{{ f.stopped.total|floatformat:0 }}</span>
+                <span class="val">{{ f.stopped.n }} · ₹{{ f.stopped.total|inr }}</span>
                 <div class="bar-track"><div class="bar-fill bar-stop" style="width:{{ f.stopped_pct }}%;"></div></div>
               </div></td>
               <td class="{% if f.net >= 0 %}net-pos{% else %}net-neg{% endif %}">
-                {% if f.net >= 0 %}+{% endif %}₹{{ f.net|floatformat:0 }}</td>
+                {% if f.net >= 0 %}+₹{{ f.net|inr }}{% else %}−₹{{ f.net_abs|inr }}{% endif %}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -108,7 +111,7 @@
       </div>
       <div class="text-muted" style="font-size:.76rem;margin-top:.4rem;">
         Stoppages count real terminations only — natural expiries ({{ tiles.expired.n }} plans,
-        ₹{{ tiles.expired.total|floatformat:0 }}/mo lifetime) and rejections are excluded.
+        ₹{{ tiles.expired.total|inr }}/mo lifetime) and rejections are excluded.
         Stop dates come from the RTA's TerminateDate.
       </div>
     </div>
@@ -126,7 +129,7 @@
             {% else %}{{ reg.investor_name|default:reg.folio_number }}{% endif %}
             <span class="scheme">{{ reg.scheme_name }}</span>
           </span>
-          <span class="amt">₹{{ reg.amount|floatformat:0 }}<br>
+          <span class="amt">₹{{ reg.amount|inr }}<br>
             <span class="text-muted" style="font-size:.74rem;">{{ reg.ceased_on|date:"d M Y" }}</span></span>
         </li>
         {% empty %}<li class="text-muted">No terminations recorded yet.</li>{% endfor %}
@@ -144,7 +147,7 @@
             {% else %}{{ reg.investor_name|default:reg.folio_number }}{% endif %}
             <span class="scheme">{{ reg.scheme_name }}</span>
           </span>
-          <span class="amt">₹{{ reg.amount|floatformat:0 }}<br>
+          <span class="amt">₹{{ reg.amount|inr }}<br>
             <span class="text-muted" style="font-size:.74rem;">since {{ reg.start_date|date:"M Y" }}</span></span>
         </li>
         {% empty %}<li class="text-muted">Nothing at risk right now 🎉</li>{% endfor %}
@@ -161,9 +164,10 @@
         <tbody>
           {% for s in scheme_rows %}
           <tr>
-            <td style="max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ s.scheme_name }}</td>
+            <td style="max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              <a href="?tab=active&q={{ s.scheme_name|urlencode }}" title="Open this scheme's active SIPs">{{ s.scheme_name }}</a></td>
             <td style="width:55%;"><div class="bar-cell">
-              <span class="val">{{ s.n }} · ₹{{ s.total|floatformat:0 }}</span>
+              <span class="val">{{ s.n }} · ₹{{ s.total|inr }}</span>
               <div class="bar-track"><div class="bar-fill bar-book" style="width:{{ s.pct }}%;"></div></div>
             </div></td>
           </tr>
@@ -212,7 +216,7 @@
             <td>{{ reg.scheme_name|truncatechars:38|default:"—" }}</td>
             <td>{{ reg.folio_number }}</td>
             <td>{{ reg.txn_type }}</td>
-            <td>{% if reg.amount %}₹{{ reg.amount|floatformat:0 }}{% else %}—{% endif %}</td>
+            <td>{% if reg.amount %}₹{{ reg.amount|inr }}{% else %}—{% endif %}</td>
             <td>{{ reg.start_date|date:"d M Y"|default:"—" }}</td>
             <td>{{ reg.end_date|date:"M Y"|default:"—" }}</td>
             <td class="text-muted" style="font-size:.78rem;">{{ reg.rta_status|default:"—" }}</td>

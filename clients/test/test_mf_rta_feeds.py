@@ -875,3 +875,49 @@ class SipLeakTrackingTests(TestCase):
         self.assertIn("9002", stopped_folios)
         self.assertNotIn("9003", stopped_folios)
         self.assertEqual(len(resp.context["flow"]), 6)
+
+
+class SipMonthDrilldownTests(TestCase):
+    """Month drill-down page + Indian number formatting."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from clients.models import SipRegistration
+        cls.admin_user = User.objects.create_user(username="md_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        SipRegistration.objects.create(
+            dedupe_key="k1", folio_number="1", scheme_name="Axis Small Cap",
+            amount=5000, registered_on="2026-06-05", start_date="2026-06-10",
+            status="active", rta_status="Live SIP")
+        SipRegistration.objects.create(
+            dedupe_key="k2", folio_number="2", scheme_name="HDFC Flexi Cap",
+            amount=3000, registered_on="2026-01-05", start_date="2026-01-10",
+            status="ceased", rta_status="Terminated", ceased_on="2026-06-20")
+        SipRegistration.objects.create(
+            dedupe_key="k3", folio_number="3", scheme_name="SBI Bluechip",
+            amount=2000, registered_on="2025-01-05", start_date="2025-01-10",
+            status="ceased", rta_status="Expired", end_date="2026-06-15")
+
+    def _http(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        return c
+
+    def test_month_page_splits_new_stopped_expired(self):
+        resp = self._http().get(reverse("clients:mf_sips_month", args=[2026, 6]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([r.folio_number for r in resp.context["new_regs"]], ["1"])
+        self.assertEqual([r.folio_number for r in resp.context["stopped_regs"]], ["2"])
+        self.assertEqual([r.folio_number for r in resp.context["expired_regs"]], ["3"])
+        self.assertEqual(resp.context["net"], 2000)  # 5000 new - 3000 stopped
+
+    def test_invalid_month_404(self):
+        self.assertEqual(self._http().get("/clients/mf/sips/month/2026/13/").status_code, 404)
+
+    def test_inr_filter_groups_indian_style(self):
+        from clients.templatetags.custom_filters import inr
+        self.assertEqual(inr(2063297), "20,63,297")
+        self.assertEqual(inr(182063297), "18,20,63,297")
+        self.assertEqual(inr(999), "999")
+        self.assertEqual(inr(-1234567), "-12,34,567")
+        self.assertEqual(inr(None), "0")
