@@ -473,7 +473,7 @@ def import_rows(rows, header_map, *, rta, feed_import):
         trade_date = _parse_date(get(row, "trade_date"))
         txn_number = _clean(get(row, "txn_number"))
         key = _dedupe_key(rta, amc, folio_no, txn_number, txn_type, trade_date, amount, units)
-        _, created = MutualFundTransaction.objects.get_or_create(
+        txn, created = MutualFundTransaction.objects.get_or_create(
             dedupe_key=key,
             defaults={
                 "folio": folio, "rta": rta, "scheme_name": _clean(get(row, "scheme"))[:200],
@@ -488,6 +488,13 @@ def import_rows(rows, header_map, *, rta, feed_import):
             feed_import.rows_imported += 1
         else:
             feed_import.rows_duplicate += 1
+            # re-imports are self-healing: fill in attribution an earlier
+            # import missed (e.g. before the TD_AGENT fallback existed)
+            if arn and txn.arn_id is None:
+                txn.arn = arn
+                if broker and not txn.broker_code:
+                    txn.broker_code = broker[:40]
+                txn.save(update_fields=["arn", "broker_code"])
 
     if unmatched_brokers:
         listing = ", ".join(sorted(unmatched_brokers)[:20])

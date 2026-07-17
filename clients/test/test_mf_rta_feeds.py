@@ -1004,3 +1004,21 @@ class BrokerAttributionFallbackTests(TestCase):
         rta_feed.import_feed_container("MFSD201_b.csv", second, source="upload")
         txn = MutualFundTransaction.objects.get(txn_number="T3")
         self.assertEqual(txn.arn, self.arn)  # inherited from the folio
+
+
+    def test_reimport_heals_missing_attribution(self):
+        # first import: broker column empty and no agent fallback available
+        first = (
+            "FMCODE,TD_ACNO,INVNAME,TRDESC,TD_TRNO,TD_TRDT,TD_AMT,TD_UNITS,TD_BROKER\n"
+            "102,881003,Asha Naik,Purchase,T4,01/07/2026,5000,10,\n"
+        ).encode()
+        rta_feed.import_feed_container("MFSD201_c.csv", first, source="upload")
+        self.assertIsNone(MutualFundTransaction.objects.get(txn_number="T4").arn)
+        # same row re-imported, now with the agent column present
+        second = (
+            "FMCODE,TD_ACNO,INVNAME,TRDESC,TD_TRNO,TD_TRDT,TD_AMT,TD_UNITS,TD_BROKER,TD_AGENT\n"
+            "102,881003,Asha Naik,Purchase,T4,01/07/2026,5000,10,,ARN-295541\n"
+        ).encode()
+        rta_feed.import_feed_container("MFSD201_d.csv", second, source="upload")
+        txn = MutualFundTransaction.objects.get(txn_number="T4")
+        self.assertEqual(txn.arn, self.arn)
