@@ -246,13 +246,15 @@ def client_bulk_merge(request):
         group_count = 0
     for i in range(group_count):
         keep_id = request.POST.get(f"keep_g{i}", "")
-        member_ids = request.POST.getlist(f"members_g{i}")
-        if not keep_id or keep_id not in member_ids:
+        # only the profiles the admin explicitly ticked in this group are
+        # merged — unrelated members sharing a phone are left alone
+        merge_ids = request.POST.getlist(f"merge_g{i}")
+        if not keep_id.isdigit() or not merge_ids:
             continue
         keep = Client.objects.filter(id=keep_id).first()
         if keep is None:
             continue
-        for rid in member_ids:
+        for rid in merge_ids:
             if rid == keep_id or not rid.isdigit():
                 continue
             remove = Client.objects.filter(id=rid).first()

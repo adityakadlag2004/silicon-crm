@@ -107,24 +107,30 @@
     <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-people"></i> Possible duplicate profiles ({{ duplicate_groups|length }})</span></div>
     <div class="ki-card-body">
       <p class="text-muted" style="font-size:.85rem;">
-        Profiles sharing a PAN, phone number, or exact name. In each group, <strong>pick the profile to
-        keep</strong> (the ● radio) — every other profile in that group merges into it, carrying all its
-        records (sales, renewals, tasks, folios, SIPs, follow-ups). Do this for as many groups as you
-        like, then hit <strong>Merge all selected</strong> once at the bottom.
+        Profiles sharing a PAN, phone number, or exact name — <strong>but a shared phone can also be two
+        real people</strong>, so nothing is pre-selected. In a group that really is one person:
+        <strong>tick the profiles to merge</strong> and mark <strong>one as ● Keep</strong>. Ticked
+        profiles fold into the Keep one (with all their sales, renewals, folios, SIPs, tasks); untouched
+        rows stay separate. Then hit <strong>Merge all selected</strong>.
       </p>
       <form method="post" action="{% url 'clients:client_bulk_merge' %}"
-            onsubmit="return confirm('Merge every group where you picked a keeper? This cannot be undone.');">
+            onsubmit="return confirm('Merge the ticked profiles in each group into their Keep profile? This cannot be undone.');">
         {% csrf_token %}
         <input type="hidden" name="group_count" value="{{ duplicate_groups|length }}">
         {% for group in duplicate_groups %}
         <div class="dup-group">
           <div style="margin-bottom:.3rem;"><span class="dup-tag">{{ group.label }}</span> <code>{{ group.key }}</code>
-            <span class="text-muted" style="font-size:.78rem;">— pick the one to keep</span></div>
+            <span class="text-muted" style="font-size:.78rem;">— tick the same-person profiles, mark one to keep</span></div>
           {% for client in group.clients %}
-          <label class="dup-row" style="cursor:pointer;">
-            <input type="radio" name="keep_g{{ forloop.parentloop.counter0 }}" value="{{ client.id }}"
-                   {% if forloop.first %}checked{% endif %} style="margin-right:.5rem;">
-            <input type="hidden" name="members_g{{ forloop.parentloop.counter0 }}" value="{{ client.id }}">
+          <div class="dup-row">
+            <label style="display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;margin-right:.6rem;">
+              <input type="checkbox" name="merge_g{{ forloop.parentloop.counter0 }}" value="{{ client.id }}">
+              <span class="text-muted" style="font-size:.76rem;">merge</span>
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:.3rem;cursor:pointer;margin-right:.6rem;">
+              <input type="radio" name="keep_g{{ forloop.parentloop.counter0 }}" value="{{ client.id }}">
+              <span class="text-muted" style="font-size:.76rem;">● keep</span>
+            </label>
             <span style="flex:1 1 220px;">
               <strong>{{ client.name }}</strong>
               <span class="text-muted">#{{ client.id }}</span>
@@ -134,7 +140,7 @@
               </div>
             </span>
             <a href="{% url 'clients:client_profile' client.id %}" target="_blank" class="text-muted" style="font-size:.78rem;">view ↗</a>
-          </label>
+          </div>
           {% endfor %}
         </div>
         {% empty %}
@@ -143,7 +149,7 @@
         {% if duplicate_groups %}
         <div style="margin-top:.7rem;">
           <button class="ki-btn ki-btn-primary" type="submit"><i class="bi bi-box-arrow-in-down"></i> Merge all selected</button>
-          <span class="text-muted" style="font-size:.8rem;margin-left:.5rem;">Each group keeps its ● profile; the rest merge into it.</span>
+          <span class="text-muted" style="font-size:.8rem;margin-left:.5rem;">Only groups where you both ticked profiles and marked a Keep are merged.</span>
         </div>
         {% endif %}
       </form>

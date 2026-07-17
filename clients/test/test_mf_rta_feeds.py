@@ -1245,15 +1245,27 @@ class BulkKycTests(TestCase):
         product, _ = Product.objects.get_or_create(name="SIP", defaults={"code": "SIP"})
         Sale.objects.create(client=dupe, employee=emp, product="SIP",
                             product_ref=product, amount=5000, status=Sale.STATUS_APPROVED)
-        # the page renders one group of these two; index 0
+        # tick the dupe to merge, mark keep as the survivor
         resp = self._http().post(reverse("clients:client_bulk_merge"), {
             "group_count": "1",
             "keep_g0": str(keep.id),
-            "members_g0": [str(keep.id), str(dupe.id)],
+            "merge_g0": [str(dupe.id)],
         })
         self.assertEqual(resp.status_code, 302)
         self.assertFalse(Client.objects.filter(id=dupe.id).exists())
         self.assertEqual(Sale.objects.filter(client=keep).count(), 1)
+
+    def test_bulk_merge_skips_group_with_nothing_ticked(self):
+        # two DIFFERENT people sharing a phone — keeper picked but nothing
+        # ticked to merge → group must be left untouched
+        a = Client.objects.create(name="Person A", phone="9111122222")
+        b = Client.objects.create(name="Person B", phone="9111122222")
+        resp = self._http().post(reverse("clients:client_bulk_merge"), {
+            "group_count": "1", "keep_g0": str(a.id),  # no merge_g0 ticked
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Client.objects.filter(id=a.id).exists())
+        self.assertTrue(Client.objects.filter(id=b.id).exists())  # both survive
 
     def test_bulk_merge_page_admin_only(self):
         c = TestClient()
