@@ -163,10 +163,16 @@ class ImporterTests(TestCase):
         self.assertEqual(txn.arn, self.nj)
         self.assertEqual(txn.sub_broker_code, "SB123")
 
-    def test_same_file_skipped_and_same_rows_deduped(self):
+    def test_same_file_skipped_for_email_but_uploads_always_process(self):
         rta_feed.import_feed_container("a.csv", CAMS_CSV, source=RTAFeedImport.SOURCE_UPLOAD)
-        again = rta_feed.import_feed_container("a.csv", CAMS_CSV, source=RTAFeedImport.SOURCE_UPLOAD)
+        # identical file via email → skipped (protects the hourly cron)
+        again = rta_feed.import_feed_container("a.csv", CAMS_CSV, source=RTAFeedImport.SOURCE_EMAIL)
         self.assertEqual(again.status, RTAFeedImport.STATUS_SKIPPED)
+        # identical file re-UPLOADED → processed (deliberate; rows dedupe)
+        reup = rta_feed.import_feed_container("a.csv", CAMS_CSV, source=RTAFeedImport.SOURCE_UPLOAD)
+        self.assertEqual(reup.status, RTAFeedImport.STATUS_PROCESSED)
+        self.assertEqual(reup.rows_duplicate, 3)
+        self.assertEqual(MutualFundTransaction.objects.count(), 3)  # no doubles
 
         # Same rows arriving in a *different* file (e.g. weekly vs daily report)
         renamed = CAMS_CSV + b"\n"

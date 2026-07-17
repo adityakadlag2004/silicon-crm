@@ -655,7 +655,13 @@ def import_feed_container(file_name, data, *, source, rta_hint="", user=None):
     from ..models import RTAFeedImport
 
     sha = hashlib.sha256(data).hexdigest()
-    if RTAFeedImport.objects.filter(file_sha256=sha, status=RTAFeedImport.STATUS_PROCESSED).exists():
+    # The identical-file guard protects the hourly mail cron from re-parsing.
+    # Manual uploads are deliberate — always process them: row-level dedupe
+    # keeps them safe and re-imports heal attribution/status the original
+    # import missed.
+    if (source == RTAFeedImport.SOURCE_EMAIL
+            and RTAFeedImport.objects.filter(file_sha256=sha,
+                                             status=RTAFeedImport.STATUS_PROCESSED).exists()):
         return RTAFeedImport.objects.create(
             source=source, file_name=file_name[:255], file_sha256=sha, rta=rta_hint,
             status=RTAFeedImport.STATUS_SKIPPED, notes="Identical file already imported.",
