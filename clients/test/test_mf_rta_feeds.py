@@ -1273,3 +1273,18 @@ class BulkKycTests(TestCase):
         Employee.objects.create(user=emp_user, role="employee", salary=0, active=True)
         c.force_login(emp_user)
         self.assertEqual(c.post(reverse("clients:client_bulk_merge"), {"group_count": "0"}).status_code, 403)
+
+
+class MsoffcryptoPatchTests(TestCase):
+    """The guarded monkeypatch for msoffcrypto's legacy-XLS decrypt bugs
+    applies cleanly and is idempotent (CAMS Systematic-Registration files)."""
+
+    def test_patch_applies_and_is_idempotent(self):
+        rta_feed._patch_msoffcrypto_biff()
+        from msoffcrypto.format import xls97
+        import olefile
+        self.assertTrue(getattr(xls97._BIFFStream.iter_record, "_ki_patched", False))
+        self.assertTrue(getattr(olefile.OleFileIO.write_stream, "_ki_patched", False))
+        # second call must not re-wrap or raise
+        rta_feed._patch_msoffcrypto_biff()
+        self.assertTrue(getattr(xls97._BIFFStream.iter_record, "_ki_patched", False))
