@@ -972,3 +972,35 @@ class FolioCreateClientTests(TestCase):
             "keep_id": "99999", "remove_id": junk.id})
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(Client.objects.filter(id=junk.id).exists())  # nothing merged
+
+
+class BrokerAttributionFallbackTests(TestCase):
+    """Broker-less rows: TD_AGENT fallback + inheritance from the folio's ARN."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.arn = ArnAccount.objects.create(label="Direct", arn_code="ARN-295541")
+
+    def test_agent_column_fallback_when_broker_blank(self):
+        data = (
+            "FMCODE,TD_ACNO,INVNAME,TRDESC,TD_TRNO,TD_TRDT,TD_AMT,TD_UNITS,TD_BROKER,TD_AGENT\n"
+            "102,881001,Asha Naik,Purchase,T1,01/07/2026,5000,10,,ARN-295541\n"
+        ).encode()
+        rta_feed.import_feed_container("MFSD201_x.csv", data, source="upload")
+        txn = MutualFundTransaction.objects.get()
+        self.assertEqual(txn.arn, self.arn)
+        self.assertEqual(txn.broker_code, "ARN-295541")
+
+    def test_blank_broker_inherits_folio_arn(self):
+        first = (
+            "FMCODE,TD_ACNO,INVNAME,TRDESC,TD_TRNO,TD_TRDT,TD_AMT,TD_UNITS,TD_BROKER\n"
+            "102,881002,Asha Naik,Purchase,T2,01/07/2026,5000,10,ARN-295541\n"
+        ).encode()
+        rta_feed.import_feed_container("MFSD201_a.csv", first, source="upload")
+        second = (
+            "FMCODE,TD_ACNO,INVNAME,TRDESC,TD_TRNO,TD_TRDT,TD_AMT,TD_UNITS,TD_BROKER\n"
+            "102,881002,Asha Naik,Dividend Reinvest,T3,05/07/2026,200,1,NOT PROVIDED\n"
+        ).encode()
+        rta_feed.import_feed_container("MFSD201_b.csv", second, source="upload")
+        txn = MutualFundTransaction.objects.get(txn_number="T3")
+        self.assertEqual(txn.arn, self.arn)  # inherited from the folio

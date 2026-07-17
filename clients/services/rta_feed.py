@@ -54,8 +54,11 @@ FIELD_ALIASES = {
     "amount": ["AMOUNT", "TDAMT", "AMT", "TRXNAMOUNT", "NETAMOUNT", "GROSSAMT"],
     "units": ["UNITS", "TDUNITS", "UNIT", "TRXNUNITS"],
     "nav": ["PURPRICE", "NAV", "TDNAV", "PRICE", "TRADENAV"],
-    "broker": ["BROKCODE", "BRCODE", "BROKER", "BROKERCODE", "ARN", "ARNCODE", "AGENTCODE",
-               "TDBROKER", "TDAGENT"],
+    "broker": ["BROKCODE", "BRCODE", "BROKER", "BROKERCODE", "ARN", "ARNCODE",
+               "TDBROKER"],
+    # KFintech DBFs often leave TD_BROKER blank and put the ARN in TD_AGENT —
+    # used as a per-row fallback when the broker cell is empty/junk.
+    "broker_alt": ["TDAGENT", "AGENTCODE", "AGENT"],
     "sub_broker": ["SUBBROK", "SBCODE", "SUBBROKER", "SUBBROKERCODE", "SUBBRCODE", "SUBARN",
                    "SUBARNCODE"],
 }
@@ -414,6 +417,10 @@ def import_rows(rows, header_map, *, rta, feed_import):
         pan = _normalize_pan(_clean(get(row, "pan")))[:20]
         investor = _clean(get(row, "investor_name"))[:200]
         broker = _clean(get(row, "broker"))[:40]
+        if broker.upper() in ("0", "NOT PROVIDED", "NA", "N.A."):
+            broker = ""
+        if not broker:
+            broker = _clean(get(row, "broker_alt"))[:40]
         sub_broker = _clean(get(row, "sub_broker"))[:40]
         arn = ArnAccount.resolve(broker, sub_broker, accounts=accounts) if broker else None
         if broker and arn is None:
@@ -450,6 +457,11 @@ def import_rows(rows, header_map, *, rta, feed_import):
             feed_import.clients_linked += 1
         if changed:
             folio.save(update_fields=changed + ["updated_at"])
+
+        # a broker-less row inside a folio we've already attributed belongs
+        # to that folio's ARN (KFin leaves the broker cell blank on many rows)
+        if arn is None and not broker and folio.arn_id:
+            arn = folio.arn
 
         amount = _parse_decimal(get(row, "amount"))
         units = _parse_decimal(get(row, "units"), places=4)
@@ -1053,7 +1065,7 @@ def _import_kfin_link(url):
 
 
 def _fetch_one_mailbox(box):
-    from ..models import RTA_CAMS, RTA_KFIN
+    from ..models import RTA_CAMS, RTA_KFIN, RTAFeedImport
 
     senders = [s.strip().lower() for s in
                os.environ.get("RTA_FEED_SENDERS", "camsonline.com,kfintech.com,karvy.com").split(",")
@@ -1068,7 +1080,7 @@ def _fetch_one_mailbox(box):
         # mail — automation only needs the fresh files, so scope the search
         # to recent days per sender and cap how many messages one run eats.
         days = int(os.environ.get("RTA_FEED_SINCE_DAYS", "7"))
-        max_messages = int(os.environ.get("RTA_FEED_MAX_MESSAGES", "50"))
+        max_messages = int(os.environ.get("RTA_FEED_MAX_MESSAGES", "200"))
         since = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
         message_ids = []
         if senders:
@@ -1112,11 +1124,19 @@ def _fetch_one_mailbox(box):
             # password-locked and redundant with the series-2 mailback
             # reports (decision 2026-07-16) — not followed.
             subject = str(message.get("Subject") or "").lower()
+            keep_unread = False
             if (rta_hint == RTA_KFIN and message_imports == 0
                     and not subject.startswith("subscribed")):
                 for url in _kfin_report_links(message):
-                    imports.append(_import_kfin_link(url))
-            mail.store(num, "+FLAGS", "\\Seen")
+                    result = _import_kfin_link(url)
+                    imports.append(result)
+                    # a dead/not-ready link is transient — leave the mail
+                    # unread so the next hourly run retries it
+                    if (result.status == RTAFeedImport.STATUS_FAILED
+                            and "link" in (result.notes or "").lower()):
+                        keep_unread = True
+            if not keep_unread:
+                mail.store(num, "+FLAGS", "\\Seen")
     finally:
         try:
             mail.logout()
