@@ -194,6 +194,32 @@ def _patch_msoffcrypto_biff():
     except Exception:  # noqa: BLE001 — never let a patch failure break imports
         pass
 
+    # Second msoffcrypto bug on the same files: after the iter_record fix the
+    # decrypted Workbook is a few bytes shorter than the original slot, and
+    # olefile.write_stream demands an exact size match. Pad/truncate the
+    # decrypted data back to the slot size — the tail is ignorable padding
+    # (the original file carried it too and xlrd stops at the EOF record).
+    try:
+        import olefile
+
+        if getattr(olefile.OleFileIO.write_stream, "_ki_patched", False):
+            return
+        _orig_write = olefile.OleFileIO.write_stream
+
+        def write_stream(self, stream_name, data):
+            try:
+                entry = self.direntries[self._find(stream_name)]
+                if isinstance(data, bytes) and len(data) != entry.size:
+                    data = (data + b"\x00" * entry.size)[:entry.size]
+            except Exception:  # noqa: BLE001 — fall through to the original on any doubt
+                pass
+            return _orig_write(self, stream_name, data)
+
+        write_stream._ki_patched = True
+        olefile.OleFileIO.write_stream = write_stream
+    except Exception:  # noqa: BLE001
+        pass
+
 
 def _decrypt_office(data):
     """Decrypt a password-protected Excel workbook (legacy XLS or OOXML
