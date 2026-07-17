@@ -207,6 +207,8 @@ class SipRegistration(models.Model):
     arn = models.ForeignKey(ArnAccount, null=True, blank=True,
                             on_delete=models.SET_NULL, related_name="sip_registrations")
     broker_code = models.CharField(max_length=40, blank=True, default="")
+    broker_name = models.CharField(max_length=120, blank=True, default="",
+                                   help_text="Agent name as reported by the RTA — identifies foreign codes on the COB page")
     sub_broker_code = models.CharField(max_length=40, blank=True, default="")
 
     # sha1 over the identity fields so re-imported reports upsert

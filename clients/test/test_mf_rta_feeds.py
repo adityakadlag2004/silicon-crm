@@ -1094,3 +1094,67 @@ class CobAndProfileSipTests(TestCase):
             amount=12000, status="active", rta_status="Live SIP")
         summary = rta_feed.mf_summary_for_client(self.client_row)
         self.assertEqual(summary["monthly_sip"], 12000)
+
+
+class SipFieldSyncAndIdentityTests(TestCase):
+    """Client SIP columns fed from the register; folio identity conflicts."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from clients.models import SipRegistration
+        cls.admin_user = User.objects.create_user(username="ss_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.client_row = Client.objects.create(name="Deepak Rao NSE", pan="DEEPR1234K")
+        cls.reg = SipRegistration.objects.create(
+            dedupe_key="ss1", folio_number="550001", client=cls.client_row,
+            amount=7000, status="active", rta_status="Live SIP")
+
+    def test_refresh_sets_client_sip_columns_from_register(self):
+        rta_feed.refresh_client_sip_fields()
+        self.client_row.refresh_from_db()
+        self.assertEqual(self.client_row.sip_amount, 7000)
+        self.assertTrue(self.client_row.sip_status)
+
+    def test_sale_signal_does_not_override_register_truth(self):
+        rta_feed.refresh_client_sip_fields()
+        product, _ = Product.objects.get_or_create(name="SIP", defaults={"code": "SIP"})
+        emp_user = User.objects.create_user(username="ss_emp2", password="x")
+        emp = Employee.objects.create(user=emp_user, role="employee", salary=0, active=True)
+        Sale.objects.create(client=self.client_row, employee=emp, product="SIP",
+                            product_ref=product, amount=999, status=Sale.STATUS_APPROVED)
+        self.client_row.refresh_from_db()
+        self.assertEqual(self.client_row.sip_amount, 7000)  # register wins over the 999 sale
+
+    def test_ceased_register_zeroes_sip_columns(self):
+        from clients.models import SipRegistration
+        self.reg.status = SipRegistration.STATUS_CEASED
+        self.reg.save()
+        rta_feed.refresh_client_sip_fields()
+        self.client_row.refresh_from_db()
+        self.assertEqual(self.client_row.sip_amount, 0)
+        self.assertFalse(self.client_row.sip_status)
+
+    def test_identity_issue_detection(self):
+        from clients.views.kyc import _folio_identity_issues
+        # PAN conflict + name mismatch on one client
+        MutualFundFolio.objects.create(folio_number="551", amc_name="HDFC",
+                                       investor_name="SOMEONE ELSE", pan="XXXXX9999X",
+                                       client=self.client_row)
+        # a healthy link elsewhere must not appear
+        ok = Client.objects.create(name="Asha Naik", pan="ASHAN1234K")
+        MutualFundFolio.objects.create(folio_number="552", amc_name="Axis",
+                                       investor_name="ASHA NAIK", pan="ASHAN1234K", client=ok)
+        issues = _folio_identity_issues()
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["client"], self.client_row)
+        self.assertTrue(any("PAN" in p for p in issues[0]["problems"]))
+
+    def test_broker_name_captured_and_shown_in_cob(self):
+        data = (
+            "Folio,Scheme Name,Amount,Start Date,Status,AgentCode,AgentName,RegistrationDate,No Of Installments\n"
+            "660001,Quant Small Cap,2500,01/07/2026,Live SIP,63755,SHARMA INVESTMENTS,15/06/2026,60\n"
+        ).encode()
+        rta_feed.import_feed_container("MFSD243_name.csv", data, source="upload")
+        from clients.models import SipRegistration
+        reg = SipRegistration.objects.get(folio_number="660001")
+        self.assertEqual(reg.broker_name, "SHARMA INVESTMENTS")

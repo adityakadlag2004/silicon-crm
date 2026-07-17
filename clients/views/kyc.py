@@ -113,6 +113,49 @@ def _hygiene_lists():
     return single_word, no_business
 
 
+def _folio_identity_issues():
+    """Folio↔client identity conflicts — usually a wrong PAN typed on the
+    client or a folio linked to the wrong person:
+      - the client's folios carry 2+ different PANs
+      - the client's PAN differs from the folio PAN(s)
+      - a linked folio's investor name shares no word with the client's name
+    """
+    from ..models import MutualFundFolio
+    from ..services.rta_feed import _name_tokens
+
+    by_client = defaultdict(list)
+    for folio in (MutualFundFolio.objects.filter(client__isnull=False)
+                  .select_related("client")):
+        by_client[folio.client].append(folio)
+
+    issues = []
+    for client, folios in by_client.items():
+        pans = {f.pan for f in folios if f.pan}
+        client_pan = re.sub(r"[^A-Z0-9]", "", (client.pan or "").upper())
+        client_tokens = set(_name_tokens(client.name))
+        name_mismatch_ids = {
+            f.id for f in folios
+            if _name_tokens(f.investor_name)
+            and client_tokens
+            and not (set(_name_tokens(f.investor_name)) & client_tokens)
+        }
+        problems = []
+        if len(pans) > 1:
+            problems.append(f"folios carry {len(pans)} different PANs")
+        if client_pan and pans and client_pan not in pans:
+            problems.append("client PAN matches none of the folio PANs")
+        if name_mismatch_ids:
+            problems.append("investor name shares no word with the client name")
+        if problems:
+            for f in folios:
+                f.name_mismatch = f.id in name_mismatch_ids
+            issues.append({
+                "client": client, "folios": folios,
+                "pans": sorted(pans), "problems": problems,
+            })
+    return issues
+
+
 @login_required
 def client_kyc_issues(request):
     from ..models import MutualFundFolio
@@ -133,6 +176,7 @@ def client_kyc_issues(request):
             "no_business": no_business,
             "unlinked_folios": MutualFundFolio.objects.filter(client__isnull=True).count(),
             "match_suggestions": len(rta_feed.suggest_folio_matches()),
+            "identity_issues": _folio_identity_issues(),
         })
     return render(request, "clients/kyc_issues.html", context)
 

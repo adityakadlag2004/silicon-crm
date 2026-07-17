@@ -87,6 +87,7 @@ SIP_FIELD_ALIASES = {
     "registration_ref": ["UKRN", "SIPREFNO", "REGNO", "SIPREGNO", "XSIPREGNO",
                          "SIPREFERENCENO", "REGREFNO"],
     "broker": FIELD_ALIASES["broker"],
+    "broker_name": ["AGENTNAME", "BROKERNAME", "AGENTNM", "BROKERNM"],
     "sub_broker": ["SUBBROKERARN", "SUBBROKERRMCODE"] + FIELD_ALIASES["sub_broker"],
 }
 
@@ -593,6 +594,7 @@ def import_sip_registrations(rows, headers, *, rta, feed_import):
                 "registered_on": _parse_date(get(row, "registered_on")),
                 "installments": _parse_int(get(row, "installments")),
                 "broker_code": broker, "sub_broker_code": sub_broker, "arn": arn,
+                "broker_name": _clean(get(row, "broker_name"))[:120],
                 "rta_status": rta_status,
                 "source_import": feed_import,
             },
@@ -626,6 +628,8 @@ def import_sip_registrations(rows, headers, *, rta, feed_import):
                 changed.append("folio")
             if changed:
                 reg.save(update_fields=changed + ["updated_at"])
+
+    refresh_client_sip_fields()
 
     if newly_ceased:
         admins = list(User.objects.filter(employee__role="admin", employee__active=True))
@@ -812,6 +816,7 @@ def relink_folios():
             reg.client_id = client_id
             reg.save(update_fields=["client_id", "folio", "updated_at"])
             linked += 1
+    refresh_client_sip_fields()
     return linked
 
 
@@ -977,6 +982,39 @@ def mf_summary_for_client(client):
     }
 
 
+def refresh_client_sip_fields(client_ids=None):
+    """Keep Client.sip_amount/sip_status in step with the SIP register.
+
+    For any client that has register rows, the RTA feed is the truth for the
+    SIP product columns (sales exist for incentives, not holdings). Clients
+    without register rows keep their sales-derived values. Returns the
+    number of clients updated.
+    """
+    from django.db.models import Sum
+
+    from ..models import Client, SipRegistration
+
+    reg_clients = SipRegistration.objects.filter(client__isnull=False)
+    if client_ids is not None:
+        reg_clients = reg_clients.filter(client_id__in=client_ids)
+    covered_ids = set(reg_clients.values_list("client_id", flat=True).distinct())
+    totals = {
+        row["client_id"]: row["t"] or Decimal("0")
+        for row in reg_clients.filter(status=SipRegistration.STATUS_ACTIVE)
+        .values("client_id").annotate(t=Sum("amount"))
+    }
+    updated = 0
+    for client in Client.objects.filter(id__in=covered_ids):
+        total = totals.get(client.id, Decimal("0"))
+        status = total > 0
+        if client.sip_amount != total or client.sip_status != status:
+            client.sip_amount = total
+            client.sip_status = status
+            client.save(update_fields=["sip_amount", "sip_status"])
+            updated += 1
+    return updated
+
+
 def cob_opportunities():
     """Change-of-Broker targets: SIP installment streams running in our
     clients' folios under some OTHER broker's code (their trail goes to that
@@ -1025,12 +1063,59 @@ def cob_opportunities():
                 g["last_date"] = txn.trade_date
                 g["monthly"] = abs(txn.amount or Decimal("0"))
 
+    # agent names harvested from KFintech SIP-registration rows identify
+    # who a foreign code belongs to
+    from ..models import SipRegistration
+
+    name_map = dict(
+        SipRegistration.objects.exclude(broker_name="").exclude(broker_code="")
+        .values_list("broker_code", "broker_name")
+    )
     results = []
     for g in groups.values():
         g["live"] = bool(g["last_date"] and g["last_date"] >= live_cutoff)
         g["schemes"] = sorted(g["schemes"])
+        g["broker_name"] = name_map.get(g["broker_code"], "")
         results.append(g)
     results.sort(key=lambda g: (not g["live"], -g["monthly"]))
+    return results
+
+
+def outside_flows_by_client(days=365):
+    """All money movement (any transaction type) in our clients' folios under
+    other brokers' codes, grouped per client — the 'my client also invests
+    elsewhere' view."""
+    from collections import defaultdict
+
+    from django.utils import timezone
+
+    from ..models import MutualFundTransaction
+
+    cutoff = timezone.localdate() - timedelta(days=days)
+    txns = (
+        MutualFundTransaction.objects.filter(
+            arn__isnull=True, trade_date__gte=cutoff, folio__client__isnull=False)
+        .exclude(broker_code="").select_related("folio__client")
+    )
+    per_client = {}
+    for txn in txns:
+        client = txn.folio.client
+        g = per_client.get(client.id)
+        if g is None:
+            g = per_client[client.id] = {
+                "client": client, "total": Decimal("0"), "n": 0,
+                "codes": set(), "folios": set(), "last_date": None,
+            }
+        g["total"] += abs(txn.amount or Decimal("0"))
+        g["n"] += 1
+        g["codes"].add(txn.broker_code)
+        g["folios"].add(txn.folio.folio_number)
+        if txn.trade_date and (g["last_date"] is None or txn.trade_date > g["last_date"]):
+            g["last_date"] = txn.trade_date
+    results = sorted(per_client.values(), key=lambda g: -g["total"])
+    for g in results:
+        g["codes"] = sorted(g["codes"])
+        g["folios"] = sorted(g["folios"])
     return results
 
 

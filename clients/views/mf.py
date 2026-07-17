@@ -171,9 +171,16 @@ def mf_folio_link(request, folio_id):
     folio = get_object_or_404(MutualFundFolio.objects.select_related("client"), id=folio_id)
 
     if request.method == "POST":
+        from ..models import SipRegistration
+
         if request.POST.get("action") == "unlink":
+            old_client_id = folio.client_id
             folio.client = None
             folio.save(update_fields=["client", "updated_at"])
+            # the folio's SIP registrations follow it out
+            SipRegistration.objects.filter(
+                folio=folio, client_id=old_client_id).update(client=None)
+            rta_feed.refresh_client_sip_fields(client_ids=[old_client_id])
             messages.success(request, f"Folio {folio.folio_number} unlinked.")
             return redirect("clients:mf_folios")
         client_id = request.POST.get("client_id")
@@ -181,6 +188,9 @@ def mf_folio_link(request, folio_id):
             client = get_object_or_404(Client, id=int(client_id))
             folio.client = client
             folio.save(update_fields=["client", "updated_at"])
+            SipRegistration.objects.filter(
+                folio_number=folio.folio_number, client__isnull=True).update(client=client)
+            rta_feed.refresh_client_sip_fields(client_ids=[client.id])
             messages.success(request, f"Folio {folio.folio_number} linked to {client.name}.")
             return redirect("clients:mf_folios")
         messages.error(request, "Pick a client to link.")
@@ -356,6 +366,7 @@ def mf_cob(request):
         "live": live,
         "stopped": stopped,
         "tiles": tiles,
+        "by_client": rta_feed.outside_flows_by_client(),
     })
 
 

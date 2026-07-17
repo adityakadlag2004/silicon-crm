@@ -36,6 +36,9 @@
       <div class="num">{{ unlinked_folios }}</div>
       <div class="lbl">Unlinked folios ({{ match_suggestions }} auto-matched) →</div>
     </a>
+    <a class="health-tile" href="#identity-issues">
+      <div class="num" style="color:#b91c1c;">{{ identity_issues|length }}</div><div class="lbl">PAN / name conflicts</div>
+    </a>
     <a class="health-tile" href="#junk-names">
       <div class="num">{{ single_word|length }}</div><div class="lbl">Single-word names</div>
     </a>
@@ -116,6 +119,41 @@
       </div>
       {% empty %}
       <p class="text-muted">No duplicate profiles detected.</p>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="ki-card" id="identity-issues" style="margin-bottom:1rem;">
+    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-fingerprint"></i> PAN / name conflicts ({{ identity_issues|length }}) — check these links</span></div>
+    <div class="ki-card-body">
+      <p class="text-muted" style="font-size:.85rem;">
+        The client and their linked folios disagree — usually a wrongly typed PAN or a folio
+        linked to the wrong person. Compare the names and PANs, then either fix the client's PAN,
+        or open the folio and unlink / relink it to the right client.
+      </p>
+      {% for issue in identity_issues %}
+      <div class="dup-group">
+        <div style="margin-bottom:.35rem;">
+          <a href="{% url 'clients:client_profile' issue.client.id %}"><strong>{{ issue.client.name }}</strong></a>
+          <span class="text-muted">#{{ issue.client.id }} · client PAN: <code>{{ issue.client.pan|default:"—" }}</code></span>
+          {% for p in issue.problems %}<span class="dup-tag">{{ p }}</span>{% endfor %}
+          <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:edit_client' issue.client.id %}" style="float:right;"><i class="bi bi-pencil"></i> Edit client</a>
+        </div>
+        {% for folio in issue.folios %}
+        <div class="dup-row">
+          <span style="flex:1 1 260px;">
+            Folio <strong>{{ folio.folio_number }}</strong> · {{ folio.amc_name|default:"—" }}
+            <div class="dup-meta">
+              investor: <strong {% if folio.name_mismatch %}style="color:var(--ki-danger);"{% endif %}>{{ folio.investor_name|default:"—" }}</strong>
+              · folio PAN: <code>{{ folio.pan|default:"—" }}</code>
+            </div>
+          </span>
+          <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_folio_link' folio.id %}"><i class="bi bi-link-45deg"></i> Relink / unlink</a>
+        </div>
+        {% endfor %}
+      </div>
+      {% empty %}
+      <p class="text-muted">🎉 Every linked folio agrees with its client's PAN and name.</p>
       {% endfor %}
     </div>
   </div>

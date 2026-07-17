@@ -24,6 +24,14 @@ def update_client_status(sender, instance, **kwargs):
     client.motor_insured_value = _sum_amount("MOTOR_INS", "Motor Insurance", "amount")
     client.pms_amount = _sum_amount("PMS", "PMS", "amount")
 
+    # When the client is covered by the RTA SIP register, the feed is the
+    # truth for the SIP columns — sales exist for incentives, not holdings.
+    from .models import SipRegistration
+    if SipRegistration.objects.filter(client=client).exists():
+        client.sip_amount = SipRegistration.objects.filter(
+            client=client, status=SipRegistration.STATUS_ACTIVE,
+        ).aggregate(total=Sum("amount"))["total"] or 0
+
     client.sip_status = client.sip_amount > 0
     client.life_status = client.life_cover > 0
     client.health_status = client.health_cover > 0

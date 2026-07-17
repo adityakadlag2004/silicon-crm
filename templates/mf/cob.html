@@ -67,7 +67,8 @@
             </td>
             <td>{{ g.folio.folio_number }}</td>
             <td style="max-width:280px;">{{ g.schemes|join:", "|truncatechars:60 }}</td>
-            <td><span class="mf-pill code">{{ g.broker_code }}</span></td>
+            <td><span class="mf-pill code">{{ g.broker_code }}</span>
+              {% if g.broker_name %}<div class="text-muted" style="font-size:.72rem;">{{ g.broker_name }}</div>{% endif %}</td>
             <td><strong>₹{{ g.monthly|inr }}</strong></td>
             <td>{{ g.first_date|date:"M Y" }}</td>
             <td><span class="mf-pill live">{{ g.last_date|date:"d M Y" }}</span></td>
@@ -75,6 +76,35 @@
           </tr>
           {% empty %}
           <tr><td colspan="8" class="text-muted">🎉 No live outsider SIPs detected in your clients' folios.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ki-card" style="margin-bottom:1rem;">
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <h3 class="sip-section-title" style="color:#1d4ed8;">🧭 Outside investments by client — last 12 months, all transaction types</h3>
+      <p class="text-muted" style="font-size:.82rem;">
+        Everything (lumpsum, SIP, switches) your clients invested through other broker codes —
+        the full conversion conversation, not just SIPs.
+      </p>
+      <table class="mf-table">
+        <thead><tr>
+          <th>Client</th><th>Outside flow (12m)</th><th>Txns</th><th>Folios</th><th>Broker code(s)</th><th>Last activity</th>
+        </tr></thead>
+        <tbody>
+          {% for g in by_client %}
+          <tr>
+            <td><a href="{% url 'clients:client_profile' g.client.id %}">{{ g.client.name }}</a></td>
+            <td><strong>₹{{ g.total|inr }}</strong></td>
+            <td>{{ g.n }}</td>
+            <td class="text-muted">{{ g.folios|join:", "|truncatechars:40 }}</td>
+            <td>{% for c in g.codes %}<span class="mf-pill code">{{ c }}</span> {% endfor %}</td>
+            <td>{{ g.last_date|date:"d M Y" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-muted">No outside investment activity detected in the last 12 months.</td></tr>
           {% endfor %}
         </tbody>
       </table>
