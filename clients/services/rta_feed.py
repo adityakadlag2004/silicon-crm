@@ -819,6 +819,13 @@ def relink_folios():
 
 SIP_TYPE_TOKENS = ("SIP", "SYSTEMATIC")
 
+
+def _is_sip_type(txn_type):
+    """SIP-installment detection across both RTAs' vocabularies — CAMS
+    reports installments as bare 'SIN'."""
+    upper = (txn_type or "").upper()
+    return any(tok in upper for tok in SIP_TYPE_TOKENS) or upper.strip() == "SIN"
+
 # How far around the sale date a matching RTA transaction may fall. SIPs
 # especially can start weeks after registration.
 SALE_MATCH_DAYS_BEFORE = 7
@@ -828,11 +835,10 @@ SALE_MATCH_DAYS_AFTER = 45
 def _txn_matches_mode(txn_type, mode):
     from ..models import Product
 
-    upper = (txn_type or "").upper()
     if mode == Product.RTA_MATCH_SIP:
-        return any(tok in upper for tok in SIP_TYPE_TOKENS)
+        return _is_sip_type(txn_type)
     if mode == Product.RTA_MATCH_LUMPSUM:
-        return not any(tok in upper for tok in SIP_TYPE_TOKENS)
+        return not _is_sip_type(txn_type)
     return True  # RTA_MATCH_ANY
 
 
@@ -903,16 +909,28 @@ def mf_summary_for_client(client):
     number). Returns None when the client has no imported transactions."""
     from collections import defaultdict
 
+    from django.db.models import Sum
     from django.utils import timezone
 
-    from ..models import MutualFundTransaction
+    from ..models import MutualFundTransaction, SipRegistration
 
     txns = list(
         MutualFundTransaction.objects.filter(folio__client=client)
         .select_related("folio").order_by("trade_date", "id")
     )
+    # the SIP register is authoritative for the live SIP figure — installment
+    # inference below is the fallback for clients without register rows
+    register_sip = SipRegistration.objects.filter(
+        client=client, status=SipRegistration.STATUS_ACTIVE,
+    ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
     if not txns:
-        return None
+        if not register_sip:
+            return None
+        return {
+            "monthly_sip": register_sip, "inflow_12m": Decimal("0"),
+            "outflow_12m": Decimal("0"), "est_value": None,
+            "txn_count": 0, "last_txn_date": None,
+        }
 
     today = timezone.localdate()
     sip_cutoff = today - timedelta(days=35)
@@ -928,8 +946,7 @@ def mf_summary_for_client(client):
         amount = txn.amount or Decimal("0")
         outflow = _is_outflow(txn.txn_type) or amount < 0
         if txn.trade_date:
-            if txn.trade_date >= sip_cutoff and not outflow and \
-                    any(tok in (txn.txn_type or "").upper() for tok in SIP_TYPE_TOKENS):
+            if txn.trade_date >= sip_cutoff and not outflow and _is_sip_type(txn.txn_type):
                 monthly_sip += abs(amount)
             if txn.trade_date >= year_cutoff:
                 if outflow:
@@ -951,13 +968,70 @@ def mf_summary_for_client(client):
     )
 
     return {
-        "monthly_sip": monthly_sip,
+        "monthly_sip": register_sip if register_sip > 0 else monthly_sip,
         "inflow_12m": inflow_12m,
         "outflow_12m": outflow_12m,
         "est_value": est_value if est_value > 0 else None,
         "txn_count": len(txns),
         "last_txn_date": max((t.trade_date for t in txns if t.trade_date), default=None),
     }
+
+
+def cob_opportunities():
+    """Change-of-Broker targets: SIP installment streams running in our
+    clients' folios under some OTHER broker's code (their trail goes to that
+    broker until a COB is filed).
+
+    One entry per (folio, outside broker): the client, scheme(s), inferred
+    monthly amount (most recent installment), first/last installment dates,
+    and whether the stream still looks live (installment within 45 days).
+    """
+    from collections import defaultdict
+
+    from django.utils import timezone
+
+    from ..models import MutualFundTransaction
+
+    today = timezone.localdate()
+    live_cutoff = today - timedelta(days=45)
+
+    txns = (
+        MutualFundTransaction.objects.filter(arn__isnull=True)
+        .exclude(broker_code="").select_related("folio__client")
+        .order_by("trade_date")
+    )
+    groups = {}
+    for txn in txns:
+        if not _is_sip_type(txn.txn_type):
+            continue
+        key = (txn.folio_id, txn.broker_code)
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {
+                "folio": txn.folio, "client": txn.folio.client if txn.folio else None,
+                "broker_code": txn.broker_code, "schemes": set(),
+                "n": 0, "total": Decimal("0"),
+                "first_date": txn.trade_date, "last_date": txn.trade_date,
+                "monthly": Decimal("0"),
+            }
+        g["n"] += 1
+        g["total"] += abs(txn.amount or Decimal("0"))
+        if txn.scheme_name:
+            g["schemes"].add(txn.scheme_name)
+        if txn.trade_date:
+            if g["first_date"] is None or txn.trade_date < g["first_date"]:
+                g["first_date"] = txn.trade_date
+            if g["last_date"] is None or txn.trade_date > g["last_date"]:
+                g["last_date"] = txn.trade_date
+                g["monthly"] = abs(txn.amount or Decimal("0"))
+
+    results = []
+    for g in groups.values():
+        g["live"] = bool(g["last_date"] and g["last_date"] >= live_cutoff)
+        g["schemes"] = sorted(g["schemes"])
+        results.append(g)
+    results.sort(key=lambda g: (not g["live"], -g["monthly"]))
+    return results
 
 
 # ─── Mailbox fetcher (cron) ─────────────────────────────────────────────────

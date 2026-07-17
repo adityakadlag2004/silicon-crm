@@ -336,6 +336,29 @@ def mf_folio_match(request):
     })
 
 
+@_admin_required
+def mf_cob(request):
+    """COB Opportunities: our clients' SIP streams running under other
+    brokers' codes — file a Change of Broker to bring the trail here."""
+    groups = rta_feed.cob_opportunities()
+
+    live = [g for g in groups if g["live"]]
+    stopped = [g for g in groups if not g["live"]]
+    tiles = {
+        "live_n": len(live),
+        "live_monthly": sum(g["monthly"] for g in live),
+        "clients": len({g["client"].id for g in groups if g["client"]}),
+        "unlinked": sum(1 for g in groups if not g["client"]),
+        "total_flow": sum(g["total"] for g in groups),
+    }
+    return render(request, "mf/cob.html", {
+        "page_title": "COB Opportunities",
+        "live": live,
+        "stopped": stopped,
+        "tiles": tiles,
+    })
+
+
 def _sip_leak_qs():
     """Ceased registrations that are real terminations — the AUM leaks.
     Natural expiries and process rejections are not leaks."""

@@ -1022,3 +1022,75 @@ class BrokerAttributionFallbackTests(TestCase):
         rta_feed.import_feed_container("MFSD201_d.csv", second, source="upload")
         txn = MutualFundTransaction.objects.get(txn_number="T4")
         self.assertEqual(txn.arn, self.arn)
+
+
+class CobAndProfileSipTests(TestCase):
+    """COB opportunity detection + the client-profile live-SIP figure."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import timedelta
+
+        from django.utils import timezone
+        cls.admin_user = User.objects.create_user(username="cob_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="cob_emp", password="x")
+        Employee.objects.create(user=cls.emp_user, role="employee", salary=0, active=True)
+        cls.arn = ArnAccount.objects.create(label="Direct", arn_code="ARN-295541")
+        cls.client_row = Client.objects.create(name="Asha Naik", pan="ASHAN1234K")
+        cls.folio = MutualFundFolio.objects.create(
+            folio_number="990001", amc_name="LIC MF", investor_name="ASHA NAIK",
+            pan="ASHAN1234K", client=cls.client_row, arn=cls.arn)
+        today = timezone.localdate()
+        # outsider SIP stream: old broker code 63755, still running
+        for i, days_ago in enumerate((70, 40, 10)):
+            MutualFundTransaction.objects.create(
+                dedupe_key=f"cob{i}", folio=cls.folio, txn_type="Systematic Investment",
+                amount=2000, trade_date=today - timedelta(days=days_ago),
+                broker_code="63755")
+        # dead outsider stream in another folio
+        cls.folio2 = MutualFundFolio.objects.create(
+            folio_number="990002", amc_name="Axis", investor_name="ASHA NAIK",
+            pan="ASHAN1234K", client=cls.client_row)
+        MutualFundTransaction.objects.create(
+            dedupe_key="cobdead", folio=cls.folio2, txn_type="SIN",
+            amount=1500, trade_date=today - timedelta(days=200), broker_code="26848")
+        # the user's own attributed SIP — must NOT appear in COB
+        MutualFundTransaction.objects.create(
+            dedupe_key="own1", folio=cls.folio, txn_type="SIN",
+            amount=5000, trade_date=today - timedelta(days=5),
+            broker_code="ARN-295541", arn=cls.arn)
+
+    def test_cob_groups_live_and_stopped(self):
+        groups = rta_feed.cob_opportunities()
+        self.assertEqual(len(groups), 2)
+        live = [g for g in groups if g["live"]]
+        self.assertEqual(len(live), 1)
+        self.assertEqual(live[0]["broker_code"], "63755")
+        self.assertEqual(live[0]["monthly"], 2000)
+        self.assertEqual(live[0]["n"], 3)
+        self.assertEqual(live[0]["client"], self.client_row)
+
+    def test_cob_page_admin_only(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        resp = c.get(reverse("clients:mf_cob"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["tiles"]["live_n"], 1)
+        c2 = TestClient()
+        c2.force_login(self.emp_user)
+        self.assertEqual(c2.get(reverse("clients:mf_cob")).status_code, 403)
+
+    def test_profile_sip_counts_cams_sin_rows(self):
+        summary = rta_feed.mf_summary_for_client(self.client_row)
+        # the own-ARN SIN installment (5 days ago) counts toward monthly SIP;
+        # the live outsider installment does too (it's the client's money)
+        self.assertGreaterEqual(summary["monthly_sip"], 5000)
+
+    def test_profile_sip_prefers_register(self):
+        from clients.models import SipRegistration
+        SipRegistration.objects.create(
+            dedupe_key="reg-pref", folio_number="990001", client=self.client_row,
+            amount=12000, status="active", rta_status="Live SIP")
+        summary = rta_feed.mf_summary_for_client(self.client_row)
+        self.assertEqual(summary["monthly_sip"], 12000)

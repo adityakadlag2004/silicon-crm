@@ -16,5 +16,6 @@ urlpatterns = [
     path("mf/folios/<int:folio_id>/create-client/", mf.mf_folio_create_client, name="mf_folio_create_client"),
     path("mf/transactions/", mf.mf_transactions, name="mf_transactions"),
     path("mf/sips/", mf.mf_sips, name="mf_sips"),
+    path("mf/cob/", mf.mf_cob, name="mf_cob"),
     path("mf/sips/month/<int:year>/<int:month>/", mf.mf_sips_month, name="mf_sips_month"),
 ]
