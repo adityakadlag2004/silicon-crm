@@ -21,6 +21,27 @@
     </div>
   </div>
 
+  {% if not folio.client %}
+  <div class="ki-card" style="max-width:720px;margin-bottom:1rem;border-left:3px solid var(--ki-primary);">
+    <div class="ki-card-body" style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+      <div style="flex:1;">
+        <strong>Investor not in the CRM yet?</strong>
+        <div class="text-muted" style="font-size:.83rem;">
+          Creates client “{{ folio.investor_name|title }}”{% if folio.pan %} with PAN {{ folio.pan }}{% endif %}
+          and links every folio &amp; SIP on that PAN.
+        </div>
+      </div>
+      <form method="post" action="{% url 'clients:mf_folio_create_client' folio.id %}">
+        {% csrf_token %}
+        <button class="ki-btn ki-btn-primary ki-btn-sm"
+                onclick="return confirm('Create a new client from this folio?');">
+          <i class="bi bi-person-plus"></i> Create new client from folio
+        </button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="ki-card" style="max-width:720px;">
     <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-search"></i> Pick the client</span></div>
     <div class="ki-card-body">

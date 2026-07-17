@@ -52,8 +52,20 @@
                 <span class="mf-pill unlinked">unlinked</span>
               {% endif %}
             </td>
-            <td><a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_folio_link' folio.id %}">
-              {% if folio.client %}Re-link{% else %}Link{% endif %}</a></td>
+            <td style="white-space:nowrap;">
+              <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_folio_link' folio.id %}">
+                {% if folio.client %}Re-link{% else %}Link{% endif %}</a>
+              {% if not folio.client %}
+              <form method="post" action="{% url 'clients:mf_folio_create_client' folio.id %}" style="display:inline;">
+                {% csrf_token %}
+                <button class="ki-btn ki-btn-primary ki-btn-sm"
+                        title="Create a new client from this folio's name & PAN and link it"
+                        onclick="return confirm('Create client “{{ folio.investor_name|title|escapejs }}” from this folio?');">
+                  <i class="bi bi-person-plus"></i> New client
+                </button>
+              </form>
+              {% endif %}
+            </td>
           </tr>
           {% empty %}
           <tr><td colspan="8" class="text-muted">No folios{% if q %} matching “{{ q }}”{% endif %}. Import a mailback file from the MF dashboard first.</td></tr>

@@ -204,6 +204,43 @@ def mf_folio_link(request, folio_id):
 
 
 @_admin_required
+@require_POST
+def mf_folio_create_client(request, folio_id):
+    """Create a Client straight from an unlinked folio's RTA data — the
+    investor exists at the RTA but not in the CRM. Name and PAN come from
+    the folio; everything sharing that PAN links immediately."""
+    folio = get_object_or_404(MutualFundFolio, id=folio_id)
+    next_url = request.POST.get("next") or "clients:mf_folios"
+    if folio.client_id:
+        messages.info(request, f"Folio {folio.folio_number} is already linked.")
+        return redirect(next_url)
+
+    pan = re.sub(r"[^A-Z0-9]", "", (folio.pan or "").upper())
+    if pan:
+        existing = Client.objects.filter(pan__iexact=pan).first()
+        if existing:
+            folio.client = existing
+            folio.save(update_fields=["client", "updated_at"])
+            linked = rta_feed.relink_folios()
+            messages.info(request, f"'{existing.name}' already has PAN {pan} — "
+                                   f"linked this folio to them ({linked + 1} record(s)).")
+            return redirect(next_url)
+
+    name = (folio.investor_name or "").strip().title() or f"Folio {folio.folio_number}"
+    client = Client.objects.create(name=name, pan=pan)
+    folio.client = client
+    folio.save(update_fields=["client", "updated_at"])
+    linked = rta_feed.relink_folios() + 1  # same-PAN folios + SIP registrations
+    messages.success(
+        request,
+        f"Client '{name}' created from folio {folio.folio_number}"
+        f"{f' (PAN {pan})' if pan else ' (no PAN in feed)'} — {linked} record(s) linked. "
+        f"Add phone/email on their profile when known.",
+    )
+    return redirect(next_url)
+
+
+@_admin_required
 def mf_transactions(request):
     qs = MutualFundTransaction.objects.select_related("folio__client", "arn")
     q = (request.GET.get("q") or "").strip()

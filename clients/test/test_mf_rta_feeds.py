@@ -921,3 +921,54 @@ class SipMonthDrilldownTests(TestCase):
         self.assertEqual(inr(999), "999")
         self.assertEqual(inr(-1234567), "-12,34,567")
         self.assertEqual(inr(None), "0")
+
+
+class FolioCreateClientTests(TestCase):
+    """Create-client-from-folio button + the KYC data-health console."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="cc_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.folio = MutualFundFolio.objects.create(
+            folio_number="777001", amc_name="Axis",
+            investor_name="MEENA RAVI JOSHI", pan="MEENJ1234R")
+        MutualFundFolio.objects.create(
+            folio_number="777002", amc_name="HDFC",
+            investor_name="MEENA RAVI JOSHI", pan="MEENJ1234R")
+
+    def _http(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        return c
+
+    def test_create_client_from_folio_links_all_same_pan(self):
+        resp = self._http().post(reverse("clients:mf_folio_create_client", args=[self.folio.id]))
+        self.assertEqual(resp.status_code, 302)
+        client = Client.objects.get(pan="MEENJ1234R")
+        self.assertEqual(client.name, "Meena Ravi Joshi")
+        self.assertEqual(MutualFundFolio.objects.filter(client=client).count(), 2)
+
+    def test_existing_pan_links_instead_of_duplicating(self):
+        existing = Client.objects.create(name="Meena J NSE", pan="MEENJ1234R")
+        self._http().post(reverse("clients:mf_folio_create_client", args=[self.folio.id]))
+        self.assertEqual(Client.objects.filter(pan="MEENJ1234R").count(), 1)
+        self.folio.refresh_from_db()
+        self.assertEqual(self.folio.client, existing)
+
+    def test_kyc_health_console_context(self):
+        Client.objects.create(name="Ramesh")           # single-word junk
+        resp = self._http().get(reverse("clients:client_kyc_issues"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("single_word", resp.context)
+        self.assertIn("no_business", resp.context)
+        self.assertEqual(resp.context["unlinked_folios"], 2)
+        names = [c.name for c in resp.context["single_word"]]
+        self.assertIn("Ramesh", names)
+
+    def test_merge_into_typed_bad_id_is_friendly(self):
+        junk = Client.objects.create(name="Ramesh")
+        resp = self._http().post(reverse("clients:client_merge"), {
+            "keep_id": "99999", "remove_id": junk.id})
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Client.objects.filter(id=junk.id).exists())  # nothing merged

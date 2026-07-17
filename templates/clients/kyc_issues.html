@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Client KYC Issues{% endblock %}
-{% block page_title %}Client KYC Issues{% endblock %}
+{% block title %}Client KYC & Data Health{% endblock %}
+{% block page_title %}Client KYC & Data Health{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -13,11 +13,38 @@
   .dup-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .35rem 0; border-top: 1px dashed var(--ki-card-border, #e5e7eb); }
   .dup-row:first-of-type { border-top: none; }
   .dup-meta { color: var(--ki-text-muted, #6b7280); font-size: .8rem; }
+  .health-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:.75rem; margin-bottom:1rem; }
+  .health-tile { background:var(--ki-card-bg, #fff); border:1px solid var(--ki-card-border, #e5e7eb); border-radius:10px; padding:.7rem .9rem; display:block; color:inherit; text-decoration:none; }
+  a.health-tile:hover { border-color:#94a3b8; box-shadow:0 1px 4px rgba(0,0,0,.08); color:inherit; }
+  .health-tile .num { font-size:1.3rem; font-weight:700; }
+  .health-tile .lbl { font-size:.74rem; color:var(--ki-text-muted, #6b7280); text-transform:uppercase; letter-spacing:.04em; }
+  .merge-into { display:flex; gap:.35rem; align-items:center; }
+  .merge-into input { width:90px; }
 </style>
 {% endblock %}
 
 {% block content %}
-  <div class="ki-card" style="margin-bottom:1rem;">
+  {% if is_admin %}
+  <div class="health-tiles">
+    <a class="health-tile" href="#missing-pan">
+      <div class="num">{{ missing|length }}</div><div class="lbl">Missing PAN</div>
+    </a>
+    <a class="health-tile" href="#duplicates">
+      <div class="num">{{ duplicate_groups|length }}</div><div class="lbl">Duplicate groups</div>
+    </a>
+    <a class="health-tile" href="{% url 'clients:mf_folio_match' %}">
+      <div class="num">{{ unlinked_folios }}</div>
+      <div class="lbl">Unlinked folios ({{ match_suggestions }} auto-matched) →</div>
+    </a>
+    <a class="health-tile" href="#junk-names">
+      <div class="num">{{ single_word|length }}</div><div class="lbl">Single-word names</div>
+    </a>
+    <a class="health-tile" href="#no-business">
+      <div class="num">{{ no_business|length }}</div><div class="lbl">No business records</div>
+    </a>
+  </div>
+  {% endif %}
+  <div class="ki-card" style="margin-bottom:1rem;" id="missing-pan">
     <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-person-vcard"></i> Clients missing PAN ({{ missing|length }})</span></div>
     <div class="ki-card-body" style="overflow-x:auto;">
       <p class="text-muted" style="font-size:.85rem;">
@@ -49,7 +76,7 @@
   </div>
 
   {% if is_admin %}
-  <div class="ki-card">
+  <div class="ki-card" id="duplicates" style="margin-bottom:1rem;">
     <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-people"></i> Possible duplicate profiles ({{ duplicate_groups|length }})</span></div>
     <div class="ki-card-body">
       <p class="text-muted" style="font-size:.85rem;">
@@ -90,6 +117,79 @@
       {% empty %}
       <p class="text-muted">No duplicate profiles detected.</p>
       {% endfor %}
+    </div>
+  </div>
+
+  <div class="ki-card" id="junk-names" style="margin-bottom:1rem;">
+    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-exclamation-triangle"></i> Single-word names ({{ single_word|length }}) — badly created profiles</span></div>
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <p class="text-muted" style="font-size:.85rem;">
+        Profiles created with just a first name. Fix the name on the profile, <strong>merge into</strong>
+        the proper profile by typing its ID, or delete if it holds no records.
+      </p>
+      <table class="kyc-table">
+        <thead><tr><th>Client</th><th>PAN / Phone</th><th>Mapped to</th><th>Records</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for client in single_word %}
+          <tr>
+            <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
+            <td class="text-muted">{{ client.pan|default:"—" }} · {{ client.phone|default:"—" }}</td>
+            <td>{{ client.mapped_to.user.username|default:"—" }}</td>
+            <td>{% if client.has_business %}<span class="dup-tag">has records</span>{% else %}<span class="text-muted">none</span>{% endif %}</td>
+            <td style="white-space:nowrap;">
+              <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:edit_client' client.id %}"><i class="bi bi-pencil"></i> Fix name</a>
+              <form method="post" action="{% url 'clients:client_merge' %}" class="merge-into" style="display:inline-flex;"
+                    onsubmit="return confirm('Merge {{ client.name|escapejs }} (#{{ client.id }}) into the client ID you typed? All records move there.');">
+                {% csrf_token %}
+                <input type="hidden" name="remove_id" value="{{ client.id }}">
+                <input class="form-control form-control-sm" name="keep_id" placeholder="into #ID" required pattern="[0-9]+">
+                <button class="ki-btn ki-btn-secondary ki-btn-sm" title="Merge this profile into the typed client ID"><i class="bi bi-box-arrow-in-down"></i> Merge</button>
+              </form>
+              {% if not client.has_business %}
+              <form method="post" action="{% url 'clients:client_safe_delete' client.id %}" style="display:inline;"
+                    onsubmit="return confirm('Delete {{ client.name|escapejs }} (#{{ client.id }})? This cannot be undone.');">
+                {% csrf_token %}
+                <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i> Delete</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted">🎉 No single-word client names.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="ki-card" id="no-business">
+    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-person-x"></i> No business records ({{ no_business|length }}) — delete candidates</span></div>
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <p class="text-muted" style="font-size:.85rem;">
+        No sales, renewals, folios, SIPs, tasks or follow-ups anywhere. Real prospects belong in the
+        Lead Pipeline — empty duplicates can go. Deletion re-checks every relation before removing.
+      </p>
+      <table class="kyc-table">
+        <thead><tr><th>Client</th><th>PAN / Phone</th><th>Mapped to</th><th></th></tr></thead>
+        <tbody>
+          {% for client in no_business %}
+          <tr>
+            <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
+            <td class="text-muted">{{ client.pan|default:"—" }} · {{ client.phone|default:"—" }}</td>
+            <td>{{ client.mapped_to.user.username|default:"—" }}</td>
+            <td>
+              <form method="post" action="{% url 'clients:client_safe_delete' client.id %}"
+                    onsubmit="return confirm('Delete {{ client.name|escapejs }} (#{{ client.id }})? This cannot be undone.');">
+                {% csrf_token %}
+                <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i> Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-muted">🎉 Every client carries business data.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
   {% endif %}
