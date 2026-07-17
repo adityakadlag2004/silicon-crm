@@ -163,6 +163,18 @@ def client_kyc_issues(request):
 
     missing = list(_missing_pan_qs(request))
     is_admin = _is_admin(request)
+
+    # Folio name-matches suggest PANs for the missing-PAN rows: investor name
+    # shown alongside for a visual cross-check before bulk-applying.
+    suggestions = rta_feed.suggest_folio_matches()
+    best_by_client = {}
+    for s in suggestions:
+        cid = s["client"].id
+        if s["pan"] and (cid not in best_by_client or s["level"] > best_by_client[cid]["level"]):
+            best_by_client[cid] = s
+    for c in missing:
+        c.pan_suggestion = best_by_client.get(c.id)
+
     context = {
         "page_title": "Client KYC & Data Health",
         "missing": missing,
@@ -175,10 +187,85 @@ def client_kyc_issues(request):
             "single_word": single_word,
             "no_business": no_business,
             "unlinked_folios": MutualFundFolio.objects.filter(client__isnull=True).count(),
-            "match_suggestions": len(rta_feed.suggest_folio_matches()),
+            "match_suggestions": len(suggestions),
             "identity_issues": _folio_identity_issues(),
         })
     return render(request, "clients/kyc_issues.html", context)
+
+
+@login_required
+@require_POST
+def client_kyc_bulk_pan(request):
+    """Apply the ticked PANs from the missing-PAN table in one go, then
+    relink folios/SIPs once. Employees may only update their own clients."""
+    applied, errors = 0, []
+    for cid in request.POST.getlist("pan_apply")[:300]:
+        if not cid.isdigit():
+            continue
+        client = Client.objects.filter(id=cid).first()
+        if client is None:
+            continue
+        if _role(request) == "employee" and client.mapped_to != request.user.employee:
+            errors.append(f"{client.name}: not your assigned client")
+            continue
+        try:
+            pan = validate_pan(request.POST.get(f"pan_for_{cid}", ""), required=True)
+        except forms.ValidationError as exc:
+            errors.append(f"{client.name}: {'; '.join(exc.messages)}")
+            continue
+        duplicate = Client.objects.filter(pan__iexact=pan).exclude(id=client.id).first()
+        if duplicate:
+            errors.append(
+                f"{client.name}: PAN {pan} already belongs to '{duplicate.name}' "
+                f"(#{duplicate.id}) — merge those profiles instead")
+            continue
+        client.pan = pan
+        client.save(update_fields=["pan"])
+        applied += 1
+    linked = rta_feed.relink_folios() if applied else 0
+    if applied:
+        messages.success(request, f"{applied} PAN(s) saved — {linked} MF record(s) auto-linked.")
+    elif not errors:
+        messages.info(request, "Nothing ticked — no PANs applied.")
+    for e in errors[:6]:
+        messages.error(request, e)
+    return redirect("clients:client_kyc_issues")
+
+
+@login_required
+@require_POST
+def client_bulk_merge(request):
+    """Merge every duplicate group where a keeper was ticked — one click for
+    the whole page instead of group-by-group."""
+    if not _is_admin(request):
+        return HttpResponseForbidden("Admins only.")
+    merged = []
+    try:
+        group_count = min(int(request.POST.get("group_count", 0)), 300)
+    except ValueError:
+        group_count = 0
+    for i in range(group_count):
+        keep_id = request.POST.get(f"keep_g{i}", "")
+        member_ids = request.POST.getlist(f"members_g{i}")
+        if not keep_id or keep_id not in member_ids:
+            continue
+        keep = Client.objects.filter(id=keep_id).first()
+        if keep is None:
+            continue
+        for rid in member_ids:
+            if rid == keep_id or not rid.isdigit():
+                continue
+            remove = Client.objects.filter(id=rid).first()
+            if remove is None:  # already merged away via an overlapping group
+                continue
+            client_merge.merge_clients(keep, remove)
+            merged.append(f"'{remove.name}' → '{keep.name}'")
+    if merged:
+        listing = "; ".join(merged[:8]) + ("…" if len(merged) > 8 else "")
+        messages.success(request, f"Merged {len(merged)} profile(s): {listing}")
+    else:
+        messages.info(request, "No group had a keeper ticked — nothing merged.")
+    return redirect("clients:client_kyc_issues")
 
 
 @login_required

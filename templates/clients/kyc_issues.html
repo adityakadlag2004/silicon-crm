@@ -52,29 +52,53 @@
     <div class="ki-card-body" style="overflow-x:auto;">
       <p class="text-muted" style="font-size:.85rem;">
         Without a PAN the system can't link a client to their mutual-fund folios or verify their
-        sales against the RTA feeds. Enter the PAN here — folios auto-link the moment it's saved.
+        sales against the RTA feeds. Where the client's name matches an unlinked folio, its
+        <strong>PAN is suggested</strong> below with the folio's investor name — tick the ones you've
+        cross-checked and hit <strong>Apply ticked PANs</strong>. Any row's PAN is editable.
       </p>
-      <table class="kyc-table">
-        <thead><tr><th>Client</th><th>Phone</th><th>Mapped to</th><th>Enter PAN</th></tr></thead>
-        <tbody>
-          {% for client in missing %}
-          <tr>
-            <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
-            <td>{{ client.phone|default:"—" }}</td>
-            <td>{% if client.mapped_to %}{{ client.mapped_to.user.get_full_name|default:client.mapped_to.user.username }}{% else %}Unmapped{% endif %}</td>
-            <td>
-              <form method="post" action="{% url 'clients:client_kyc_update_pan' client.id %}" class="kyc-pan-form">
-                {% csrf_token %}
-                <input class="form-control form-control-sm" name="pan" placeholder="ABCDE1234F" maxlength="10" required>
-                <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check-lg"></i> Save</button>
-              </form>
-            </td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="4" class="text-muted">🎉 Every client{% if not is_admin %} mapped to you{% endif %} has a PAN.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+      <form method="post" action="{% url 'clients:client_kyc_bulk_pan' %}">
+        {% csrf_token %}
+        <table class="kyc-table">
+          <thead><tr>
+            <th style="width:34px;"><input type="checkbox" onclick="document.querySelectorAll('.pan-tick').forEach(c=>{if(!c.disabled)c.checked=this.checked})" title="Tick all suggested"></th>
+            <th>Client</th><th>Phone</th><th>Suggested from folio (cross-check the name)</th><th>PAN to save</th>
+          </tr></thead>
+          <tbody>
+            {% for client in missing %}
+            <tr>
+              <td><input class="pan-tick" type="checkbox" name="pan_apply" value="{{ client.id }}"
+                         {% if not client.pan_suggestion %}disabled title="Type a PAN to enable"{% endif %}></td>
+              <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
+              <td>{{ client.phone|default:"—" }}</td>
+              <td>
+                {% if client.pan_suggestion %}
+                  <span class="dup-tag">{{ client.pan_suggestion.level_label }}</span>
+                  <strong>{{ client.pan_suggestion.investor_name }}</strong>
+                  <span class="text-muted">· {{ client.pan_suggestion.folios|length }} folio(s)</span>
+                {% else %}<span class="text-muted">no folio name-match</span>{% endif %}
+              </td>
+              <td>
+                <input class="form-control form-control-sm" name="pan_for_{{ client.id }}"
+                       value="{{ client.pan_suggestion.pan|default:'' }}"
+                       placeholder="ABCDE1234F" maxlength="10" style="width:130px;text-transform:uppercase;"
+                       oninput="this.closest('tr').querySelector('.pan-tick').disabled = this.value.length!=10">
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-muted">🎉 Every client{% if not is_admin %} mapped to you{% endif %} has a PAN.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if missing %}
+        <div style="margin-top:.7rem;">
+          <button class="ki-btn ki-btn-primary" type="submit"
+                  onclick="return confirm('Apply the ticked PANs? Folios auto-link afterwards.');">
+            <i class="bi bi-check2-all"></i> Apply ticked PANs
+          </button>
+          <span class="text-muted" style="font-size:.8rem;margin-left:.5rem;">Only rows with a valid 10-char PAN can be ticked.</span>
+        </div>
+        {% endif %}
+      </form>
     </div>
   </div>
 
@@ -83,43 +107,46 @@
     <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-people"></i> Possible duplicate profiles ({{ duplicate_groups|length }})</span></div>
     <div class="ki-card-body">
       <p class="text-muted" style="font-size:.85rem;">
-        Profiles sharing a PAN, phone number, or exact name. <strong>Merge</strong> moves every record
-        (sales, renewals, tasks, folios, follow-ups) onto the profile you keep, then removes the duplicate.
-        <strong>Delete</strong> works only on profiles with no business records.
+        Profiles sharing a PAN, phone number, or exact name. In each group, <strong>pick the profile to
+        keep</strong> (the ● radio) — every other profile in that group merges into it, carrying all its
+        records (sales, renewals, tasks, folios, SIPs, follow-ups). Do this for as many groups as you
+        like, then hit <strong>Merge all selected</strong> once at the bottom.
       </p>
-      {% for group in duplicate_groups %}
-      <div class="dup-group">
-        <div style="margin-bottom:.3rem;"><span class="dup-tag">{{ group.label }}</span> <code>{{ group.key }}</code></div>
-        {% for client in group.clients %}
-        <div class="dup-row">
-          <span style="flex:1 1 220px;">
-            <a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a>
-            <span class="text-muted">#{{ client.id }}</span>
-            <div class="dup-meta">
-              {{ client.phone|default:"no phone" }} · PAN {{ client.pan|default:"—" }} ·
-              {{ client.record_total }} record(s) · mapped to {{ client.mapped_to.user.username|default:"—" }}
-            </div>
-          </span>
-          <form method="post" action="{% url 'clients:client_merge' %}"
-                onsubmit="return confirm('Keep {{ client.name }} (#{{ client.id }}) and merge the other profile(s) of this group into it?');">
-            {% csrf_token %}
-            <input type="hidden" name="keep_id" value="{{ client.id }}">
-            {% for other in group.clients %}{% if other.id != client.id %}<input type="hidden" name="remove_id" value="{{ other.id }}">{% endif %}{% endfor %}
-            <button class="ki-btn ki-btn-secondary ki-btn-sm" title="Keep this profile, merge the others into it"><i class="bi bi-box-arrow-in-down"></i> Keep this one</button>
-          </form>
-          {% if not client.record_total %}
-          <form method="post" action="{% url 'clients:client_safe_delete' client.id %}"
-                onsubmit="return confirm('Delete empty profile {{ client.name }} (#{{ client.id }})? This cannot be undone.');">
-            {% csrf_token %}
-            <button class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i> Delete</button>
-          </form>
-          {% endif %}
+      <form method="post" action="{% url 'clients:client_bulk_merge' %}"
+            onsubmit="return confirm('Merge every group where you picked a keeper? This cannot be undone.');">
+        {% csrf_token %}
+        <input type="hidden" name="group_count" value="{{ duplicate_groups|length }}">
+        {% for group in duplicate_groups %}
+        <div class="dup-group">
+          <div style="margin-bottom:.3rem;"><span class="dup-tag">{{ group.label }}</span> <code>{{ group.key }}</code>
+            <span class="text-muted" style="font-size:.78rem;">— pick the one to keep</span></div>
+          {% for client in group.clients %}
+          <label class="dup-row" style="cursor:pointer;">
+            <input type="radio" name="keep_g{{ forloop.parentloop.counter0 }}" value="{{ client.id }}"
+                   {% if forloop.first %}checked{% endif %} style="margin-right:.5rem;">
+            <input type="hidden" name="members_g{{ forloop.parentloop.counter0 }}" value="{{ client.id }}">
+            <span style="flex:1 1 220px;">
+              <strong>{{ client.name }}</strong>
+              <span class="text-muted">#{{ client.id }}</span>
+              <div class="dup-meta">
+                {{ client.phone|default:"no phone" }} · PAN {{ client.pan|default:"—" }} ·
+                {{ client.record_total }} record(s) · mapped to {{ client.mapped_to.user.username|default:"—" }}
+              </div>
+            </span>
+            <a href="{% url 'clients:client_profile' client.id %}" target="_blank" class="text-muted" style="font-size:.78rem;">view ↗</a>
+          </label>
+          {% endfor %}
         </div>
+        {% empty %}
+        <p class="text-muted">No duplicate profiles detected.</p>
         {% endfor %}
-      </div>
-      {% empty %}
-      <p class="text-muted">No duplicate profiles detected.</p>
-      {% endfor %}
+        {% if duplicate_groups %}
+        <div style="margin-top:.7rem;">
+          <button class="ki-btn ki-btn-primary" type="submit"><i class="bi bi-box-arrow-in-down"></i> Merge all selected</button>
+          <span class="text-muted" style="font-size:.8rem;margin-left:.5rem;">Each group keeps its ● profile; the rest merge into it.</span>
+        </div>
+        {% endif %}
+      </form>
     </div>
   </div>
 

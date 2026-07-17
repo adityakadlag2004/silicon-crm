@@ -1187,3 +1187,77 @@ class SipFieldSyncAndIdentityTests(TestCase):
         resp = c.get(reverse("clients:client_profile", args=[self.client_row.id]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "live from RTA")
+
+
+class BulkKycTests(TestCase):
+    """Bulk PAN apply + bulk duplicate merge from the KYC page."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="bk_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+
+    def _http(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        return c
+
+    def test_bulk_pan_applies_ticked_and_links_folios(self):
+        a = Client.objects.create(name="Asha Naik NSE")
+        b = Client.objects.create(name="Vikram Rao NSE")
+        MutualFundFolio.objects.create(folio_number="700001", amc_name="Axis",
+                                       investor_name="ASHA NAIK", pan="ASHAN1234K")
+        resp = self._http().post(reverse("clients:client_kyc_bulk_pan"), {
+            "pan_apply": [str(a.id), str(b.id)],
+            f"pan_for_{a.id}": "ASHAN1234K",
+            f"pan_for_{b.id}": "VIKRR5678L",
+        })
+        self.assertEqual(resp.status_code, 302)
+        a.refresh_from_db(); b.refresh_from_db()
+        self.assertEqual(a.pan, "ASHAN1234K")
+        self.assertEqual(b.pan, "VIKRR5678L")
+        # folio auto-linked by the freshly-applied PAN
+        self.assertEqual(MutualFundFolio.objects.get(folio_number="700001").client, a)
+
+    def test_bulk_pan_rejects_duplicate_pan(self):
+        Client.objects.create(name="Existing", pan="DUPES1234K")
+        target = Client.objects.create(name="New One NSE")
+        self._http().post(reverse("clients:client_kyc_bulk_pan"), {
+            "pan_apply": [str(target.id)], f"pan_for_{target.id}": "DUPES1234K"})
+        target.refresh_from_db()
+        self.assertFalse(target.pan)  # not applied — belongs to another client
+
+    def test_missing_pan_rows_carry_folio_suggestion(self):
+        c = Client.objects.create(name="Meena Joshi NSE")
+        MutualFundFolio.objects.create(folio_number="700002", amc_name="HDFC",
+                                       investor_name="MEENA JOSHI", pan="MEENJ9999K")
+        resp = self._http().get(reverse("clients:client_kyc_issues"))
+        row = next(x for x in resp.context["missing"] if x.id == c.id)
+        self.assertIsNotNone(row.pan_suggestion)
+        self.assertEqual(row.pan_suggestion["pan"], "MEENJ9999K")
+
+    def test_bulk_merge_keeps_selected_and_moves_records(self):
+        keep = Client.objects.create(name="Ramesh Kumar", phone="9998887777")
+        dupe = Client.objects.create(name="Ramesh Kumar", phone="9998887777")
+        emp = Employee.objects.create(
+            user=User.objects.create_user(username="bk_emp", password="x"),
+            role="employee", salary=0, active=True)
+        product, _ = Product.objects.get_or_create(name="SIP", defaults={"code": "SIP"})
+        Sale.objects.create(client=dupe, employee=emp, product="SIP",
+                            product_ref=product, amount=5000, status=Sale.STATUS_APPROVED)
+        # the page renders one group of these two; index 0
+        resp = self._http().post(reverse("clients:client_bulk_merge"), {
+            "group_count": "1",
+            "keep_g0": str(keep.id),
+            "members_g0": [str(keep.id), str(dupe.id)],
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Client.objects.filter(id=dupe.id).exists())
+        self.assertEqual(Sale.objects.filter(client=keep).count(), 1)
+
+    def test_bulk_merge_page_admin_only(self):
+        c = TestClient()
+        emp_user = User.objects.create_user(username="bk_emp2", password="x")
+        Employee.objects.create(user=emp_user, role="employee", salary=0, active=True)
+        c.force_login(emp_user)
+        self.assertEqual(c.post(reverse("clients:client_bulk_merge"), {"group_count": "0"}).status_code, 403)
