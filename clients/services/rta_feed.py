@@ -167,6 +167,34 @@ def _read_delimited(data):
     return list(reader.fieldnames or []), rows
 
 
+def _patch_msoffcrypto_biff():
+    """msoffcrypto 6.0's legacy-XLS record iterator crashes on files with
+    trailing padding bytes (`if not h` only catches a fully-empty read, so a
+    1–3 byte tail hits `unpack` and raises struct.error). CAMS encrypts its
+    Systematic-Registration .xls files this way — the password verifies but
+    decrypt() dies. Patch the EOF check to `len(h) < 4`. Guarded so it
+    silently no-ops if the library internals change."""
+    try:
+        from struct import unpack as _unpack
+        from msoffcrypto.format import xls97
+
+        if getattr(xls97._BIFFStream.iter_record, "_ki_patched", False):
+            return
+
+        def iter_record(self):
+            while True:
+                h = self.data.read(4)
+                if len(h) < 4:  # empty OR short trailing buffer = EOF
+                    break
+                num, size = _unpack("<HH", h)
+                yield num, size, io.BytesIO(self.data.read(size))
+
+        iter_record._ki_patched = True
+        xls97._BIFFStream.iter_record = iter_record
+    except Exception:  # noqa: BLE001 — never let a patch failure break imports
+        pass
+
+
 def _decrypt_office(data):
     """Decrypt a password-protected Excel workbook (legacy XLS or OOXML
     inside OLE2) with the configured password candidates.
@@ -177,6 +205,7 @@ def _decrypt_office(data):
     import msoffcrypto
     from msoffcrypto.exceptions import DecryptionError, InvalidKeyError
 
+    _patch_msoffcrypto_biff()
     office = msoffcrypto.OfficeFile(io.BytesIO(data))
     try:
         if not office.is_encrypted():
