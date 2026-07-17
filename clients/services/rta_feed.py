@@ -943,8 +943,8 @@ def mf_summary_for_client(client):
             return None
         return {
             "monthly_sip": register_sip, "inflow_12m": Decimal("0"),
-            "outflow_12m": Decimal("0"), "est_value": None,
-            "txn_count": 0, "last_txn_date": None,
+            "outflow_12m": Decimal("0"), "lumpsum_12m": Decimal("0"),
+            "est_value": None, "txn_count": 0, "last_txn_date": None,
         }
 
     today = timezone.localdate()
@@ -954,6 +954,7 @@ def mf_summary_for_client(client):
     monthly_sip = Decimal("0")
     inflow_12m = Decimal("0")
     outflow_12m = Decimal("0")
+    lumpsum_12m = Decimal("0")
     units = defaultdict(lambda: Decimal("0"))
     latest_nav = {}
 
@@ -968,6 +969,8 @@ def mf_summary_for_client(client):
                     outflow_12m += abs(amount)
                 else:
                     inflow_12m += abs(amount)
+                    if not _is_sip_type(txn.txn_type):
+                        lumpsum_12m += abs(amount)
         if txn.units is not None:
             scheme_key = (txn.folio_id, txn.scheme_name)
             delta = txn.units
@@ -986,6 +989,7 @@ def mf_summary_for_client(client):
         "monthly_sip": register_sip if register_sip > 0 else monthly_sip,
         "inflow_12m": inflow_12m,
         "outflow_12m": outflow_12m,
+        "lumpsum_12m": lumpsum_12m,
         "est_value": est_value if est_value > 0 else None,
         "txn_count": len(txns),
         "last_txn_date": max((t.trade_date for t in txns if t.trade_date), default=None),

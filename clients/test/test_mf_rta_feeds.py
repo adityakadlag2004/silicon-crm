@@ -1164,3 +1164,26 @@ class SipFieldSyncAndIdentityTests(TestCase):
         from clients.models import SipRegistration
         reg = SipRegistration.objects.get(folio_number="660001")
         self.assertEqual(reg.broker_name, "SHARMA INVESTMENTS")
+
+
+    def test_mf_summary_has_lumpsum_12m(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        folio = MutualFundFolio.objects.create(
+            folio_number="550002", amc_name="HDFC",
+            investor_name="DEEPAK RAO", pan="DEEPR1234K", client=self.client_row)
+        MutualFundTransaction.objects.create(
+            dedupe_key="lump1", folio=folio, txn_type="Purchase",
+            amount=100000, trade_date=timezone.localdate() - timedelta(days=30))
+        MutualFundTransaction.objects.create(
+            dedupe_key="sip1", folio=folio, txn_type="SIN",
+            amount=3000, trade_date=timezone.localdate() - timedelta(days=10))
+        summary = rta_feed.mf_summary_for_client(self.client_row)
+        self.assertEqual(summary["lumpsum_12m"], 100000)  # SIN row excluded
+
+    def test_profile_portfolio_uses_feed_numbers(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        resp = c.get(reverse("clients:client_profile", args=[self.client_row.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "live from RTA")

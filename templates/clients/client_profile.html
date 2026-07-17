@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}{{ client.name }} — Profile{% endblock %}
 {% block page_title %}Client Profile{% endblock %}
 
@@ -126,18 +127,38 @@
     <div class="ki-card mt-3">
       <h3 class="ki-section-title" style="margin-top:0;">Portfolio</h3>
       <div class="product-section">
+        {% if mf_summary %}
+        {# RTA-linked MF products: numbers come from the feed, never sales #}
+        <div class="product-card">
+          <div class="pc-title"><i class="bi bi-piggy-bank"></i> SIP
+            <span class="status-pill {% if mf_summary.monthly_sip %}status-yes{% else %}status-no{% endif %}">{% if mf_summary.monthly_sip %}Yes{% else %}No{% endif %}</span>
+          </div>
+          <div class="pc-sub">
+            {% if mf_summary.monthly_sip %}₹{{ mf_summary.monthly_sip|inr }}/mo{% else %}—{% endif %}
+            <span class="text-muted" style="font-size:.72rem;"> · live from RTA</span>
+          </div>
+        </div>
+        <div class="product-card">
+          <div class="pc-title"><i class="bi bi-cash-stack"></i> MF Value</div>
+          <div class="pc-sub">
+            {% if mf_summary.est_value %}₹{{ mf_summary.est_value|inr }} <span class="text-muted" style="font-size:.72rem;">est.</span>{% else %}—{% endif %}
+            {% if mf_summary.lumpsum_12m %}<br><span class="text-muted" style="font-size:.76rem;">Lumpsum 12m: ₹{{ mf_summary.lumpsum_12m|inr }}</span>{% endif %}
+          </div>
+        </div>
+        {% else %}
         <div class="product-card">
           <div class="pc-title"><i class="bi bi-piggy-bank"></i> SIP
             <span class="status-pill {% if client.sip_status %}status-yes{% else %}status-no{% endif %}">{% if client.sip_status %}Yes{% else %}No{% endif %}</span>
           </div>
           <div class="pc-sub">
-            {% if client.sip_amount %}Amount: ₹{{ client.sip_amount|floatformat:0 }}{% if client.sip_topup %} · Topup: ₹{{ client.sip_topup|floatformat:0 }}{% endif %}{% else %}—{% endif %}
+            {% if client.sip_amount %}Amount: ₹{{ client.sip_amount|inr }}{% if client.sip_topup %} · Topup: ₹{{ client.sip_topup|inr }}{% endif %}{% else %}—{% endif %}
           </div>
         </div>
         <div class="product-card">
           <div class="pc-title"><i class="bi bi-cash-stack"></i> Lumpsum</div>
-          <div class="pc-sub">{% if client.lumsum_investment %}₹{{ client.lumsum_investment|floatformat:0 }}{% else %}—{% endif %}</div>
+          <div class="pc-sub">{% if client.lumsum_investment %}₹{{ client.lumsum_investment|inr }}{% else %}—{% endif %}</div>
         </div>
+        {% endif %}
         <div class="product-card">
           <div class="pc-title"><i class="bi bi-heart-pulse"></i> Health
             <span class="status-pill {% if client.health_status %}status-yes{% else %}status-no{% endif %}">{% if client.health_status %}Yes{% else %}No{% endif %}</span>
