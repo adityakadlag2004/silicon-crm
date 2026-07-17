@@ -611,6 +611,10 @@ def import_sip_registrations(rows, headers, *, rta, feed_import):
             if rta_status and reg.rta_status != rta_status:
                 reg.rta_status = rta_status
                 changed.append("rta_status")
+            broker_name = _clean(get(row, "broker_name"))[:120]
+            if broker_name and not reg.broker_name:
+                reg.broker_name = broker_name
+                changed.append("broker_name")
             if is_ceased and reg.status == SipRegistration.STATUS_ACTIVE:
                 reg.status = SipRegistration.STATUS_CEASED
                 reg.ceased_on = cease_date or timezone.localdate()
