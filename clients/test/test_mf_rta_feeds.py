@@ -1202,28 +1202,23 @@ class BulkKycTests(TestCase):
         c.force_login(self.admin_user)
         return c
 
-    def test_bulk_pan_applies_ticked_and_links_folios(self):
+    def test_row_save_applies_pan_and_links_folios(self):
         a = Client.objects.create(name="Asha Naik NSE")
-        b = Client.objects.create(name="Vikram Rao NSE")
         MutualFundFolio.objects.create(folio_number="700001", amc_name="Axis",
                                        investor_name="ASHA NAIK", pan="ASHAN1234K")
-        resp = self._http().post(reverse("clients:client_kyc_bulk_pan"), {
-            "pan_apply": [str(a.id), str(b.id)],
-            f"pan_for_{a.id}": "ASHAN1234K",
-            f"pan_for_{b.id}": "VIKRR5678L",
-        })
+        resp = self._http().post(
+            reverse("clients:client_kyc_update_pan", args=[a.id]), {"pan": "ASHAN1234K"})
         self.assertEqual(resp.status_code, 302)
-        a.refresh_from_db(); b.refresh_from_db()
+        a.refresh_from_db()
         self.assertEqual(a.pan, "ASHAN1234K")
-        self.assertEqual(b.pan, "VIKRR5678L")
-        # folio auto-linked by the freshly-applied PAN
+        # folio auto-linked by the freshly-saved PAN
         self.assertEqual(MutualFundFolio.objects.get(folio_number="700001").client, a)
 
-    def test_bulk_pan_rejects_duplicate_pan(self):
+    def test_row_save_rejects_pan_owned_by_another_client(self):
         Client.objects.create(name="Existing", pan="DUPES1234K")
         target = Client.objects.create(name="New One NSE")
-        self._http().post(reverse("clients:client_kyc_bulk_pan"), {
-            "pan_apply": [str(target.id)], f"pan_for_{target.id}": "DUPES1234K"})
+        self._http().post(
+            reverse("clients:client_kyc_update_pan", args=[target.id]), {"pan": "DUPES1234K"})
         target.refresh_from_db()
         self.assertFalse(target.pan)  # not applied — belongs to another client
 

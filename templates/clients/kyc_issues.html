@@ -53,52 +53,41 @@
       <p class="text-muted" style="font-size:.85rem;">
         Without a PAN the system can't link a client to their mutual-fund folios or verify their
         sales against the RTA feeds. Where the client's name matches an unlinked folio, its
-        <strong>PAN is suggested</strong> below with the folio's investor name — tick the ones you've
-        cross-checked and hit <strong>Apply ticked PANs</strong>. Any row's PAN is editable.
+        <strong>PAN is suggested</strong> below with the folio's investor name — cross-check the name,
+        edit if needed, and hit <strong>Save</strong> on that row. Folios auto-link the moment it's saved.
       </p>
-      <form method="post" action="{% url 'clients:client_kyc_bulk_pan' %}">
-        {% csrf_token %}
-        <table class="kyc-table">
-          <thead><tr>
-            <th style="width:34px;"><input type="checkbox" onclick="document.querySelectorAll('.pan-tick').forEach(c=>{if(!c.disabled)c.checked=this.checked})" title="Tick all suggested"></th>
-            <th>Client</th><th>Phone</th><th>Suggested from folio (cross-check the name)</th><th>PAN to save</th>
-          </tr></thead>
-          <tbody>
-            {% for client in missing %}
-            <tr>
-              <td><input class="pan-tick" type="checkbox" name="pan_apply" value="{{ client.id }}"
-                         {% if not client.pan_suggestion %}disabled title="Type a PAN to enable"{% endif %}></td>
-              <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
-              <td>{{ client.phone|default:"—" }}</td>
-              <td>
-                {% if client.pan_suggestion %}
-                  <span class="dup-tag">{{ client.pan_suggestion.level_label }}</span>
-                  <strong>{{ client.pan_suggestion.investor_name }}</strong>
-                  <span class="text-muted">· {{ client.pan_suggestion.folios|length }} folio(s)</span>
-                {% else %}<span class="text-muted">no folio name-match</span>{% endif %}
-              </td>
-              <td>
-                <input class="form-control form-control-sm" name="pan_for_{{ client.id }}"
+      <table class="kyc-table">
+        <thead><tr>
+          <th>Client</th><th>Phone</th><th>Suggested from folio (cross-check the name)</th><th>PAN</th>
+        </tr></thead>
+        <tbody>
+          {% for client in missing %}
+          <tr>
+            <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
+            <td>{{ client.phone|default:"—" }}</td>
+            <td>
+              {% if client.pan_suggestion %}
+                <span class="dup-tag">{{ client.pan_suggestion.level_label }}</span>
+                <strong>{{ client.pan_suggestion.investor_name }}</strong>
+                <span class="text-muted">· {{ client.pan_suggestion.folios|length }} folio(s)</span>
+              {% else %}<span class="text-muted">no folio name-match</span>{% endif %}
+            </td>
+            <td>
+              <form method="post" action="{% url 'clients:client_kyc_update_pan' client.id %}" class="kyc-pan-form">
+                {% csrf_token %}
+                <input class="form-control form-control-sm" name="pan"
                        value="{{ client.pan_suggestion.pan|default:'' }}"
-                       placeholder="ABCDE1234F" maxlength="10" style="width:130px;text-transform:uppercase;"
-                       oninput="this.closest('tr').querySelector('.pan-tick').disabled = this.value.length!=10">
-              </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="5" class="text-muted">🎉 Every client{% if not is_admin %} mapped to you{% endif %} has a PAN.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% if missing %}
-        <div style="margin-top:.7rem;">
-          <button class="ki-btn ki-btn-primary" type="submit"
-                  onclick="return confirm('Apply the ticked PANs? Folios auto-link afterwards.');">
-            <i class="bi bi-check2-all"></i> Apply ticked PANs
-          </button>
-          <span class="text-muted" style="font-size:.8rem;margin-left:.5rem;">Only rows with a valid 10-char PAN can be ticked.</span>
-        </div>
-        {% endif %}
-      </form>
+                       placeholder="ABCDE1234F" maxlength="10" required
+                       style="text-transform:uppercase;">
+                <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check-lg"></i> Save</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-muted">🎉 Every client{% if not is_admin %} mapped to you{% endif %} has a PAN.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
   </div>
 

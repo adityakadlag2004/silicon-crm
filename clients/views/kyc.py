@@ -195,45 +195,6 @@ def client_kyc_issues(request):
 
 @login_required
 @require_POST
-def client_kyc_bulk_pan(request):
-    """Apply the ticked PANs from the missing-PAN table in one go, then
-    relink folios/SIPs once. Employees may only update their own clients."""
-    applied, errors = 0, []
-    for cid in request.POST.getlist("pan_apply")[:300]:
-        if not cid.isdigit():
-            continue
-        client = Client.objects.filter(id=cid).first()
-        if client is None:
-            continue
-        if _role(request) == "employee" and client.mapped_to != request.user.employee:
-            errors.append(f"{client.name}: not your assigned client")
-            continue
-        try:
-            pan = validate_pan(request.POST.get(f"pan_for_{cid}", ""), required=True)
-        except forms.ValidationError as exc:
-            errors.append(f"{client.name}: {'; '.join(exc.messages)}")
-            continue
-        duplicate = Client.objects.filter(pan__iexact=pan).exclude(id=client.id).first()
-        if duplicate:
-            errors.append(
-                f"{client.name}: PAN {pan} already belongs to '{duplicate.name}' "
-                f"(#{duplicate.id}) — merge those profiles instead")
-            continue
-        client.pan = pan
-        client.save(update_fields=["pan"])
-        applied += 1
-    linked = rta_feed.relink_folios() if applied else 0
-    if applied:
-        messages.success(request, f"{applied} PAN(s) saved — {linked} MF record(s) auto-linked.")
-    elif not errors:
-        messages.info(request, "Nothing ticked — no PANs applied.")
-    for e in errors[:6]:
-        messages.error(request, e)
-    return redirect("clients:client_kyc_issues")
-
-
-@login_required
-@require_POST
 def client_bulk_merge(request):
     """Merge every duplicate group where a keeper was ticked — one click for
     the whole page instead of group-by-group."""
@@ -282,10 +243,19 @@ def client_kyc_update_pan(request, client_id):
         messages.error(request, f"{client.name}: {'; '.join(exc.messages)}")
         return redirect("clients:client_kyc_issues")
 
+    duplicate = Client.objects.filter(pan__iexact=pan).exclude(id=client.id).first()
+    if duplicate:
+        messages.error(
+            request,
+            f"PAN {pan} already belongs to '{duplicate.name}' (#{duplicate.id}) — "
+            f"merge the two profiles instead of assigning the same PAN twice.",
+        )
+        return redirect("clients:client_kyc_issues")
+
     client.pan = pan
     client.save(update_fields=["pan"])
     linked = rta_feed.relink_folios()
-    note = f" — {linked} MF folio(s) auto-linked" if linked else ""
+    note = f" — {linked} MF record(s) auto-linked" if linked else ""
     messages.success(request, f"PAN saved for {client.name}{note}.")
     return redirect("clients:client_kyc_issues")
 
