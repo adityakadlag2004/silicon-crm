@@ -319,8 +319,7 @@
 
         {% if request.user.is_authenticated and nav %}
 
-          {# ─── One nav for every role — visibility gated by `nav.*` flags
-                 (clients/context_processors.py). Edit menu here once. ─── #}
+          {% comment %}One nav for every role — visibility gated by nav.* flags (clients/context_processors.py). Edit menu here once.{% endcomment %}
 
           <a class="kn-link" href="{% if nav.dashboard_admin %}{% url 'clients:admin_dashboard' %}{% else %}{% url 'clients:employee_dashboard' %}{% endif %}">
             <i class="bi bi-grid-1x2-fill"></i> Dashboard
