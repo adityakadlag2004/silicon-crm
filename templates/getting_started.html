@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Getting Started{% endblock %}
+{% block page_title %}Getting Started{% endblock %}
+
+{% block extra_css %}
+<style>
+  .gs-intro { color: var(--ki-text-secondary, #4b5563); font-size: .92rem; max-width: 760px; margin-bottom: 1.2rem; }
+  .gs-step { display: flex; gap: .9rem; padding: .9rem 1rem; border: 1px solid var(--ki-card-border, #e5e7eb);
+             border-radius: 12px; margin-bottom: .7rem; background: var(--ki-card-bg, #fff); }
+  .gs-num { flex: 0 0 34px; height: 34px; border-radius: 50%; background: var(--ki-primary-pale, #fef3c7);
+            color: var(--ki-primary, #d97706); font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .gs-body { flex: 1; min-width: 0; }
+  .gs-body h4 { margin: 0 0 .2rem; font-size: 1rem; }
+  .gs-body p { margin: 0 0 .5rem; color: var(--ki-text-secondary, #4b5563); font-size: .87rem; }
+  .gs-section-title { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+                      color: var(--ki-text-muted, #6b7280); margin: 1.4rem 0 .6rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <p class="gs-intro">
+    Welcome 👋 This is everything you need to start using the CRM in your day-to-day. Do these in order —
+    each step links straight to the page. It takes about ten minutes.
+  </p>
+
+  <div class="gs-section-title">Your daily flow</div>
+
+  <div class="gs-step">
+    <div class="gs-num">1</div>
+    <div class="gs-body">
+      <h4>See your clients</h4>
+      <p>“My Clients” is your book. “All Clients” is everyone in the firm. Open any client to see their
+        portfolio, MF folios, live SIP and history.</p>
+      <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:all_clients' %}">All Clients</a>
+    </div>
+  </div>
+
+  <div class="gs-step">
+    <div class="gs-num">2</div>
+    <div class="gs-body">
+      <h4>Log a sale</h4>
+      <p>Every deal goes here — it drives your points and incentives. Pick the client, the product and the
+        amount. Admins review and approve it.</p>
+      <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:add_sale' %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a>
+    </div>
+  </div>
+
+  <div class="gs-step">
+    <div class="gs-num">3</div>
+    <div class="gs-body">
+      <h4>Work your tasks &amp; follow-ups</h4>
+      <p>“My Tasks” is your to-do list. Your calendar shows every follow-up, renewal and reminder due — call
+        follow-ups even ring on the phone app.</p>
+      <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:employee_calendar_page' %}">My Calendar</a>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:my_call_followups' %}">Call Follow-ups</a>
+    </div>
+  </div>
+
+  <div class="gs-step">
+    <div class="gs-num">4</div>
+    <div class="gs-body">
+      <h4>Grow the pipeline</h4>
+      <p>Track prospects in the Lead Pipeline and move them through stages until they convert to clients.</p>
+      <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a>
+    </div>
+  </div>
+
+  <div class="gs-step">
+    <div class="gs-num">5</div>
+    <div class="gs-body">
+      <h4>Keep client data clean</h4>
+      <p>A client needs a <strong>PAN</strong> to link to their mutual-fund folios. The KYC page flags who's
+        missing one and suggests it from matching folios — fix these as you go.</p>
+      <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-person-vcard"></i> KYC &amp; Data Health</a>
+    </div>
+  </div>
+
+  {% if is_admin %}
+  <div class="gs-section-title">Admin setup (one-time)</div>
+
+  <div class="gs-step">
+    <div class="gs-num">A</div>
+    <div class="gs-body">
+      <h4>Set up the firm</h4>
+      <p>Add your products, targets, and team members. Configure what managers are allowed to do under
+        Manager Rights.</p>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:firm_settings' %}">Firm Settings</a>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:product_management' %}">Products</a>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:team_list' %}">Team</a>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:employee_management' %}">Manager Rights</a>
+    </div>
+  </div>
+
+  <div class="gs-step">
+    <div class="gs-num">B</div>
+    <div class="gs-body">
+      <h4>Connect the mutual-fund feeds</h4>
+      <p>Import CAMS/KFintech RTA feeds to auto-populate folios, transactions and the SIP register. Match
+        folios to clients and watch for AUM leaks on the COB page.</p>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_dashboard' %}">RTA Feeds</a>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_folio_match' %}">Match Folios</a>
+      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_sips' %}">SIP Register</a>
+    </div>
+  </div>
+  {% endif %}
+
+  <p class="gs-intro" style="margin-top:1.4rem;">
+    That's it — you're ready. This page is always here if you need a refresher.
+  </p>
+{% endblock %}

@@ -73,3 +73,15 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect("clients:login")
+
+
+@login_required
+def getting_started(request):
+    """Day-1 checklist for new team members — the same for every role, with
+    admin-only steps gated. Linked from the dashboard; safe for anyone."""
+    from .. import permissions
+
+    return render(request, "getting_started.html", {
+        "page_title": "Getting Started",
+        "is_admin": permissions.is_admin(request.user),
+    })

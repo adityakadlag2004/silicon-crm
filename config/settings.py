@@ -99,6 +99,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'clients.context_processors.manager_access',
+                'clients.context_processors.nav',
             ],
         },
     },

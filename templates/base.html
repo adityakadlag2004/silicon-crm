@@ -317,281 +317,150 @@
 
       <nav class="kn-nav" id="navMenu">
 
-        {% if request.user.is_authenticated %}
+        {% if request.user.is_authenticated and nav %}
 
-          {# ─── ADMIN ─── #}
-          {% if request.user.employee.role == "admin" or request.user.is_superuser %}
+          {# ─── One nav for every role — visibility gated by `nav.*` flags
+                 (clients/context_processors.py). Edit menu here once. ─── #}
 
-            <a class="kn-link" href="{% url 'clients:admin_dashboard' %}">
-              <i class="bi bi-grid-1x2-fill"></i> Dashboard
-            </a>
+          <a class="kn-link" href="{% if nav.dashboard_admin %}{% url 'clients:admin_dashboard' %}{% else %}{% url 'clients:employee_dashboard' %}{% endif %}">
+            <i class="bi bi-grid-1x2-fill"></i> Dashboard
+          </a>
 
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-people-fill"></i> Clients <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-person-vcard"></i> KYC Issues</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:bulk_reassign' %}"><i class="bi bi-arrow-left-right"></i> Bulk Reassign</a></li>
-              </ul>
-            </div>
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <i class="bi bi-people-fill"></i> Clients <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
+              {% if nav.show_my_clients %}<li><a class="kn-menu-item" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a></li>{% endif %}
+              <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-person-vcard"></i> KYC Issues</a></li>
+              {% if nav.show_bulk_reassign %}<li><a class="kn-menu-item" href="{% url 'clients:bulk_reassign' %}"><i class="bi bi-arrow-left-right"></i> Bulk Reassign</a></li>{% endif %}
+            </ul>
+          </div>
 
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-receipt"></i> Sales <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:admin_add_sale' %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:approve_sales' %}"><i class="bi bi-check-circle-fill"></i> Approve Sales</a></li>
-                <li><div class="kn-menu-divider"></div></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
-                <li><div class="kn-menu-divider"></div></li>
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <i class="bi bi-receipt"></i> Sales <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
+              <li><a class="kn-menu-item" href="{% if nav.is_admin %}{% url 'clients:admin_add_sale' %}{% else %}{% url 'clients:add_sale' %}{% endif %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
+              {% if nav.can_approve %}<li><a class="kn-menu-item" href="{% url 'clients:approve_sales' %}"><i class="bi bi-check-circle-fill"></i> Approve Sales</a></li>{% endif %}
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
+              {% if nav.can_incentives or nav.can_recalc or nav.can_analysis %}<li><div class="kn-menu-divider"></div></li>{% endif %}
+              {% if nav.can_incentives %}
                 <li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:manage_campaigns' %}"><i class="bi bi-megaphone-fill"></i> Campaigns</a></li>
-                <li>
-                  <form method="post" action="{% url 'clients:recalc_points' %}" onsubmit="return confirm('Recalculate points on ALL sales using the current rules?');" style="margin:0;">
-                    {% csrf_token %}
-                    <button type="submit" class="kn-menu-item" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;"><i class="bi bi-calculator-fill"></i> Recalculate Points</button>
-                  </form>
-                </li>
-                <li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
-              </ul>
-            </div>
+              {% endif %}
+              {% if nav.can_recalc %}
+              <li>
+                <form method="post" action="{% url 'clients:recalc_points' %}" onsubmit="return confirm('Recalculate points on ALL sales using the current rules?');" style="margin:0;">
+                  {% csrf_token %}
+                  <button type="submit" class="kn-menu-item" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;"><i class="bi bi-calculator-fill"></i> Recalculate Points</button>
+                </form>
+              </li>
+              {% endif %}
+              {% if nav.can_analysis %}<li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>{% endif %}
+              <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
+            </ul>
+          </div>
 
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-graph-up"></i> Mutual Funds <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-cloud-arrow-down"></i> RTA Feeds</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_folios' %}"><i class="bi bi-folder2-open"></i> Folios</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_folio_match' %}"><i class="bi bi-person-bounding-box"></i> Match Folios</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_transactions' %}"><i class="bi bi-list-columns"></i> Transactions</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_sips' %}"><i class="bi bi-arrow-repeat"></i> SIP Register</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:mf_cob' %}"><i class="bi bi-arrow-left-right"></i> COB Opportunities</a></li>
-                <li><div class="kn-menu-divider"></div></li>
+          {% if nav.show_mf %}
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <i class="bi bi-graph-up"></i> Mutual Funds <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              <li><a class="kn-menu-item" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-cloud-arrow-down"></i> RTA Feeds</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:mf_folios' %}"><i class="bi bi-folder2-open"></i> Folios</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:mf_folio_match' %}"><i class="bi bi-person-bounding-box"></i> Match Folios</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:mf_transactions' %}"><i class="bi bi-list-columns"></i> Transactions</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:mf_sips' %}"><i class="bi bi-arrow-repeat"></i> SIP Register</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:mf_cob' %}"><i class="bi bi-arrow-left-right"></i> COB Opportunities</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:business_analytics' %}"><i class="bi bi-percent"></i> Business Analytics</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:call_analytics' %}"><i class="bi bi-telephone-fill"></i> Call Analytics</a></li>
+            </ul>
+          </div>
+          {% endif %}
+
+          {% if nav.show_reports_menu %}
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <i class="bi bi-graph-up-arrow"></i> Reports <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              {% if nav.reports_performance %}<li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>{% endif %}
+              {% if nav.reports_business %}
                 <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:business_analytics' %}"><i class="bi bi-percent"></i> Business Analytics</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:call_analytics' %}"><i class="bi bi-telephone-fill"></i> Call Analytics</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-funnel-fill"></i> Leads <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-check2-square"></i> Tasks <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_subscribed' %}"><i class="bi bi-bell"></i> Subscribed</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a></li>
-                <li><div class="kn-menu-divider"></div></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted Tasks</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_categories' %}"><i class="bi bi-tags"></i> Categories</a></li>
-              </ul>
-            </div>
-
-            <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
-              <i class="bi bi-link-45deg"></i> Links
-            </a>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-gear-fill"></i> Settings <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:product_management' %}"><i class="bi bi-box-seam"></i> Products</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:target_management' %}"><i class="bi bi-bullseye"></i> Targets</a></li>
-                <li><div class="kn-menu-divider"></div></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}"><i class="bi bi-people-fill"></i> Team Members</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}?add=1"><i class="bi bi-person-plus-fill"></i> Add Member</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:employee_management' %}"><i class="bi bi-shield-lock-fill"></i> Manager Rights</a></li>
-                <li><div class="kn-menu-divider"></div></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:audit_log' %}"><i class="bi bi-journal-text"></i> Audit Log</a></li>
-              </ul>
-            </div>
-
-          {# ─── MANAGER ─── #}
-          {% elif request.user.employee.role == "manager" %}
-
-            <a class="kn-link" href="{% url 'clients:employee_dashboard' %}">
-              <i class="bi bi-grid-1x2-fill"></i> Dashboard
-            </a>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-people-fill"></i> Clients <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-person-vcard"></i> KYC Issues</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-receipt"></i> Sales <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:add_sale' %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
-                {% if manager_access.allow_approve_sales %}<li><a class="kn-menu-item" href="{% url 'clients:approve_sales' %}"><i class="bi bi-check-circle-fill"></i> Approve Sales</a></li>{% endif %}
-                <li><div class="kn-menu-divider"></div></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
-                {% if manager_access.allow_manage_incentives or manager_access.allow_recalc_points or manager_access.allow_client_analysis %}<li><div class="kn-menu-divider"></div></li>{% endif %}
-                {% if manager_access.allow_manage_incentives %}<li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>{% endif %}
-                {% if manager_access.allow_manage_incentives %}<li><a class="kn-menu-item" href="{% url 'clients:manage_campaigns' %}"><i class="bi bi-megaphone-fill"></i> Campaigns</a></li>{% endif %}
-                {% if manager_access.allow_recalc_points %}
-                <li>
-                  <form method="post" action="{% url 'clients:recalc_points' %}" onsubmit="return confirm('Recalculate points on ALL sales using the current rules?');" style="margin:0;">
-                    {% csrf_token %}
-                    <button type="submit" class="kn-menu-item" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;"><i class="bi bi-calculator-fill"></i> Recalculate Points</button>
-                  </form>
-                </li>
-                {% endif %}
-                {% if manager_access.allow_client_analysis %}<li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>{% endif %}
-                <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
-              </ul>
-            </div>
-
-            {% if manager_access.allow_business_tracking or manager_access.allow_employee_performance %}
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-graph-up-arrow"></i> Reports <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                {% if manager_access.allow_employee_performance %}<li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>{% endif %}
-                {% if manager_access.allow_business_tracking %}
-                  <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
-                  <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
-                  <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
-                  <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
-                {% endif %}
-              </ul>
-            </div>
-            {% endif %}
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-funnel-fill"></i> Leads <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                {% if manager_access.allow_lead_management %}
-                  <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
-                {% endif %}
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-check2-square"></i> Tasks <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_subscribed' %}"><i class="bi bi-bell"></i> Subscribed</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted Tasks</a></li>
-              </ul>
-            </div>
-
-            <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
-              <i class="bi bi-link-45deg"></i> Links
-            </a>
-
-          {# ─── EMPLOYEE ─── #}
-          {% elif request.user.employee.role == "employee" %}
-
-            <a class="kn-link" href="{% url 'clients:employee_dashboard' %}">
-              <i class="bi bi-grid-1x2-fill"></i> Dashboard
-            </a>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-people-fill"></i> Clients <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-person-vcard"></i> KYC Issues</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-receipt"></i> Sales <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:add_sale' %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
-                <li><div class="kn-menu-divider"></div></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
-                <li><div class="kn-menu-divider"></div></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-funnel-fill"></i> Leads <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
-              </ul>
-            </div>
-
-            <div class="kn-dropdown">
-              <button class="kn-dropdown-toggle" type="button">
-                <i class="bi bi-check2-square"></i> Tasks <i class="bi bi-chevron-down kn-caret"></i>
-              </button>
-              <ul class="kn-menu">
-                <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_subscribed' %}"><i class="bi bi-bell"></i> Subscribed</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted Tasks</a></li>
-              </ul>
-            </div>
-
-            <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
-              <i class="bi bi-link-45deg"></i> Links
-            </a>
-
+              {% endif %}
+            </ul>
+          </div>
           {% endif %}
+
+          {% if nav.can_leads %}
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <i class="bi bi-funnel-fill"></i> Leads <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
+            </ul>
+          </div>
+          {% endif %}
+
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <i class="bi bi-check2-square"></i> Tasks <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:task_subscribed' %}"><i class="bi bi-bell"></i> Subscribed</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted Tasks</a></li>
+              {% if nav.show_tasks_categories %}<li><a class="kn-menu-item" href="{% url 'clients:task_categories' %}"><i class="bi bi-tags"></i> Categories</a></li>{% endif %}
+            </ul>
+          </div>
+
+          <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
+            <i class="bi bi-link-45deg"></i> Links
+          </a>
+
+          {% if nav.show_settings %}
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <i class="bi bi-gear-fill"></i> Settings <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:product_management' %}"><i class="bi bi-box-seam"></i> Products</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:target_management' %}"><i class="bi bi-bullseye"></i> Targets</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}"><i class="bi bi-people-fill"></i> Team Members</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}?add=1"><i class="bi bi-person-plus-fill"></i> Add Member</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:employee_management' %}"><i class="bi bi-shield-lock-fill"></i> Manager Rights</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:audit_log' %}"><i class="bi bi-journal-text"></i> Audit Log</a></li>
+            </ul>
+          </div>
+          {% endif %}
+
         {% endif %}
       </nav>
 
@@ -617,6 +486,7 @@
                 {% if request.user.employee.role %}<div style="font-size:0.75rem;color:var(--kn-fg-muted);text-transform:capitalize;">{{ request.user.employee.role }}</div>{% endif %}
               </li>
               <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:getting_started' %}"><i class="bi bi-compass"></i> Getting Started</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
             </ul>
           </div>
