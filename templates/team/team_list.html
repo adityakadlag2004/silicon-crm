@@ -146,11 +146,11 @@
         <i class="bi bi-pencil"></i> Edit
       </a>
       {% if emp.active %}
-        <button class="ki-btn flex-fill" style="font-size:.8rem;padding:5px 8px;background:#fef2f2;color:#dc2626;" onclick="toggleStatus({{ emp.id }}, '{{ emp.user.username }}', true)">
+        <button class="ki-btn flex-fill" style="font-size:.8rem;padding:5px 8px;background:#fef2f2;color:#dc2626;" onclick="toggleStatus({{ emp.id }}, '{{ emp.user.username }}', true)" aria-label="Deactivate">
           <i class="bi bi-person-x"></i>
         </button>
       {% else %}
-        <button class="ki-btn ki-btn-primary flex-fill" style="font-size:.8rem;padding:5px 8px;" onclick="toggleStatus({{ emp.id }}, '{{ emp.user.username }}', false)">
+        <button class="ki-btn ki-btn-primary flex-fill" aria-label="Activate {{ emp.user.username }}" style="font-size:.8rem;padding:5px 8px;" onclick="toggleStatus({{ emp.id }}, '{{ emp.user.username }}', false)">
           <i class="bi bi-person-check"></i>
         </button>
       {% endif %}

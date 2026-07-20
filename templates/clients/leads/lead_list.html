@@ -127,7 +127,7 @@
           <td class="small text-muted">{{ lead.updated_at|date:"Y-m-d H:i" }}</td>
           <td class="text-end">
             <div class="dropdown">
-              <button class="ki-btn ki-btn-sm ki-btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots"></i></button>
+              <button class="ki-btn ki-btn-sm ki-btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions"><i class="bi bi-three-dots"></i></button>
               <ul class="dropdown-menu dropdown-menu-end">
                 <li><a class="dropdown-item" href="{% url 'clients:lead_detail' lead.id %}">Open lead</a></li>
                 <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#followupModal" data-lead-id="{{ lead.id }}" data-lead-name="{{ lead.customer_name }}">Add next follow-up</button></li>

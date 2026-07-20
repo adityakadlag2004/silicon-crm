@@ -23,7 +23,7 @@
                 <button class="ki-btn ki-btn-secondary ki-btn-sm">{% if c.is_active %}Deactivate{% else %}Activate{% endif %}</button></form>
               <form method="post" style="display:inline;" onsubmit="return confirm('Delete “{{ c.name }}”? Tasks keep their history but lose this category.');">{% csrf_token %}
                 <input type="hidden" name="action" value="delete"><input type="hidden" name="id" value="{{ c.id }}">
-                <button class="ki-btn ki-btn-danger ki-btn-sm"><i class="bi bi-trash"></i></button></form>
+                <button class="ki-btn ki-btn-danger ki-btn-sm" aria-label="Delete"><i class="bi bi-trash"></i></button></form>
             </td>
           </tr>
           {% empty %}<tr><td colspan="5" class="tk-empty">No categories yet — add one on the right.</td></tr>{% endfor %}

@@ -199,3 +199,29 @@ class ResponsiveHygieneTests(TestCase):
                     if int(m.group(1)) > 360:
                         offenders.append(f"{path}:{num} width:{m.group(1)}px")
         self.assertEqual(offenders, [], f"fixed widths wider than a phone: {offenders}")
+
+
+class AccessibilityTests(TestCase):
+    """Accessibility basics that are easy to regress and cheap to keep."""
+
+    def test_icon_only_controls_have_an_accessible_name(self):
+        """A button containing only <i class="bi-..."> reads as nothing.
+
+        Screen readers announce an empty button; keyboard users get no clue
+        what it does. Every icon-only control needs aria-label or title.
+        """
+        import re
+        import pathlib
+        offenders = []
+        for path in pathlib.Path("templates").rglob("*.html"):
+            if "admin/" in str(path):
+                continue
+            text = path.read_text()
+            pattern = r'<(a|button)\b([^>]*)>\s*(<i class="bi[^"]*"[^>]*>\s*</i>)\s*</\1>'
+            for m in re.finditer(pattern, text, re.S):
+                if "aria-label" in m.group(2) or "title=" in m.group(2):
+                    continue
+                offenders.append(f"{path}:{text[:m.start()].count(chr(10)) + 1}")
+        self.assertEqual(
+            offenders, [],
+            f"icon-only controls need aria-label or title: {offenders}")

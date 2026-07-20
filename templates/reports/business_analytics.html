@@ -422,7 +422,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="delete_expense">
                 <input type="hidden" name="expense_id" value="{{ x.id }}">
-                <button type="submit" class="ki-btn" style="padding:3px 7px;font-size:.78rem;background:#fee2e2;color:#b91c1c;"><i class="bi bi-trash"></i></button>
+                <button type="submit" class="ki-btn" style="padding:3px 7px;font-size:.78rem;background:#fee2e2;color:#b91c1c;" aria-label="Delete"><i class="bi bi-trash"></i></button>
               </form>
             </td>
           </tr>

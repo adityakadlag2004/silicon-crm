@@ -8,7 +8,7 @@
     <a href="{% url 'clients:links_dashboard' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-left"></i> All Links</a>
     <form method="get" style="flex:1 1 220px;display:flex;gap:.4rem;">
       <input type="text" name="q" class="form-control form-control-sm" placeholder="Search in {{ category.name }}…" value="{{ q }}">
-      <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-search"></i></button>
+      <button class="ki-btn ki-btn-primary ki-btn-sm" aria-label="Search"><i class="bi bi-search"></i></button>
     </form>
     <span style="flex:1 1 auto;"></span>
     <button type="button" class="ki-btn ki-btn-primary ki-btn-sm" data-add-link data-cat="{{ category.id }}" data-bs-toggle="modal" data-bs-target="#linkModal"><i class="bi bi-plus-lg"></i> Add Link</button>

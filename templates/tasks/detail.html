@@ -77,7 +77,7 @@
           <div class="tk-check {% if item.is_done %}done{% endif %}">
             {% if can_edit %}
             <form method="post" action="{% url 'clients:task_toggle_checklist' task.pk item.id %}" style="margin:0;">{% csrf_token %}
-              <button type="submit" class="tk-chip-remove" style="color:{% if item.is_done %}#16a34a{% else %}#9ca3af{% endif %};font-size:1.1rem;">
+              <button type="submit" class="tk-chip-remove" aria-label="{% if item.is_done %}Mark checklist item not done{% else %}Mark checklist item done{% endif %}" style="color:{% if item.is_done %}#16a34a{% else %}#9ca3af{% endif %};font-size:1.1rem;">
                 <i class="bi {% if item.is_done %}bi-check-square-fill{% else %}bi-square{% endif %}"></i></button>
             </form>
             {% else %}<i class="bi {% if item.is_done %}bi-check-square-fill{% else %}bi-square{% endif %}"></i>{% endif %}
@@ -87,7 +87,7 @@
         {% if can_edit %}
         <form method="post" action="{% url 'clients:task_add_checklist' task.pk %}" class="tk-checklist-add">{% csrf_token %}
           <input type="text" name="title" class="form-control form-control-sm" placeholder="Add checklist item" required>
-          <button class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-plus"></i></button>
+          <button class="ki-btn ki-btn-secondary ki-btn-sm" aria-label="Add"><i class="bi bi-plus"></i></button>
         </form>{% endif %}
       </div>
     </div>
@@ -107,8 +107,8 @@
                 <a href="{% url 'clients:task_attachment_download' att.id %}" target="_blank"><img src="{% url 'clients:task_attachment_download' att.id %}" style="max-height:90px;border-radius:6px;margin-top:.3rem;"></a>
               {% endif %}
             </div>
-            <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:task_attachment_download' att.id %}?dl=1"><i class="bi bi-download"></i></a>
-            {% if can_edit %}<form method="post" action="{% url 'clients:task_delete_attachment' task.pk att.id %}" style="margin:0;" onsubmit="return confirm('Delete this file?');">{% csrf_token %}<button class="ki-btn ki-btn-danger ki-btn-sm"><i class="bi bi-trash"></i></button></form>{% endif %}
+            <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:task_attachment_download' att.id %}?dl=1" aria-label="Download"><i class="bi bi-download"></i></a>
+            {% if can_edit %}<form method="post" action="{% url 'clients:task_delete_attachment' task.pk att.id %}" style="margin:0;" onsubmit="return confirm('Delete this file?');">{% csrf_token %}<button class="ki-btn ki-btn-danger ki-btn-sm" aria-label="Delete"><i class="bi bi-trash"></i></button></form>{% endif %}
           </div>
         {% empty %}<p class="text-muted" style="font-size:.85rem;">No attachments.</p>{% endfor %}
 
@@ -140,7 +140,7 @@
         {% empty %}<p class="text-muted" style="font-size:.85rem;">No comments yet.</p>{% endfor %}
         <form method="post" action="{% url 'clients:task_add_comment' task.pk %}" style="margin-top:.6rem;display:flex;gap:.4rem;">{% csrf_token %}
           <input type="text" name="body" class="form-control form-control-sm" placeholder="Write a comment…" required>
-          <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-send"></i></button>
+          <button class="ki-btn ki-btn-primary ki-btn-sm" aria-label="Post comment"><i class="bi bi-send"></i></button>
         </form>
       </div>
     </div>
@@ -196,7 +196,7 @@
           <select name="user" class="form-select form-select-sm" required>
             <option value="">Add someone…</option>
             {% for u in all_users %}<option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
-          </select><button class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-plus"></i></button>
+          </select><button class="ki-btn ki-btn-secondary ki-btn-sm" aria-label="Add"><i class="bi bi-plus"></i></button>
         </form>{% endif %}
       </div>
     </div>

@@ -7,7 +7,7 @@
   <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem;">
     <form method="get" style="flex:1 1 260px;display:flex;gap:.4rem;">
       <input type="text" name="q" class="form-control form-control-sm" placeholder="Search all links…" value="">
-      <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-search"></i></button>
+      <button class="ki-btn ki-btn-primary ki-btn-sm" aria-label="Search"><i class="bi bi-search"></i></button>
     </form>
     <span style="flex:1 1 auto;"></span>
     <button type="button" class="ki-btn ki-btn-primary ki-btn-sm" data-add-link data-bs-toggle="modal" data-bs-target="#linkModal"><i class="bi bi-plus-lg"></i> Add Link</button>
@@ -38,7 +38,7 @@
       </ul>
       <div class="lk-cat-actions">
         <a href="{% url 'clients:links_category' cat.id %}" class="ki-btn ki-btn-secondary ki-btn-sm" style="flex:1;">View all</a>
-        <button type="button" class="ki-btn ki-btn-primary ki-btn-sm" data-add-link data-cat="{{ cat.id }}" data-bs-toggle="modal" data-bs-target="#linkModal"><i class="bi bi-plus"></i></button>
+        <button type="button" class="ki-btn ki-btn-primary ki-btn-sm" data-add-link data-cat="{{ cat.id }}" data-bs-toggle="modal" data-bs-target="#linkModal" aria-label="Add"><i class="bi bi-plus"></i></button>
       </div>
     </div>
     {% empty %}
