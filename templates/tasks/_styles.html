@@ -70,12 +70,17 @@
   .tk-quick { display:flex; gap:.35rem; align-items:center; align-self:center; opacity:0;
     transition:opacity .12s; flex:0 0 auto; }
   .tk-card:hover .tk-quick { opacity:1; }
-  .tk-quick-btn { border:none; cursor:pointer; width:30px; height:30px; border-radius:8px;
+  .tk-quick-btn { border:none; cursor:pointer; width:36px; height:36px; border-radius:8px;
     display:grid; place-items:center; font-size:.95rem; color:#fff; }
   .tk-q-prog { background:#2563eb; }
   .tk-q-done { background:#16a34a; }
   .tk-quick-btn:hover { filter:brightness(1.08); }
-  @media (hover: none) { .tk-quick { opacity:1; } }  /* always show on touch devices */
+  @media (hover: none) {
+    .tk-quick { opacity:1; }
+    /* Touch targets: 44px minimum on the controls people tap all day. */
+    .tk-quick-btn { width:44px; height:44px; }
+    .tk-card-check { padding:.4rem; font-size:1.5rem; }
+  }
   .tk-card.p-critical { border-left-color:#dc2626; }
   .tk-card.p-high { border-left-color:#d97706; }
   .tk-card.p-medium { border-left-color:#2563eb; }
@@ -115,7 +120,14 @@
 
   /* Detail layout */
   .tk-detail { display:grid; grid-template-columns:1fr 320px; gap:1.1rem; align-items:start; }
-  @media (max-width:900px){ .tk-detail{ grid-template-columns:1fr; } .tk-kanban{ grid-template-columns:repeat(4,minmax(200px,1fr)); } }
+  @media (max-width:900px){
+    .tk-detail{ grid-template-columns:1fr; }
+    /* Sidebar (status actions) above the long description/comments on mobile. */
+    .tk-detail .tk-side{ order:-1; }
+  }
+  /* Four 200px columns on a 360px screen is a permanent sideways scroll —
+     below 760px the board goes single-column and the status tabs pick which. */
+  @media (max-width:760px){ .tk-kanban{ grid-template-columns:1fr; } }
   .tk-side .ki-card { margin-bottom:.9rem; }
   .tk-check { display:flex; align-items:center; gap:.55rem; padding:.35rem 0; border-bottom:1px solid var(--ki-card-border,#eee); }
   .tk-check.done label { text-decoration:line-through; color:var(--ki-text-secondary,#9ca3af); }

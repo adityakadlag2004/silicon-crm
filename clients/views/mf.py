@@ -7,6 +7,7 @@ import re
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
+from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -18,6 +19,7 @@ from ..models import (
     RTAFeedImport,
     RTA_CHOICES,
 )
+from ..templatetags.custom_filters import inr
 from ..permissions import admin_required as _admin_required
 from ..services import rta_feed
 
@@ -156,8 +158,20 @@ def mf_folios(request):
         qs = qs.filter(arn_id=int(arn_id))
 
     page = Paginator(qs, 50).get_page(request.GET.get("page"))
+    all_folios = MutualFundFolio.objects.all()
+    base_url = reverse("clients:mf_folios")
     return render(request, "mf/folios.html", {
         "page_title": "MF Folios",
+        "kpis": [
+            {"label": "All Folios", "value": all_folios.count(), "color": "#4338CA",
+             "url": base_url, "active": not linked},
+            {"label": "Linked to a Client",
+             "value": all_folios.filter(client__isnull=False).count(), "color": "#15803D",
+             "url": f"{base_url}?linked=yes", "active": linked == "yes"},
+            {"label": "Unlinked",
+             "value": all_folios.filter(client__isnull=True).count(), "color": "#BE123C",
+             "url": f"{base_url}?linked=no", "active": linked == "no"},
+        ],
         "page": page,
         "q": q,
         "linked": linked or "",
@@ -271,6 +285,11 @@ def mf_transactions(request):
     page = Paginator(qs, 100).get_page(request.GET.get("page"))
     return render(request, "mf/transactions.html", {
         "page_title": "MF Transactions",
+        "kpis": [
+            {"label": "Transactions", "value": page.paginator.count, "color": "#4338CA"},
+            {"label": "Gross Value", "value": f"\u20b9{inr(totals['gross'] or 0)}",
+             "color": "#15803D"},
+        ],
         "page": page,
         "q": q,
         "arn_id": arn_id or "",

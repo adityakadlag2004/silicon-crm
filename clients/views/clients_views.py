@@ -1,21 +1,23 @@
 """Client management views: list, add, edit, search, map, reassign, analysis."""
 from decimal import Decimal
+from urllib.parse import quote
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test, permission_required
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.utils import timezone
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.db import transaction
 from django.core.paginator import Paginator
 from django.urls import reverse
 from django.conf import settings
 
 from .. import permissions
-from ..models import Client, Employee, MessageTemplate, Product, Renewal, Sale
+from ..models import Client, Employee, Family, MessageTemplate, Product, Renewal, Sale
 from ..forms import ClientForm, ClientReassignForm
 from ..services.google_drive import DriveNotConfigured, get_or_create_client_folder
+from ..templatetags.custom_filters import inr
 from .helpers import parse_date_param
 
 
@@ -161,6 +163,32 @@ def _attach_client_product_badges(clients, product_filters):
         client.dynamic_product_status_map = status_map
 
 
+def _client_kpis(request):
+    """Headline counts for the clients KPI strip — one aggregate query.
+
+    Each tile links back into the list with the matching filter applied, so
+    the strip doubles as the coarse filter row.
+    """
+    base = reverse("clients:all_clients")
+    agg = Client.objects.aggregate(
+        total=Count("id"),
+        mapped=Count("id", filter=Q(mapped_to__isnull=False)),
+        unmapped=Count("id", filter=Q(mapped_to__isnull=True)),
+        sip=Count("id", filter=Q(sip_status=True)),
+        aum=Sum("lumsum_investment"),
+    )
+    current = request.GET.get("mapped_to", "")
+    return [
+        {"label": "All Clients", "value": agg["total"], "color": "#4338CA",
+         "url": base, "active": not current},
+        {"label": "Mapped", "value": agg["mapped"], "color": "#15803D"},
+        {"label": "Unmapped", "value": agg["unmapped"], "color": "#BE123C",
+         "url": f"{base}?mapped_to=unmapped", "active": current == "unmapped"},
+        {"label": "Active SIPs", "value": agg["sip"], "color": "#0369A1"},
+        {"label": "Lumpsum AUM", "value": f"₹{inr(agg['aum'] or 0)}", "color": "#B45309"},
+    ]
+
+
 @login_required
 def all_clients(request):
     # ── Sorting ──
@@ -232,6 +260,8 @@ def all_clients(request):
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
 
     context = {
+        "crumbs": [{"label": "Clients"}],
+        "kpis": _client_kpis(request),
         "clients_page": page_obj,
         "page_range": page_range,
         "total_pages": total_pages,
@@ -249,8 +279,9 @@ def all_clients(request):
 @login_required
 def my_clients(request):
     if not hasattr(request.user, "employee"):
+        # No "home" route exists — send them somewhere real instead of 500ing.
         messages.error(request, "You are not assigned as an employee.")
-        return redirect("home")
+        return redirect("clients:all_clients")
 
     employee = request.user.employee
     clients_qs = Client.objects.filter(mapped_to=employee).order_by("id")
@@ -296,7 +327,20 @@ def my_clients(request):
     edited_toggle_qs = qs_without_edited.urlencode()
 
     templates = MessageTemplate.objects.all()
+    mine = Client.objects.filter(mapped_to=employee)
+    agg = mine.aggregate(
+        total=Count("id"),
+        sip=Count("id", filter=Q(sip_status=True)),
+        pms=Count("id", filter=Q(pms_status=True)),
+        aum=Sum("lumsum_investment"),
+    )
     context = {
+        "kpis": [
+            {"label": "My Clients", "value": agg["total"], "color": "#4338CA"},
+            {"label": "Active SIPs", "value": agg["sip"], "color": "#0369A1"},
+            {"label": "PMS Clients", "value": agg["pms"], "color": "#7E22CE"},
+            {"label": "Lumpsum AUM", "value": f"\u20b9{inr(agg['aum'] or 0)}", "color": "#B45309"},
+        ],
         "clients_page": page_obj,
         "page_range": page_range,
         "total_pages": total_pages,
@@ -413,7 +457,25 @@ def client_profile(request, client_id):
     )
     mf_summary = rta_feed.mf_summary_for_client(client)
 
+    # Portfolio headline tiles — MF numbers come from the RTA feed, the rest
+    # from the client record.
+    kpis = [
+        {"label": "MF Value", "color": "#15803D",
+         "value": f"₹{inr((mf_summary or {}).get('est_value') or 0)}"},
+        {"label": "Monthly SIP", "color": "#0369A1",
+         "value": f"₹{inr((mf_summary or {}).get('monthly_sip') or 0)}"},
+        {"label": "Lumpsum", "color": "#B45309",
+         "value": f"₹{inr(client.lumsum_investment or 0)}"},
+        {"label": "PMS", "color": "#7E22CE", "value": f"₹{inr(client.pms_amount or 0)}"},
+        {"label": "Open Tasks", "color": "#BE123C", "value": open_tasks.count()},
+    ]
+
     return render(request, "clients/client_profile.html", {
+        "crumbs": [
+            {"label": "Clients", "url": reverse("clients:all_clients")},
+            {"label": client.name},
+        ],
+        "kpis": kpis,
         "client": client,
         "sales": sales,
         "renewals": renewals,
@@ -687,3 +749,66 @@ def bulk_reassign_view(request):
             return redirect("clients:bulk_reassign")
 
     return render(request, "clients/bulk_reassign.html", context)
+
+
+# ─────────────────────────── families / households ───────────────────────────
+
+@login_required
+def family_list(request):
+    """Households with combined AUM and wealth band."""
+    families = (
+        Family.objects.select_related("head", "relationship_manager__user")
+        .prefetch_related("members").order_by("name")
+    )
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        families = families.filter(Q(name__icontains=q) | Q(code__icontains=q))
+
+    rows = list(families)
+    total_households = len(rows)
+    # AUM and band are derived from members — compute once, here, so the
+    # template and the KPI strip agree.
+    band_counts = {label: 0 for label, _ in Family.CATEGORY_BANDS}
+    for f in rows:
+        f.total_aum = f.aum
+        f.band = f.category
+        band_counts[f.band] += 1
+
+    wanted = request.GET.get("band", "")
+    if wanted:
+        rows = [f for f in rows if f.band == wanted]
+
+    base = reverse("clients:family_list")
+    colors = ["#15803D", "#4338CA", "#B45309", "#57534E"]
+    kpis = [{"label": "All Households", "value": total_households, "color": "#0F766E",
+             "url": base, "active": not wanted}]
+    for i, (label, _floor) in enumerate(Family.CATEGORY_BANDS):
+        kpis.append({
+            "label": label.split(" (")[0], "value": band_counts[label],
+            "color": colors[i % len(colors)],
+            "url": f"{base}?band={quote(label)}", "active": wanted == label,
+        })
+
+    return render(request, "clients/families.html", {
+        "crumbs": [{"label": "Households"}],
+        "kpis": kpis, "families": rows, "q": q, "band": wanted,
+    })
+
+
+@login_required
+def family_detail(request, family_id):
+    family = get_object_or_404(
+        Family.objects.select_related("head", "relationship_manager__user"), pk=family_id)
+    members = family.members.select_related("mapped_to__user").order_by("name")
+    return render(request, "clients/family_detail.html", {
+        "crumbs": [
+            {"label": "Households", "url": reverse("clients:family_list")},
+            {"label": family.name},
+        ],
+        "kpis": [
+            {"label": "Combined AUM", "value": f"\u20b9{inr(family.aum)}", "color": "#15803D"},
+            {"label": "Category", "value": family.category.split(" (")[0], "color": "#4338CA"},
+            {"label": "Members", "value": members.count(), "color": "#0369A1"},
+        ],
+        "family": family, "members": members,
+    })

@@ -1,14 +1,23 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}Lead {{ lead.customer_name }}{% endblock %}
 {% block page_title %}Lead Detail{% endblock %}
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-start mb-3">
-  <div>
-    <h2 class="ki-section-title mb-1">{{ lead.customer_name }}</h2>
-    <div class="text-muted">Assigned to {{ lead.assigned_to.user.username }}</div>
-  </div>
-  <div class="d-flex gap-2 flex-wrap">
-    <span class="ki-badge align-self-center">{{ lead.get_stage_display }}</span>
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+
+<div class="ki-rec">
+  <div class="ki-rec-top">
+    <span class="ki-mono" style="--c:{{ lead.customer_name|monocolor }};">{{ lead.customer_name|monogram }}</span>
+    <div class="ki-rec-head">
+      <h2 class="ki-rec-title">{{ lead.customer_name }}</h2>
+      <div class="ki-tags">
+        <span class="ki-tag" style="--c:{{ stage_color }};">{{ lead.get_stage_display }}</span>
+        <span class="ki-tag" style="--c:var(--ki-text-secondary);">{{ lead.assigned_to.user.username }}</span>
+        {% if lead.is_discarded %}<span class="ki-tag" style="--c:#BE123C;">Discarded</span>{% endif %}
+        {% if lead.converted_client %}<span class="ki-tag ki-tag-solid" style="--c:#15803D;">Converted</span>{% endif %}
+      </div>
+    </div>
+    <div class="ki-rec-actions">
     {% if lead.converted_client %}
       <a class="ki-btn ki-btn-sm ki-btn-primary" href="{% url 'clients:edit_client' lead.converted_client.id %}"><i class="bi bi-person-check"></i> View Client #{{ lead.converted_client.id }}</a>
     {% elif lead.stage == 'processed' and not lead.is_discarded %}
@@ -19,6 +28,14 @@
     {% endif %}
     <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_management' %}"><i class="bi bi-arrow-left"></i> Back to list</a>
     <a class="ki-btn ki-btn-sm ki-btn-primary" href="{% url 'clients:lead_update' lead.id %}"><i class="bi bi-pencil"></i> Edit Lead</a>
+    </div>
+  </div>
+
+  <div class="ki-rec-summary">
+    <div class="ki-sum-item"><span class="k">Phone</span><span class="v">{{ lead.phone|default:"—" }}</span></div>
+    <div class="ki-sum-item"><span class="k">Email</span><span class="v">{{ lead.email|default:"—" }}</span></div>
+    <div class="ki-sum-item"><span class="k">Data Received</span><span class="v">{% if lead.data_received %}Yes{% else %}No{% endif %}</span></div>
+    <div class="ki-sum-item"><span class="k">Updated</span><span class="v">{{ lead.updated_at|date:"d M Y H:i" }}</span></div>
   </div>
 </div>
 

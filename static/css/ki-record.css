@@ -1,0 +1,314 @@
+/* ============================================================
+   Kadlag Investment BO — Record Shell
+   Reusable list/detail furniture shared by every module:
+   breadcrumb · KPI strip · record header · tabs · field grid ·
+   related rail · data table.
+
+   Built mobile-first: every component below stacks to one column
+   on a phone. Nothing here may force a horizontal page scroll —
+   wide content scrolls inside its own container instead.
+   ============================================================ */
+
+/* ─── Breadcrumb row ─── */
+.ki-crumb {
+  display: flex; align-items: center; gap: .5rem;
+  flex-wrap: wrap; margin-bottom: 1rem;
+}
+.ki-crumb a { color: var(--ki-text-secondary); text-decoration: none; font-size: .88rem; }
+.ki-crumb a:hover { color: var(--ki-primary); }
+.ki-crumb .sep { color: var(--ki-text-light); font-size: .8rem; }
+.ki-crumb .cur { color: var(--ki-text-primary); font-weight: 600; font-size: .88rem; }
+.ki-crumb-actions { margin-left: auto; display: flex; gap: .4rem; }
+.ki-icon-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--ki-card-border); background: var(--ki-card-bg);
+  display: grid; place-items: center; cursor: pointer;
+  color: var(--ki-text-secondary); transition: var(--ki-transition);
+}
+.ki-icon-btn:hover { background: var(--ki-primary-pale); color: var(--ki-primary); }
+
+/* ─── KPI strip ─────────────────────────────────────────────
+   Each card carries its own accent via --c. On a phone these
+   become a horizontally scrollable rail rather than a tall
+   stack, so the record below stays above the fold.           */
+.ki-kpis {
+  display: grid; gap: .7rem; margin-bottom: 1.1rem;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+}
+.ki-kpi {
+  background: var(--ki-card-bg);
+  border: 1px solid var(--ki-card-border);
+  border-left: 4px solid var(--c, var(--ki-primary));
+  border-radius: var(--ki-radius); padding: .8rem .95rem;
+  text-decoration: none; display: block; transition: var(--ki-transition);
+}
+a.ki-kpi:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
+.ki-kpi .l {
+  font-size: .78rem; color: var(--ki-text-secondary);
+  font-weight: 600; margin-bottom: .3rem;
+}
+.ki-kpi .v { font-size: 1.6rem; font-weight: 800; line-height: 1; color: var(--c, var(--ki-primary)); }
+.ki-kpi .sub { font-size: .72rem; color: var(--ki-text-muted); margin-top: .25rem; }
+.ki-kpi.is-active { background: var(--ki-primary-pale); }
+
+@media (max-width: 640px) {
+  .ki-kpis {
+    display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+    padding-bottom: .4rem; margin-inline: -.25rem; padding-inline: .25rem;
+  }
+  .ki-kpi { flex: 0 0 46%; scroll-snap-align: start; }
+  .ki-kpi .v { font-size: 1.35rem; }
+}
+
+/* ─── Record layout: main + related rail ─── */
+.ki-rec-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.1rem; align-items: start; }
+@media (max-width: 1024px) { .ki-rec-layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* ─── Record header card ─── */
+.ki-rec {
+  background: var(--ki-card-bg); border: 1px solid var(--ki-card-border);
+  border-radius: var(--ki-radius-lg); padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+}
+.ki-rec-top { display: flex; align-items: flex-start; gap: .9rem; flex-wrap: wrap; }
+.ki-mono {
+  width: 56px; height: 56px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; color: #fff;
+  font-weight: 700; font-size: 1.1rem; letter-spacing: .02em;
+  background: var(--c, var(--ki-primary));
+}
+.ki-mono-sm { width: 34px; height: 34px; font-size: .8rem; }
+.ki-rec-head { flex: 1 1 260px; min-width: 0; }
+.ki-rec-title {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  margin: 0 0 .35rem; font-size: 1.3rem; font-weight: 700; color: var(--ki-text-primary);
+}
+.ki-star { color: var(--ki-text-light); cursor: pointer; background: none; border: none; font-size: 1rem; }
+.ki-star.on { color: var(--ki-primary); }
+.ki-rec-actions { display: flex; gap: .45rem; flex-wrap: wrap; margin-left: auto; }
+@media (max-width: 640px) {
+  .ki-rec-actions { margin-left: 0; width: 100%; }
+  .ki-rec-actions > * { flex: 1 1 auto; }
+  .ki-rec-title { font-size: 1.1rem; }
+}
+
+/* Tag pills under the title */
+.ki-tags { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.ki-tag {
+  font-size: .74rem; font-weight: 600; padding: .2rem .6rem;
+  border-radius: 999px; border: 1px solid var(--c, var(--ki-primary));
+  color: var(--c, var(--ki-primary)); background: transparent; white-space: nowrap;
+}
+.ki-tag-solid { background: var(--c, var(--ki-primary)); color: #fff; }
+
+/* Summary grid inside the record header */
+.ki-rec-summary {
+  display: grid; gap: .55rem 1.6rem; margin-top: .9rem;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+.ki-sum-item { display: flex; gap: .5rem; align-items: baseline; min-width: 0; }
+.ki-sum-item .k { font-size: .8rem; color: var(--ki-text-secondary); flex: 0 0 auto; }
+.ki-sum-item .v { font-size: .87rem; font-weight: 600; color: var(--ki-text-primary); word-break: break-word; }
+
+/* ─── Underline tab strip ─── */
+.ki-rtabs {
+  display: flex; gap: .2rem; overflow-x: auto; scrollbar-width: thin;
+  border-bottom: 1px solid var(--ki-card-border); margin-bottom: 1rem;
+}
+.ki-rtab {
+  padding: .6rem .9rem; font-size: .87rem; font-weight: 600; white-space: nowrap;
+  color: var(--ki-text-secondary); text-decoration: none;
+  border-bottom: 2px solid transparent; background: none; border-top: 0; border-inline: 0; cursor: pointer;
+}
+.ki-rtab:hover { color: var(--ki-text-primary); }
+.ki-rtab.active { color: var(--ki-primary); border-bottom-color: var(--ki-primary); }
+
+/* ─── Field grid (label / value) ─── */
+.ki-fields {
+  display: grid; gap: .1rem 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.ki-field {
+  display: grid; grid-template-columns: minmax(120px, 38%) 1fr;
+  gap: .75rem; padding: .5rem 0; align-items: start;
+  border-bottom: 1px solid var(--ki-card-border);
+}
+.ki-field .k { font-size: .83rem; color: var(--ki-text-secondary); }
+.ki-field .v { font-size: .87rem; color: var(--ki-text-primary); font-weight: 500; word-break: break-word; }
+.ki-field .v a { color: var(--ki-info); text-decoration: none; }
+.ki-field .v a:hover { text-decoration: underline; }
+.ki-field .v.empty { color: var(--ki-text-light); }
+@media (max-width: 520px) {
+  .ki-field { grid-template-columns: 1fr; gap: .1rem; }
+  .ki-field .k { font-size: .76rem; }
+}
+
+/* ─── Related modules rail ─── */
+.ki-related { background: var(--ki-card-bg); border: 1px solid var(--ki-card-border); border-radius: var(--ki-radius-lg); overflow: hidden; }
+.ki-related h6 {
+  margin: 0; padding: .85rem 1rem; text-align: center; font-size: .85rem;
+  font-weight: 700; color: var(--ki-text-primary); border-bottom: 1px solid var(--ki-card-border);
+}
+.ki-rel-row {
+  display: flex; align-items: center; gap: .5rem; padding: .75rem 1rem;
+  border-bottom: 1px solid var(--ki-card-border); font-size: .85rem;
+  color: var(--ki-text-primary); text-decoration: none;
+}
+.ki-rel-row:last-child { border-bottom: 0; }
+.ki-rel-row:hover { background: var(--ki-primary-bg); }
+.ki-rel-row .n { color: var(--ki-text-secondary); font-weight: 600; }
+.ki-rel-row .add { margin-left: auto; color: var(--ki-primary); font-size: 1.1rem; line-height: 1; }
+
+/* ─── Data table (list views) ─── */
+.ki-table-wrap { overflow-x: auto; border: 1px solid var(--ki-card-border); border-radius: var(--ki-radius-lg); background: var(--ki-card-bg); }
+.ki-dtable { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.ki-dtable th {
+  text-align: left; padding: .7rem .8rem; font-size: .78rem; font-weight: 700;
+  color: var(--ki-text-secondary); background: var(--ki-primary-bg);
+  border-bottom: 1px solid var(--ki-card-border); white-space: nowrap;
+}
+.ki-dtable th a { color: inherit; text-decoration: none; }
+.ki-dtable th a:hover { color: var(--ki-primary); }
+.ki-dtable td { padding: .65rem .8rem; border-bottom: 1px solid var(--ki-card-border); vertical-align: middle; }
+.ki-dtable tbody tr:hover { background: var(--ki-primary-bg); }
+.ki-dtable tbody tr:last-child td { border-bottom: 0; }
+.ki-dtable .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ki-dtable .name-link { color: var(--ki-text-primary); font-weight: 600; text-decoration: none; }
+.ki-dtable .name-link:hover { color: var(--ki-primary); }
+/* Per-column filter row */
+.ki-dtable tr.ki-colsearch th { background: var(--ki-card-bg); padding: .4rem .5rem; }
+.ki-dtable tr.ki-colsearch input,
+.ki-dtable tr.ki-colsearch select {
+  width: 100%; min-width: 90px; font-size: .78rem; padding: .3rem .45rem;
+  border: 1px solid var(--ki-card-border); border-radius: var(--ki-radius-sm);
+  background: var(--ki-card-bg); color: var(--ki-text-primary);
+}
+
+/* "Show N entries" */
+.ki-showbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .7rem; font-size: .82rem; color: var(--ki-text-secondary); }
+.ki-showbar a { color: var(--ki-text-secondary); text-decoration: none; padding: .1rem .35rem; border-radius: 4px; }
+.ki-showbar a.active { color: var(--ki-primary); font-weight: 700; text-decoration: underline; }
+.ki-showbar .right { margin-left: auto; display: flex; gap: .4rem; align-items: center; }
+
+/* Card fallback for tables on phones — the table itself scrolls, but
+   list pages may opt into stacked cards instead via .ki-cardify. */
+@media (max-width: 640px) {
+  .ki-cardify thead { display: none; }
+  .ki-cardify tbody tr {
+    display: block; border: 1px solid var(--ki-card-border);
+    border-radius: var(--ki-radius); margin-bottom: .6rem; padding: .5rem .7rem;
+  }
+  .ki-cardify tbody td { display: flex; border: 0; padding: .25rem 0; gap: .6rem; }
+  .ki-cardify tbody td::before {
+    content: attr(data-label); flex: 0 0 40%;
+    font-size: .76rem; color: var(--ki-text-secondary); font-weight: 600;
+  }
+  .ki-cardify tbody td.num { text-align: left; }
+}
+
+/* ─── Empty state ─── */
+.ki-empty { text-align: center; padding: 2.5rem 1rem; color: var(--ki-text-secondary); }
+.ki-empty i { font-size: 2rem; opacity: .35; display: block; margin-bottom: .5rem; }
+
+/* ─── Global uplift ──────────────────────────────────────────────────────
+   Every existing table in the app uses .ki-table. Rather than touch 30
+   templates, the shell treatment is applied to that class directly, so all
+   67 tables pick up the same header, row hover, and numeric alignment.   */
+.ki-table {
+  width: 100%; border-collapse: collapse; font-size: .86rem;
+}
+.ki-table > thead th {
+  text-align: left; padding: .7rem .8rem; font-size: .78rem; font-weight: 700;
+  color: var(--ki-text-secondary); background: var(--ki-primary-bg);
+  border-bottom: 1px solid var(--ki-card-border); white-space: nowrap;
+}
+.ki-table > thead th a { color: inherit; text-decoration: none; }
+.ki-table > thead th a:hover { color: var(--ki-primary); }
+.ki-table > tbody > tr > td {
+  padding: .65rem .8rem; border-bottom: 1px solid var(--ki-card-border);
+  vertical-align: middle;
+}
+.ki-table > tbody > tr:hover { background: var(--ki-primary-bg); }
+.ki-table > tbody > tr:last-child > td { border-bottom: 0; }
+.ki-table .num,
+.ki-table td.text-end, .ki-table th.text-end {
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+
+/* Any table can scroll inside its own box rather than pushing the page. */
+.ki-table-wrap { overflow-x: auto; }
+
+/* ─── Page header (rendered by base.html for every page) ─── */
+.kn-page-header { flex-wrap: wrap; }
+.kn-page-header h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
+.kn-page-head-actions { margin-left: auto; display: flex; gap: .4rem; }
+@media (max-width: 640px) { .kn-page-header h1 { font-size: 1.15rem; } }
+
+/* ─── Mutual Funds module ────────────────────────────────────────────────
+   Lifted out of seven MF templates that each redefined the same rules.
+   .mf-table now just leans on .ki-table; only the pills and SIP tiles are
+   genuinely MF-specific.                                                */
+.mf-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.mf-table th, .mf-table td {
+  padding: .5rem .55rem; text-align: left;
+  border-bottom: 1px solid var(--ki-card-border);
+}
+.mf-table th {
+  font-size: .78rem; font-weight: 700; color: var(--ki-text-secondary);
+  background: var(--ki-primary-bg); white-space: nowrap;
+}
+.mf-table tbody tr:hover { background: var(--ki-primary-bg); }
+
+.mf-pill {
+  display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+  font-size: .74rem; font-weight: 600; white-space: nowrap;
+}
+.mf-pill.linked, .mf-pill.active   { background: #dcfce7; color: #166534; }
+.mf-pill.unlinked, .mf-pill.ceased { background: #fee2e2; color: #b91c1c; }
+.mf-pill.expired                   { background: #f1f5f9; color: #475569; }
+.mf-pill.at-risk                   { background: #fef3c7; color: #92400e; }
+
+/* SIP register tiles — same shape as .ki-kpi but linkable and denser. */
+.sip-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+.sip-tile {
+  background: var(--ki-card-bg); border: 1px solid var(--ki-card-border);
+  border-radius: var(--ki-radius); padding: .7rem .9rem;
+  display: block; color: inherit; text-decoration: none;
+}
+a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow); color: inherit; }
+.sip-tile .num { font-size: 1.3rem; font-weight: 700; }
+.sip-tile .sub { font-size: .82rem; color: var(--ki-text-secondary); }
+.sip-tile .lbl { font-size: .74rem; color: var(--ki-text-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: .15rem; }
+.sip-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.sip-section-title {
+  font-size: .85rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--ki-text-secondary); margin: 0 0 .6rem;
+}
+@media (max-width: 640px) {
+  .sip-tiles { grid-template-columns: repeat(2, 1fr); }
+  .sip-grid-2 { grid-template-columns: 1fr; }
+}
+
+/* Inline bars: the number carries the meaning, the bar supports it. */
+.bar-track { background: var(--ki-card-border); border-radius: 4px; height: 10px; min-width: 60px; flex: 1; }
+.bar-fill { height: 10px; border-radius: 4px; }
+.bar-new { background: #1d4ed8; }
+.bar-stop { background: #b91c1c; }
+.bar-book { background: #0d9488; }
+.bar-cell { display: flex; align-items: center; gap: .5rem; }
+.bar-cell .val { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: .82rem; }
+.net-pos { color: #15803d; font-weight: 700; }
+.net-neg { color: #b91c1c; font-weight: 700; }
+
+.leak-list { list-style: none; margin: 0; padding: 0; }
+.leak-list li {
+  display: flex; justify-content: space-between; gap: .6rem;
+  padding: .4rem 0; border-bottom: 1px solid var(--ki-card-border); font-size: .84rem;
+}
+.leak-list .who { min-width: 0; }
+.leak-list .who .scheme {
+  color: var(--ki-text-muted); font-size: .76rem; display: block;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px;
+}
+.leak-list .amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sip-tab { text-decoration: none; }
+.sip-tab.on { background: var(--ki-primary) !important; color: #fff !important; border-color: var(--ki-primary) !important; }

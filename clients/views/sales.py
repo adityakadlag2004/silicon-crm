@@ -11,7 +11,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse, HttpResponse
 from django.utils import timezone
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
+from django.urls import reverse
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 
@@ -19,6 +20,7 @@ from .. import permissions
 from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Product
 from ..forms import AdminSaleForm, EditSaleForm, SaleForm
 from ..services import sales as sales_service
+from ..templatetags.custom_filters import inr
 from .helpers import get_manager_access, parse_date_param
 
 logger = logging.getLogger(__name__)
@@ -142,9 +144,11 @@ def all_sales(request):
     is_manager = bool(user_emp and user_emp.role == "manager")
     manager_access = get_manager_access() if is_manager else None
 
-    if hasattr(request.user, "employee") and request.user.employee.role == "employee":
-        sales_qs = sales_qs.filter(employee=request.user.employee)
-    elif is_manager and not permissions.can(request.user, "view_all_sales"):
+    own_only = (
+        (hasattr(request.user, "employee") and request.user.employee.role == "employee")
+        or (is_manager and not permissions.can(request.user, "view_all_sales"))
+    )
+    if own_only:
         sales_qs = sales_qs.filter(employee=request.user.employee)
 
     product = request.GET.get("product")
@@ -196,7 +200,31 @@ def all_sales(request):
     qdict.pop("page", None)
     qstring = qdict.urlencode()
 
+    # Status counts respect the same visibility scope as the list itself.
+    scope = Sale.objects.all()
+    if own_only:
+        scope = scope.filter(employee=request.user.employee)
+    agg = scope.aggregate(
+        total=Count("id"),
+        pending=Count("id", filter=Q(status=Sale.STATUS_PENDING)),
+        approved=Count("id", filter=Q(status=Sale.STATUS_APPROVED)),
+        rejected=Count("id", filter=Q(status=Sale.STATUS_REJECTED)),
+        amount=Sum("amount", filter=Q(status=Sale.STATUS_APPROVED)),
+    )
+    base = reverse("clients:all_sales")
     context = {
+        "crumbs": [{"label": "Sales"}],
+        "kpis": [
+            {"label": "All Sales", "value": agg["total"], "color": "#4338CA",
+             "url": base, "active": not status},
+            {"label": "Pending", "value": agg["pending"], "color": "#B45309",
+             "url": f"{base}?status={Sale.STATUS_PENDING}", "active": status == Sale.STATUS_PENDING},
+            {"label": "Approved", "value": agg["approved"], "color": "#15803D",
+             "url": f"{base}?status={Sale.STATUS_APPROVED}", "active": status == Sale.STATUS_APPROVED},
+            {"label": "Rejected", "value": agg["rejected"], "color": "#BE123C",
+             "url": f"{base}?status={Sale.STATUS_REJECTED}", "active": status == Sale.STATUS_REJECTED},
+            {"label": "Approved Value", "value": f"₹{inr(agg['amount'] or 0)}", "color": "#0F766E"},
+        ],
         "sales": page_obj,
         "is_employee": hasattr(request.user, "employee") and request.user.employee.role == "employee",
         "is_manager": is_manager,

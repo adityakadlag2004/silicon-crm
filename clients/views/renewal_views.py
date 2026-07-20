@@ -1,17 +1,19 @@
 import calendar
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .. import permissions
 from ..forms import EditRenewalForm, RenewalForm
+from ..templatetags.custom_filters import inr
 from ..models import Client, Renewal, Product
 from .helpers import parse_date_param
 from .helpers import get_manager_access
@@ -202,7 +204,21 @@ def all_renewals(request):
 	qdict.pop("page", None)
 	qstring = qdict.urlencode()
 
+	today = timezone.localdate()
+	agg = Renewal.objects.aggregate(
+		total=Count("id"),
+		due_30=Count("id", filter=Q(renewal_end_date__gte=today,
+		                            renewal_end_date__lte=today + timedelta(days=30))),
+		overdue=Count("id", filter=Q(renewal_end_date__lt=today)),
+		premium=Sum("premium_amount"),
+	)
 	context = {
+		"kpis": [
+			{"label": "All Renewals", "value": agg["total"], "color": "#4338CA"},
+			{"label": "Due \u226430 days", "value": agg["due_30"], "color": "#B45309"},
+			{"label": "Overdue", "value": agg["overdue"], "color": "#BE123C"},
+			{"label": "Premium Booked", "value": f"\u20b9{inr(agg['premium'] or 0)}", "color": "#15803D"},
+		],
 		"renewals": page_obj,
 		"is_employee": bool(user_emp and user_emp.role == "employee"),
 		"is_manager": is_manager,

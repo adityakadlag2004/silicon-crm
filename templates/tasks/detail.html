@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}#{{ task.pk }} {{ task.title }}{% endblock %}
 {% block page_title %}Task #{{ task.pk }}{% endblock %}
 {% block extra_css %}{% include "tasks/_styles.html" %}{% endblock %}
@@ -17,16 +18,25 @@
   </div>
 {% endif %}
 
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+
 <div class="tk-detail">
   {# ─────────── Main column ─────────── #}
   <div class="tk-main">
     <div class="ki-card">
       <div class="ki-card-body">
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
-          <span class="tk-id">#{{ task.pk }}</span>
-          <h2 style="margin:0;font-size:1.25rem;flex:1;">{{ task.title }}</h2>
-          <span class="tk-pri tk-pri-{{ task.priority }}">{{ task.get_priority_display }}</span>
-          <span class="tk-st tk-st-{{ task.status }}">{{ task.get_status_display }}</span>
+        <div class="ki-rec-top" style="gap:.75rem;">
+          <span class="ki-mono ki-mono-sm" style="--c:{{ task.title|monocolor }};">{{ task.title|monogram }}</span>
+          <div class="ki-rec-head">
+            <h2 class="ki-rec-title" style="font-size:1.2rem;">
+              <span class="tk-id">#{{ task.pk }}</span> {{ task.title }}
+            </h2>
+            <div class="ki-tags">
+              <span class="tk-pri tk-pri-{{ task.priority }}">{{ task.get_priority_display }}</span>
+              <span class="tk-st tk-st-{{ task.status }}">{{ task.get_status_display }}</span>
+              {% if task.repeat_rule %}<span class="ki-tag" style="--c:#7E22CE;">Repeats {{ task.repeat_rule }}</span>{% endif %}
+            </div>
+          </div>
         </div>
         {% if task.description %}<p style="margin-top:.8rem;white-space:pre-wrap;">{{ task.description }}</p>{% endif %}
         <div class="tk-card-meta" style="margin-top:.8rem;">

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Claim Tracker{% endblock %}
+{% block page_title %}Claim Tracker{% endblock %}
+{% block content %}
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+{% include "insurance/_searchbar.html" with count=claims|length noun="claim" %}
+
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr>
+      <th>Claim</th><th>Client</th><th>Policy</th><th class="num">Claimed</th>
+      <th class="num">Settled</th><th>Intimated</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+      {% for c in claims %}
+      <tr>
+        <td data-label="Claim">
+          <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+            <span class="ki-mono ki-mono-sm" style="--c:{{ c.policy.client.name|monocolor }};">{{ c.policy.client.name|monogram }}</span>
+            <a href="{% url 'clients:claim_detail' c.id %}" class="name-link">{{ c.claim_type|default:"Claim" }}</a>
+          </div>
+        </td>
+        <td data-label="Client"><a href="{% url 'clients:client_profile' c.policy.client.id %}" class="name-link">{{ c.policy.client.name }}</a></td>
+        <td data-label="Policy"><a href="{% url 'clients:policy_detail' c.policy.id %}" class="name-link">{{ c.policy.policy_number|mask_pan }}</a></td>
+        <td data-label="Claimed" class="num">₹{{ c.claimed_amount|inr }}</td>
+        <td data-label="Settled" class="num">₹{{ c.settled_amount|inr }}</td>
+        <td data-label="Intimated">{{ c.intimation_date|date:"d M Y"|default:"—" }}</td>
+        <td data-label="Status"><span class="ki-tag" style="--c:{% if c.status == 'settled' %}#15803D{% elif c.status == 'rejected' %}#BE123C{% else %}#B45309{% endif %};">{{ c.get_status_display }}</span></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7"><div class="ki-empty"><i class="bi bi-file-medical"></i>No claims yet.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

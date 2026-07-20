@@ -1,27 +1,10 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}{{ emp.user.get_full_name|default:emp.user.username }} — Team{% endblock %}
 {% block page_title %}Team Member{% endblock %}
 {% block extra_css %}
 <style>
-  .profile-header {
-    display: flex;
-    align-items: center;
-    gap: 1.25rem;
-    flex-wrap: wrap;
-  }
-  .profile-avatar {
-    width: 72px; height: 72px; border-radius: 16px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.75rem; font-weight: 800; color: #fff; flex-shrink: 0;
-    background: linear-gradient(135deg, var(--ki-primary), #3b82f6);
-  }
   .profile-avatar.inactive { background: linear-gradient(135deg, #94a3b8, #cbd5e1); }
-  .profile-meta { flex: 1; min-width: 200px; }
-  .profile-name { font-size: 1.35rem; font-weight: 700; color: var(--ki-text-primary); margin: 0; }
-  .profile-sub { font-size: 0.88rem; color: var(--ki-text-muted); margin-top: 0.15rem; }
-  .profile-badges { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
-  .profile-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-
   .detail-stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -48,7 +31,6 @@
     letter-spacing: 0.03em;
     margin-top: 0.15rem;
   }
-
   .section-title {
     font-size: 1rem;
     font-weight: 700;
@@ -64,37 +46,23 @@
 
 {% block content %}
 
-<!-- Back link -->
-<a href="{% url 'clients:team_list' %}" class="ki-btn ki-btn-secondary ki-btn-sm mb-3">
-  <i class="bi bi-arrow-left"></i> Back to Team
-</a>
-
-<!-- Profile Header -->
-<div class="ki-card mb-3">
-  <div class="profile-header">
-    <div class="profile-avatar {% if not emp.active %}inactive{% endif %}">
-      {{ emp.user.first_name|default:emp.user.username|make_list|first|upper }}
-    </div>
-    <div class="profile-meta">
-      <h2 class="profile-name">{{ emp.user.get_full_name|default:emp.user.username }}</h2>
-      <div class="profile-sub">
-        @{{ emp.user.username }}
-        {% if emp.employee_number %} · #{{ emp.employee_number }}{% endif %}
-        {% if emp.user.email %} · {{ emp.user.email }}{% endif %}
-      </div>
-      <div class="profile-badges">
-        <span class="badge text-capitalize" style="background:var(--ki-primary-pale);color:var(--ki-primary);font-size:.78rem;">{{ emp.role }}</span>
+{% with who=emp.user.get_full_name|default:emp.user.username %}
+<div class="ki-rec">
+  <div class="ki-rec-top">
+    <span class="ki-mono" style="--c:{% if emp.active %}{{ who|monocolor }}{% else %}#9B8B6A{% endif %};">{{ who|monogram }}</span>
+    <div class="ki-rec-head">
+      <h2 class="ki-rec-title">{{ who }}</h2>
+      <div class="ki-tags">
+        <span class="ki-tag text-capitalize" style="--c:var(--ki-primary);">{{ emp.role }}</span>
         {% if emp.active %}
-          <span class="badge bg-success" style="font-size:.78rem;">Active</span>
+          <span class="ki-tag" style="--c:#15803D;">Active</span>
         {% else %}
-          <span class="badge bg-secondary" style="font-size:.78rem;">Inactive</span>
+          <span class="ki-tag" style="--c:#BE123C;">Inactive</span>
         {% endif %}
-        {% if emp.salary %}
-          <span class="badge" style="background:#fef3c7;color:#92400e;font-size:.78rem;">₹{{ emp.salary|floatformat:0 }}/mo</span>
-        {% endif %}
+        {% if emp.salary %}<span class="ki-tag" style="--c:#B45309;">₹{{ emp.salary|floatformat:0 }}/mo</span>{% endif %}
       </div>
     </div>
-    <div class="profile-actions">
+    <div class="ki-rec-actions">
       <a href="{% url 'clients:team_edit' emp.id %}" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-pencil"></i> Edit</a>
       <form method="post" action="{% url 'clients:team_toggle_status' emp.id %}" style="display:inline;">
         {% csrf_token %}
@@ -138,7 +106,13 @@
       <div class="detail-stat-label">Clients</div>
     </div>
   </div>
+  <div class="ki-rec-summary">
+    <div class="ki-sum-item"><span class="k">Username</span><span class="v">@{{ emp.user.username }}</span></div>
+    {% if emp.employee_number %}<div class="ki-sum-item"><span class="k">Employee #</span><span class="v">{{ emp.employee_number }}</span></div>{% endif %}
+    {% if emp.user.email %}<div class="ki-sum-item"><span class="k">Email</span><span class="v">{{ emp.user.email|mask_email }}</span></div>{% endif %}
+  </div>
 </div>
+{% endwith %}
 
 <!-- This Month -->
 <div class="ki-card mb-3">

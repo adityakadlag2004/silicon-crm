@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}{{ family.name }}{% endblock %}
+{% block page_title %}Household{% endblock %}
+{% block content %}
+
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+
+<div class="ki-rec">
+  <div class="ki-rec-top">
+    <span class="ki-mono" style="--c:{{ family.name|monocolor }};">{{ family.name|monogram }}</span>
+    <div class="ki-rec-head">
+      <h2 class="ki-rec-title">{{ family.name }}</h2>
+      <div class="ki-tags">
+        <span class="ki-tag" style="--c:var(--ki-text-secondary);">{{ family.code }}</span>
+        <span class="ki-tag ki-tag-solid" style="--c:{{ family.category|monocolor }};">{{ family.category }}</span>
+      </div>
+    </div>
+  </div>
+  <div class="ki-rec-summary">
+    <div class="ki-sum-item"><span class="k">Group Head</span>
+      <span class="v">{% if family.head %}<a href="{% url 'clients:client_profile' family.head.id %}">{{ family.head.name }}</a>{% else %}—{% endif %}</span></div>
+    <div class="ki-sum-item"><span class="k">Relationship Mgr</span>
+      <span class="v">{% if family.relationship_manager %}{{ family.relationship_manager.user.get_full_name|default:family.relationship_manager.user.username }}{% else %}—{% endif %}</span></div>
+    <div class="ki-sum-item"><span class="k">Combined AUM</span><span class="v">₹{{ family.aum|inr }}</span></div>
+  </div>
+</div>
+
+
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr><th>Member</th><th>Phone</th><th class="num">Lumpsum</th><th class="num">PMS</th><th>Mapped To</th></tr></thead>
+    <tbody>
+      {% for c in members %}
+      <tr>
+        <td data-label="Member">
+          <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+            <span class="ki-mono ki-mono-sm" style="--c:{{ c.name|monocolor }};">{{ c.name|monogram }}</span>
+            <a href="{% url 'clients:client_profile' c.id %}" class="name-link">{{ c.name }}</a>
+            {% if family.head_id == c.id %}<span class="ki-tag" style="--c:#15803D;">Head</span>{% endif %}
+          </div>
+        </td>
+        <td data-label="Phone">{{ c.phone|mask_phone }}</td>
+        <td data-label="Lumpsum" class="num">₹{{ c.lumsum_investment|default:0|inr }}</td>
+        <td data-label="PMS" class="num">₹{{ c.pms_amount|default:0|inr }}</td>
+        <td data-label="Mapped To">{% if c.mapped_to %}{{ c.mapped_to.user.get_full_name|default:c.mapped_to.user.username }}{% else %}—{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5"><div class="ki-empty"><i class="bi bi-people"></i>No members in this household yet.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

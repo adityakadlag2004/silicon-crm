@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}All Clients{% endblock %}
 {% block page_title %}All Clients{% endblock %}
 {% block extra_css %}
@@ -183,6 +184,10 @@
 
 {% block content %}
 
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+
+{# KPI strip — headline counts, each tile also a coarse filter #}
+
 <!-- Header -->
 <div class="clients-header">
   <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
@@ -266,7 +271,7 @@
 
 <!-- Data Table -->
 <div class="ki-card ki-card-flush ki-table-wrap">
-  <table class="ki-table" id="clientsTable">
+  <table class="ki-table ki-dtable ki-cardify" id="clientsTable">
     <thead>
       <tr>
         <th class="hide-on-mobile" style="width:60px;">
@@ -296,17 +301,20 @@
     <tbody>
       {% for client in clients_page %}
       <tr>
-        <td class="hide-on-mobile"><span style="font-weight:600;color:var(--ki-text-muted);">{{ client.id }}</span></td>
-        <td>
-          <div class="client-name-cell">
-            <span class="name">{{ client.name }}</span>
-            <span class="sub">
-              {% if client.phone %}{{ client.phone|floatformat:0 }}{% endif %}
-              {% if client.email %}· {{ client.email }}{% endif %}
-            </span>
+        <td data-label="#" class="hide-on-mobile"><span style="font-weight:600;color:var(--ki-text-muted);">{{ client.id }}</span></td>
+        <td data-label="Client">
+          <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+            <span class="ki-mono ki-mono-sm" style="--c:{{ client.name|monocolor }};">{{ client.name|monogram }}</span>
+            <div class="client-name-cell" style="min-width:0;">
+              <a href="{% url 'clients:client_profile' client.id %}" class="name name-link">{{ client.name }}</a>
+              <span class="sub">
+                {% if client.phone %}{{ client.phone|mask_phone }}{% endif %}
+                {% if client.email %}· {{ client.email|mask_email }}{% endif %}
+              </span>
+            </div>
           </div>
         </td>
-        <td>
+        <td data-label="Products">
           <div class="product-badges">
             {% for badge in client.dynamic_product_badges %}
               <span class="product-badge {{ badge.badge_class }}">{{ badge.name }}</span>
@@ -316,15 +324,15 @@
             {% endif %}
           </div>
         </td>
-        <td class="hide-on-mobile">{% if client.lumsum_investment %}₹{{ client.lumsum_investment|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
-        <td>
+        <td data-label="Lumpsum" class="hide-on-mobile">{% if client.lumsum_investment %}₹{{ client.lumsum_investment|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+        <td data-label="Mapped To">
           {% if client.mapped_to %}
             <span class="mapped-badge"><i class="bi bi-person-fill" style="font-size:0.75rem;"></i> {{ client.mapped_to.user.get_full_name|default:client.mapped_to.user.username }}</span>
           {% else %}
             <span class="mapped-badge" style="color:var(--ki-warning);background:#fef3c7;"><i class="bi bi-exclamation-triangle-fill" style="font-size:0.75rem;"></i> Unmapped</span>
           {% endif %}
         </td>
-        <td>
+        <td data-label="Actions">
           <div style="display:flex;gap:0.3rem;">
             <a href="{% url 'clients:client_profile' client.id %}" class="ki-btn ki-btn-sm ki-btn-secondary" title="View profile">
               <i class="bi bi-eye"></i>

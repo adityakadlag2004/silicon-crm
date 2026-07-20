@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Households{% endblock %}
+{% block page_title %}Households{% endblock %}
+{% block content %}
+
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+
+<form method="get" class="ki-showbar">
+  {% if band %}<input type="hidden" name="band" value="{{ band }}">{% endif %}
+  <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm"
+         style="max-width:280px;" placeholder="Search household name or code…">
+  <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit"><i class="bi bi-search"></i> Search</button>
+  {% if q or band %}<a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:family_list' %}">Reset</a>{% endif %}
+  <span class="right">{{ families|length }} household{{ families|length|pluralize }}</span>
+</form>
+
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead>
+      <tr>
+        <th>Household</th><th>Code</th><th class="num">Combined AUM</th>
+        <th>Category</th><th>Relationship Mgr</th><th class="num">Members</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in families %}
+      <tr>
+        <td data-label="Household">
+          <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+            <span class="ki-mono ki-mono-sm" style="--c:{{ f.name|monocolor }};">{{ f.name|monogram }}</span>
+            <a href="{% url 'clients:family_detail' f.id %}" class="name-link">{{ f.name }}</a>
+          </div>
+        </td>
+        <td data-label="Code">{{ f.code }}</td>
+        <td data-label="Combined AUM" class="num">₹{{ f.total_aum|inr }}</td>
+        <td data-label="Category"><span class="ki-tag" style="--c:{{ f.band|monocolor }};">{{ f.band }}</span></td>
+        <td data-label="Relationship Mgr">
+          {% if f.relationship_manager %}{{ f.relationship_manager.user.get_full_name|default:f.relationship_manager.user.username }}
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td data-label="Members" class="num">{{ f.members.count }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">
+        <div class="ki-empty"><i class="bi bi-house-heart"></i>
+          No households yet. Group clients into a family to see combined AUM here.</div>
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

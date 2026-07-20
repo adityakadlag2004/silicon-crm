@@ -207,6 +207,13 @@ def client_kyc_issues(request):
 
     context = {
         "page_title": "Client KYC & Data Health",
+        "kpis": [
+            {"label": "Missing PAN", "value": page_obj.paginator.count, "color": "#BE123C"},
+            {"label": "Unlinked Folios",
+             "value": MutualFundFolio.objects.filter(client__isnull=True).count(),
+             "color": "#B45309"},
+            {"label": "Match Suggestions", "value": len(suggestions), "color": "#0369A1"},
+        ],
         "missing": missing,
         "page_obj": page_obj,
         "missing_total": page_obj.paginator.count,

@@ -1,0 +1,16 @@
+{% comment %}
+KPI strip. Expects `kpis`: list of dicts with label, value, and optionally
+color, url, sub, active. Rendered from base.html for any view that sets it.
+{% endcomment %}
+{% if kpis %}
+<div class="ki-kpis">
+  {% for k in kpis %}
+    {% if k.url %}<a href="{{ k.url }}" class="ki-kpi {% if k.active %}is-active{% endif %}" style="--c:{{ k.color|default:'#E5B740' }};">
+    {% else %}<div class="ki-kpi" style="--c:{{ k.color|default:'#E5B740' }};">{% endif %}
+      <div class="l">{{ k.label }}</div>
+      <div class="v">{{ k.value }}</div>
+      {% if k.sub %}<div class="sub">{{ k.sub }}</div>{% endif %}
+    {% if k.url %}</a>{% else %}</div>{% endif %}
+  {% endfor %}
+</div>
+{% endif %}

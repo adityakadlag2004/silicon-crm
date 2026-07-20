@@ -86,3 +86,71 @@ def inr(value):
     if head:
         pairs.insert(0, head)
     return sign + ",".join(pairs) + "," + tail
+
+
+# ── Record-shell helpers (monogram avatars) ──────────────────────────────
+# Every module screen leads with a circular two-letter avatar. Initials come
+# from the record's name; the colour is derived from that same name so a given
+# client keeps one colour everywhere without storing anything.
+
+_MONO_COLORS = [
+    "#C2410C", "#B45309", "#15803D", "#0F766E", "#0369A1",
+    "#4338CA", "#7E22CE", "#A21CAF", "#BE123C", "#57534E",
+]
+
+
+@register.filter
+def monogram(value):
+    """Two-letter initials for `value`: "Parekh & Family" -> "PA"."""
+    text = str(value or "").strip()
+    if not text:
+        return "—"
+    words = [w for w in text.split() if w[:1].isalnum()]
+    if len(words) >= 2:
+        return (words[0][:1] + words[1][:1]).upper()
+    return text[:2].upper()
+
+
+@register.filter
+def monocolor(value):
+    """Stable accent colour for `value` — same name always same colour."""
+    text = str(value or "")
+    if not text:
+        return _MONO_COLORS[0]
+    return _MONO_COLORS[sum(ord(c) for c in text) % len(_MONO_COLORS)]
+
+
+# ── Data masking ─────────────────────────────────────────────────────────
+# Not every RM needs full contact details on screen. These mirror the
+# reference CRM's masking: enough to recognise a record, not enough to
+# exfiltrate a contact list. Masking is display-only — the database and the
+# tap-to-call/mailto links still carry the real value.
+
+@register.filter
+def mask_phone(value):
+    """98******10 — keeps the first two and last two digits."""
+    digits = "".join(c for c in str(value or "") if c.isdigit())
+    if len(digits) < 6:
+        return digits or "—"
+    return f"{digits[:2]}{'*' * (len(digits) - 4)}{digits[-2:]}"
+
+
+@register.filter
+def mask_email(value):
+    """rah***a@gmail.com — keeps the domain and the first/last local chars."""
+    text = str(value or "").strip()
+    if "@" not in text:
+        return text or "—"
+    local, _, domain = text.partition("@")
+    if len(local) <= 2:
+        return f"{local[:1]}***@{domain}"
+    return f"{local[:3]}***{local[-1]}@{domain}"
+
+
+@register.filter
+def mask_pan(value):
+    """ABCD****1F — PAN is a KYC identifier; never show it whole in a list."""
+    text = str(value or "").strip().upper()
+    if len(text) < 6:
+        return text or "—"
+    return f"{text[:4]}{'*' * (len(text) - 6)}{text[-2:]}"

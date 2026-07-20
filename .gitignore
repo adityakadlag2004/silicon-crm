@@ -37,3 +37,6 @@ secrets/
 # OS
 .DS_Store
 Thumbs.db
+
+# UI reference screenshots (competitor/design refs — local only, never committed)
+design-refs/

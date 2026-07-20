@@ -1,0 +1,13 @@
+{% comment %}
+Breadcrumb row. Expects `crumbs`: list of {label, url} — the last one renders
+as plain current-page text. Rendered from base.html; views may set `crumbs`
+explicitly, otherwise clients.context_processors.breadcrumbs derives them.
+{% endcomment %}
+<div class="ki-crumb">
+  <a href="{% if nav.dashboard_admin %}{% url 'clients:admin_dashboard' %}{% else %}{% url 'clients:employee_dashboard' %}{% endif %}">Dashboard</a>
+  {% for c in crumbs %}
+    <span class="sep">›</span>
+    {% if c.url and not forloop.last %}<a href="{{ c.url }}">{{ c.label }}</a>
+    {% else %}<span class="cur">{{ c.label }}</span>{% endif %}
+  {% endfor %}
+</div>

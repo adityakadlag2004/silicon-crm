@@ -100,6 +100,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'clients.context_processors.manager_access',
                 'clients.context_processors.nav',
+                'clients.context_processors.breadcrumbs',
             ],
         },
     },

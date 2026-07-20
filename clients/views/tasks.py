@@ -420,6 +420,10 @@ def _board_ctx(request, qs, limit, collapse=False):
 def task_detail(request, pk):
     task = _visible_task_or_404(request, pk, include_deleted=True)
     ctx = {
+        "crumbs": [
+            {"label": "Tasks", "url": reverse("clients:task_dashboard")},
+            {"label": f"#{task.pk}"},
+        ],
         "task": task,
         "page_title": f"#{task.pk} · {task.title}",
         "checklist": task.checklist_items.all(),

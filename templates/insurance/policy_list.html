@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Insurance Tracker{% endblock %}
+{% block page_title %}Insurance Tracker{% endblock %}
+{% block content %}
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+{% include "insurance/_searchbar.html" with count=policies|length noun="policy" %}
+
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr>
+      <th>Policy</th><th>Client</th><th>Type</th><th class="num">Sum Insured</th>
+      <th class="num">Premium</th><th>Ends</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+      {% for p in policies %}
+      <tr>
+        <td data-label="Policy">
+          <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+            <span class="ki-mono ki-mono-sm" style="--c:{{ p.insurer|monocolor }};">{{ p.insurer|monogram }}</span>
+            <div style="min-width:0;">
+              <a href="{% url 'clients:policy_detail' p.id %}" class="name-link">{{ p.policy_number|mask_pan }}</a>
+              <div class="text-muted small">{{ p.insurer }}{% if p.plan_name %} · {{ p.plan_name }}{% endif %}</div>
+            </div>
+          </div>
+        </td>
+        <td data-label="Client"><a href="{% url 'clients:client_profile' p.client.id %}" class="name-link">{{ p.client.name }}</a></td>
+        <td data-label="Type">{{ p.get_insurance_type_display }}</td>
+        <td data-label="Sum Insured" class="num">₹{{ p.sum_insured|inr }}</td>
+        <td data-label="Premium" class="num">₹{{ p.premium_amount|inr }}</td>
+        <td data-label="Ends">
+          {{ p.end_date|date:"d M Y"|default:"—" }}
+          {% if p.is_expiring_soon %}<span class="ki-tag" style="--c:#B45309;">Soon</span>{% endif %}
+        </td>
+        <td data-label="Status">
+          <span class="ki-tag" style="--c:{% if p.status == 'active' %}#15803D{% elif p.status == 'lapsed' %}#BE123C{% else %}#57534E{% endif %};">{{ p.get_status_display }}</span>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7"><div class="ki-empty"><i class="bi bi-shield-check"></i>No policies yet. Add them from the admin.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

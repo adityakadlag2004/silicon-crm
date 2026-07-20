@@ -19,6 +19,7 @@
     <link href="{% static 'django_select2/django_select2.css' %}" rel="stylesheet"/>
     <!-- KI Design System -->
     <link href="{% static 'css/ki-design-system.css' %}" rel="stylesheet" />
+    <link href="{% static 'css/ki-record.css' %}" rel="stylesheet" />
     <!-- KI Mobile (loaded last so it cascades over everything) -->
     <link href="{% static 'css/ki-mobile.css' %}" rel="stylesheet" />
     <style>
@@ -236,6 +237,54 @@
         .kn-content { padding: 1rem; }
       }
 
+      /* ── Desktop: the nav is a permanent left sidebar ──────────────
+         Below 1180px this whole block switches off and the existing
+         off-canvas drawer takes over unchanged (see the media query
+         further down) — same markup, same links, same JS.            */
+      @media (min-width: 1181px) {
+        :root { --kn-side: 260px; }
+        .kn-nav {
+          position: fixed;
+          top: var(--kn-h); left: 0;
+          width: var(--kn-side);
+          height: calc(100vh - var(--kn-h));
+          background: var(--kn-bg);
+          border-right: 1px solid var(--kn-border);
+          flex-direction: column;
+          align-items: stretch;
+          gap: .1rem;
+          padding: .6rem .5rem;
+          overflow-y: auto;
+          z-index: 1035;
+        }
+        .kn-nav .kn-link,
+        .kn-nav .kn-dropdown-toggle {
+          width: 100%; justify-content: flex-start;
+          padding: .55rem .7rem; border-radius: var(--ki-radius-sm);
+        }
+        .kn-nav .kn-dropdown { width: 100%; position: static; }
+        /* Sub-items expand inline instead of floating out sideways. */
+        .kn-nav .kn-menu {
+          position: static; opacity: 1; visibility: visible; transform: none;
+          width: 100%; box-shadow: none; border: none;
+          padding: 0 0 .3rem 1.6rem; margin-top: -.1rem; display: none;
+          min-width: 0;
+        }
+        .kn-nav .kn-dropdown.open .kn-menu { display: block; }
+        .kn-dropdown-toggle .kn-caret { margin-left: auto; transition: transform .2s; }
+        .kn-dropdown.open .kn-dropdown-toggle .kn-caret { transform: rotate(180deg); }
+        .kn-content { margin-left: var(--kn-side); max-width: calc(1600px - var(--kn-side)); }
+        .kn-toggle { display: none; }
+      }
+
+      /* Module monogram — the coloured two-letter chip on each nav group. */
+      .kn-mono {
+        width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto;
+        display: inline-grid; place-items: center; color: #fff;
+        font-size: .68rem; font-weight: 700; letter-spacing: .01em;
+        background: var(--c, var(--ki-primary));
+      }
+
       .kn-page-header {
         display: flex;
         align-items: center;
@@ -322,15 +371,20 @@
           {% comment %}One nav for every role — visibility gated by nav.* flags (clients/context_processors.py). Edit menu here once.{% endcomment %}
 
           <a class="kn-link" href="{% if nav.dashboard_admin %}{% url 'clients:admin_dashboard' %}{% else %}{% url 'clients:employee_dashboard' %}{% endif %}">
-            <i class="bi bi-grid-1x2-fill"></i> Dashboard
+            <span class="kn-mono" style="--c:#0369A1;">Db</span> Dashboard
           </a>
 
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
-              <i class="bi bi-people-fill"></i> Clients <i class="bi bi-chevron-down kn-caret"></i>
+              <span class="kn-mono" style="--c:#BE123C;">Cl</span> Clients <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
               <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:family_list' %}"><i class="bi bi-house-heart-fill"></i> Households</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:policy_list' %}"><i class="bi bi-shield-check"></i> Insurance Tracker</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:claim_list' %}"><i class="bi bi-file-medical"></i> Claim Tracker</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:meeting_list' %}"><i class="bi bi-calendar-event"></i> Meetings</a></li>
               {% if nav.show_my_clients %}<li><a class="kn-menu-item" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a></li>{% endif %}
               <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-person-vcard"></i> KYC Issues</a></li>
@@ -340,7 +394,7 @@
 
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
-              <i class="bi bi-receipt"></i> Sales <i class="bi bi-chevron-down kn-caret"></i>
+              <span class="kn-mono" style="--c:#B45309;">Sa</span> Sales <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
               <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
@@ -371,7 +425,7 @@
           {% if nav.show_mf %}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
-              <i class="bi bi-graph-up"></i> Mutual Funds <i class="bi bi-chevron-down kn-caret"></i>
+              <span class="kn-mono" style="--c:#15803D;">MF</span> Mutual Funds <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
               <li><a class="kn-menu-item" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-cloud-arrow-down"></i> RTA Feeds</a></li>
@@ -395,7 +449,7 @@
           {% if nav.show_reports_menu %}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
-              <i class="bi bi-graph-up-arrow"></i> Reports <i class="bi bi-chevron-down kn-caret"></i>
+              <span class="kn-mono" style="--c:#0F766E;">Re</span> Reports <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
               {% if nav.reports_performance %}<li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>{% endif %}
@@ -412,7 +466,7 @@
           {% if nav.can_leads %}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
-              <i class="bi bi-funnel-fill"></i> Leads <i class="bi bi-chevron-down kn-caret"></i>
+              <span class="kn-mono" style="--c:#C2410C;">Le</span> Leads <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
               <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
@@ -422,7 +476,7 @@
 
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
-              <i class="bi bi-check2-square"></i> Tasks <i class="bi bi-chevron-down kn-caret"></i>
+              <span class="kn-mono" style="--c:#4338CA;">Ta</span> Tasks <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
               <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
@@ -438,13 +492,13 @@
           </div>
 
           <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
-            <i class="bi bi-link-45deg"></i> Links
+            <span class="kn-mono" style="--c:#7E22CE;">Li</span> Links
           </a>
 
           {% if nav.show_settings %}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
-              <i class="bi bi-gear-fill"></i> Settings <i class="bi bi-chevron-down kn-caret"></i>
+              <span class="kn-mono" style="--c:#57534E;">Se</span> Settings <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
               <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
@@ -499,9 +553,12 @@
     <main class="kn-content">
       {% if self|stringformat:"s" %}{# render page title if block defined #}{% endif %}
       {% block page_title_wrap %}
+        {# Views supplying crumbs/kpis get the shell furniture here. #}
+        {% if crumbs %}{% include "_shell/crumb.html" %}{% endif %}
         <div class="kn-page-header">
           <h1>{% block page_title %}Dashboard{% endblock %}</h1>
         </div>
+        {% if kpis %}{% include "_shell/kpi_strip.html" %}{% endif %}
       {% endblock %}
 
       {% if messages %}
@@ -677,20 +734,25 @@
             e.stopPropagation();
             // On desktop dropdowns also work via :hover, but click toggles too
             const isOpen = dd.classList.contains('open');
-            // Close other open dropdowns at the same level (desktop only)
+            // Close sibling sections in the same container (desktop only), so
+            // the sidebar behaves as an accordion and the top bar as a menu.
             if (!isMobile()) {
-              document.querySelectorAll('.kn-dropdown.open').forEach(d => {
+              const scope = dd.closest('.kn-nav, .kn-right') || document;
+              scope.querySelectorAll('.kn-dropdown.open').forEach(d => {
                 if (d !== dd) d.classList.remove('open');
               });
             }
             dd.classList.toggle('open', !isOpen);
           });
         });
-        // Close dropdowns when clicking outside (desktop)
+        // Close dropdowns when clicking outside. The left sidebar is an
+        // accordion — its sections must survive a click on the page — so only
+        // the top-bar user menu collapses here.
         document.addEventListener('click', function(e) {
           if (isMobile()) return;
           if (!e.target.closest('.kn-dropdown')) {
-            document.querySelectorAll('.kn-dropdown.open').forEach(d => d.classList.remove('open'));
+            document.querySelectorAll('.kn-right .kn-dropdown.open')
+              .forEach(d => d.classList.remove('open'));
           }
         });
         // Close mobile nav when clicking a navigation link

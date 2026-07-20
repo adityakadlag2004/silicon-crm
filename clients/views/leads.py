@@ -58,7 +58,16 @@ def lead_list_by_stage(request, stage):
         Lead.STAGE_PROCESSED: base_qs.filter(stage=Lead.STAGE_PROCESSED).count(),
     }
 
+    # Stage counts double as the KPI strip — each tile is the stage filter.
+    stage_colors = {Lead.STAGE_PENDING: "#B45309", Lead.STAGE_HALF: "#0369A1",
+                    Lead.STAGE_PROCESSED: "#15803D"}
     context = {
+        "crumbs": [{"label": "Leads"}, {"label": stage_labels[stage]}],
+        "kpis": [
+            {"label": stage_labels[st], "value": counts[st], "color": stage_colors[st],
+             "url": reverse("clients:lead_stage_list", args=[st]), "active": st == stage}
+            for st in (Lead.STAGE_PENDING, Lead.STAGE_HALF, Lead.STAGE_PROCESSED)
+        ],
         "leads": leads,
         "stage": stage,
         "stage_label": stage_labels.get(stage, "Leads"),
@@ -77,7 +86,14 @@ def lead_detail(request, lead_id):
     now_ts = timezone.now()
     for f in followups:
         f.is_overdue = f.status == "pending" and f.scheduled_time < now_ts
+    stage_colors = {Lead.STAGE_PENDING: "#B45309", Lead.STAGE_HALF: "#0369A1",
+                    Lead.STAGE_PROCESSED: "#15803D"}
     return render(request, "clients/leads/lead_detail.html", {
+        "crumbs": [
+            {"label": "Leads", "url": reverse("clients:lead_stage_list", args=[lead.stage])},
+            {"label": lead.customer_name},
+        ],
+        "stage_color": stage_colors.get(lead.stage, "#6B5D3F"),
         "lead": lead,
         "followups": followups,
         "remarks": remarks,

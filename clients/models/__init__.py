@@ -23,7 +23,13 @@ from .ops import (  # noqa: F401
 from .clients import (  # noqa: F401
     Client,
     ClientMappingAudit,
+    Family,
     Renewal,
+)
+from .insurance import (  # noqa: F401
+    InsuranceClaim,
+    InsurancePolicy,
+    Meeting,
 )
 from .targets import (  # noqa: F401
     Target,

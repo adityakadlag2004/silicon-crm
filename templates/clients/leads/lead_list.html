@@ -1,16 +1,16 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}Leads - {{ stage_label }}{% endblock %}
 {% block page_title %}Leads{% endblock %}
 {% block content %}
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <div>
     <h2 class="ki-section-title" style="margin-bottom:0.25rem;">{{ stage_label }}</h2>
     <div class="text-muted small">See only the leads you are allowed to access.</div>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_stage_list' 'pending' %}">Pending ({{ counts.pending }})</a>
-    <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_stage_list' 'half_sold' %}">Half Sold ({{ counts.half_sold }})</a>
-    <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_stage_list' 'processed' %}">Processed ({{ counts.processed }})</a>
     <a class="ki-btn ki-btn-sm ki-btn-primary" href="{% url 'clients:lead_create' %}"><i class="bi bi-plus-lg"></i> Add Lead</a>
   </div>
 </div>
@@ -25,7 +25,7 @@
 </form>
 
 <div class="ki-card ki-table-wrap">
-  <table class="ki-table">
+  <table class="ki-table ki-dtable">
     <thead>
       <tr>
         <th>Customer</th>
@@ -42,9 +42,14 @@
     <tbody>
       {% for lead in leads %}
         <tr>
-          <td>
-            <div class="fw-semibold">{{ lead.customer_name }}</div>
-            <div class="text-muted small">{{ lead.phone|default:"No phone" }}</div>
+          <td data-label="Customer">
+            <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+              <span class="ki-mono ki-mono-sm" style="--c:{{ lead.customer_name|monocolor }};">{{ lead.customer_name|monogram }}</span>
+              <div style="min-width:0;">
+                <a href="{% url 'clients:lead_detail' lead.id %}" class="name-link">{{ lead.customer_name }}</a>
+                <div class="text-muted small">{{ lead.phone|default:"No phone" }}</div>
+              </div>
+            </div>
           </td>
           <td>{{ lead.assigned_to.user.username }}</td>
           <td>

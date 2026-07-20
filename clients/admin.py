@@ -28,6 +28,9 @@ from .models import (
     MutualFundFolio,
     MutualFundTransaction,
     RTAFeedImport,
+    InsurancePolicy,
+    InsuranceClaim,
+    Meeting,
 )
 
 
@@ -415,3 +418,33 @@ admin.site.get_urls = get_admin_urls(admin.site.get_urls())
 
 
 
+
+
+# ── Insurance Tracker / Claim Tracker / Meetings ──
+# The web screens are read-only; records are created and maintained here.
+
+@admin.register(InsurancePolicy)
+class InsurancePolicyAdmin(admin.ModelAdmin):
+    list_display = ("policy_number", "client", "insurer", "insurance_type",
+                    "sum_insured", "end_date", "status")
+    list_filter = ("status", "insurance_type", "insurer")
+    search_fields = ("policy_number", "client__name", "insurer", "plan_name")
+    autocomplete_fields = ("client",)
+    date_hierarchy = "end_date"
+
+
+@admin.register(InsuranceClaim)
+class InsuranceClaimAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "claim_type", "status", "claimed_amount",
+                    "settled_amount", "intimation_date")
+    list_filter = ("status", "claim_mode")
+    search_fields = ("policy__policy_number", "policy__client__name", "claim_type")
+
+
+@admin.register(Meeting)
+class MeetingAdmin(admin.ModelAdmin):
+    list_display = ("client", "kind", "scheduled_at", "employee", "status", "next_meeting_date")
+    list_filter = ("status", "kind")
+    search_fields = ("client__name", "outcome")
+    autocomplete_fields = ("client",)
+    date_hierarchy = "scheduled_at"

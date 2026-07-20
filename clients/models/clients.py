@@ -27,6 +27,10 @@ class Client(models.Model):
 
     mapped_to = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
 
+    # Household this client belongs to (optional — plenty of clients stand alone).
+    family = models.ForeignKey("Family", null=True, blank=True, on_delete=models.SET_NULL,
+                               related_name="members")
+
     # SIP details
     sip_status = models.BooleanField(default=False)
     sip_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -196,3 +200,55 @@ class Renewal(models.Model):
     def __str__(self):
         product_label = self.product_ref.name if self.product_ref_id else self.get_product_type_display()
         return f"{self.client} - {product_label} - {self.renewal_date}"
+
+
+class Family(models.Model):
+    """A household — several Clients who are reviewed and served together.
+
+    MFD practice is family-first: an RM meets the family, not each folio
+    holder separately. Grouping clients lets the back office see combined AUM
+    and band the household (Super HNI, HNI, …) the way the industry does.
+    """
+
+    # Bands are (label, floor in rupees), richest first — see `category`.
+    CATEGORY_BANDS = [
+        ("Super HNI (Above 5 Cr)", 50_000_000),
+        ("HNI (1 Cr to 5 Cr)", 10_000_000),
+        ("Upper Middle (50 L to 1 Cr)", 5_000_000),
+        ("Middle (Below 50 Lakh)", 0),
+    ]
+
+    name = models.CharField(max_length=200, db_index=True)
+    code = models.CharField(max_length=20, unique=True,
+                            help_text="Short household code, e.g. A001.")
+    head = models.ForeignKey("Client", null=True, blank=True, on_delete=models.SET_NULL,
+                             related_name="heads_family",
+                             help_text="Primary investor / group head.")
+    relationship_manager = models.ForeignKey("Employee", null=True, blank=True,
+                                             on_delete=models.SET_NULL, related_name="families")
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = "Families"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.code} · {self.name}"
+
+    @property
+    def aum(self):
+        """Combined lumpsum + PMS across the household."""
+        from django.db.models import Sum
+        agg = self.members.aggregate(
+            lump=Sum("lumsum_investment"), pms=Sum("pms_amount"))
+        return (agg["lump"] or 0) + (agg["pms"] or 0)
+
+    @property
+    def category(self):
+        """Wealth band for the household's combined AUM."""
+        total = self.aum
+        for label, floor in self.CATEGORY_BANDS:
+            if total >= floor:
+                return label
+        return self.CATEGORY_BANDS[-1][0]

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Meetings{% endblock %}
+{% block page_title %}Meetings{% endblock %}
+{% block content %}
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+
+{% if next_by_rm %}
+<div class="ki-card mb-3">
+  <h3 class="ki-section-title" style="margin-top:0;">Forward book — next meetings booked per RM</h3>
+  <div class="ki-table-wrap">
+    <table class="ki-dtable">
+      <thead><tr><th>Relationship Manager</th><th class="num">Meetings booked ahead</th></tr></thead>
+      <tbody>
+        {% for r in next_by_rm %}
+        <tr><td>{{ r.name }}</td><td class="num">{{ r.count }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% include "insurance/_searchbar.html" with count=meetings|length noun="meeting" %}
+
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr><th>Client</th><th>Type</th><th>Scheduled</th><th>RM</th><th>Next Meeting</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for m in meetings %}
+      <tr>
+        <td data-label="Client">
+          <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+            <span class="ki-mono ki-mono-sm" style="--c:{{ m.client.name|monocolor }};">{{ m.client.name|monogram }}</span>
+            <a href="{% url 'clients:client_profile' m.client.id %}" class="name-link">{{ m.client.name }}</a>
+          </div>
+        </td>
+        <td data-label="Type">{{ m.get_kind_display }}</td>
+        <td data-label="Scheduled">{{ m.scheduled_at|date:"d M Y H:i" }}</td>
+        <td data-label="RM">{% if m.employee %}{{ m.employee.user.get_full_name|default:m.employee.user.username }}{% else %}—{% endif %}</td>
+        <td data-label="Next Meeting">{{ m.next_meeting_date|date:"d M Y"|default:"—" }}</td>
+        <td data-label="Status">
+          <span class="ki-tag" style="--c:{% if m.status == 'completed' %}#15803D{% elif m.is_overdue %}#BE123C{% else %}#0369A1{% endif %};">
+            {% if m.is_overdue %}Overdue{% else %}{{ m.get_status_display }}{% endif %}
+          </span>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6"><div class="ki-empty"><i class="bi bi-calendar-event"></i>No meetings yet.</div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
