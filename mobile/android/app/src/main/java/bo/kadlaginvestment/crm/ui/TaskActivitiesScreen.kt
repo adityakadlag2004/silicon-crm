@@ -66,15 +66,15 @@ fun TaskActivitiesScreen(
                     Column(Modifier.padding(12.dp)) {
                         Text(
                             "${a.optString("actor")} · ${a.optString("action")}",
-                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold, fontSize = rsp(13),
                         )
                         if (a.optString("detail").isNotBlank())
-                            Text(a.optString("detail"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(a.optString("detail"), fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text("#${a.optInt("task_id")} ${a.optString("task_title")}",
-                                fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                                fontSize = rsp(11), color = MaterialTheme.colorScheme.secondary)
                             Text(fmtDate(a.optString("at").take(10)),
-                                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -112,10 +112,10 @@ fun TaskMoreScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
             ) {
                 Row(Modifier.fillMaxWidth().padding(14.dp)) {
-                    Text(icon, fontSize = 18.sp, modifier = Modifier.padding(end = 12.dp))
-                    Text(label, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 8.dp))
+                    Text(icon, fontSize = rsp(18), modifier = Modifier.padding(end = 12.dp))
+                    Text(label, fontSize = rsp(15), fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 8.dp))
                     if (action.startsWith("web:")) {
-                        Text("web", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("web", fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

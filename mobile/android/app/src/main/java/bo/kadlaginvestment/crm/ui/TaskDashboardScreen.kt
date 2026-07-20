@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -75,7 +76,7 @@ fun TaskPagerScreen(
         androidx.compose.material3.OutlinedTextField(
             query, { query = it },
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            placeholder = { Text("Search tasks…", fontSize = 13.sp) },
+            placeholder = { Text("Search tasks…", fontSize = rsp(13)) },
             singleLine = true,
             trailingIcon = {
                 if (query.isNotEmpty()) Text(
@@ -95,7 +96,7 @@ fun TaskPagerScreen(
                 Tab(
                     selected = pager.currentPage == i,
                     onClick = { scope.launch { pager.animateScrollToPage(i) } },
-                    text = { Text(label, fontSize = 13.sp) },
+                    text = { Text(label, fontSize = rsp(13)) },
                 )
             }
         }
@@ -125,15 +126,15 @@ private fun Scorecard(reloadSignal: Int, onSessionExpired: () -> Unit) {
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Team scorecard", fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f))
+            Text("Team scorecard", fontWeight = FontWeight.Bold, fontSize = rsp(15), modifier = Modifier.weight(1f))
             Box {
                 Row(
                     Modifier.clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { open = true }.padding(horizontal = 10.dp, vertical = 6.dp),
                 ) {
-                    Text(period.replaceFirstChar { it.uppercase() }, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text(" ▾", fontSize = 12.sp)
+                    Text(period.replaceFirstChar { it.uppercase() }, fontSize = rsp(12), fontWeight = FontWeight.SemiBold)
+                    Text(" ▾", fontSize = rsp(12))
                 }
                 DropdownMenu(open, onDismissRequest = { open = false }) {
                     listOf("day" to "Day", "week" to "Week", "month" to "Month").forEach { (v, l) ->
@@ -144,7 +145,7 @@ private fun Scorecard(reloadSignal: Int, onSessionExpired: () -> Unit) {
         }
         Spacer(Modifier.height(6.dp))
         if (rows.isEmpty()) {
-            Text("No data for this period.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("No data for this period.", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(rows) { s -> ScoreCardItem(s) }
@@ -168,10 +169,10 @@ private fun ScoreCardItem(s: JSONObject) {
             .background(MaterialTheme.colorScheme.surface)
             .padding(12.dp),
     ) {
-        Text(s.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
+        Text(s.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = rsp(13), maxLines = 1)
         Spacer(Modifier.height(6.dp))
-        Text("$pct%", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = color)
-        Text("completed", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("$pct%", fontWeight = FontWeight.Bold, fontSize = rsp(22), color = color)
+        Text("completed", fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(4.dp))
         // mini bar
         Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
@@ -181,13 +182,13 @@ private fun ScoreCardItem(s: JSONObject) {
         Text(
             "${s.optInt("completed")}/${s.optInt("total")} done" +
                 (s.optInt("overdue").takeIf { it > 0 }?.let { " · $it overdue" } ?: ""),
-            fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         // Timeliness: % of dated completions finished by their due date.
         if (!s.isNull("on_time_pct")) {
             Text(
                 "⏱ ${s.optInt("on_time_pct")}% on time",
-                fontSize = 10.sp,
+                fontSize = rsp(10),
                 color = if (s.optInt("on_time_pct") >= 70) StatusGreen else StatusAmber,
             )
         }
@@ -242,9 +243,9 @@ private fun StatusTaskList(
         loading && rows.isEmpty() -> LoadingBox()
         rows.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("🗒️", fontSize = 40.sp)
-                Text("No Tasks Here", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text("Nothing in this list.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("🗒️", fontSize = rsp(40))
+                Text("No Tasks Here", fontWeight = FontWeight.Bold, fontSize = rsp(16))
+                Text("Nothing in this list.", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         else -> LazyColumn(
@@ -253,7 +254,7 @@ private fun StatusTaskList(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
         ) {
             items(rows) { t -> TaskCard(t, onOpen = { onOpenTask(t.optInt("id")) }, onToggleDone = { toggleDone(t) }) }
-            item { Spacer(Modifier.height(72.dp)) }
+            item { Spacer(Modifier.heightIn(min = 72.dp)) }
         }
     }
 }

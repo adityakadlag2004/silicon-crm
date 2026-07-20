@@ -67,7 +67,7 @@ fun CallAnalyticsScreen(
 
     if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -78,7 +78,7 @@ fun CallAnalyticsScreen(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
             )
-            Text("Call Analytics", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("Call Analytics", fontSize = rsp(22), fontWeight = FontWeight.Bold)
         }
 
         // Tabs
@@ -150,15 +150,15 @@ fun CallAnalyticsScreen(
                         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Text("Employee", Modifier.weight(1.6f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Dialed", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Conn", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Talk", Modifier.weight(1f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Ser.", Modifier.weight(0.8f), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Employee", Modifier.weight(1.6f), fontSize = rsp(11), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Dialed", Modifier.weight(1f), fontSize = rsp(11), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Conn", Modifier.weight(1f), fontSize = rsp(11), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Talk", Modifier.weight(1f), fontSize = rsp(11), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Ser.", Modifier.weight(0.8f), fontSize = rsp(11), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if (emps.isEmpty()) {
-                    item { Text("No active employees.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+                    item { Text("No active employees.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
                 }
                 items(emps) { e ->
                     Card(
@@ -170,11 +170,11 @@ fun CallAnalyticsScreen(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(e.optString("name"), Modifier.weight(1.6f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                            Text("${e.optInt("calls")}", Modifier.weight(1f), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text("${e.optInt("connected")}", Modifier.weight(1f), fontSize = 13.sp, color = StatusGreen)
-                            Text(minsShort(e.optDouble("talk_minutes", 0.0)), Modifier.weight(1f), fontSize = 12.sp)
-                            Text("${e.optInt("serious")}", Modifier.weight(0.8f), fontSize = 13.sp, color = BrandGoldDark, fontWeight = FontWeight.SemiBold)
+                            Text(e.optString("name"), Modifier.weight(1.6f), fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
+                            Text("${e.optInt("calls")}", Modifier.weight(1f), fontSize = rsp(14), fontWeight = FontWeight.Bold)
+                            Text("${e.optInt("connected")}", Modifier.weight(1f), fontSize = rsp(13), color = StatusGreen)
+                            Text(minsShort(e.optDouble("talk_minutes", 0.0)), Modifier.weight(1f), fontSize = rsp(12))
+                            Text("${e.optInt("serious")}", Modifier.weight(0.8f), fontSize = rsp(13), color = BrandGoldDark, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -200,7 +200,7 @@ fun CallAnalyticsScreen(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
         ) {
             if (rows.isEmpty()) {
-                item { Text("No calls in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+                item { Text("No calls in this period.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
             }
             items(rows) { c ->
                 Card(
@@ -215,18 +215,18 @@ fun CallAnalyticsScreen(
                         Column(Modifier.weight(1f)) {
                             Text(
                                 c.optString("client").ifEmpty { c.optString("phone") },
-                                fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold, fontSize = rsp(14),
                             )
                             Text(
                                 "${if (c.optString("direction") == "outgoing") "↗ Out" else "↙ In"} · ${c.optString("employee")} · ${c.optString("time")}",
-                                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("${c.optInt("duration")}s", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("${c.optInt("duration")}s", fontSize = rsp(13), fontWeight = FontWeight.Bold)
                             Text(
                                 if (c.optBoolean("connected")) "Connected" else "Not connected",
-                                fontSize = 10.sp,
+                                fontSize = rsp(10),
                                 color = if (c.optBoolean("connected")) StatusGreen else StatusRed,
                                 fontWeight = FontWeight.SemiBold,
                             )
@@ -252,10 +252,10 @@ private fun AnalyticsStat(
     ) {
         Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                value, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                value, fontSize = rsp(17), fontWeight = FontWeight.Bold,
                 color = if (color == androidx.compose.ui.graphics.Color.Unspecified) MaterialTheme.colorScheme.onSurface else color,
             )
-            Text(title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

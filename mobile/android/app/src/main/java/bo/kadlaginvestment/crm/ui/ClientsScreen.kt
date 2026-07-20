@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -110,7 +111,7 @@ fun ClientsScreen(
 
     if (onBack != null) BackHandler(onBack = onBack)
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -125,7 +126,7 @@ fun ClientsScreen(
                         modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
                     )
                 }
-                Text("Clients", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Clients", fontSize = rsp(22), fontWeight = FontWeight.Bold)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("My", scopeMy) { scopeMy = true; page = 1 }
@@ -154,7 +155,7 @@ fun ClientsScreen(
                     item {
                         Text(
                             if (scopeMy) "No clients mapped to you yet." else "No clients found.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13),
                         )
                     }
                 }
@@ -170,15 +171,15 @@ fun ClientsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(c.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                Text(c.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = rsp(15))
                                 Text(
                                     listOf(c.optString("phone"), c.optString("mapped_to"))
                                         .filter { it.isNotEmpty() }.joinToString(" · "),
-                                    fontSize = 12.sp,
+                                    fontSize = rsp(12),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Text("#${c.optInt("id")}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("#${c.optInt("id")}", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -229,7 +230,7 @@ private fun ClientDetail(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
             )
-            Text(d.optString("name"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(d.optString("name"), fontSize = rsp(20), fontWeight = FontWeight.Bold)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -270,7 +271,7 @@ private fun ClientDetail(
         SectionTitle("Recent sales")
         val sales = d.optJSONArray("recent_sales")
         if (sales == null || sales.length() == 0) {
-            Text("No sales for this client yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Text("No sales for this client yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
         } else {
             for (i in 0 until sales.length()) {
                 val s = sales.getJSONObject(i)
@@ -281,11 +282,11 @@ private fun ClientDetail(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column {
-                            Text(s.optString("product"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text(s.optString("date"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(s.optString("product"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
+                            Text(s.optString("date"), fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(rupees(s.optDouble("amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(rupees(s.optDouble("amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = rsp(14))
                             StatusPill(s.optString("status"))
                         }
                     }
@@ -300,8 +301,8 @@ private fun ClientDetail(
 @Composable
 private fun InfoRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth()) {
-        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.35f))
-        Text(if (value.isEmpty()) "—" else value, fontSize = 13.sp, modifier = Modifier.weight(0.65f))
+        Text(label, fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(0.35f))
+        Text(if (value.isEmpty()) "—" else value, fontSize = rsp(13), modifier = Modifier.weight(0.65f))
     }
 }
 
@@ -346,7 +347,7 @@ private fun AddClientForm(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable { onDone(null) }.padding(end = 12.dp),
             )
-            Text("Add Client", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Add Client", fontSize = rsp(20), fontWeight = FontWeight.Bold)
         }
 
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -414,7 +415,7 @@ private fun AddClientForm(
             }
         }
 
-        message?.let { Text(it, color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+        message?.let { Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold) }
 
         Button(
             onClick = {
@@ -440,8 +441,8 @@ private fun AddClientForm(
                 }
             },
             enabled = !submitting && name.isNotBlank() && phone.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(if (submitting) "Saving…" else "Save Client", fontSize = 16.sp) }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text(if (submitting) "Saving…" else "Save Client", fontSize = rsp(16)) }
 
         Spacer(Modifier.height(24.dp))
     }

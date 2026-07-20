@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -89,7 +90,7 @@ fun RenewalsScreen(
         loading = false
     }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -104,7 +105,7 @@ fun RenewalsScreen(
                         modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
                     )
                 }
-                Text("Renewals", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Renewals", fontSize = rsp(22), fontWeight = FontWeight.Bold)
             }
             Button(onClick = { adding = true }) { Text("＋ Add") }
         }
@@ -134,7 +135,7 @@ fun RenewalsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
             ) {
                 if (rows.isEmpty()) {
-                    item { Text("No renewals found.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+                    item { Text("No renewals found.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
                 }
                 items(rows) { r ->
                     Card(
@@ -147,17 +148,17 @@ fun RenewalsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(r.optString("client"), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                Text(r.optString("client"), fontWeight = FontWeight.SemiBold, fontSize = rsp(15))
                                 Text(
                                     "${r.optString("product")} · ${r.optString("frequency")} · due ${r.optString("renewal_date")}",
-                                    fontSize = 12.sp,
+                                    fontSize = rsp(12),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 if (r.optString("employee").isNotEmpty()) {
-                                    Text(r.optString("employee"), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(r.optString("employee"), fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
-                            Text(rupees(r.optDouble("premium", 0.0)), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(rupees(r.optDouble("premium", 0.0)), fontWeight = FontWeight.Bold, fontSize = rsp(15))
                         }
                     }
                 }
@@ -182,9 +183,9 @@ private fun MiniStat(title: String, value: String, sub: String, modifier: Modifi
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.padding(12.dp)) {
-            Text(title, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text(sub, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = rsp(17), fontWeight = FontWeight.Bold)
+            Text(sub, fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -252,7 +253,7 @@ private fun AddRenewalForm(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onDone).padding(end = 12.dp),
             )
-            Text("Add Renewal", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Add Renewal", fontSize = rsp(20), fontWeight = FontWeight.Bold)
         }
 
         if (selectedClient == null) {
@@ -269,7 +270,7 @@ private fun AddRenewalForm(
                         selectedClient = id to text; clientResults = emptyList()
                     },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                ) { Text(text, Modifier.padding(12.dp), fontSize = 14.sp) }
+                ) { Text(text, Modifier.padding(12.dp), fontSize = rsp(14)) }
             }
         } else {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
@@ -278,10 +279,10 @@ private fun AddRenewalForm(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(selectedClient!!.second, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(selectedClient!!.second, fontSize = rsp(14), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     Text(
                         "Change",
-                        color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.secondary, fontSize = rsp(13), fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { selectedClient = null; clientQuery = "" },
                     )
                 }
@@ -355,7 +356,7 @@ private fun AddRenewalForm(
         }
 
         message?.let { (ok, text) ->
-            Text(text, color = if (ok) StatusGreen else StatusRed, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(text, color = if (ok) StatusGreen else StatusRed, fontSize = rsp(14), fontWeight = FontWeight.SemiBold)
         }
 
         Button(
@@ -386,8 +387,8 @@ private fun AddRenewalForm(
             },
             enabled = !submitting && selectedClient != null && selectedProduct != null
                 && frequency != null && premium.isNotBlank() && renewalDate.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(if (submitting) "Saving…" else "Save Renewal", fontSize = 16.sp) }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text(if (submitting) "Saving…" else "Save Renewal", fontSize = rsp(16)) }
 
         Spacer(Modifier.height(24.dp))
     }

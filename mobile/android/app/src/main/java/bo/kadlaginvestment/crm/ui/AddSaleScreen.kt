@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -111,7 +112,7 @@ fun AddSaleScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Add Sale", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("Add Sale", fontSize = rsp(22), fontWeight = FontWeight.Bold)
 
         // ── Client picker ──
         if (selectedClient == null) {
@@ -130,7 +131,7 @@ fun AddSaleScreen(
                     },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 ) {
-                    Text(text, Modifier.padding(12.dp), fontSize = 14.sp)
+                    Text(text, Modifier.padding(12.dp), fontSize = rsp(14))
                 }
             }
         } else {
@@ -140,11 +141,11 @@ fun AddSaleScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(selectedClient!!.second, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(selectedClient!!.second, fontSize = rsp(14), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     Text(
                         "Change",
                         color = MaterialTheme.colorScheme.secondary,
-                        fontSize = 13.sp,
+                        fontSize = rsp(13),
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable { selectedClient = null; clientQuery = "" },
                     )
@@ -199,7 +200,7 @@ fun AddSaleScreen(
         }
 
         if (selectedProduct?.optBoolean("is_health") == true) {
-            Text("Policy type", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Policy type", fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(selected = policyType == "fresh", onClick = { policyType = "fresh" })
                 Text("Fresh", Modifier.clickable { policyType = "fresh" })
@@ -244,7 +245,7 @@ fun AddSaleScreen(
             Text(
                 text,
                 color = if (ok) StatusGreen else StatusRed,
-                fontSize = 14.sp,
+                fontSize = rsp(14),
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -276,9 +277,9 @@ fun AddSaleScreen(
                 }
             },
             enabled = !submitting && selectedClient != null && selectedProduct != null && amount.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
         ) {
-            Text(if (submitting) "Saving…" else "Save Sale", fontSize = 16.sp)
+            Text(if (submitting) "Saving…" else "Save Sale", fontSize = rsp(16))
         }
 
         Spacer(Modifier.height(24.dp))

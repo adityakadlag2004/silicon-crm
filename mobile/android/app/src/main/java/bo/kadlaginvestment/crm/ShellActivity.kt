@@ -70,6 +70,7 @@ import bo.kadlaginvestment.crm.ui.SalesScreen
 import bo.kadlaginvestment.crm.ui.SettingsScreen
 import bo.kadlaginvestment.crm.ui.SimSettingsScreen
 import bo.kadlaginvestment.crm.ui.TeamScreen
+import bo.kadlaginvestment.crm.ui.rsp
 
 @androidx.compose.runtime.Composable
 private fun PermCard(title: String, desc: String, cta: String, onFix: () -> Unit) {
@@ -78,12 +79,12 @@ private fun PermCard(title: String, desc: String, cta: String, onFix: () -> Unit
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = rsp(15))
             Spacer(Modifier.height(4.dp))
-            Text(desc, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(desc, fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(10.dp))
             // Full-width button so it can never be clipped off-screen.
-            Button(onClick = onFix, modifier = Modifier.fillMaxWidth().height(46.dp)) { Text(cta) }
+            Button(onClick = onFix, modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp)) { Text(cta) }
         }
     }
 }
@@ -304,12 +305,12 @@ class ShellActivity : ComponentActivity() {
                             Column(
                                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
                             ) {
-                                Text("Permissions needed", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                Text("Permissions needed", fontSize = rsp(20), fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.height(10.dp))
                                 Text(
                                     "These let call tracking and follow-up reminders work. The app " +
                                         "keeps asking each time you open it until they're allowed.",
-                                    fontSize = 14.sp,
+                                    fontSize = rsp(14),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(Modifier.height(18.dp))

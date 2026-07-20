@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -123,7 +124,7 @@ private fun LeadList(
         loading = false
     }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -138,7 +139,7 @@ private fun LeadList(
                         modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
                     )
                 }
-                Text("Leads", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Leads", fontSize = rsp(22), fontWeight = FontWeight.Bold)
             }
             Button(onClick = onCreate) { Text("＋ Add") }
         }
@@ -170,7 +171,7 @@ private fun LeadList(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
             ) {
                 if (rows.isEmpty()) {
-                    item { Text("No leads here.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+                    item { Text("No leads here.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
                 }
                 items(rows) { l ->
                     Card(
@@ -184,18 +185,18 @@ private fun LeadList(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(l.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                Text(l.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = rsp(15))
                                 Text(
                                     listOf(l.optString("phone"), l.optString("assigned_to"))
                                         .filter { it.isNotEmpty() }.joinToString(" · "),
-                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 LeadStagePill(l.optString("stage"), l.optBoolean("converted"))
                                 Text(
                                     l.optString("progress"),
-                                    fontSize = 12.sp,
+                                    fontSize = rsp(12),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -223,7 +224,7 @@ private fun LeadStagePill(stage: String, converted: Boolean) {
         stage == "half_sold" -> StatusAmber to "Half Sold"
         else -> BrandMuted to "Pending"
     }
-    Text(label, fontSize = 11.sp, color = color, fontWeight = FontWeight.Bold)
+    Text(label, fontSize = rsp(11), color = color, fontWeight = FontWeight.Bold)
 }
 
 @Composable
@@ -274,7 +275,7 @@ private fun LeadDetail(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
             )
-            Text(d.optString("name"), fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(d.optString("name"), fontSize = rsp(20), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             LeadStagePill(d.optString("stage"), d.optInt("converted_client_id") > 0)
         }
 
@@ -301,9 +302,9 @@ private fun LeadDetail(
             }
         }
 
-        actionError?.let { Text(it, color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+        actionError?.let { Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold) }
         if (d.optInt("converted_client_id") > 0) {
-            Text("Converted to client #${d.optInt("converted_client_id")}", color = StatusGreen, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("Converted to client #${d.optInt("converted_client_id")}", color = StatusGreen, fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
         }
 
         SectionTitle("Product progress")
@@ -313,9 +314,9 @@ private fun LeadDetail(
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(p.optString("label"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(p.optString("label"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
                         val achieved = p.optDouble("achieved", 0.0)
-                        if (achieved > 0) Text(rupees(achieved), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (achieved > 0) Text(rupees(achieved), fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         val current = p.optString("status")
@@ -356,10 +357,10 @@ private fun LeadDetail(
         for (i in 0 until (remarks?.length() ?: 0)) {
             val r = remarks!!.getJSONObject(i)
             Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                Text(r.optString("text"), fontSize = 13.sp)
+                Text(r.optString("text"), fontSize = rsp(13))
                 Text(
                     "${r.optString("by")} · ${r.optString("at")}",
-                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -406,7 +407,7 @@ private fun LeadCreateForm(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onDone).padding(end = 12.dp),
             )
-            Text("New Lead", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("New Lead", fontSize = rsp(20), fontWeight = FontWeight.Bold)
         }
 
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Customer name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -460,7 +461,7 @@ private fun LeadCreateForm(
             }
         }
 
-        message?.let { Text(it, color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+        message?.let { Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold) }
 
         Button(
             onClick = {
@@ -483,8 +484,8 @@ private fun LeadCreateForm(
                 }
             },
             enabled = !submitting && name.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(if (submitting) "Saving…" else "Create Lead", fontSize = 16.sp) }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text(if (submitting) "Saving…" else "Create Lead", fontSize = rsp(16)) }
 
         Spacer(Modifier.height(24.dp))
     }

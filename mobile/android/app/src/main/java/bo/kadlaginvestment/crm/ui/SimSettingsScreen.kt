@@ -49,26 +49,26 @@ fun SimSettingsScreen(
             Text("← Back", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack))
             Spacer(Modifier.padding(6.dp))
-            Text("Office SIM", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Office SIM", fontSize = rsp(20), fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(8.dp))
         Text(
             "Only calls made or received on the office SIM are tracked and prompt a follow-up. Your personal SIM is ignored.",
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
 
         when {
             sims.isEmpty() -> Text(
                 "No SIMs detected, or phone permission is not granted yet. Grant the phone permission and reopen this screen.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13),
             )
             sims.size == 1 -> {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(Modifier.padding(14.dp)) {
                         Text(sims[0].label, fontWeight = FontWeight.SemiBold)
                         Text("This is your only SIM — all its calls are tracked.",
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -82,7 +82,7 @@ fun SimSettingsScreen(
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = selectedSub == sim.subId,
                                 onClick = { selectedSub = sim.subId; saved = false })
-                            Text(sim.label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text(sim.label, fontSize = rsp(14), fontWeight = FontWeight.Medium)
                         }
                     }
                 }
@@ -103,7 +103,7 @@ fun SimSettingsScreen(
         // Fires FollowupActivity with a fake call so anyone can verify in two
         // seconds that the post-call popup works on this phone (permissions,
         // rendering) — separating device problems from SIM/window config.
-        Text("Not seeing the popup after calls?", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text("Not seeing the popup after calls?", fontSize = rsp(14), fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
         OutlinedButton(
             onClick = {
@@ -120,7 +120,7 @@ fun SimSettingsScreen(
         ) { Text("▶ Test the follow-up popup") }
         Text(
             "If a popup appears, the app is fine — check the office SIM above and the popup hours in App Settings.",
-            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

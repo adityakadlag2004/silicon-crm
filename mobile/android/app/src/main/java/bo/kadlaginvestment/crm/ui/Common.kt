@@ -40,7 +40,7 @@ fun ErrorBox(message: String, modifier: Modifier = Modifier, onRetry: () -> Unit
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Something went wrong", fontWeight = FontWeight.SemiBold)
-            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
             androidx.compose.foundation.layout.Spacer(Modifier.height(12.dp))
             Button(onClick = onRetry) { Text("Retry") }
         }
@@ -59,13 +59,13 @@ fun StatusPill(status: String) {
             .background(bg.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        Text(label, fontSize = 10.sp, color = bg, fontWeight = FontWeight.SemiBold)
+        Text(label, fontSize = rsp(10), color = bg, fontWeight = FontWeight.SemiBold)
     }
 }
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 6.dp))
+    Text(text, fontSize = rsp(16), fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 6.dp))
 }
 
 @Composable
@@ -79,6 +79,6 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp)
     ) {
-        Text(text, color = fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(text, color = fg, fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -115,7 +116,7 @@ private fun TeamList(
         }
     }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -128,7 +129,7 @@ private fun TeamList(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
                 )
-                Text("Team", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("Team", fontSize = rsp(22), fontWeight = FontWeight.Bold)
             }
             Button(onClick = onCreate) { Text("＋ Add") }
         }
@@ -157,12 +158,12 @@ private fun TeamList(
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(e.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                    Text(e.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = rsp(15))
                                     Spacer(Modifier.padding(horizontal = 4.dp))
                                     RolePill(e.optString("role"))
                                     if (!e.optBoolean("active")) {
                                         Spacer(Modifier.padding(horizontal = 3.dp))
-                                        Text("INACTIVE", fontSize = 9.sp, color = StatusRed, fontWeight = FontWeight.Bold)
+                                        Text("INACTIVE", fontSize = rsp(9), color = StatusRed, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 Text(
@@ -170,15 +171,15 @@ private fun TeamList(
                                         e.optString("employee_number"),
                                         "${e.optInt("client_count")} clients",
                                     ).filter { it.isNotEmpty() }.joinToString(" · "),
-                                    fontSize = 12.sp,
+                                    fontSize = rsp(12),
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(rupees(e.optDouble("month_amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(rupees(e.optDouble("month_amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = rsp(14))
                                 Text(
                                     "${e.optInt("month_sales")} sale(s) this month",
-                                    fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -197,7 +198,7 @@ private fun RolePill(role: String) {
         "manager" -> StatusAmber
         else -> StatusGreen
     }
-    Text(role.uppercase(), fontSize = 9.sp, color = color, fontWeight = FontWeight.Bold)
+    Text(role.uppercase(), fontSize = rsp(9), color = color, fontWeight = FontWeight.Bold)
 }
 
 @Composable
@@ -318,7 +319,7 @@ private fun TeamDetail(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
             )
-            Text(d.optString("username"), fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(d.optString("username"), fontSize = rsp(20), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             RolePill(d.optString("role"))
         }
 
@@ -368,7 +369,7 @@ private fun TeamDetail(
         OutlinedTextField(value = empNumber, onValueChange = { empNumber = it }, label = { Text("Employee number") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
         message?.let { (ok, text) ->
-            Text(text, color = if (ok) StatusGreen else StatusRed, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(text, color = if (ok) StatusGreen else StatusRed, fontSize = rsp(14), fontWeight = FontWeight.SemiBold)
         }
 
         Button(
@@ -386,7 +387,7 @@ private fun TeamDetail(
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
         ) { Text("Save changes") }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -407,8 +408,8 @@ private fun MiniStatCard(title: String, value: String, modifier: Modifier = Modi
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text(title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = rsp(14), fontWeight = FontWeight.Bold)
+            Text(title, fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -443,7 +444,7 @@ private fun TeamCreateForm(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onDone).padding(end = 12.dp),
             )
-            Text("Add Team Member", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Add Team Member", fontSize = rsp(20), fontWeight = FontWeight.Bold)
         }
 
         OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Username *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -487,7 +488,7 @@ private fun TeamCreateForm(
             modifier = Modifier.fillMaxWidth(), singleLine = true,
         )
 
-        message?.let { Text(it, color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+        message?.let { Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold) }
 
         Button(
             onClick = {
@@ -507,8 +508,8 @@ private fun TeamCreateForm(
                 }
             },
             enabled = !submitting && username.isNotBlank() && password.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(if (submitting) "Creating…" else "Create Member", fontSize = 16.sp) }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text(if (submitting) "Creating…" else "Create Member", fontSize = rsp(16)) }
 
         Spacer(Modifier.height(24.dp))
     }

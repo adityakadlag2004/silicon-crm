@@ -50,6 +50,7 @@ import bo.kadlaginvestment.crm.ui.TaskActivitiesScreen
 import bo.kadlaginvestment.crm.ui.TaskDetailScreen
 import bo.kadlaginvestment.crm.ui.TaskMoreScreen
 import bo.kadlaginvestment.crm.ui.TaskPagerScreen
+import bo.kadlaginvestment.crm.ui.rsp
 
 /** Self-contained native Task module: its own bottom nav, FAB and sub-pages. */
 class TasksActivity : ComponentActivity() {
@@ -116,14 +117,14 @@ class TasksActivity : ComponentActivity() {
                         TopAppBar(
                             title = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("🗂", fontSize = 18.sp, modifier = Modifier.padding(end = 8.dp))
+                                    Text("🗂", fontSize = rsp(18), modifier = Modifier.padding(end = 8.dp))
                                     Text("Tasks", fontWeight = FontWeight.Bold)
                                 }
                             },
                             actions = {
                                 Text(
                                     "↻",
-                                    fontSize = 20.sp,
+                                    fontSize = rsp(20),
                                     color = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier
                                         .padding(end = 16.dp)
@@ -150,7 +151,7 @@ class TasksActivity : ComponentActivity() {
                                     selected = tab == i && subRoute == null,
                                     onClick = { tab = i; subRoute = null },
                                     icon = { Icon(t.icon, contentDescription = t.label) },
-                                    label = { Text(t.label, fontSize = 10.sp) },
+                                    label = { Text(t.label, fontSize = rsp(10)) },
                                 )
                             }
                         }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,6 +37,7 @@ import bo.kadlaginvestment.crm.net.ApiClient
 import bo.kadlaginvestment.crm.ui.BrandGoldDark
 import bo.kadlaginvestment.crm.ui.KadlagTheme
 import bo.kadlaginvestment.crm.ui.StatusRed
+import bo.kadlaginvestment.crm.ui.rsp
 import kotlinx.coroutines.launch
 
 /** Native login screen. On success the session cookies are stored (shared
@@ -121,19 +123,19 @@ private fun LoginForm(sessionExpired: Boolean = false, onLoggedIn: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Spacer(Modifier.height(56.dp))
+        Spacer(Modifier.heightIn(min = 56.dp))
         androidx.compose.foundation.Image(
             painter = androidx.compose.ui.res.painterResource(id = bo.kadlaginvestment.crm.R.drawable.kilogo),
             contentDescription = "Kadlag Investment",
-            modifier = Modifier.fillMaxWidth(0.72f).height(120.dp),
+            modifier = Modifier.fillMaxWidth(0.72f).heightIn(min = 120.dp),
             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
         )
         Text(
             "Back Office",
-            fontSize = 15.sp,
+            fontSize = rsp(15),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(36.dp))
+        Spacer(Modifier.heightIn(min = 36.dp))
 
         OutlinedTextField(
             value = username,
@@ -155,16 +157,16 @@ private fun LoginForm(sessionExpired: Boolean = false, onLoggedIn: () -> Unit) {
 
         error?.let {
             Spacer(Modifier.height(10.dp))
-            Text(it, color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+            Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
         }
 
         Spacer(Modifier.height(20.dp))
         Button(
             onClick = { submit() },
             enabled = !loading && username.isNotBlank() && password.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(if (loading) "Signing in…" else "Sign in", fontSize = 16.sp) }
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text(if (loading) "Signing in…" else "Sign in", fontSize = rsp(16)) }
 
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.heightIn(min = 40.dp))
     }
 }

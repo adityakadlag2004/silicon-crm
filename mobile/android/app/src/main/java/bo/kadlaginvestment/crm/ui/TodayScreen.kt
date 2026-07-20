@@ -74,7 +74,7 @@ fun TodayScreen(
     }
 
     LazyColumn(
-        modifier.fillMaxSize().padding(horizontal = 16.dp),
+        modifier.fillMaxSize().padding(horizontal = rdp(16)),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
     ) {
@@ -83,8 +83,8 @@ fun TodayScreen(
                 Text("← Back", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clickable(onClick = onBack))
                 Spacer(Modifier.padding(6.dp))
-                Text("📅 Today", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text("↻", fontSize = 20.sp, color = MaterialTheme.colorScheme.secondary,
+                Text("📅 Today", fontSize = rsp(22), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text("↻", fontSize = rsp(20), color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.clickable { data = null; reloadKey++ }.padding(8.dp))
             }
         }
@@ -103,13 +103,13 @@ fun TodayScreen(
                     ),
                 ) {
                     Column(Modifier.padding(12.dp)) {
-                        Text(t.optString("title"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(t.optString("title"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
                         Row {
                             Text(
                                 (t.optString("due_time").takeIf { it.isNotBlank() }?.let { fmt12h(it) }
                                     ?: fmtDate(t.optString("due_date"))) +
                                     (t.optString("client").takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
-                                fontSize = 12.sp,
+                                fontSize = rsp(12),
                                 color = if (t.optString("status") == "overdue") StatusRed
                                 else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -128,14 +128,14 @@ fun TodayScreen(
                 Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(f.optString("client").ifBlank { f.optString("phone") },
-                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
                         Text(
                             f.optString("scheduled_at") +
                                 (f.optString("note").takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""),
-                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { dial(f.optString("phone")) }) { Text("📞 Call", fontSize = 12.sp) }
+                            OutlinedButton(onClick = { dial(f.optString("phone")) }) { Text("📞 Call", fontSize = rsp(12)) }
                             OutlinedButton(onClick = {
                                 scope.launch {
                                     ApiClient.post(
@@ -144,7 +144,7 @@ fun TodayScreen(
                                     )
                                     data = null; reloadKey++
                                 }
-                            }) { Text("✓ Done", fontSize = 12.sp) }
+                            }) { Text("✓ Done", fontSize = rsp(12)) }
                         }
                     }
                 }
@@ -162,12 +162,12 @@ fun TodayScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 ) {
                     Column(Modifier.padding(12.dp)) {
-                        Text(r.optString("client"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(r.optString("client"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
                         val premium = "₹" + String.format(java.util.Locale.US, "%,.0f", r.optDouble("premium", 0.0))
                         Text(
                             "${r.optString("product")} · ${fmtDate(r.optString("renewal_date"))} · $premium" +
                                 if (r.optBoolean("overdue")) "  · OVERDUE" else "",
-                            fontSize = 12.sp,
+                            fontSize = rsp(12),
                             color = if (r.optBoolean("overdue")) StatusRed else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -181,5 +181,5 @@ fun TodayScreen(
 
 @Composable
 private fun EmptyLine(text: String) {
-    Text(text, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(text, fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -204,10 +206,10 @@ fun TaskDetailScreen(
             }
         }
 
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-            Text("#${t.optInt("id")}", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = rdp(16))) {
+            Text("#${t.optInt("id")}", fontSize = rsp(12), fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(t.optString("title"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(t.optString("title"), fontSize = rsp(20), fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Pill(t.optString("priority_label"), priorityColor(t.optString("priority")))
@@ -220,13 +222,13 @@ fun TaskDetailScreen(
             val roster = t.optJSONArray("ack_roster")
             if ((roster?.length() ?: 0) > 1) {
                 Spacer(Modifier.height(4.dp))
-                Text("Seen", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Seen", fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 for (i in 0 until roster!!.length()) {
                     val r = roster.optJSONObject(i) ?: continue
                     val seen = r.optBoolean("acknowledged")
                     Text(
                         (if (seen) "✓ " else "○ ") + r.optString("name") + "  ·  " + r.optString("status"),
-                        fontSize = 13.sp,
+                        fontSize = rsp(13),
                         color = if (seen) StatusGreen else StatusAmber,
                         modifier = Modifier.padding(start = 8.dp, top = 2.dp),
                     )
@@ -285,7 +287,7 @@ fun TaskDetailScreen(
 
             if (t.optString("description").isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
-                Text(t.optString("description"), fontSize = 14.sp)
+                Text(t.optString("description"), fontSize = rsp(14))
             }
 
             // Checklist
@@ -308,7 +310,7 @@ fun TaskDetailScreen(
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(Modifier.size(8.dp))
-                        Text(item.optString("title"), fontSize = 14.sp,
+                        Text(item.optString("title"), fontSize = rsp(14),
                             color = if (d) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                     }
                 }
@@ -334,7 +336,7 @@ fun TaskDetailScreen(
                     OutlinedButton(
                         onClick = { if (!uploading) pickFile.launch("*/*") },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (uploading) "Uploading…" else "📎 Attach file / photo", fontSize = 13.sp) }
+                    ) { Text(if (uploading) "Uploading…" else "📎 Attach file / photo", fontSize = rsp(13)) }
                 }
             }
             if ((atts?.length() ?: 0) > 0) {
@@ -345,10 +347,10 @@ fun TaskDetailScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     ) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (a.optBoolean("is_voice")) "🎙️" else "📎", fontSize = 16.sp)
+                            Text(if (a.optBoolean("is_voice")) "🎙️" else "📎", fontSize = rsp(16))
                             Spacer(Modifier.size(8.dp))
-                            Text(a.optString("filename"), fontSize = 13.sp, modifier = Modifier.weight(1f))
-                            Text("Open", color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
+                            Text(a.optString("filename"), fontSize = rsp(13), modifier = Modifier.weight(1f))
+                            Text("Open", color = MaterialTheme.colorScheme.secondary, fontSize = rsp(12))
                         }
                     }
                 }
@@ -359,21 +361,21 @@ fun TaskDetailScreen(
             if ((subs?.length() ?: 0) > 0) {
                 SectionTitle("In Loop")
                 Text((0 until subs!!.length()).joinToString(", ") { subs.getJSONObject(it).optString("name") },
-                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             // Comments
             SectionTitle("Comments")
             val comments = t.optJSONArray("comments")
             if ((comments?.length() ?: 0) == 0) {
-                Text("No comments yet.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("No comments yet.", fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             for (i in 0 until (comments?.length() ?: 0)) {
                 val c = comments!!.getJSONObject(i)
                 Column(Modifier.padding(vertical = 4.dp)) {
-                    Text(c.optString("author"), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    Text(fmtDate(c.optString("at").take(10)), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(c.optString("body"), fontSize = 14.sp)
+                    Text(c.optString("author"), fontWeight = FontWeight.SemiBold, fontSize = rsp(13))
+                    Text(fmtDate(c.optString("at").take(10)), fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(c.optString("body"), fontSize = rsp(14))
                 }
             }
 
@@ -387,7 +389,7 @@ fun TaskDetailScreen(
                     Text(
                         "${a.optString("actor")} · ${a.optString("action")}" +
                             (a.optString("detail").takeIf { it.isNotBlank() }?.let { " — $it" } ?: ""),
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -404,40 +406,48 @@ fun TaskDetailScreen(
                     containerColor = StatusAmber,
                     contentColor = androidx.compose.ui.graphics.Color.White,
                 ),
-            ) { Text("✋ Acknowledge — I've seen this task", fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+            ) { Text("✋ Acknowledge — I've seen this task", fontSize = rsp(14), fontWeight = FontWeight.Bold) }
         }
 
-        // Bottom actions
-        Row(
+        // Bottom actions. FlowRow, not Row: an admin looking at a pending task
+        // sees up to five buttons here, which on a 360dp phone left each about
+        // 60dp and truncated the labels. Wrapping to a second line is better
+        // than five unreadable buttons.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
             Modifier.fillMaxWidth().padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (canEdit && (status == "pending" || status == "overdue")) {
                 OutlinedButton(
                     onClick = {
                         act(JSONObject().put("action", "status").put("status", "in_progress"))
                     },
-                    modifier = Modifier.weight(1f),
-                ) { Text("▶ Start", fontSize = 13.sp) }
+                    modifier = Modifier.widthIn(min = 96.dp).heightIn(min = TouchTarget),
+                ) { Text("▶ Start", fontSize = rsp(13), maxLines = 1) }
             }
             if (canEdit) {
                 Button(
                     onClick = {
                         act(JSONObject().put("action", "status").put("status", if (done) "pending" else "completed"))
                     },
-                    modifier = Modifier.weight(1f),
-                ) { Text(if (done) "Reopen" else "Complete", fontSize = 13.sp) }
+                    modifier = Modifier.widthIn(min = 110.dp).heightIn(min = TouchTarget),
+                ) { Text(if (done) "Reopen" else "Complete", fontSize = rsp(13), maxLines = 1) }
             }
-            OutlinedButton(onClick = { showComment = true }, modifier = Modifier.weight(1f)) {
-                Text("Comment", fontSize = 13.sp)
+            OutlinedButton(onClick = { showComment = true },
+                modifier = Modifier.widthIn(min = 104.dp).heightIn(min = TouchTarget)) {
+                Text("Comment", fontSize = rsp(13), maxLines = 1)
             }
             if (canEdit) {
-                OutlinedButton(onClick = { onEdit(t) }, modifier = Modifier.weight(1f)) {
-                    Text("Edit", fontSize = 13.sp)
+                OutlinedButton(onClick = { onEdit(t) },
+                    modifier = Modifier.widthIn(min = 84.dp).heightIn(min = TouchTarget)) {
+                    Text("Edit", fontSize = rsp(13), maxLines = 1)
                 }
             }
             if (canDelete) {
-                OutlinedButton(onClick = { confirmDelete = true }) {
+                OutlinedButton(onClick = { confirmDelete = true },
+                    modifier = Modifier.heightIn(min = TouchTarget)) {
                     Text("🗑", color = StatusRed)
                 }
             }
@@ -448,7 +458,10 @@ fun TaskDetailScreen(
 @Composable
 private fun InfoRow(label: String, value: String, valueColor: androidx.compose.ui.graphics.Color? = null) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp))
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = valueColor ?: MaterialTheme.colorScheme.onSurface)
+        // widthIn, not width: at a large system font scale a hard 96dp
+        // truncated the label while the value column sat half empty.
+        Text(label, fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.widthIn(min = 88.dp, max = 132.dp))
+        Text(value, fontSize = rsp(13), fontWeight = FontWeight.Medium, color = valueColor ?: MaterialTheme.colorScheme.onSurface)
     }
 }

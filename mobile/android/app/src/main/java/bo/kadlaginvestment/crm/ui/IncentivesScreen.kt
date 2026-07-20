@@ -54,7 +54,7 @@ fun IncentivesScreen(
     BackHandler(onBack = onBack)
     var tab by remember { mutableStateOf(0) } // 0 = rules, 1 = campaigns
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -65,7 +65,7 @@ fun IncentivesScreen(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
             )
-            Text("Incentives", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("Incentives", fontSize = rsp(22), fontWeight = FontWeight.Bold)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Rules", tab == 0) { tab = 0 }
@@ -152,7 +152,7 @@ private fun RulesTab(onSessionExpired: () -> Unit) {
         )
     }
 
-    actionError?.let { Text(it, color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+    actionError?.let { Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -175,7 +175,7 @@ private fun RulesTab(onSessionExpired: () -> Unit) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(rule.optString("product"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text(rule.optString("product"), fontWeight = FontWeight.Bold, fontSize = rsp(15))
                         Switch(
                             checked = rule.optBoolean("active"),
                             onCheckedChange = { on ->
@@ -189,7 +189,7 @@ private fun RulesTab(onSessionExpired: () -> Unit) {
                             rule.optDouble("points_per_unit", 0.0),
                             rupees(rule.optDouble("unit_amount", 0.0)),
                         ),
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     val slabs = rule.optJSONArray("slabs") ?: JSONArray()
                     for (i in 0 until slabs.length()) {
@@ -202,11 +202,11 @@ private fun RulesTab(onSessionExpired: () -> Unit) {
                             Text(
                                 "Slab: ${rupees(s.optDouble("threshold", 0.0))} → ${"%.0f".format(s.optDouble("payout", 0.0))} pts" +
                                     (s.optString("label").takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: ""),
-                                fontSize = 12.sp,
+                                fontSize = rsp(12),
                             )
                             Text(
                                 "✕",
-                                color = StatusRed, fontSize = 14.sp,
+                                color = StatusRed, fontSize = rsp(14),
                                 modifier = Modifier.clickable {
                                     mutate("/clients/incentives/slab/${s.getInt("id")}/delete/")
                                 }.padding(4.dp),
@@ -214,13 +214,13 @@ private fun RulesTab(onSessionExpired: () -> Unit) {
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("Edit", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp,
+                        Text("Edit", color = MaterialTheme.colorScheme.secondary, fontSize = rsp(13),
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.clickable { editRule = rule }.padding(4.dp))
-                        Text("＋ Slab", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp,
+                        Text("＋ Slab", color = MaterialTheme.colorScheme.secondary, fontSize = rsp(13),
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.clickable { slabFor = rule }.padding(4.dp))
-                        Text("Delete", color = StatusRed, fontSize = 13.sp,
+                        Text("Delete", color = StatusRed, fontSize = rsp(13),
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.clickable {
                                 mutate("/clients/incentives/rule/${rule.getInt("id")}/delete/")
@@ -306,7 +306,7 @@ private fun CampaignsTab(onSessionExpired: () -> Unit) {
         )
     }
 
-    actionError?.let { Text(it, color = StatusRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+    actionError?.let { Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -326,10 +326,10 @@ private fun CampaignsTab(onSessionExpired: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(c.optString("name"), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                            Text(c.optString("name"), fontWeight = FontWeight.Bold, fontSize = rsp(15))
                             Text(
                                 "${c.optString("start_date")} → ${c.optString("end_date")}",
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Switch(
@@ -360,10 +360,10 @@ private fun CampaignsTab(onSessionExpired: () -> Unit) {
                                             rupees(cp.optDouble("unit_amount", 0.0)),
                                         )
                                     else "  ·  target slabs",
-                                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                    fontSize = rsp(13), fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    "✕", color = StatusRed, fontSize = 14.sp,
+                                    "✕", color = StatusRed, fontSize = rsp(14),
                                     modifier = Modifier.clickable {
                                         mutate("/clients/campaigns/product/${cp.getInt("id")}/delete/")
                                     }.padding(4.dp),
@@ -378,10 +378,10 @@ private fun CampaignsTab(onSessionExpired: () -> Unit) {
                                 ) {
                                     Text(
                                         "  ${rupees(s.optDouble("threshold", 0.0))} → ${"%.0f".format(s.optDouble("payout", 0.0))} pts",
-                                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                     Text(
-                                        "✕", color = StatusRed, fontSize = 12.sp,
+                                        "✕", color = StatusRed, fontSize = rsp(12),
                                         modifier = Modifier.clickable {
                                             mutate("/clients/campaigns/slab/${s.getInt("id")}/delete/")
                                         }.padding(2.dp),
@@ -392,17 +392,17 @@ private fun CampaignsTab(onSessionExpired: () -> Unit) {
                                 Text(
                                     "＋ Add slab",
                                     color = MaterialTheme.colorScheme.secondary,
-                                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                                    fontSize = rsp(12), fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.clickable { slabForCp = cp }.padding(2.dp),
                                 )
                             }
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("＋ Product", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp,
+                        Text("＋ Product", color = MaterialTheme.colorScheme.secondary, fontSize = rsp(13),
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.clickable { addProductTo = c }.padding(4.dp))
-                        Text("Delete campaign", color = StatusRed, fontSize = 13.sp,
+                        Text("Delete campaign", color = StatusRed, fontSize = rsp(13),
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.clickable {
                                 mutate("/clients/campaigns/${c.getInt("id")}/delete/")
@@ -600,7 +600,7 @@ private fun CampaignProductDialog(
                         label = { Text("Points per unit") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 } else {
                     Text("Add slabs after creating (target payouts use cumulative slabs).",
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         },

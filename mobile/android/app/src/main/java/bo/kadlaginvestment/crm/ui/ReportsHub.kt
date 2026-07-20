@@ -67,7 +67,7 @@ fun ReportsHub(
 
     val isManagerPlus = role == "admin" || role == "manager"
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -78,7 +78,7 @@ fun ReportsHub(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
             )
-            Text("Reports", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("Reports", fontSize = rsp(22), fontWeight = FontWeight.Bold)
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
@@ -86,7 +86,7 @@ fun ReportsHub(
             item { ReportCard("📆", "Past Performance", "Month-by-month business over the last year") { sub = "past" } }
             if (isManagerPlus) {
                 item { ReportCard("🧾", "Monthly Report", "Product-wise + employee-wise for a month") { sub = "monthly" } }
-                item { Spacer(Modifier.height(4.dp)); Text("Detailed tools (open on web)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
+                item { Spacer(Modifier.height(4.dp)); Text("Detailed tools (open on web)", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
                 item { ReportCard("💹", "Business Analytics", "Revenue vs expenses, margins", web = true) { onOpenWeb("/clients/reports/business-analytics/") } }
                 item { ReportCard("💰", "Net Business", "Sales minus redemptions", web = true) { onOpenWeb("/clients/dashboard/net-business/") } }
                 item { ReportCard("🔁", "Net SIP", "SIP fresh vs stopped", web = true) { onOpenWeb("/clients/dashboard/net-sip/") } }
@@ -106,12 +106,12 @@ private fun ReportCard(icon: String, title: String, subtitle: String, web: Boole
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(icon, fontSize = 22.sp, modifier = Modifier.padding(end = 14.dp))
+            Text(icon, fontSize = rsp(22), modifier = Modifier.padding(end = 14.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, fontSize = rsp(15), fontWeight = FontWeight.SemiBold)
+                Text(subtitle, fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(if (web) "web ›" else "›", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (web) "web ›" else "›", fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -147,7 +147,7 @@ private fun MonthlyReportScreen(
 
     if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         ReportHeader("Monthly Report", onBack)
 
         val d = data
@@ -194,12 +194,12 @@ private fun MonthlyReportScreen(
                 }
             }
             item { SectionTitle("By product") }
-            if (prodRows.isEmpty()) item { Text("No approved business this month.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+            if (prodRows.isEmpty()) item { Text("No approved business this month.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
             items(prodRows) { p ->
                 Column(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(p.optString("name"), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text("${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(p.optString("name"), fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
+                        Text("${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = rsp(13), fontWeight = FontWeight.Bold)
                     }
                     Spacer(Modifier.height(3.dp))
                     BarLine(if (maxProd > 0) (p.optDouble("amount", 0.0) / maxProd).toFloat() else 0f)
@@ -213,10 +213,10 @@ private fun MonthlyReportScreen(
                         Modifier.fillMaxWidth().padding(vertical = 5.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(e.optString("name"), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(e.optString("name"), fontSize = rsp(14), fontWeight = FontWeight.Medium)
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(rupees(e.optDouble("amount", 0.0)), fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                            Text("%.0f pts".format(e.optDouble("points", 0.0)), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(rupees(e.optDouble("amount", 0.0)), fontSize = rsp(14), fontWeight = FontWeight.Bold)
+                            Text("%.0f pts".format(e.optDouble("points", 0.0)), fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -252,7 +252,7 @@ private fun PastPerformanceScreen(
 
     if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         ReportHeader("Past Performance", onBack)
         val d = data
 
@@ -286,10 +286,10 @@ private fun PastPerformanceScreen(
             items(rows.reversed()) { t ->  // newest first
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${t.optString("label")} ${t.optInt("year")}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("${t.optString("label")} ${t.optInt("year")}", fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
                         Text(
                             "${rupees(t.optDouble("amount", 0.0))}  ·  %.0f pts".format(t.optDouble("points", 0.0)),
-                            fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                            fontSize = rsp(13), fontWeight = FontWeight.Bold,
                         )
                     }
                     Spacer(Modifier.height(3.dp))
@@ -315,7 +315,7 @@ private fun ReportHeader(title: String, onBack: () -> Unit) {
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
         )
-        Text(title, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+        Text(title, fontSize = rsp(21), fontWeight = FontWeight.Bold)
     }
 }
 
@@ -327,8 +327,8 @@ private fun HeroStat(title: String, value: String, modifier: Modifier = Modifier
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text(title, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = rsp(17), fontWeight = FontWeight.Bold)
+            Text(title, fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

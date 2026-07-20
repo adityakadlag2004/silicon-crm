@@ -136,7 +136,7 @@ fun SalesScreen(
         )
     }
 
-    Column(modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -149,7 +149,7 @@ fun SalesScreen(
                     modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
                 )
             }
-            Text("Sales", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text("Sales", fontSize = rsp(22), fontWeight = FontWeight.Bold)
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -169,7 +169,7 @@ fun SalesScreen(
             ) {
                 if (rows.isEmpty()) {
                     item {
-                        Text("No sales found.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                        Text("No sales found.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
                     }
                 }
                 items(rows) { s ->
@@ -184,15 +184,15 @@ fun SalesScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(s.optString("client"), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                                    Text(s.optString("client"), fontWeight = FontWeight.SemiBold, fontSize = rsp(15))
                                     Text(
                                         "${s.optString("product")} · ${s.optString("employee")} · ${s.optString("date")}",
-                                        fontSize = 12.sp,
+                                        fontSize = rsp(12),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
-                                    Text(rupees(s.optDouble("amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    Text(rupees(s.optDouble("amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = rsp(15))
                                     StatusPill(s.optString("status"))
                                 }
                             }

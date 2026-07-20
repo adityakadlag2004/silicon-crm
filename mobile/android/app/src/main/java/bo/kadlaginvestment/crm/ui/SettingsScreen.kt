@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
@@ -139,10 +140,10 @@ fun SettingsScreen(
             Modifier.fillMaxWidth().padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(label, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Text(label, fontSize = rsp(14), modifier = Modifier.weight(1f))
             Text(
                 fmt12(value),
-                fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                fontSize = rsp(14), fontWeight = FontWeight.SemiBold,
                 color = BrandGoldDark,
                 modifier = Modifier.clickable {
                     val parts = value.split(":")
@@ -160,17 +161,17 @@ fun SettingsScreen(
             Text("← Back", fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onBack))
             Spacer(Modifier.width(10.dp))
-            Text("App Settings", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("App Settings", fontSize = rsp(20), fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(4.dp))
         savedMsg?.let {
-            Text(it, fontSize = 12.sp,
+            Text(it, fontSize = rsp(12),
                 color = if (it.startsWith("Saved")) StatusGreen else StatusRed)
         }
         Spacer(Modifier.height(8.dp))
 
         when {
-            loading -> LoadingBox(Modifier.height(160.dp))
+            loading -> LoadingBox(Modifier.heightIn(min = 160.dp))
             error != null -> ErrorBox(error ?: "", onRetry = {
                 loading = true; error = null
                 scope.launch {
@@ -203,10 +204,10 @@ fun SettingsScreen(
                     timeRow("Popup until", popEnd) { popEnd = it }()
                     DayPicker(popDays) { popDays = it }
                     Spacer(Modifier.height(10.dp))
-                    Text("Quick options shown on the popup", fontSize = 13.sp,
+                    Text("Quick options shown on the popup", fontSize = rsp(13),
                         fontWeight = FontWeight.SemiBold)
                     Text("Tap to include/exclude. At least one required.",
-                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(6.dp))
                     catalog.chunked(3).forEach { rowItems ->
                         Row(
@@ -261,13 +262,13 @@ fun SettingsScreen(
                         Modifier.fillMaxWidth().padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("📶", fontSize = 18.sp, modifier = Modifier.padding(end = 12.dp))
+                        Text("📶", fontSize = rsp(18), modifier = Modifier.padding(end = 12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Office SIM", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                            Text("Office SIM", fontSize = rsp(15), fontWeight = FontWeight.Medium)
                             Text("This device only — pick which SIM's calls are tracked",
-                                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text("›", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("›", fontSize = rsp(16), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 Spacer(Modifier.height(24.dp))
@@ -290,8 +291,8 @@ private fun SettingsCard(title: String, subtitle: String, content: @Composable (
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp)) {
-            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-            Text(subtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, fontSize = rsp(15), fontWeight = FontWeight.Bold)
+            Text(subtitle, fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             content()
         }
@@ -304,7 +305,7 @@ private fun SwitchRow(label: String, checked: Boolean, onChange: (Boolean) -> Un
         Modifier.fillMaxWidth().padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, fontSize = 14.sp, modifier = Modifier.weight(1f))
+        Text(label, fontSize = rsp(14), modifier = Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }

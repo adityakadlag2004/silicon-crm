@@ -204,7 +204,7 @@ fun AssignTaskSheet(
                 .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(if (isEdit) "Edit Task" else "New Task", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text(if (isEdit) "Edit Task" else "New Task", fontWeight = FontWeight.Bold, fontSize = rsp(17))
 
             OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(),
                 label = { Text("Title") }, singleLine = true)
@@ -312,7 +312,7 @@ fun AssignTaskSheet(
                     }
                     results.take(6).forEach { c ->
                         Text(
-                            "•  ${c.name}", fontSize = 14.sp,
+                            "•  ${c.name}", fontSize = rsp(14),
                             modifier = Modifier.fillMaxWidth()
                                 .clickable { client = c; openMenu = "" }
                                 .padding(vertical = 8.dp, horizontal = 4.dp),
@@ -350,10 +350,10 @@ fun AssignTaskSheet(
                 }
             }
             TextButton(onClick = { checklist.add("") }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                Text("+ Checklist item", fontSize = 13.sp)
+                Text("+ Checklist item", fontSize = rsp(13))
             }
 
-            error?.let { Text(it, color = StatusRed, fontSize = 13.sp) }
+            error?.let { Text(it, color = StatusRed, fontSize = rsp(13)) }
 
             // Save the current fields as a reusable template (admins/managers).
             if (openMenu == "savetpl") {
@@ -419,7 +419,7 @@ private fun SelectorChip(
     ) {
         if (icon != null) { Icon(icon, null, Modifier.size(16.dp), tint = fg); Spacer(Modifier.width(5.dp)) }
         if (leadingDot != null) { Box(Modifier.size(9.dp).clip(RoundedCornerShape(3.dp)).background(leadingDot)); Spacer(Modifier.width(5.dp)) }
-        Text(label, color = fg, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = fg, fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -466,5 +466,5 @@ private fun IconAction(emoji: String, onClick: () -> Unit) {
         Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text(emoji, fontSize = 16.sp) }
+    ) { Text(emoji, fontSize = rsp(16)) }
 }

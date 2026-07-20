@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -29,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.ui.KadlagTheme
+import bo.kadlaginvestment.crm.ui.rsp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -74,29 +76,29 @@ class AlarmRingActivity : ComponentActivity() {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
-                        Text("⏰", fontSize = 56.sp)
+                        Text("⏰", fontSize = rsp(56))
                         Spacer(Modifier.height(8.dp))
                         Text(
                             "Call follow-up",
-                            fontSize = 15.sp,
+                            fontSize = rsp(15),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
                             SimpleDateFormat("h:mm a", Locale.US).format(Date(alarm.at)),
-                            fontSize = 13.sp,
+                            fontSize = rsp(13),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Spacer(Modifier.height(18.dp))
                         Text(
                             alarm.name,
-                            fontSize = 32.sp,
+                            fontSize = rsp(32),
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
                         )
                         if (alarm.phone.isNotEmpty() && alarm.phone != alarm.name) {
                             Text(
                                 alarm.phone,
-                                fontSize = 15.sp,
+                                fontSize = rsp(15),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -104,11 +106,11 @@ class AlarmRingActivity : ComponentActivity() {
                             Spacer(Modifier.height(14.dp))
                             Text(
                                 "“${alarm.note}”",
-                                fontSize = 17.sp,
+                                fontSize = rsp(17),
                                 textAlign = TextAlign.Center,
                             )
                         }
-                        Spacer(Modifier.height(36.dp))
+                        Spacer(Modifier.heightIn(min = 36.dp))
 
                         Button(
                             onClick = {
@@ -116,12 +118,12 @@ class AlarmRingActivity : ComponentActivity() {
                                 startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${alarm.phone}")))
                                 finish()
                             },
-                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Color(0xFFE5B740),
                                 contentColor = Color.White,
                             ),
-                        ) { Text("📞  Call now", fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                        ) { Text("📞  Call now", fontSize = rsp(18), fontWeight = FontWeight.Bold) }
 
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(
@@ -135,8 +137,8 @@ class AlarmRingActivity : ComponentActivity() {
                                 }.start()
                                 silenceAndFinish()
                             },
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                        ) { Text("✓  Mark done", fontSize = 16.sp) }
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                        ) { Text("✓  Mark done", fontSize = rsp(16)) }
 
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(
@@ -150,8 +152,8 @@ class AlarmRingActivity : ComponentActivity() {
                                 )
                                 silenceAndFinish()
                             },
-                            modifier = Modifier.fillMaxWidth().height(50.dp),
-                        ) { Text("⏰  Snooze ${FollowupAlarmReceiver.SNOOZE_MINUTES} min", fontSize = 16.sp) }
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                        ) { Text("⏰  Snooze ${FollowupAlarmReceiver.SNOOZE_MINUTES} min", fontSize = rsp(16)) }
 
                         Spacer(Modifier.height(8.dp))
                         TextButton(onClick = { silenceAndFinish() }) {

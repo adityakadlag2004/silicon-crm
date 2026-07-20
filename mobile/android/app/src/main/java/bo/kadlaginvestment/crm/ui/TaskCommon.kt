@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -88,7 +89,7 @@ fun Pill(text: String, color: Color) {
             .background(color.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        Text(text, color = color, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = color, fontSize = rsp(10), fontWeight = FontWeight.Bold)
     }
 }
 
@@ -113,7 +114,7 @@ fun TaskFilterSheet(
         title = { Text("Filters", fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text("Category", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Category", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Box {
                     Row(
                         Modifier
@@ -135,7 +136,7 @@ fun TaskFilterSheet(
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Priority", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Priority", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (i in 0 until (pris?.length() ?: 0)) {
                         val p = pris!!.getJSONObject(i)
@@ -178,7 +179,7 @@ fun TaskCard(
             Box(
                 Modifier
                     .width(4.dp)
-                    .height(46.dp)
+                    .heightIn(min = 46.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(priorityColor(priority))
             )
@@ -209,7 +210,7 @@ fun TaskCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "#${task.optInt("id")}",
-                        fontSize = 11.sp,
+                        fontSize = rsp(11),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -217,7 +218,7 @@ fun TaskCard(
                     Text(
                         task.optString("title"),
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp,
+                        fontSize = rsp(14),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         textDecoration = if (done) TextDecoration.LineThrough else null,
@@ -245,7 +246,7 @@ fun TaskCard(
                 if (meta.isNotBlank()) {
                     Text(
                         meta,
-                        fontSize = 11.sp,
+                        fontSize = rsp(11),
                         // `late` also reddens In Progress rows past their deadline.
                         color = if (status == "overdue" || task.optBoolean("late")) StatusRed
                         else MaterialTheme.colorScheme.onSurfaceVariant,

@@ -144,7 +144,7 @@ fun FollowupsScreen(
 
     Box(modifier.fillMaxSize()) {
     LazyColumn(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        Modifier.fillMaxSize().padding(horizontal = rdp(16)),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 88.dp),
     ) {
@@ -154,10 +154,10 @@ fun FollowupsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("My Calls Today", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("My Calls Today", fontSize = rsp(22), fontWeight = FontWeight.Bold)
                 Text(
                     "↻",
-                    fontSize = 20.sp,
+                    fontSize = rsp(20),
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier
                         .clickable { data = null; reloadKey++ }
@@ -189,7 +189,7 @@ fun FollowupsScreen(
         item {
             Text(
                 "Pending follow-ups (${pendingRows.size})",
-                fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                fontSize = rsp(16), fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 8.dp),
             )
         }
@@ -199,7 +199,7 @@ fun FollowupsScreen(
                 Text(
                     "Nothing pending — schedule from the post-call popup, or tap ＋ to add one yourself.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 13.sp,
+                    fontSize = rsp(13),
                 )
             }
         }
@@ -218,19 +218,19 @@ fun FollowupsScreen(
                         Column {
                             Text(
                                 displayName(context, f),
-                                fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold, fontSize = rsp(15),
                             )
                             Text(
                                 f.optString("scheduled_at") + if (overdue) "  · DUE" else "",
-                                fontSize = 12.sp,
+                                fontSize = rsp(12),
                                 color = if (overdue) StatusAmber else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = if (overdue) FontWeight.Bold else FontWeight.Normal,
                             )
                         }
-                        Text(f.optString("phone"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(f.optString("phone"), fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (f.optString("note").isNotEmpty()) {
-                        Text(f.optString("note"), fontSize = 13.sp)
+                        Text(f.optString("note"), fontSize = rsp(13))
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
@@ -355,13 +355,13 @@ private fun StatBlock(
         Column(Modifier.padding(vertical = 14.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 value,
-                fontSize = 24.sp,
+                fontSize = rsp(24),
                 fontWeight = FontWeight.Bold,
                 color = if (accent == Color.Unspecified) MaterialTheme.colorScheme.onSurface else accent,
             )
-            Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (sub != null) {
-                Text(sub, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(sub, fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

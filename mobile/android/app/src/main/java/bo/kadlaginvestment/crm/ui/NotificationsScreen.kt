@@ -67,7 +67,7 @@ fun NotificationsScreen(
     val rows = (0 until (arr?.length() ?: 0)).map { arr!!.getJSONObject(it) }
 
     LazyColumn(
-        modifier.fillMaxSize().padding(horizontal = 16.dp),
+        modifier.fillMaxSize().padding(horizontal = rdp(16)),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
     ) {
@@ -84,7 +84,7 @@ fun NotificationsScreen(
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
                     )
-                    Text("Notifications", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text("Notifications", fontSize = rsp(22), fontWeight = FontWeight.Bold)
                 }
                 if (d.optInt("unread") > 0) {
                     TextButton(onClick = {
@@ -98,7 +98,7 @@ fun NotificationsScreen(
         }
 
         if (rows.isEmpty()) {
-            item { Text("No notifications yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp) }
+            item { Text("No notifications yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
         }
 
         items(rows) { n ->
@@ -120,16 +120,16 @@ fun NotificationsScreen(
                         Text(
                             n.optString("title"),
                             fontWeight = if (unread) FontWeight.Bold else FontWeight.SemiBold,
-                            fontSize = 14.sp,
+                            fontSize = rsp(14),
                             modifier = Modifier.weight(1f),
                         )
                         Text(
                             n.optString("created_at"),
-                            fontSize = 11.sp,
+                            fontSize = rsp(11),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(n.optString("body"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(n.optString("body"), fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

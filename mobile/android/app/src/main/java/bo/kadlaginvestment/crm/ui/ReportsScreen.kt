@@ -117,7 +117,7 @@ fun ReportsScreen(
             )
             Text(
                 if (d.optBoolean("firm_wide")) "Business Overview" else "My Performance",
-                fontSize = 22.sp, fontWeight = FontWeight.Bold,
+                fontSize = rsp(22), fontWeight = FontWeight.Bold,
             )
         }
 
@@ -131,12 +131,12 @@ fun ReportsScreen(
                 FilterChip(
                     selected = period == key,
                     onClick = { period = key },
-                    label = { Text(label, fontSize = 13.sp) },
+                    label = { Text(label, fontSize = rsp(13)) },
                 )
             }
             var colMenu by remember { mutableStateOf(false) }
             Box {
-                AssistChip(onClick = { colMenu = true }, label = { Text("$columns cols ▾", fontSize = 13.sp) })
+                AssistChip(onClick = { colMenu = true }, label = { Text("$columns cols ▾", fontSize = rsp(13)) })
                 DropdownMenu(expanded = colMenu, onDismissRequest = { colMenu = false }) {
                     COLUMN_OPTIONS.forEach { n ->
                         DropdownMenuItem(text = { Text("$n columns") }, onClick = { columns = n; colMenu = false })
@@ -160,7 +160,7 @@ fun ReportsScreen(
         // ── Latest-period product mix ──
         SectionTitle(if (curLabel.isEmpty()) "By product" else "$curLabel · by product")
         if (products == null || products.length() == 0) {
-            Text("No approved sales in this period yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Text("No approved sales in this period yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
         } else {
             val maxAmt = (0 until products.length()).maxOf { products.getJSONObject(it).optDouble("amount", 0.0) }
             for (i in 0 until products.length()) {
@@ -169,10 +169,10 @@ fun ReportsScreen(
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(p.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(p.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
                             Text(
                                 "${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}",
-                                fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                fontSize = rsp(13), fontWeight = FontWeight.Bold,
                             )
                         }
                         Spacer(Modifier.height(6.dp))
@@ -198,17 +198,17 @@ fun ReportsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     "${i + 1}",
-                                    fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                                    fontSize = rsp(13), fontWeight = FontWeight.Bold,
                                     color = if (i == 0) BrandGoldDark else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(end = 10.dp),
                                 )
-                                Text(e.optString("name"), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text(e.optString("name"), fontSize = rsp(14), fontWeight = FontWeight.Medium)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(rupees(e.optDouble("amount", 0.0)), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                Text(rupees(e.optDouble("amount", 0.0)), fontSize = rsp(14), fontWeight = FontWeight.Bold)
                                 Text(
                                     "%.1f pts".format(e.optDouble("points", 0.0)),
-                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -241,7 +241,7 @@ private fun BucketLegend(buckets: List<String>) {
                         .background(OverviewColors[i % OverviewColors.size]),
                 )
                 Spacer(Modifier.width(5.dp))
-                Text(name, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(name, fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -258,7 +258,7 @@ private fun StackedBars(
     plotHeight: Dp = 160.dp,
 ) {
     if (rows.isEmpty()) {
-        Text("No data.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+        Text("No data.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
         return
     }
     val maxAmount = rows.maxOf { it.optDouble("amount", 0.0) }
@@ -278,7 +278,7 @@ private fun StackedBars(
             ) {
                 Text(
                     if (amount > 0) compactRupees(amount) else "–",
-                    fontSize = 9.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                    fontSize = rsp(9), fontWeight = FontWeight.SemiBold, maxLines = 1,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(4.dp))
@@ -307,7 +307,7 @@ private fun StackedBars(
                                     if (showSegLabels && segH >= 18.dp) {
                                         Text(
                                             compactRupees(byProduct[idx]),
-                                            color = Color.White, fontSize = 8.sp,
+                                            color = Color.White, fontSize = rsp(8),
                                             fontWeight = FontWeight.Bold, maxLines = 1,
                                         )
                                     }
@@ -322,10 +322,10 @@ private fun StackedBars(
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(r.optString("label"), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(r.optString("label"), fontSize = rsp(10), fontWeight = FontWeight.SemiBold, maxLines = 1)
                 val sub = r.optString("sublabel")
                 if (sub.isNotEmpty()) {
-                    Text(sub, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(sub, fontSize = rsp(9), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
             }
         }

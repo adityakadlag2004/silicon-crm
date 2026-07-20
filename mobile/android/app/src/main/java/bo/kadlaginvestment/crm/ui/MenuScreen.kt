@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -89,10 +90,10 @@ fun MenuScreen(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Menu", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
+        Text("Menu", fontSize = rsp(22), fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
 
         if (role == null) {
-            LoadingBox(Modifier.height(120.dp))
+            LoadingBox(Modifier.heightIn(min = 120.dp))
         } else {
             ENTRIES.filter { !it.adminOnly || isAdmin }.forEach { entry ->
                 Card(
@@ -109,12 +110,12 @@ fun MenuScreen(
                         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(entry.icon, fontSize = 18.sp, modifier = Modifier.padding(end = 12.dp))
-                        Text(entry.label, fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                        Text(entry.icon, fontSize = rsp(18), modifier = Modifier.padding(end = 12.dp))
+                        Text(entry.label, fontSize = rsp(15), fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                         if (entry.webPath != null) {
-                            Text("web", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("web", fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Text("  ›", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("  ›", fontSize = rsp(15), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -134,7 +135,7 @@ fun MenuScreen(
                     "Log out",
                     color = StatusRed,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
+                    fontSize = rsp(15),
                     modifier = Modifier.padding(14.dp),
                 )
             }
