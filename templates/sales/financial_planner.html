@@ -1055,7 +1055,8 @@ function buildStressGrid() {
   const baseSip = baseResult.sip;
 
   // Build grid — rows = inflation, cols = return
-  let html = `<table class="st-grid">
+  let html = `<div class="ki-table-scroll">
+<table class="st-grid">
     <thead>
       <tr>
         <th>Inflation ↓ / Return →</th>
@@ -1092,6 +1093,7 @@ function buildStressGrid() {
   });
 
   html += `</tbody></table>
+</div>
     <div class="st-legend">
       <span><i style="background:#dcfce7;border:1px solid #86efac;"></i> Better than base plan (≤ base SIP)</span>
       <span><i style="background:#fef9c3;border:1px solid #fde68a;"></i> Moderate stress (up to 1.5× SIP)</span>

@@ -62,7 +62,8 @@
         <button class="ki-btn ki-btn-sm"><i class="bi bi-search"></i> Search</button>
         {% if search %}<a class="ki-btn ki-btn-sm" href="?#missing-pan">Clear</a>{% endif %}
       </form>
-      <table class="kyc-table">
+      <div class="ki-table-scroll">
+<table class="kyc-table">
         <thead><tr>
           <th>Client</th><th>Phone</th><th>Suggested from folio (cross-check the name)</th><th>PAN</th>
         </tr></thead>
@@ -100,6 +101,7 @@
           {% endfor %}
         </tbody>
       </table>
+</div>
       {% if page_obj.paginator.num_pages > 1 %}
       <div style="display:flex;gap:.5rem;align-items:center;justify-content:center;margin-top:.75rem;">
         {% if page_obj.has_previous %}

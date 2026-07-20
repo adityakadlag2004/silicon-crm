@@ -195,7 +195,8 @@
 							<form method="post">
 								{% csrf_token %}
 								<input type="hidden" name="entry_id" value="{{ e.id }}">
-								<table class="w-100">
+								<div class="ki-table-scroll">
+<table class="w-100">
 									<tr>
 										<td style="width:50px;" class="align-middle text-center"><input type="checkbox" class="entry-checkbox" name="selected_ids" value="{{ e.id }}" form="bulkDeleteForm"></td>
 										<td style="width:60px;" class="align-middle ps-3">{{ e.id }}</td>
@@ -238,6 +239,7 @@
 										</td>
 									</tr>
 								</table>
+</div>
 							</form>
 						</td>
 					</tr>

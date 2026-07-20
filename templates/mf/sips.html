@@ -56,7 +56,8 @@
     <div class="ki-card-body">
       <h3 class="sip-section-title">Monthly SIP flow — starts vs stoppages (last 6 months)</h3>
       <div style="overflow-x:auto;">
-        <table class="mf-table">
+        <div class="ki-table-scroll">
+<table class="mf-table">
           <thead><tr>
             <th style="width:90px;">Month</th>
             <th>New <span class="text-muted">(count · ₹/mo)</span></th>
@@ -82,6 +83,7 @@
             {% endfor %}
           </tbody>
         </table>
+</div>
       </div>
       <div class="text-muted" style="font-size:.76rem;margin-top:.4rem;">
         Stoppages count real terminations only — natural expiries ({{ tiles.expired.n }} plans,
@@ -134,7 +136,8 @@
   <div class="ki-card" style="margin-bottom:1rem;">
     <div class="ki-card-body">
       <h3 class="sip-section-title">Active book by scheme (top 10, ₹/month)</h3>
-      <table class="mf-table">
+      <div class="ki-table-scroll">
+<table class="mf-table">
         <tbody>
           {% for s in scheme_rows %}
           <tr>
@@ -148,6 +151,7 @@
           {% empty %}<tr><td class="text-muted">No active SIPs yet.</td></tr>{% endfor %}
         </tbody>
       </table>
+</div>
     </div>
   </div>
 

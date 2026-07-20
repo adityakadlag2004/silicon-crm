@@ -157,3 +157,45 @@ class KpiStripCoverageTests(TestCase):
                     empty.append(name)
                     break
         self.assertEqual(empty, [], f"screens with blank KPI values: {empty}")
+
+
+class ResponsiveHygieneTests(TestCase):
+    """Structural rules that keep the app usable on a phone."""
+
+    def test_every_table_scrolls_inside_a_container(self):
+        """A bare <table> pushes the whole page sideways on a narrow screen.
+
+        Wide content must scroll inside its own box instead. Django admin
+        templates are excluded — they use the admin's own stylesheet.
+        """
+        import re
+        import pathlib
+        offenders = []
+        for path in pathlib.Path("templates").rglob("*.html"):
+            if "admin/" in str(path):
+                continue
+            text = path.read_text()
+            for m in re.finditer(r"<table[^>]*>", text):
+                before = text[max(0, m.start() - 400):m.start()]
+                if any(k in before for k in ("ki-table-wrap", "ki-table-scroll",
+                                             "table-responsive", "overflow-x")):
+                    continue
+                offenders.append(f"{path}:{text[:m.start()].count(chr(10)) + 1}")
+        self.assertEqual(
+            offenders, [],
+            "tables outside a scroll container overflow the page on mobile; "
+            f"wrap them in .ki-table-scroll: {offenders}")
+
+    def test_no_fixed_pixel_widths_wider_than_a_phone(self):
+        """A hard width over ~360px forces horizontal scrolling on a phone."""
+        import re
+        import pathlib
+        offenders = []
+        for path in pathlib.Path("templates").rglob("*.html"):
+            if "admin/" in str(path):
+                continue
+            for num, line in enumerate(path.read_text().splitlines(), 1):
+                for m in re.finditer(r"(?<!max-)(?<!min-)width:\s*(\d{3,})px", line):
+                    if int(m.group(1)) > 360:
+                        offenders.append(f"{path}:{num} width:{m.group(1)}px")
+        self.assertEqual(offenders, [], f"fixed widths wider than a phone: {offenders}")

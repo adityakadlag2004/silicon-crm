@@ -70,7 +70,8 @@
               onsubmit="return confirm('Remove ARN account {{ account.label }}?');">{% csrf_token %}</form>
         {% endfor %}
         <form id="arn-add" method="post" action="{% url 'clients:mf_arn_save' %}">{% csrf_token %}</form>
-        <table class="mf-table">
+        <div class="ki-table-scroll">
+<table class="mf-table">
           <thead><tr><th>Label</th><th>ARN</th><th>Sub-broker</th><th>Active</th><th></th></tr></thead>
           <tbody>
             {% for account in arn_accounts %}
@@ -96,8 +97,10 @@
             </tr>
           </tbody>
         </table>
+</div>
         {% if per_arn %}
-        <table class="mf-table" style="margin-top:1rem;">
+        <div class="ki-table-scroll">
+<table class="mf-table" style="margin-top:1rem;">
           <thead><tr><th>Business under</th><th>Transactions</th><th>Gross amount</th></tr></thead>
           <tbody>
             {% for row in per_arn %}
@@ -105,6 +108,7 @@
             {% endfor %}
           </tbody>
         </table>
+</div>
         {% endif %}
       </div>
     </div>
