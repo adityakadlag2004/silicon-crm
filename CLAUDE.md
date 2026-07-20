@@ -8,7 +8,7 @@ Production: **bo.kadlaginvestment.com** (DigitalOcean droplet `ubuntu@139.59.28.
 | Path | Purpose |
 |---|---|
 | `clients/` | The single Django app: models, views, services, APIs |
-| `clients/models/` | Models split by domain (`hr.py`, `sales.py`, `leads.py`, …), all re-exported in `__init__.py` — always import via `clients.models` |
+| `clients/models/` | Models split by domain (`hr.py`, `sales.py`, `leads.py`, `insurance.py`, …), all re-exported in `__init__.py` — always import via `clients.models` |
 | `clients/views/` | One module per domain (`tasks.py`, `sales.py`, `messaging.py`, `app_*.py` = mobile JSON APIs) |
 | `clients/urls/` | URL patterns split by domain, assembled in `__init__.py` under the single `clients` namespace |
 | `clients/services/` | Business logic shared by web + app views (`sales.py`, `targets.py`, `tasks.py`, `calendar_feed.py`, `push.py`, `rta_feed.py`, `google_drive.py`) |
@@ -16,6 +16,8 @@ Production: **bo.kadlaginvestment.com** (DigitalOcean droplet `ubuntu@139.59.28.
 | `clients/test/` | All tests (`manage.py test clients`) |
 | `config/settings.py` | Settings incl. `CRONJOBS`; env read from `.env` (template: `.env.example`) |
 | `templates/` | Web UI (server-rendered, Bootstrap) |
+| `templates/_shell/` | Shared record-shell partials (`crumb.html`, `kpi_strip.html`) — rendered by `base.html` for any view supplying `crumbs` / `kpis`; page templates never include them directly |
+| `static/css/ki-record.css` | The record shell: breadcrumb, KPI strip, record header, monogram, tabs, field grid, data table, print + form rules. Shared CSS lives here, never duplicated per template |
 | `mobile/` | Android app. Native screens in `android/app/src/main/java/bo/kadlaginvestment/crm/`; plan + status table in `NATIVE_MIGRATION.md` |
 | `android/` | **Legacy TWA — retired.** Kept only because the signing keystore lives here (`upload-keystore.jks`, gitignored). Do not build from it |
 | `scripts/` | Server ops: `backup_db.sh`, `server_cleanup.sh`, `seed_from_crmdb.py` |
@@ -29,6 +31,27 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - External integrations (Firebase, Drive) read credentials from env and **must silently no-op when unconfigured** — the app must always run without secrets (see `services/push.py` as the pattern).
 - Every schema change: `makemigrations` in the same commit as the model change. `makemigrations --check` must stay clean.
 - Every feature commit includes/updates tests. Full suite green before push: `.venv/bin/python manage.py test clients`.
+
+## UI conventions (record shell)
+
+- Every module screen leads with a breadcrumb and, for list screens, a KPI
+  strip. Both render from `base.html` — a view just supplies `crumbs` /
+  `kpis`, no template edit needed. `clients.context_processors.breadcrumbs`
+  derives crumbs from the URL name when a view doesn't set them.
+- KPI tiles: `{"label", "value", "color", optional "url"/"active"/"sub"}`.
+  Build them from data the view already computed; don't add queries for a tile.
+- Detail pages use the record header (`.ki-rec` + `.ki-mono` monogram +
+  `.ki-tag` pills + `.ki-rec-summary`). Monogram initials/colour come from the
+  `monogram` / `monocolor` filters — stable per name, nothing stored.
+- Contact details are masked in lists via `mask_phone` / `mask_email` /
+  `mask_pan`. Display-only; the DB and tap-to-call links keep real values.
+- Shared CSS goes in `ki-record.css`. If two templates need the same rule,
+  promote it rather than copying.
+- Tables must sit inside `.ki-table-wrap` or `.ki-table-scroll`, or they push
+  the page sideways on a phone. Icon-only buttons need `aria-label`.
+  `manage.py test clients.test.test_theme_coverage` enforces all of this.
+- Django's `{# #}` comments **cannot span lines** — a multi-line one renders
+  as visible page text. Use `{% comment %}` for anything longer than one line.
 
 ## Deploy checklist (web)
 
@@ -59,4 +82,7 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - (none currently — `monthly_snapshot` + `MonthlyIncentive` deleted 2026-07-16;
   the admin incentive report always computes live from `Sale` now)
 - Manual tools (intentionally not in CRONJOBS): `prod_readiness_check`,
-  `seed_demo_tasks_links`.
+  `seed_demo_tasks_links`, `seed_demo_crm`.
+  `seed_demo_crm` seeds Households/Insurance/Claims/Meetings for testing;
+  it refuses to run when `DEBUG` is off unless `--force`, and `--undo`
+  removes exactly what it created (demo client ids ≥ 990000, `DEMO-` codes).
