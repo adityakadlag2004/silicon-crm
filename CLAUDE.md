@@ -53,6 +53,33 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - Django's `{# #}` comments **cannot span lines** — a multi-line one renders
   as visible page text. Use `{% comment %}` for anything longer than one line.
 
+## People / employee records
+
+- `Employee` owns names, DOB, joining date, position, domain, reports_to,
+  emergency contact and skills — not just a login. Derived: `tenure_months`,
+  `total_experience_months`, `tenure_display` ("3y 6m"), `profile_completeness`.
+- Employees fill their own details at `/clients/me/profile/`; that form must
+  never expose salary, role, employee number, joining date or position —
+  self-service is not a route to a pay rise.
+- `EmployeeMilestone` + `services/people.py` turn dates into occasions.
+  `employee_milestones` (daily 08:30) generates birthdays / anniversaries /
+  long-service years and nudges admins about what lands today or tomorrow and
+  anything that slipped past unmarked. Admins are never asked to celebrate
+  themselves.
+- Recognition is the point: `people.celebrate()` notifies the employee.
+
+## Android UI rules
+
+- Sizes go through `rsp(n)` / `rdp(n)` (`ui/Responsive.kt`), never raw `n.sp`
+  or a fixed height on anything interactive. They scale against a 392dp
+  baseline, clamped — type 0.92–1.15x, spacing 0.85–1.30x.
+- This is separate from the user's font-scale accessibility setting, which
+  Compose already applies to `.sp`. Don't fight it: use `heightIn(min =)` so
+  labels can grow, never `height()`.
+- Three or more buttons in a row → `ActionRow` (wraps), not `Row` (squeezes).
+- `manage.py test clients.test.test_android_responsive` lints all of this and
+  pins the scale maths.
+
 ## Deploy checklist (web)
 
 1. `dev` green: `manage.py test clients` + `manage.py check` + `makemigrations --check`.
