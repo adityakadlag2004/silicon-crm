@@ -92,12 +92,10 @@ def _gate(check, message):
     return decorator
 
 
-def admin_required(view_func):
-    return _gate(is_admin, "Admin access required.")(view_func)
-
-
-def admin_or_manager_required(view_func):
-    return _gate(is_admin_or_manager, "Manager or admin access required.")(view_func)
+# _gate already returns a decorator, so these are the decorators — no wrapper
+# function needed to hand the view along.
+admin_required = _gate(is_admin, "Admin access required.")
+admin_or_manager_required = _gate(is_admin_or_manager, "Manager or admin access required.")
 
 
 def can_required(flag):
