@@ -506,6 +506,7 @@
               <li><a class="kn-menu-item" href="{% url 'clients:target_management' %}"><i class="bi bi-bullseye"></i> Targets</a></li>
               <li><div class="kn-menu-divider"></div></li>
               <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}"><i class="bi bi-people-fill"></i> Team Members</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:people_hub' %}"><i class="bi bi-balloon-heart"></i> People &amp; Celebrations</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}?add=1"><i class="bi bi-person-plus-fill"></i> Add Member</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:employee_management' %}"><i class="bi bi-shield-lock-fill"></i> Manager Rights</a></li>
               <li><div class="kn-menu-divider"></div></li>
@@ -539,6 +540,7 @@
                 {% if request.user.employee.role %}<div style="font-size:0.75rem;color:var(--kn-fg-muted);text-transform:capitalize;">{{ request.user.employee.role }}</div>{% endif %}
               </li>
               <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:my_profile' %}"><i class="bi bi-person-badge"></i> My Profile</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:getting_started' %}"><i class="bi bi-compass"></i> Getting Started</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:logout' %}"><i class="bi bi-box-arrow-right"></i> Logout</a></li>
             </ul>

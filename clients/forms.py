@@ -466,3 +466,75 @@ class FirmSettingsForm(forms.ModelForm):
                 field.help_text = "Include https:// or http:// (e.g., https://example.com)"
             else:
                 field.widget.attrs.setdefault("class", "form-control")
+
+
+class MyProfileForm(forms.ModelForm):
+    """What an employee may edit about themselves.
+
+    Deliberately excludes role, salary, employee_number, joining_date and
+    position — those are the admin's to set, and letting people edit their own
+    would make the record untrustworthy.
+    """
+
+    class Meta:
+        model = Employee
+        fields = [
+            "first_name", "middle_name", "last_name", "date_of_birth",
+            "personal_email", "phone", "address", "blood_group",
+            "qualification", "skills", "prior_experience_months",
+            "emergency_contact_name", "emergency_contact_phone",
+            "emergency_contact_relation",
+        ]
+        widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
+            "address": forms.Textarea(attrs={"rows": 2}),
+            "skills": forms.TextInput(attrs={"placeholder": "MFD, NISM-VA, Excel"}),
+        }
+        labels = {
+            "prior_experience_months": "Experience before joining (months)",
+            "personal_email": "Personal email",
+            "emergency_contact_relation": "Relationship",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
+            field.widget.attrs.setdefault("class", css)
+        # Nudge the fields that drive the completeness prompt.
+        for name in ("first_name", "last_name", "date_of_birth", "phone"):
+            self.fields[name].required = True
+
+
+class EmployeeAdminForm(forms.ModelForm):
+    """The admin's view of a team member — the employment facts."""
+
+    class Meta:
+        model = Employee
+        fields = [
+            "first_name", "middle_name", "last_name", "date_of_birth",
+            "personal_email", "phone", "address", "blood_group",
+            "role", "position", "domain", "joining_date", "reports_to",
+            "salary", "employee_number", "prior_experience_months",
+            "qualification", "skills",
+            "emergency_contact_name", "emergency_contact_phone",
+            "emergency_contact_relation", "notes",
+        ]
+        widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
+            "joining_date": forms.DateInput(attrs={"type": "date"}),
+            "address": forms.Textarea(attrs={"rows": 2}),
+            "notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
+            field.widget.attrs.setdefault("class", css)
+        # Nobody reports to themselves, and inactive staff aren't managers.
+        qs = Employee.objects.filter(active=True)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        self.fields["reports_to"].queryset = qs.select_related("user")
+        self.fields["reports_to"].required = False

@@ -1,0 +1,23 @@
+{% comment %}
+Nudge shown on a dashboard when the signed-in employee's profile has gaps.
+Expects `profile_gap` = {"percent", "missing"} from the dashboard view;
+renders nothing when the profile is complete.
+{% endcomment %}
+{% if profile_gap %}
+<div class="ki-card mb-3" style="border-left:4px solid var(--ki-warning);">
+  <div style="display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;">
+    <i class="bi bi-person-badge" style="font-size:1.5rem;color:var(--ki-warning);"></i>
+    <div style="flex:1 1 240px;min-width:0;">
+      <strong>Your profile is {{ profile_gap.percent }}% complete</strong>
+      <div class="text-muted" style="font-size:.85rem;">
+        We use this to celebrate birthdays and work anniversaries — add
+        {% for f, label in profile_gap.missing|slice:":3" %}{{ label|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if profile_gap.missing|length > 3 %} and {{ profile_gap.missing|length|add:"-3" }} more{% endif %}.
+      </div>
+      <div class="ki-progress" style="margin-top:.5rem;"><span style="width:{{ profile_gap.percent }}%;"></span></div>
+    </div>
+    <a href="{% url 'clients:my_profile' %}" class="ki-btn ki-btn-primary ki-btn-sm">
+      <i class="bi bi-pencil"></i> Complete profile
+    </a>
+  </div>
+</div>
+{% endif %}

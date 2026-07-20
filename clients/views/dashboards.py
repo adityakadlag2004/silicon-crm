@@ -107,6 +107,21 @@ def _is_admin_user(user):
     return permissions.is_admin(user)
 
 
+def _profile_gap(request):
+    """Data for the dashboard's "complete your profile" nudge, or None.
+
+    Cheap: request.user.employee is already loaded by this point and
+    missing_fields() is pure Python over that instance.
+    """
+    emp = getattr(request.user, "employee", None)
+    if emp is None:
+        return None
+    missing = emp.missing_fields()
+    if not missing:
+        return None
+    return {"percent": emp.profile_completeness, "missing": missing}
+
+
 @login_required
 def admin_dashboard(request):
     emp = getattr(request.user, "employee", None)
@@ -370,6 +385,7 @@ def admin_dashboard(request):
         "kyc_missing_count": _kyc_missing_count(request.user),
     }
 
+    context["profile_gap"] = _profile_gap(request)
     return render(request, "dashboards/admin_dashboard.html", context)
 
 
@@ -815,6 +831,7 @@ def employee_dashboard(request):
         "campaign_challenges": campaign_challenges,
         "kyc_missing_count": _kyc_missing_count(request.user),
     }
+    context["profile_gap"] = _profile_gap(request)
     return render(request, "dashboards/employee_dashboard.html", context)
 
 

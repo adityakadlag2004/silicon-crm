@@ -15,10 +15,14 @@ from django.db import transaction
 from django.db.models import Sum, Count, Q
 
 from django.db.models import Max
+from django.urls import reverse
+from django.utils import timezone
 
 from .. import permissions
-from ..models import AuditLog, Client, Sale, Employee, ManagerAccessConfig
-from ..forms import EmployeeCreateForm, EmployeeDeactivateForm
+from ..models import AuditLog, Client, Sale, Employee, EmployeeMilestone, ManagerAccessConfig
+from ..forms import EmployeeAdminForm, EmployeeCreateForm, EmployeeDeactivateForm, MyProfileForm
+from ..services import people
+from .helpers import parse_date_param
 
 
 def _next_employee_number():
@@ -76,12 +80,20 @@ def team_list(request):
     admins = Employee.objects.filter(role="admin", active=True).count()
     managers = Employee.objects.filter(role="manager", active=True).count()
 
+    missed_count = len(people.missed())
+    gap_count = len(people.incomplete_profiles())
     context = {
+        "people_hub_url": reverse("clients:people_hub"),
+        "missed_count": missed_count,
+        "gap_count": gap_count,
+        "upcoming_milestones": list(people.upcoming())[:5],
         "kpis": [
             {"label": "Team Members", "value": total, "color": "#4338CA"},
             {"label": "Active", "value": active_count, "color": "#15803D"},
-            {"label": "Admins", "value": admins, "color": "#BE123C"},
-            {"label": "Managers", "value": managers, "color": "#B45309"},
+            {"label": "Needs celebrating", "value": missed_count, "color": "#BE123C",
+             "url": reverse("clients:people_hub")},
+            {"label": "Incomplete profiles", "value": gap_count, "color": "#B45309",
+             "url": reverse("clients:people_hub")},
         ],
         "employees": employees,
         "q": q,
@@ -143,7 +155,6 @@ def team_detail(request, employee_id):
     emp = get_object_or_404(Employee.objects.select_related("user"), id=employee_id)
 
     # Stats
-    from django.utils import timezone
     from datetime import date
     today = date.today()
 
@@ -173,6 +184,19 @@ def team_detail(request, employee_id):
     recent_sales = Sale.objects.filter(employee=emp).select_related("client").order_by("-date", "-created_at")[:10]
 
     context = {
+        "crumbs": [{"label": "Team", "url": reverse("clients:team_list")},
+                   {"label": emp.full_name}],
+        "kpis": [
+            {"label": "With the firm", "value": emp.tenure_display, "color": "#4338CA"},
+            {"label": "Total experience", "value": emp.experience_display, "color": "#0369A1"},
+            {"label": "Profile", "value": f"{emp.profile_completeness}%",
+             "color": "#15803D" if emp.profile_is_complete else "#B45309"},
+            {"label": "Clients", "value": Client.objects.filter(mapped_to=emp).count(),
+             "color": "#7E22CE"},
+        ],
+        "milestones": emp.milestones.order_by("-occurs_on")[:8],
+        "missing_admin": emp.missing_fields(include_admin=True),
+        "reportees": emp.reportees.filter(active=True).select_related("user"),
         "emp": emp,
         "total_sales": total_sales,
         "approved_sales": approved_sales,
@@ -201,7 +225,11 @@ def team_edit(request, employee_id):
         new_role = (request.POST.get("role") or emp.role).strip()
         if new_role not in valid_roles:
             messages.error(request, f"Invalid role '{new_role}'.")
-            return render(request, "team/team_edit.html", {"emp": emp})
+            return render(request, "team/team_edit.html", {
+        "emp": emp,
+        "domain_choices": Employee.Domain.choices,
+        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
+    })
 
         raw_salary = (request.POST.get("salary") or "").strip()
         if raw_salary:
@@ -211,14 +239,22 @@ def team_edit(request, employee_id):
                     raise InvalidOperation
             except InvalidOperation:
                 messages.error(request, "Salary must be a non-negative number.")
-                return render(request, "team/team_edit.html", {"emp": emp})
+                return render(request, "team/team_edit.html", {
+        "emp": emp,
+        "domain_choices": Employee.Domain.choices,
+        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
+    })
         else:
             new_salary = emp.salary
 
         new_number = request.POST.get("employee_number", "").strip() or None
         if new_number and Employee.objects.exclude(pk=emp.pk).filter(employee_number=new_number).exists():
             messages.error(request, f"Employee number '{new_number}' is already in use.")
-            return render(request, "team/team_edit.html", {"emp": emp})
+            return render(request, "team/team_edit.html", {
+        "emp": emp,
+        "domain_choices": Employee.Domain.choices,
+        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
+    })
 
         user = emp.user
         user.first_name = request.POST.get("first_name", user.first_name)
@@ -230,7 +266,39 @@ def team_edit(request, employee_id):
         emp.role = new_role
         emp.salary = new_salary
         emp.employee_number = new_number
-        emp.save(update_fields=["role", "salary", "employee_number"])
+
+        # Employment + personal fields. Blank means "leave it alone" for dates
+        # so a half-filled form never wipes a known joining date.
+        text_fields = [
+            "first_name", "middle_name", "last_name", "position", "phone",
+            "personal_email", "address", "blood_group", "qualification",
+            "skills", "emergency_contact_name", "emergency_contact_phone",
+            "emergency_contact_relation", "notes",
+        ]
+        for field in text_fields:
+            if field in request.POST:
+                setattr(emp, field, request.POST.get(field, "").strip())
+
+        if request.POST.get("domain") in dict(Employee.Domain.choices):
+            emp.domain = request.POST["domain"]
+        for field in ("joining_date", "date_of_birth"):
+            raw = (request.POST.get(field) or "").strip()
+            if raw:
+                parsed = parse_date_param(raw)
+                if parsed:
+                    setattr(emp, field, parsed)
+        raw_prior = (request.POST.get("prior_experience_months") or "").strip()
+        if raw_prior.isdigit():
+            emp.prior_experience_months = int(raw_prior)
+        raw_manager = (request.POST.get("reports_to") or "").strip()
+        if raw_manager.isdigit():
+            emp.reports_to = Employee.objects.filter(pk=int(raw_manager)).exclude(pk=emp.pk).first()
+        elif raw_manager == "":
+            emp.reports_to = None
+
+        emp.save()
+        # New dates mean new occasions to mark.
+        people.generate_for(emp)
 
         if old_role != new_role:
             AuditLog.objects.create(
@@ -245,7 +313,11 @@ def team_edit(request, employee_id):
         messages.success(request, f"Updated {user.get_full_name() or user.username}.")
         return redirect("clients:team_detail", employee_id=emp.id)
 
-    return render(request, "team/team_edit.html", {"emp": emp})
+    return render(request, "team/team_edit.html", {
+        "emp": emp,
+        "domain_choices": Employee.Domain.choices,
+        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
+    })
 
 
 @login_required
@@ -384,3 +456,80 @@ def team_reset_password(request, employee_id):
 
     messages.success(request, msg)
     return redirect("clients:team_detail", employee_id=emp.id)
+
+
+# ─────────────────────────── my profile ───────────────────────────
+
+@login_required
+def my_profile(request):
+    """Self-service profile — the page the dashboard prompt links to."""
+    emp = getattr(request.user, "employee", None)
+    if emp is None:
+        messages.error(request, "You are not set up as a team member yet.")
+        return redirect("clients:employee_dashboard")
+
+    if request.method == "POST":
+        form = MyProfileForm(request.POST, instance=emp)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.profile_updated_at = timezone.now()
+            obj.save()
+            # Newly-known dates mean new milestones to celebrate.
+            people.generate_for(obj)
+            messages.success(request, "Thanks — your profile is up to date.")
+            return redirect("clients:my_profile")
+    else:
+        form = MyProfileForm(instance=emp)
+
+    return render(request, "team/my_profile.html", {
+        "page_title": "My Profile",
+        "crumbs": [{"label": "My Profile"}],
+        "kpis": [
+            {"label": "Profile Complete", "value": f"{emp.profile_completeness}%",
+             "color": "#15803D" if emp.profile_is_complete else "#B45309"},
+            {"label": "With the firm", "value": emp.tenure_display, "color": "#4338CA"},
+            {"label": "Total experience", "value": emp.experience_display, "color": "#0369A1"},
+        ],
+        "emp": emp,
+        "form": form,
+        "missing": emp.missing_fields(),
+        "milestones": emp.milestones.order_by("-occurs_on")[:10],
+    })
+
+
+@login_required
+def people_hub(request):
+    """Admin view: who needs celebrating, and whose profile has gaps."""
+    if not _is_admin(request):
+        return HttpResponseForbidden("Admins only.")
+
+    missed = list(people.missed())
+    upcoming = list(people.upcoming())
+    gaps = people.incomplete_profiles()
+
+    return render(request, "team/people_hub.html", {
+        "page_title": "People",
+        "crumbs": [{"label": "Team", "url": reverse("clients:team_list")},
+                   {"label": "People"}],
+        "kpis": [
+            {"label": "Needs celebrating", "value": len(missed), "color": "#BE123C"},
+            {"label": "Coming up (30d)", "value": len(upcoming), "color": "#B45309"},
+            {"label": "Incomplete profiles", "value": len(gaps), "color": "#0369A1"},
+            {"label": "Active team",
+             "value": Employee.objects.filter(active=True).count(), "color": "#15803D"},
+        ],
+        "missed": missed,
+        "upcoming": upcoming,
+        "gaps": gaps,
+    })
+
+
+@login_required
+@require_POST
+def milestone_celebrate(request, milestone_id):
+    if not _is_admin(request):
+        return HttpResponseForbidden("Admins only.")
+    milestone = get_object_or_404(EmployeeMilestone, pk=milestone_id)
+    people.celebrate(milestone, request.user, (request.POST.get("note") or "").strip())
+    messages.success(request, f"Marked — {milestone.employee.short_name} has been told.")
+    return redirect(request.META.get("HTTP_REFERER") or "clients:people_hub")

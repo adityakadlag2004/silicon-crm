@@ -402,3 +402,13 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
 /* Bare tables that were not inside a scroll container pushed the whole page
    sideways on a phone. This wrapper keeps the overflow inside the table. */
 .ki-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+
+/* ─── Progress bar (profile completeness, checklist %) ─── */
+.ki-progress {
+  background: var(--ki-card-border); border-radius: 999px;
+  height: 8px; overflow: hidden;
+}
+.ki-progress > span {
+  display: block; height: 100%; border-radius: 999px;
+  background: var(--ki-primary); transition: width .3s ease;
+}

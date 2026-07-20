@@ -162,6 +162,9 @@ CRONJOBS = [
     ('* * * * *', 'django.core.management.call_command', ['tasks_ring_due']),
     # Generate recurring task instances, daily at 12:20 AM
     ('20 0 * * *', 'django.core.management.call_command', ['tasks_generate_recurring']),
+    # Employee birthdays / work anniversaries: generate them and nudge admins
+    # to actually mark the day, every morning at 8:30 AM
+    ('30 8 * * *', 'django.core.management.call_command', ['employee_milestones']),
     # Send day-before / same-day task reminders (gated to the configured hour), hourly
     ('0 * * * *', 'django.core.management.call_command', ['tasks_send_reminders']),
     # Alert admins about employees with no synced calls for 3+ days (likely app uninstall), daily 9:15 AM

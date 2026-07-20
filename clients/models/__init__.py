@@ -7,6 +7,7 @@ working everywhere.
 """
 from .hr import (  # noqa: F401
     Employee,
+    EmployeeMilestone,
     EmployeeTarget,
     ManagerAccessConfig,
 )

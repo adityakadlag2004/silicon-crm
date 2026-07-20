@@ -66,6 +66,76 @@
         <label class="form-label">Salary (₹/mo)</label>
         <input type="number" name="salary" class="form-control" step="0.01" value="{{ emp.salary|default:'' }}" placeholder="Monthly salary">
       </div>
+      <div>
+        <label class="form-label" for="id_middle_name">Middle Name</label>
+        <input type="text" id="id_middle_name" name="middle_name" class="form-control" value="{{ emp.middle_name }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_position">Position</label>
+        <input type="text" id="id_position" name="position" class="form-control" value="{{ emp.position }}" placeholder="Relationship Manager">
+      </div>
+      <div>
+        <label class="form-label" for="id_domain">Domain</label>
+        <select id="id_domain" name="domain" class="form-select">
+          <option value="">— Not set —</option>
+          {% for value, label in domain_choices %}<option value="{{ value }}" {% if emp.domain == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="id_joining_date">Joining Date</label>
+        <input type="date" id="id_joining_date" name="joining_date" class="form-control" value="{{ emp.joining_date|date:'Y-m-d' }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_date_of_birth">Date of Birth</label>
+        <input type="date" id="id_date_of_birth" name="date_of_birth" class="form-control" value="{{ emp.date_of_birth|date:'Y-m-d' }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_reports_to">Reports To</label>
+        <select id="id_reports_to" name="reports_to" class="form-select">
+          <option value="">— Nobody —</option>
+          {% for m in managers %}<option value="{{ m.id }}" {% if emp.reports_to_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="id_prior_exp">Experience before joining (months)</label>
+        <input type="number" min="0" id="id_prior_exp" name="prior_experience_months" class="form-control" value="{{ emp.prior_experience_months }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_phone">Phone</label>
+        <input type="text" id="id_phone" name="phone" class="form-control" value="{{ emp.phone }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_personal_email">Personal Email</label>
+        <input type="email" id="id_personal_email" name="personal_email" class="form-control" value="{{ emp.personal_email }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_qualification">Qualification</label>
+        <input type="text" id="id_qualification" name="qualification" class="form-control" value="{{ emp.qualification }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_blood_group">Blood Group</label>
+        <input type="text" id="id_blood_group" name="blood_group" class="form-control" value="{{ emp.blood_group }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_ec_name">Emergency Contact</label>
+        <input type="text" id="id_ec_name" name="emergency_contact_name" class="form-control" value="{{ emp.emergency_contact_name }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_ec_phone">Emergency Phone</label>
+        <input type="text" id="id_ec_phone" name="emergency_contact_phone" class="form-control" value="{{ emp.emergency_contact_phone }}">
+      </div>
+      <div>
+        <label class="form-label" for="id_ec_rel">Relationship</label>
+        <input type="text" id="id_ec_rel" name="emergency_contact_relation" class="form-control" value="{{ emp.emergency_contact_relation }}">
+      </div>
+      <div class="full-width">
+        <label class="form-label" for="id_skills">Skills</label>
+        <input type="text" id="id_skills" name="skills" class="form-control" value="{{ emp.skills }}" placeholder="MFD, NISM-VA, Excel">
+      </div>
+      <div class="full-width">
+        <label class="form-label" for="id_address">Address</label>
+        <textarea id="id_address" name="address" rows="2" class="form-control">{{ emp.address }}</textarea>
+      </div>
       <div class="full-width" style="display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.5rem;">
         <a href="{% url 'clients:team_detail' emp.id %}" class="ki-btn ki-btn-secondary">Cancel</a>
         <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save Changes</button>

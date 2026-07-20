@@ -11,4 +11,8 @@ urlpatterns = [
     path("team/<int:employee_id>/toggle-status/", team.team_toggle_status, name="team_toggle_status"),
     path("team/<int:employee_id>/delete/", team.team_delete, name="team_delete"),
     path("team/<int:employee_id>/reset-password/", team.team_reset_password, name="team_reset_password"),
+    path("me/profile/", team.my_profile, name="my_profile"),
+    path("team/people/", team.people_hub, name="people_hub"),
+    path("team/milestone/<int:milestone_id>/celebrate/", team.milestone_celebrate,
+         name="milestone_celebrate"),
 ]

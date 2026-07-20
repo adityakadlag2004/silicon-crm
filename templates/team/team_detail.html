@@ -109,10 +109,76 @@
   <div class="ki-rec-summary">
     <div class="ki-sum-item"><span class="k">Username</span><span class="v">@{{ emp.user.username }}</span></div>
     {% if emp.employee_number %}<div class="ki-sum-item"><span class="k">Employee #</span><span class="v">{{ emp.employee_number }}</span></div>{% endif %}
-    {% if emp.user.email %}<div class="ki-sum-item"><span class="k">Email</span><span class="v">{{ emp.user.email|mask_email }}</span></div>{% endif %}
+    {% if emp.position %}<div class="ki-sum-item"><span class="k">Position</span><span class="v">{{ emp.position }}</span></div>{% endif %}
+    {% if emp.domain %}<div class="ki-sum-item"><span class="k">Domain</span><span class="v">{{ emp.get_domain_display }}</span></div>{% endif %}
+    <div class="ki-sum-item"><span class="k">Joined</span><span class="v">{{ emp.joining_date|date:"d M Y"|default:"—" }}</span></div>
+    <div class="ki-sum-item"><span class="k">Tenure</span><span class="v">{{ emp.tenure_display }}</span></div>
+    {% if emp.reports_to %}<div class="ki-sum-item"><span class="k">Reports to</span><span class="v"><a href="{% url 'clients:team_detail' emp.reports_to.id %}">{{ emp.reports_to.full_name }}</a></span></div>{% endif %}
   </div>
 </div>
 {% endwith %}
+
+{# ── Who they are, what to celebrate, who reports to them ── #}
+<div class="ki-rec-layout mb-3">
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-person-vcard"></i> Personal &amp; Employment</h3>
+    <div class="ki-fields">
+      <div class="ki-field"><span class="k">Full name</span><span class="v">{{ emp.full_name }}</span></div>
+      <div class="ki-field"><span class="k">Date of birth</span><span class="v">{{ emp.date_of_birth|date:"d M Y"|default:"—" }}</span></div>
+      <div class="ki-field"><span class="k">Phone</span><span class="v">{{ emp.phone|default:"—" }}</span></div>
+      <div class="ki-field"><span class="k">Personal email</span><span class="v">{{ emp.personal_email|default:"—" }}</span></div>
+      <div class="ki-field"><span class="k">Blood group</span><span class="v">{{ emp.blood_group|default:"—" }}</span></div>
+      <div class="ki-field"><span class="k">Qualification</span><span class="v">{{ emp.qualification|default:"—" }}</span></div>
+      <div class="ki-field"><span class="k">Experience</span><span class="v">{{ emp.experience_display }} total ({{ emp.tenure_display }} here)</span></div>
+      <div class="ki-field"><span class="k">Address</span><span class="v">{{ emp.address|default:"—"|linebreaksbr }}</span></div>
+      <div class="ki-field"><span class="k">Emergency contact</span>
+        <span class="v">{% if emp.emergency_contact_name %}{{ emp.emergency_contact_name }}{% if emp.emergency_contact_relation %} ({{ emp.emergency_contact_relation }}){% endif %}{% if emp.emergency_contact_phone %} · {{ emp.emergency_contact_phone }}{% endif %}{% else %}—{% endif %}</span>
+      </div>
+    </div>
+    {% if emp.skill_list %}
+    <div class="ki-tags" style="margin-top:.8rem;">
+      {% for skill in emp.skill_list %}<span class="ki-tag" style="--c:#0F766E;">{{ skill }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    {% if missing_admin %}
+    <div class="text-muted" style="font-size:.83rem;margin-top:.8rem;">
+      <i class="bi bi-exclamation-circle" style="color:var(--ki-warning);"></i>
+      Still missing: {% for f, label in missing_admin %}{{ label }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div>
+    <div class="ki-card">
+      <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-balloon"></i> Milestones</h3>
+      {% for m in milestones %}
+      <div class="ki-field" style="grid-template-columns:1fr auto;">
+        <span class="v">{{ m.title }}
+          {% if m.is_celebrated %}<span class="ki-tag" style="--c:#15803D;">Celebrated</span>
+          {% elif m.is_overdue %}<span class="ki-tag" style="--c:#BE123C;">Missed</span>{% endif %}
+        </span>
+        <span class="k">{{ m.occurs_on|date:"d M" }}</span>
+      </div>
+      {% empty %}
+      <div class="ki-empty" style="padding:1rem;"><i class="bi bi-calendar-heart"></i>Add a birthday or joining date.</div>
+      {% endfor %}
+    </div>
+
+    {% if reportees %}
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-diagram-3"></i> Reportees ({{ reportees|length }})</h3>
+      {% for r in reportees %}
+      <div style="display:flex;align-items:center;gap:.5rem;padding:.35rem 0;">
+        <span class="ki-mono ki-mono-sm" style="--c:{{ r.full_name|monocolor }};">{{ r.full_name|monogram }}</span>
+        <a href="{% url 'clients:team_detail' r.id %}" class="name-link">{{ r.full_name }}</a>
+        <span class="k" style="margin-left:auto;">{{ r.position|default:r.role }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
 
 <!-- This Month -->
 <div class="ki-card mb-3">
