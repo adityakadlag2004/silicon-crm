@@ -7,16 +7,6 @@
   .report-table th, .report-table td { text-align: right; vertical-align: middle; white-space: nowrap; font-size: .85rem; }
   .report-table th:first-child, .report-table td:first-child { text-align: left; }
   .report-table tfoot td { font-weight: 700; background: var(--ki-body); }
-  .zero { color: #bbb; }
-
-  @media print {
-    @page { size: landscape; margin: 1cm; }
-    nav, .no-print, footer, .ki-sidebar, .ki-topbar { display: none !important; }
-    .ki-main { margin-left: 0 !important; padding: 0 !important; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .report-table { font-size: 10pt; }
-    .ki-card { border: none !important; box-shadow: none !important; }
-  }
 </style>
 {% endblock %}
 

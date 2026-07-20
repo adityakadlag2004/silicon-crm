@@ -113,3 +113,47 @@ class TemplateHygieneTests(TestCase):
                     leaked.append(f"{name}: {marker!r} near {body[idx:idx + 60]!r}")
                     break
         self.assertEqual(leaked, [], f"template syntax leaked into HTML: {leaked}")
+
+
+# Screens whose whole job is a list of records: each should lead with a KPI
+# strip. Dashboards and form pages are deliberately excluded — a strip on a
+# form is noise, and the task board already has its status tabs.
+KPI_SCREENS = [
+    "all_clients", "my_clients", "family_list", "client_kyc_issues",
+    "all_sales", "all_renewals", "policy_list", "claim_list", "meeting_list",
+    "lead_management", "task_deleted", "mf_folios", "mf_transactions",
+    "links_dashboard", "team_list", "my_call_followups",
+    "manage_incentive_rules", "audit_log",
+]
+
+
+class KpiStripCoverageTests(TestCase):
+    """Every record-list screen leads with headline numbers."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.u = User.objects.create_user("kpiuser", password="pw", is_superuser=True)
+        Employee.objects.create(user=cls.u, role="admin", salary=0, active=True)
+        Client.objects.create(id=9700, name="KPI Client")
+
+    def test_list_screens_have_a_kpi_strip(self):
+        tc = TC(); tc.force_login(self.u)
+        missing = []
+        for name in KPI_SCREENS:
+            html = tc.get(reverse(f"clients:{name}")).content.decode()
+            if "ki-kpis" not in html:
+                missing.append(name)
+        self.assertEqual(missing, [], f"list screens without a KPI strip: {missing}")
+
+    def test_kpi_values_are_rendered_not_left_blank(self):
+        """A strip of empty tiles means the view passed a broken structure."""
+        import re
+        tc = TC(); tc.force_login(self.u)
+        empty = []
+        for name in KPI_SCREENS:
+            html = tc.get(reverse(f"clients:{name}")).content.decode()
+            for value in re.findall(r'<div class="v">(.*?)</div>', html, re.S):
+                if not value.strip():
+                    empty.append(name)
+                    break
+        self.assertEqual(empty, [], f"screens with blank KPI values: {empty}")

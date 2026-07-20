@@ -337,6 +337,14 @@ def manage_incentive_rules(request):
         request,
         "incentives/manage_rules.html",
         {
+            "kpis": [
+                {"label": "Incentive Rules", "value": len(rules), "color": "#4338CA"},
+                {"label": "Active",
+                 "value": sum(1 for r in rules if getattr(r, "is_active", True)),
+                 "color": "#15803D"},
+                {"label": "Total Slabs", "value": sum(r.slabs.count() for r in rules),
+                 "color": "#B45309"},
+            ],
             "rules": rules,
             "product_options": product_options,
         },

@@ -69,33 +69,5 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 </script>
-<style>
-  .policy-toggle-group input[type="radio"] {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-  }
 
-  .policy-toggle-option {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 110px;
-    padding: 0.65rem 1rem;
-    border: 1px solid var(--ki-border, #d7dee8);
-    border-radius: 999px;
-    background: #fff;
-    color: var(--ki-text-primary, #1f2937);
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.2s ease;
-  }
-
-  .policy-toggle-option:has(input:checked) {
-    border-color: var(--ki-primary, #2563eb);
-    background: rgba(37, 99, 235, 0.08);
-    color: var(--ki-primary, #2563eb);
-  }
-</style>
 {% endblock %}

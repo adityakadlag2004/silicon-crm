@@ -312,3 +312,40 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
 .leak-list .amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sip-tab { text-decoration: none; }
 .sip-tab.on { background: var(--ki-primary) !important; color: #fff !important; border-color: var(--ki-primary) !important; }
+
+/* ─── Print ──────────────────────────────────────────────────────────────
+   Reports are printed and PDF'd; the three report templates each carried an
+   identical copy of this. Applies app-wide, which is what you want anyway. */
+@media print {
+  @page { size: landscape; margin: 1cm; }
+  nav, footer, .no-print,
+  .kn-navbar, .kn-nav, .kn-overlay, .ki-sidebar, .ki-topbar { display: none !important; }
+  body { padding-top: 0 !important; }
+  .kn-content, .ki-main { margin-left: 0 !important; padding: 0 !important; max-width: none !important; }
+  .ki-card, .ki-table-wrap, .ki-rec, .ki-kpi { border: none !important; box-shadow: none !important; }
+  .ki-kpis { break-inside: avoid; }
+  .zero { color: #bbb; }
+}
+.zero { color: var(--ki-text-light); }
+
+/* ─── Segmented radio toggle ─────────────────────────────────────────────
+   Used by the three sale forms (new/admin/edit), each of which carried its
+   own copy. Radio inputs styled as a pill group.                         */
+.policy-toggle-group { display: flex; gap: .5rem; flex-wrap: wrap; }
+.policy-toggle-group input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.policy-toggle-option {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 110px; padding: .6rem 1rem;
+  border: 1px solid var(--ki-card-border); border-radius: 999px;
+  background: var(--ki-card-bg); color: var(--ki-text-primary);
+  cursor: pointer; font-weight: 600; transition: var(--ki-transition);
+}
+.policy-toggle-option:hover { border-color: var(--ki-primary); }
+.policy-toggle-option:has(input:checked) {
+  border-color: var(--ki-primary);
+  background: var(--ki-primary-pale);
+  color: var(--ki-primary);
+}
+/* Keyboard users need the focus ring the hidden radio would have given. */
+.policy-toggle-option:has(input:focus-visible) { outline: 2px solid var(--ki-primary); outline-offset: 2px; }
+@media (max-width: 480px) { .policy-toggle-option { min-width: 0; flex: 1 1 45%; } }

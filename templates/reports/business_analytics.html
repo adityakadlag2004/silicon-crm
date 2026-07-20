@@ -9,7 +9,6 @@
   .report-table th:first-child, .report-table td:first-child,
   .report-table th:nth-child(2), .report-table td:nth-child(2) { text-align: left; }
   .report-table tfoot td { font-weight: 700; background: var(--ki-body); }
-  .zero { color: #bbb; }
   .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
   .kpi { background: var(--ki-body); border-radius: 10px; padding: 14px 16px; }
   .kpi .kpi-label { font-size: .78rem; color: var(--ki-muted, #6b7280); }
@@ -17,15 +16,6 @@
   .view-tabs { display: inline-flex; gap: 6px; }
   .view-tabs a { font-size: .85rem; padding: 6px 14px; border-radius: 999px; text-decoration: none; border: 1px solid var(--ki-border, #e5e7eb); color: inherit; }
   .view-tabs a.active { background: var(--ki-primary, #2563eb); color: #fff; border-color: transparent; }
-
-  @media print {
-    @page { size: landscape; margin: 1cm; }
-    nav, .no-print, footer, .ki-sidebar, .ki-topbar { display: none !important; }
-    .ki-main { margin-left: 0 !important; padding: 0 !important; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .report-table { font-size: 10pt; }
-    .ki-card { border: none !important; box-shadow: none !important; }
-  }
 </style>
 {% endblock %}
 

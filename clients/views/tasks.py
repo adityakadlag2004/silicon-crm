@@ -319,6 +319,7 @@ def task_deleted(request):
         qs = Task.objects.filter(is_deleted=True)
     qs = qs.select_related("category", "assigned_to__user", "deleted_by").order_by("-deleted_at")
     ctx = _list_context(request, "deleted", "Deleted Tasks")
+    ctx["kpis"] = [{"label": "In Recycle Bin", "value": qs.count(), "color": "#BE123C"}]
     ctx.update({"tasks": qs[:300]})
     return render(request, "tasks/deleted.html", ctx)
 

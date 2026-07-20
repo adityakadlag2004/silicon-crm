@@ -33,6 +33,10 @@ def audit_log(request):
     )
 
     return render(request, "audit_log.html", {
+        "kpis": [
+            {"label": "Log Entries", "value": paginator.count, "color": "#4338CA"},
+            {"label": "Action Types", "value": len(distinct_actions), "color": "#0369A1"},
+        ],
         "page_obj": page,
         "selected_action": action,
         "selected_target": target,

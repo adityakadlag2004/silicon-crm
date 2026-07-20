@@ -79,6 +79,11 @@ def links_dashboard(request):
 
     return render(request, "links/dashboard.html", {
         "page_title": "Business Links",
+        "kpis": [
+            {"label": "Links", "value": len(links), "color": "#7E22CE"},
+            {"label": "Categories", "value": len(categories), "color": "#0369A1"},
+            {"label": "My Favourites", "value": len(favorites), "color": "#B45309"},
+        ],
         "categories": categories,
         "favorites": favorites,
         "uncategorized": by_cat.get(None, [])[:5],

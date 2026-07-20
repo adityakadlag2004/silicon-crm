@@ -300,6 +300,13 @@ def my_call_followups(request):
     ).select_related("client").order_by("-completed_at")[:30]
 
     return render(request, "calls/my_followups.html", {
+        "kpis": [
+            {"label": "Pending", "value": len(pending), "color": "#B45309"},
+            {"label": "Overdue",
+             "value": sum(1 for f in pending if f.scheduled_at < timezone.now()),
+             "color": "#BE123C"},
+            {"label": "Recently Done", "value": len(recent_done), "color": "#15803D"},
+        ],
         "pending": pending,
         "recent_done": recent_done,
         "now": timezone.now(),

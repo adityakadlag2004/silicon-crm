@@ -36,15 +36,6 @@
   .bo-total { font-weight: 700; }
   .bo-minibar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin-top: 4px; width: 100%; max-width: 160px; background: var(--ki-body, #f1f2f4); }
   .bo-minibar span { height: 100%; }
-  .zero { color: #bbb; }
-
-  @media print {
-    @page { size: landscape; margin: 1cm; }
-    nav, .no-print, footer, .ki-sidebar, .ki-topbar { display: none !important; }
-    .ki-main { margin-left: 0 !important; padding: 0 !important; }
-    .ki-card { border: none !important; box-shadow: none !important; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  }
 </style>
 {% endblock %}
 

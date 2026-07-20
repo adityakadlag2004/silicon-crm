@@ -363,7 +363,14 @@ def lead_management(request):
 
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__username") if can_see_stats else []
 
+    # Stage counts are already computed above — surface them as the strip.
     context = {
+        "kpis": [
+            {"label": "Pending", "value": stage_counts[Lead.STAGE_PENDING], "color": "#B45309"},
+            {"label": "Half Sold", "value": stage_counts[Lead.STAGE_HALF], "color": "#0369A1"},
+            {"label": "Processed", "value": stage_counts[Lead.STAGE_PROCESSED], "color": "#15803D"},
+            {"label": "Discarded", "value": tab_counts.get("discarded", 0), "color": "#BE123C"},
+        ],
         "leads": page_obj,
         "page_obj": page_obj,
         "page_range": page_range,

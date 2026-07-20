@@ -77,6 +77,12 @@ def team_list(request):
     managers = Employee.objects.filter(role="manager", active=True).count()
 
     context = {
+        "kpis": [
+            {"label": "Team Members", "value": total, "color": "#4338CA"},
+            {"label": "Active", "value": active_count, "color": "#15803D"},
+            {"label": "Admins", "value": admins, "color": "#BE123C"},
+            {"label": "Managers", "value": managers, "color": "#B45309"},
+        ],
         "employees": employees,
         "q": q,
         "role_filter": role_filter,
