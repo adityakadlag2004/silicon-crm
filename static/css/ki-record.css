@@ -349,3 +349,52 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
 /* Keyboard users need the focus ring the hidden radio would have given. */
 .policy-toggle-option:has(input:focus-visible) { outline: 2px solid var(--ki-primary); outline-offset: 2px; }
 @media (max-width: 480px) { .policy-toggle-option { min-width: 0; flex: 1 1 45%; } }
+
+/* ─── Forms ──────────────────────────────────────────────────────────────
+   Applies to all 62 form pages. Two things matter here beyond looks:
+
+   1. iOS Safari zooms the whole viewport when you focus an input whose
+      font-size is under 16px. Bootstrap's default is 14px, so every form in
+      the app janked on an iPhone. 16px on touch devices stops it.
+   2. Touch targets: a 32px-tall select is hard to hit accurately.        */
+.form-control, .form-select, .form-check-input {
+  border-color: var(--ki-card-border);
+}
+.form-label {
+  font-size: .83rem; font-weight: 600;
+  color: var(--ki-text-secondary); margin-bottom: .3rem;
+}
+.form-text { font-size: .78rem; color: var(--ki-text-muted); }
+
+@media (pointer: coarse) {
+  .form-control, .form-select, textarea.form-control {
+    font-size: 16px;      /* never below 16px — see note above */
+    min-height: 44px;
+  }
+  .form-control-sm, .form-select-sm { font-size: 16px; min-height: 40px; }
+  .form-check-input { width: 1.15em; height: 1.15em; }
+  .ki-btn, .btn { min-height: 40px; }
+}
+
+/* Form rows stack rather than squeeze on a narrow screen. */
+@media (max-width: 640px) {
+  .row > [class*="col-"] { margin-bottom: .6rem; }
+  .ki-card { padding-inline: .9rem; }
+}
+
+/* ─── Error pages (404 / 500) ─── */
+.error-container { min-height: 70vh; display: grid; place-items: center; padding: 2rem 1rem; }
+.error-box {
+  text-align: center; max-width: 460px;
+  background: var(--ki-card-bg); border: 1px solid var(--ki-card-border);
+  border-radius: var(--ki-radius-lg); padding: 2.5rem 2rem;
+}
+.error-code { font-size: 3.5rem; font-weight: 800; color: var(--ki-primary); line-height: 1; }
+.error-icon { font-size: 2.5rem; color: var(--ki-text-light); margin-bottom: .5rem; }
+.error-msg { color: var(--ki-text-secondary); margin: .75rem 0 1.5rem; }
+.btn-back {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .6rem 1.2rem; border-radius: var(--ki-radius);
+  background: var(--ki-primary); color: #fff; text-decoration: none; font-weight: 600;
+}
+.btn-back:hover { filter: brightness(1.05); color: #fff; }
