@@ -74,7 +74,7 @@
 		</div>
 		<div class="col-md-4">
 			<label class="form-label">Show series</label>
-			<select id="seriesMode" name="series_mode" class="form-select">
+			<select id="seriesMode" name="series_mode" class="form-select" aria-label="Show series">
 				<option value="net" {% if series_mode == 'net' %}selected{% endif %}>Net (Fresh - Stopped)</option>
 				<option value="fresh" {% if series_mode == 'fresh' %}selected{% endif %}>SIP Fresh only</option>
 				<option value="stopped" {% if series_mode == 'stopped' %}selected{% endif %}>SIP Stopped only</option>

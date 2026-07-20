@@ -32,7 +32,7 @@
     {% if employees %}
     <div class="col-sm-2">
       <label class="form-label small text-muted mb-0">Assigned To</label>
-      <select name="assigned_to" class="form-select form-select-sm">
+      <select name="assigned_to" class="form-select form-select-sm" aria-label="Assigned To">
         <option value="">All employees</option>
         {% for e in employees %}
           <option value="{{ e.id }}" {% if assigned_to_filter == e.id|stringformat:"d" %}selected{% endif %}>{{ e.user.username }}</option>
@@ -42,7 +42,7 @@
     {% endif %}
     <div class="col-sm-2">
       <label class="form-label small text-muted mb-0">Stage</label>
-      <select name="stage" class="form-select form-select-sm">
+      <select name="stage" class="form-select form-select-sm" aria-label="Stage">
         <option value="">All stages</option>
         <option value="pending" {% if stage_filter == 'pending' %}selected{% endif %}>Pending</option>
         <option value="half_sold" {% if stage_filter == 'half_sold' %}selected{% endif %}>Half Sold</option>
@@ -51,7 +51,7 @@
     </div>
     <div class="col-sm-1">
       <label class="form-label small text-muted mb-0">Data Rcvd</label>
-      <select name="data_received" class="form-select form-select-sm">
+      <select name="data_received" class="form-select form-select-sm" aria-label="Data Rcvd">
         <option value="">All</option>
         <option value="yes" {% if data_received_filter == 'yes' %}selected{% endif %}>Yes</option>
         <option value="no" {% if data_received_filter == 'no' %}selected{% endif %}>No</option>
@@ -59,11 +59,11 @@
     </div>
     <div class="col-sm-2">
       <label class="form-label small text-muted mb-0">From</label>
-      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" />
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" aria-label="From"/>
     </div>
     <div class="col-sm-2">
       <label class="form-label small text-muted mb-0">To</label>
-      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" />
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" aria-label="To"/>
     </div>
   </div>
   <div class="mt-2 d-flex gap-2">
@@ -262,11 +262,11 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">When to reach</label>
-            <input type="datetime-local" name="scheduled_time" class="form-control" required />
+            <input type="datetime-local" name="scheduled_time" class="form-control" required aria-label="When to reach"/>
           </div>
           <div class="mb-3">
             <label class="form-label">Notes (optional)</label>
-            <textarea name="note" class="form-control" rows="2"></textarea>
+            <textarea name="note" class="form-control" rows="2" aria-label="Notes (optional)"></textarea>
           </div>
           <div class="text-muted small" id="followupLeadLabel"></div>
         </div>
@@ -292,7 +292,7 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Remark</label>
-            <textarea name="text" class="form-control" rows="3" required></textarea>
+            <textarea name="text" class="form-control" rows="3" required aria-label="Remark"></textarea>
           </div>
           <div class="text-muted small" id="remarkLeadLabel"></div>
         </div>

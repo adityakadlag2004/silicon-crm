@@ -11,8 +11,8 @@
     <div class="mb-3">{{ form.product.label_tag }}{{ form.product }}{% if form.product.errors %}<div class="text-danger small">{{ form.product.errors.0 }}</div>{% endif %}</div>
     <div class="mb-3">{{ form.amount.label_tag }}{{ form.amount }}{% if form.amount.errors %}<div class="text-danger small">{{ form.amount.errors.0 }}</div>{% endif %}</div>
     <div class="mb-3">{{ form.date.label_tag }}{{ form.date }}{% if form.date.errors %}<div class="text-danger small">{{ form.date.errors.0 }}</div>{% endif %}</div>
-    <div class="mb-3"><label class="form-label">Employee</label><input type="text" class="form-control" value="{{ sale.employee.user.username }}" readonly></div>
-    <div class="mb-3"><label class="form-label">Client</label><input type="text" class="form-control" value="{{ sale.client.name }}" readonly></div>
+    <div class="mb-3"><label class="form-label">Employee</label><input type="text" class="form-control" value="{{ sale.employee.user.username }}" readonly aria-label="Employee"></div>
+    <div class="mb-3"><label class="form-label">Client</label><input type="text" class="form-control" value="{{ sale.client.name }}" readonly aria-label="Client"></div>
   </div>
   <div class="modal-footer">
     <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>

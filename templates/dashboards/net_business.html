@@ -74,7 +74,7 @@
 		</div>
 		<div class="col-md-4">
 			<label class="form-label">Show series</label>
-			<select id="seriesMode" name="series_mode" class="form-select">
+			<select id="seriesMode" name="series_mode" class="form-select" aria-label="Show series">
 				<option value="net" {% if series_mode == 'net' %}selected{% endif %}>Net (Sales - Redemptions)</option>
 				<option value="sales" {% if series_mode == 'sales' %}selected{% endif %}>Sales only</option>
 				<option value="redemptions" {% if series_mode == 'redemptions' %}selected{% endif %}>Redemptions only</option>

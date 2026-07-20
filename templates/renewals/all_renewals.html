@@ -42,7 +42,7 @@
     </div>
     <div>
       <label class="form-label">Product</label>
-      <select name="product" class="form-select">
+      <select name="product" class="form-select" aria-label="Product">
         <option value="">All</option>
         {% for p in product_options %}
         <option value="{{ p.id }}" {% if request.GET.product == p.id|stringformat:"s" %}selected{% endif %}>{{ p.name }}</option>
@@ -51,7 +51,7 @@
     </div>
     <div>
       <label class="form-label">Frequency</label>
-      <select name="frequency" class="form-select">
+      <select name="frequency" class="form-select" aria-label="Frequency">
         <option value="">All</option>
         <option value="monthly"     {% if request.GET.frequency == "monthly" %}selected{% endif %}>Monthly</option>
         <option value="quarterly"   {% if request.GET.frequency == "quarterly" %}selected{% endif %}>Quarterly</option>
@@ -65,10 +65,10 @@
       <input type="text" name="employee" class="form-control" placeholder="Username" value="{{ request.GET.employee|default:'' }}">
     </div>
     {% endif %}
-    <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date|default:'' }}"></div>
-    <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date|default:'' }}"></div>
-    <div><label class="form-label">Payment Start</label><input type="date" name="payment_start" class="form-control" value="{{ filter_payment_start|default:'' }}"></div>
-    <div><label class="form-label">Payment End</label><input type="date" name="payment_end" class="form-control" value="{{ filter_payment_end|default:'' }}"></div>
+    <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date|default:'' }}" aria-label="Start Date"></div>
+    <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date|default:'' }}" aria-label="End Date"></div>
+    <div><label class="form-label">Payment Start</label><input type="date" name="payment_start" class="form-control" value="{{ filter_payment_start|default:'' }}" aria-label="Payment Start"></div>
+    <div><label class="form-label">Payment End</label><input type="date" name="payment_end" class="form-control" value="{{ filter_payment_end|default:'' }}" aria-label="Payment End"></div>
     <div style="display:flex;gap:0.7rem;margin-top:0.5rem;flex-wrap:wrap;">
       <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-search"></i> Search</button>
       <a href="{% url 'clients:all_renewals' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>

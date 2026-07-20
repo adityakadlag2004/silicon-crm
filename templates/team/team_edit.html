@@ -40,15 +40,15 @@
     <div class="edit-form-grid">
       <div>
         <label class="form-label">First Name</label>
-        <input type="text" name="first_name" class="form-control" value="{{ emp.user.first_name }}" required>
+        <input type="text" name="first_name" class="form-control" value="{{ emp.user.first_name }}" required aria-label="First Name">
       </div>
       <div>
         <label class="form-label">Last Name</label>
-        <input type="text" name="last_name" class="form-control" value="{{ emp.user.last_name }}">
+        <input type="text" name="last_name" class="form-control" value="{{ emp.user.last_name }}" aria-label="Last Name">
       </div>
       <div>
         <label class="form-label">Email</label>
-        <input type="email" name="email" class="form-control" value="{{ emp.user.email }}">
+        <input type="email" name="email" class="form-control" value="{{ emp.user.email }}" aria-label="Email">
       </div>
       <div>
         <label class="form-label">Employee Number</label>
@@ -56,7 +56,7 @@
       </div>
       <div>
         <label class="form-label">Role</label>
-        <select name="role" class="form-select">
+        <select name="role" class="form-select" aria-label="Role">
           <option value="admin" {% if emp.role == "admin" %}selected{% endif %}>Admin</option>
           <option value="manager" {% if emp.role == "manager" %}selected{% endif %}>Manager</option>
           <option value="employee" {% if emp.role == "employee" %}selected{% endif %}>Employee</option>

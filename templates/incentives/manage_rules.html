@@ -43,11 +43,11 @@
     <div class="row g-2 mb-3" id="rule-fields-{{ rule.id }}">
       <div class="col-6">
         <label class="form-label" style="font-size:.8rem;font-weight:600;">Unit Amount (₹)</label>
-        <input type="number" step="0.01" class="form-control form-control-sm" id="unit-{{ rule.id }}" value="{{ rule.unit_amount }}" onchange="saveRuleField({{ rule.id }})">
+        <input type="number" step="0.01" class="form-control form-control-sm" id="unit-{{ rule.id }}" value="{{ rule.unit_amount }}" onchange="saveRuleField({{ rule.id }})" aria-label="Unit Amount (₹)">
       </div>
       <div class="col-6">
         <label class="form-label" style="font-size:.8rem;font-weight:600;">Points Per Unit</label>
-        <input type="number" step="0.001" class="form-control form-control-sm" id="ppu-{{ rule.id }}" value="{{ rule.points_per_unit }}" onchange="saveRuleField({{ rule.id }})">
+        <input type="number" step="0.001" class="form-control form-control-sm" id="ppu-{{ rule.id }}" value="{{ rule.points_per_unit }}" onchange="saveRuleField({{ rule.id }})" aria-label="Points Per Unit">
       </div>
     </div>
 
@@ -121,7 +121,7 @@
       <div class="modal-body" style="padding:20px;">
         <div class="mb-3">
           <label class="form-label fw-semibold">Product</label>
-          <select id="newRuleProduct" class="form-select">
+          <select id="newRuleProduct" class="form-select" aria-label="Product">
             <option value="">Select product…</option>
             {% for product in product_options %}
               <option value="{{ product.id }}">{{ product.name }}</option>
@@ -131,11 +131,11 @@
         <div class="row g-2">
           <div class="col-6">
             <label class="form-label fw-semibold">Unit Amount (₹)</label>
-            <input type="number" step="0.01" id="newRuleUnit" class="form-control" value="1000">
+            <input type="number" step="0.01" id="newRuleUnit" class="form-control" value="1000" aria-label="Unit Amount (₹)">
           </div>
           <div class="col-6">
             <label class="form-label fw-semibold">Points Per Unit</label>
-            <input type="number" step="0.001" id="newRulePPU" class="form-control" value="1">
+            <input type="number" step="0.001" id="newRulePPU" class="form-control" value="1" aria-label="Points Per Unit">
           </div>
         </div>
       </div>

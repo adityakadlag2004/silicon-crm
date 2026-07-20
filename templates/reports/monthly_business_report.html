@@ -22,7 +22,7 @@
   <form method="get" class="row g-2 align-items-end mb-4 no-print">
     <div class="col-auto">
       <label class="form-label mb-0 small">Month</label>
-      <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+      <select name="month" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Month">
         {% for num, name in months %}
           <option value="{{ num }}" {% if num == sel_month %}selected{% endif %}>{{ name }}</option>
         {% endfor %}
@@ -30,7 +30,7 @@
     </div>
     <div class="col-auto">
       <label class="form-label mb-0 small">Year</label>
-      <select name="year" class="form-select form-select-sm" onchange="this.form.submit()">
+      <select name="year" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Year">
         {% for y in years %}
           <option value="{{ y }}" {% if y == sel_year %}selected{% endif %}>{{ y }}</option>
         {% endfor %}

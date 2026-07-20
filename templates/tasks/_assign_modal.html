@@ -27,14 +27,14 @@
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Assign to <span class="text-muted" style="font-weight:400;">(pick one or more)</span></label>
-              <select name="assigned_to" class="form-select" multiple size="4">
+              <select name="assigned_to" class="form-select" multiple size="4" aria-label="Assign to (pick one or more)">
                 {% for e in employees %}<option value="{{ e.id }}">{{ e.user.get_full_name|default:e.user.username }} ({{ e.role }})</option>{% endfor %}
               </select>
               <div class="form-text">Select multiple to create a copy of the task for each person. Leave blank for an unassigned task.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Category</label>
-              <select name="category" class="form-select" id="tkCatSelect" data-create-url="{% url 'clients:task_category_create' %}">
+              <select name="category" class="form-select" id="tkCatSelect" data-create-url="{% url 'clients:task_category_create' %}" aria-label="Category">
                 <option value="">— None —</option>
                 {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
                 <option value="__add__">＋ Add category…</option>
@@ -50,28 +50,28 @@
             </div>
             <div class="col-md-4">
               <label class="form-label">Due date</label>
-              <input type="date" name="due_date" class="form-control">
+              <input type="date" name="due_date" class="form-control" aria-label="Due date">
             </div>
             <div class="col-md-4">
               <label class="form-label">Due time</label>
-              <input type="time" name="due_time" class="form-control">
+              <input type="time" name="due_time" class="form-control" aria-label="Due time">
             </div>
             <div class="col-md-4">
               <label class="form-label">Priority</label>
-              <select name="priority" class="form-select">
+              <select name="priority" class="form-select" aria-label="Priority">
                 {% for val,label in priorities %}<option value="{{ val }}" {% if val == 'medium' %}selected{% endif %}>{{ label }}</option>{% endfor %}
               </select>
             </div>
             <div class="col-md-8">
               <label class="form-label">Subscribers (In Loop)</label>
-              <select name="subscribers" class="form-select" multiple size="4">
+              <select name="subscribers" class="form-select" multiple size="4" aria-label="Subscribers (In Loop)">
                 {% for u in all_users %}<option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
               </select>
               <div class="form-text">Ctrl/Cmd-click to pick multiple. They get notified but aren't responsible.</div>
             </div>
             <div class="col-md-4">
               <label class="form-label">Repeat</label>
-              <select name="repeat_rule" class="form-select" id="tkRepeat">
+              <select name="repeat_rule" class="form-select" id="tkRepeat" aria-label="Repeat">
                 <option value="">Does not repeat</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
@@ -82,7 +82,7 @@
               <div class="row g-3">
                 <div class="col-md-6">
                   <label class="form-label">Repeat until (optional)</label>
-                  <input type="date" name="repeat_end_date" class="form-control">
+                  <input type="date" name="repeat_end_date" class="form-control" aria-label="Repeat until (optional)">
                 </div>
                 <div class="col-md-6">
                   <label class="form-label">…or after N occurrences (optional)</label>
@@ -96,7 +96,7 @@
           <div class="row g-3 mt-1">
             <div class="col-md-6">
               <label class="form-label">Attachments</label>
-              <input type="file" name="attachments" class="form-control" multiple>
+              <input type="file" name="attachments" class="form-control" multiple aria-label="Attachments">
             </div>
             <div class="col-md-6">
               <label class="form-label">Voice note</label>

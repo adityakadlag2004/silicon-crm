@@ -153,19 +153,19 @@
       <div class="ki-card-body">
         <form method="post" action="{% url 'clients:task_set_status' task.pk %}" style="margin-bottom:.6rem;">{% csrf_token %}
           <label class="form-label" style="font-size:.75rem;">Status</label>
-          <div style="display:flex;gap:.3rem;"><select name="status" class="form-select form-select-sm">
+          <div style="display:flex;gap:.3rem;"><select name="status" class="form-select form-select-sm" aria-label="Status">
             {% for val,label in statuses %}<option value="{{ val }}" {% if task.status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select><button class="ki-btn ki-btn-secondary ki-btn-sm">Set</button></div>
         </form>
         <form method="post" action="{% url 'clients:task_set_priority' task.pk %}" style="margin-bottom:.6rem;">{% csrf_token %}
           <label class="form-label" style="font-size:.75rem;">Priority</label>
-          <div style="display:flex;gap:.3rem;"><select name="priority" class="form-select form-select-sm">
+          <div style="display:flex;gap:.3rem;"><select name="priority" class="form-select form-select-sm" aria-label="Priority">
             {% for val,label in priorities %}<option value="{{ val }}" {% if task.priority == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select><button class="ki-btn ki-btn-secondary ki-btn-sm">Set</button></div>
         </form>
         <form method="post" action="{% url 'clients:task_set_category' task.pk %}" style="margin-bottom:.6rem;">{% csrf_token %}
           <label class="form-label" style="font-size:.75rem;">Category</label>
-          <div style="display:flex;gap:.3rem;"><select name="category" class="form-select form-select-sm">
+          <div style="display:flex;gap:.3rem;"><select name="category" class="form-select form-select-sm" aria-label="Category">
             <option value="">— None —</option>
             {% for c in categories %}<option value="{{ c.id }}" {% if task.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
           </select><button class="ki-btn ki-btn-secondary ki-btn-sm">Set</button></div>
@@ -173,8 +173,8 @@
         <form method="post" action="{% url 'clients:task_set_due' task.pk %}">{% csrf_token %}
           <label class="form-label" style="font-size:.75rem;">Due date / time</label>
           <div style="display:flex;gap:.3rem;flex-wrap:wrap;">
-            <input type="date" name="due_date" class="form-control form-control-sm" value="{{ task.due_date|date:'Y-m-d' }}" style="flex:1;">
-            <input type="time" name="due_time" class="form-control form-control-sm" value="{{ task.due_time|time:'H:i' }}" style="width:auto;">
+            <input type="date" name="due_date" class="form-control form-control-sm" value="{{ task.due_date|date:'Y-m-d' }}" style="flex:1;" aria-label="Due date">
+            <input type="time" name="due_time" class="form-control form-control-sm" value="{{ task.due_time|time:'H:i' }}" style="width:auto;" aria-label="Due time">
             <button class="ki-btn ki-btn-secondary ki-btn-sm">Set</button>
           </div>
         </form>

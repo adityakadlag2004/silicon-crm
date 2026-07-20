@@ -11,7 +11,7 @@
     {% if is_manager %}
       <div class="col-auto">
         <label class="form-label small">Employee</label>
-        <select name="employee_id" class="form-select form-select-sm">
+        <select name="employee_id" class="form-select form-select-sm" aria-label="Employee">
           {% for emp in employees %}
             <option value="{{ emp.id }}" {% if emp.id == employee.id %}selected{% endif %}>{{ emp.user.get_full_name|default:emp.user.username }}</option>
           {% endfor %}
@@ -21,11 +21,11 @@
 
     <div class="col-auto">
       <label class="form-label small">From</label>
-      <input type="date" name="start" class="form-control form-control-sm" value="{{ start }}" />
+      <input type="date" name="start" class="form-control form-control-sm" value="{{ start }}" aria-label="From"/>
     </div>
     <div class="col-auto">
       <label class="form-label small">To</label>
-      <input type="date" name="end" class="form-control form-control-sm" value="{{ end }}" />
+      <input type="date" name="end" class="form-control form-control-sm" value="{{ end }}" aria-label="To"/>
     </div>
     <div class="col-auto">
       <label class="form-label small">&nbsp;</label>

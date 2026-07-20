@@ -185,23 +185,23 @@
           <div class="row g-3">
             <div class="col-6">
               <label class="form-label">First Name</label>
-              <input type="text" name="first_name" class="form-control" required>
+              <input type="text" name="first_name" class="form-control" required aria-label="First Name">
             </div>
             <div class="col-6">
               <label class="form-label">Last Name</label>
-              <input type="text" name="last_name" class="form-control">
+              <input type="text" name="last_name" class="form-control" aria-label="Last Name">
             </div>
             <div class="col-6">
               <label class="form-label">Username <span class="text-danger">*</span></label>
-              <input type="text" name="username" class="form-control" required>
+              <input type="text" name="username" class="form-control" required aria-label="Username">
             </div>
             <div class="col-6">
               <label class="form-label">Email</label>
-              <input type="email" name="email" class="form-control">
+              <input type="email" name="email" class="form-control" aria-label="Email">
             </div>
             <div class="col-6">
               <label class="form-label">Password <span class="text-danger">*</span></label>
-              <input type="password" name="password" class="form-control" required minlength="6">
+              <input type="password" name="password" class="form-control" required minlength="6" aria-label="Password">
             </div>
             <div class="col-6">
               <label class="form-label">Employee #</label>
@@ -209,7 +209,7 @@
             </div>
             <div class="col-6">
               <label class="form-label">Role</label>
-              <select name="role" class="form-select">
+              <select name="role" class="form-select" aria-label="Role">
                 <option value="employee" selected>Employee</option>
                 <option value="manager">Manager</option>
                 <option value="admin">Admin</option>
@@ -217,7 +217,7 @@
             </div>
             <div class="col-6">
               <label class="form-label">Salary (₹/mo)</label>
-              <input type="number" name="salary" class="form-control" step="0.01" value="0">
+              <input type="number" name="salary" class="form-control" step="0.01" value="0" aria-label="Salary (₹/mo)">
             </div>
           </div>
         </div>

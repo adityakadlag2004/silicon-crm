@@ -72,7 +72,7 @@
       <input id="selectAllClients" type="checkbox" />
       <small>Select all</small>
     </label>
-    <select id="messageTemplateSelect" class="form-select" style="min-width:260px;">
+    <select id="messageTemplateSelect" class="form-select" style="min-width:260px;" aria-label="Select all">
       <option value="">Select message template...</option>
       {% for tpl in templates %}
         <option value="{{ tpl.id }}">{{ tpl.name }}</option>

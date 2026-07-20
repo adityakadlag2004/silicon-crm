@@ -50,7 +50,7 @@
   <form method="get" class="audit-filter">
     <div>
       <label class="form-label">Action</label>
-      <select name="action" class="form-select form-select-sm">
+      <select name="action" class="form-select form-select-sm" aria-label="Action">
         <option value="">All</option>
         {% for a in action_options %}
           <option value="{{ a }}" {% if a == selected_action %}selected{% endif %}>{{ a }}</option>
@@ -59,7 +59,7 @@
     </div>
     <div>
       <label class="form-label">Target Type</label>
-      <select name="target" class="form-select form-select-sm">
+      <select name="target" class="form-select form-select-sm" aria-label="Target Type">
         <option value="">All</option>
         {% for t in target_options %}
           <option value="{{ t }}" {% if t == selected_target %}selected{% endif %}>{{ t }}</option>

@@ -11,7 +11,7 @@
     {% csrf_token %}
     <div class="mb-3">
       <label class="form-label">Select Employee</label>
-      <select name="employee" class="form-select">
+      <select name="employee" class="form-select" aria-label="Select Employee">
         <option value="">-- Unmap (None) --</option>
         {% for emp in employees %}
           <option value="{{ emp.id }}" {% if client.mapped_to == emp %}selected{% endif %}>

@@ -128,7 +128,7 @@
         <div class="modal-body">
           <div class="mb-2">
             <label class="form-label">Name</label>
-            <input class="form-control" name="name" required>
+            <input class="form-control" name="name" required aria-label="Name">
           </div>
           <div class="mb-2">
             <label class="form-label">Code</label>
@@ -136,14 +136,14 @@
           </div>
           <div class="mb-2">
             <label class="form-label">Track Renewal?</label>
-            <select class="form-select" name="renewal_tracked" id="add_renewal_tracked">
+            <select class="form-select" name="renewal_tracked" id="add_renewal_tracked" aria-label="Track Renewal?">
               <option value="no" selected>No</option>
               <option value="yes">Yes</option>
             </select>
           </div>
           <div class="mb-2">
             <label class="form-label">RTA Feed Link</label>
-            <select class="form-select" name="rta_match" id="add_rta_match">
+            <select class="form-select" name="rta_match" id="add_rta_match" aria-label="RTA Feed Link">
               <option value="" selected>Not RTA-linked</option>
               <option value="sip">MF SIP installments</option>
               <option value="lumpsum">MF lumpsum purchases</option>
@@ -153,17 +153,17 @@
           </div>
           <div class="mb-2">
             <label class="form-label">Default Margin %</label>
-            <input type="number" step="0.01" min="0" class="form-control" name="margin_percent" value="0">
+            <input type="number" step="0.01" min="0" class="form-control" name="margin_percent" value="0" aria-label="Default Margin %">
             <small class="text-muted">Used when no revenue slab matches. Add slabs after saving.</small>
           </div>
           <div class="mb-2" id="add_renewal_margin_wrap" style="display:none;">
             <label class="form-label">Renewal Margin %</label>
-            <input type="number" step="0.01" min="0" class="form-control" name="renewal_margin_percent" value="0">
+            <input type="number" step="0.01" min="0" class="form-control" name="renewal_margin_percent" value="0" aria-label="Renewal Margin %">
             <small class="text-muted">Applied to this product's renewal premium.</small>
           </div>
           <div>
             <label class="form-label">Display Order</label>
-            <input type="number" class="form-control" name="display_order" value="0">
+            <input type="number" class="form-control" name="display_order" value="0" aria-label="Display Order">
           </div>
         </div>
         <div class="modal-footer">
@@ -189,22 +189,22 @@
         <div class="modal-body">
           <div class="mb-2">
             <label class="form-label">Name</label>
-            <input class="form-control" name="name" id="edit_name" required>
+            <input class="form-control" name="name" id="edit_name" required aria-label="Name">
           </div>
           <div class="mb-2">
             <label class="form-label">Code</label>
-            <input class="form-control" name="code" id="edit_code" required>
+            <input class="form-control" name="code" id="edit_code" required aria-label="Code">
           </div>
           <div class="mb-2">
             <label class="form-label">Track Renewal?</label>
-            <select class="form-select" name="renewal_tracked" id="edit_renewal_tracked">
+            <select class="form-select" name="renewal_tracked" id="edit_renewal_tracked" aria-label="Track Renewal?">
               <option value="no">No</option>
               <option value="yes">Yes</option>
             </select>
           </div>
           <div class="mb-2">
             <label class="form-label">RTA Feed Link</label>
-            <select class="form-select" name="rta_match" id="edit_rta_match">
+            <select class="form-select" name="rta_match" id="edit_rta_match" aria-label="RTA Feed Link">
               <option value="">Not RTA-linked</option>
               <option value="sip">MF SIP installments</option>
               <option value="lumpsum">MF lumpsum purchases</option>
@@ -214,17 +214,17 @@
           </div>
           <div class="mb-2">
             <label class="form-label">Default Margin %</label>
-            <input type="number" step="0.01" min="0" class="form-control" name="margin_percent" id="edit_margin_percent">
+            <input type="number" step="0.01" min="0" class="form-control" name="margin_percent" id="edit_margin_percent" aria-label="Default Margin %">
             <small class="text-muted">Used when no revenue slab matches.</small>
           </div>
           <div class="mb-2" id="edit_renewal_margin_wrap" style="display:none;">
             <label class="form-label">Renewal Margin %</label>
-            <input type="number" step="0.01" min="0" class="form-control" name="renewal_margin_percent" id="edit_renewal_margin_percent">
+            <input type="number" step="0.01" min="0" class="form-control" name="renewal_margin_percent" id="edit_renewal_margin_percent" aria-label="Renewal Margin %">
             <small class="text-muted">Applied to this product's renewal premium.</small>
           </div>
           <div>
             <label class="form-label">Display Order</label>
-            <input type="number" class="form-control" name="display_order" id="edit_display_order">
+            <input type="number" class="form-control" name="display_order" id="edit_display_order" aria-label="Display Order">
           </div>
         </div>
         <div class="modal-footer">
@@ -324,7 +324,7 @@
           {% if product.is_health %}
           <div class="col-md-3">
             <label class="form-label" style="font-size:.8rem;">Type</label>
-            <select class="form-select form-select-sm" name="policy_type" required>
+            <select class="form-select form-select-sm" name="policy_type" required aria-label="Type">
               <option value="fresh">Fresh</option>
               <option value="port">Port</option>
             </select>
@@ -332,15 +332,15 @@
           {% endif %}
           <div class="{% if product.is_health %}col-md-2{% else %}col-md-3{% endif %}">
             <label class="form-label" style="font-size:.8rem;">Min ₹</label>
-            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="min_amount" required>
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="min_amount" required aria-label="Min ₹">
           </div>
           <div class="{% if product.is_health %}col-md-2{% else %}col-md-3{% endif %}">
             <label class="form-label" style="font-size:.8rem;">Max ₹ <span class="text-muted">(blank = ∞)</span></label>
-            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="max_amount">
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="max_amount" aria-label="Max ₹ (blank = ∞)">
           </div>
           <div class="col-md-2">
             <label class="form-label" style="font-size:.8rem;">Margin %</label>
-            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="margin_percent" required>
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="margin_percent" required aria-label="Margin %">
           </div>
           <div class="col-md-2">
             <button type="submit" class="ki-btn ki-btn-primary w-100" style="font-size:.82rem;">

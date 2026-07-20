@@ -47,7 +47,7 @@
             {{ form.mapped_to }}
           {% else %}
             {% if client.mapped_to %}
-              <input class="form-control" type="text" value="{{ client.mapped_to.user.username }}" disabled>
+              <input class="form-control" type="text" value="{{ client.mapped_to.user.username }}" disabled aria-label="Mapped To">
             {% else %}
               <input class="form-control" type="text" value="-" disabled>
             {% endif %}

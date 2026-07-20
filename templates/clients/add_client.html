@@ -14,7 +14,7 @@
       <div class="col-md-6">
         <label class="form-label">Client Name *</label>
         <input type="text" name="name" value="{{ form.name.value|default_if_none:'' }}"
-               class="form-control {% if form.name.errors %}is-invalid{% endif %}" required>
+               class="form-control {% if form.name.errors %}is-invalid{% endif %}" required aria-label="Client Name">
         <div class="invalid-feedback">
           {% if form.name.errors %}{{ form.name.errors.0 }}{% else %}Name is required{% endif %}
         </div>
@@ -23,7 +23,7 @@
       <div class="col-md-6">
         <label class="form-label">Email *</label>
         <input type="email" name="email" value="{{ form.email.value|default_if_none:'' }}"
-               class="form-control {% if form.email.errors %}is-invalid{% endif %}" required style="text-transform: uppercase;">
+               class="form-control {% if form.email.errors %}is-invalid{% endif %}" required style="text-transform: uppercase;" aria-label="Email">
         <div class="invalid-feedback">
           {% if form.email.errors %}{{ form.email.errors.0 }}{% else %}Email is required and must be valid{% endif %}
         </div>
@@ -51,7 +51,7 @@
       <!-- Address -->
       <div class="col-12">
         <label class="form-label">Address</label>
-        <textarea name="address" class="form-control {% if form.address.errors %}is-invalid{% endif %}" rows="2">{{ form.address.value|default_if_none:'' }}</textarea>
+        <textarea name="address" class="form-control {% if form.address.errors %}is-invalid{% endif %}" rows="2" aria-label="Address">{{ form.address.value|default_if_none:'' }}</textarea>
         <div class="invalid-feedback">
           {% if form.address.errors %}{{ form.address.errors.0 }}{% endif %}
         </div>
@@ -68,7 +68,7 @@
     <div class="row g-3">
       <div class="col-md-4">
         <label class="form-label">SIP Amount</label>
-        <input type="number" step="0.01" name="sip_amount" value="{{ form.sip_amount.value|default_if_none:'' }}" class="form-control">
+        <input type="number" step="0.01" name="sip_amount" value="{{ form.sip_amount.value|default_if_none:'' }}" class="form-control" aria-label="SIP Amount">
       </div>
       <div class="col-md-4">
         <label class="form-label">Lumsum Investment</label>
@@ -76,15 +76,15 @@
       </div>
       <div class="col-md-4">
         <label class="form-label">PMS Amount</label>
-        <input type="number" step="0.01" name="pms_amount" value="{{ form.pms_amount.value|default_if_none:'' }}" class="form-control">
+        <input type="number" step="0.01" name="pms_amount" value="{{ form.pms_amount.value|default_if_none:'' }}" class="form-control" aria-label="PMS Amount">
       </div>
       <div class="col-md-4">
         <label class="form-label">Life Cover</label>
-        <input type="number" step="0.01" name="life_cover" value="{{ form.life_cover.value|default_if_none:'' }}" class="form-control">
+        <input type="number" step="0.01" name="life_cover" value="{{ form.life_cover.value|default_if_none:'' }}" class="form-control" aria-label="Life Cover">
       </div>
       <div class="col-md-4">
         <label class="form-label">Health Cover</label>
-        <input type="number" step="0.01" name="health_cover" value="{{ form.health_cover.value|default_if_none:'' }}" class="form-control">
+        <input type="number" step="0.01" name="health_cover" value="{{ form.health_cover.value|default_if_none:'' }}" class="form-control" aria-label="Health Cover">
       </div>
     </div>
     <hr class="my-4">

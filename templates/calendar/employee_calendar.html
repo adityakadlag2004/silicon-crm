@@ -162,19 +162,19 @@
               <form id="createEventForm">
                 <div class="mb-2">
                   <label class="form-label small">Title</label>
-                  <input class="form-control form-control-sm" name="title" id="evt_title" required />
+                  <input class="form-control form-control-sm" name="title" id="evt_title" required aria-label="Title"/>
                 </div>
                 <div class="mb-2">
                   <label class="form-label small">When</label>
-                  <input type="datetime-local" class="form-control form-control-sm" name="scheduled_time" id="evt_when" required />
+                  <input type="datetime-local" class="form-control form-control-sm" name="scheduled_time" id="evt_when" required aria-label="When"/>
                 </div>
                 <div class="mb-2">
                   <label class="form-label small">End</label>
-                  <input type="datetime-local" class="form-control form-control-sm" name="end_time" id="evt_end" />
+                  <input type="datetime-local" class="form-control form-control-sm" name="end_time" id="evt_end" aria-label="End"/>
                 </div>
                 <div class="mb-2">
                   <label class="form-label small">Type</label>
-                  <select class="form-select form-select-sm" id="evt_type" name="type">
+                  <select class="form-select form-select-sm" id="evt_type" name="type" aria-label="Type">
                     <option value="call_followup">Call Follow-up</option>
                     <option value="meeting">Meeting</option>
                     <option value="task">Task</option>
@@ -184,7 +184,7 @@
                 </div>
                 <div class="mb-2">
                   <label class="form-label small">Notes</label>
-                  <textarea class="form-control form-control-sm" id="evt_notes" name="notes"></textarea>
+                  <textarea class="form-control form-control-sm" id="evt_notes" name="notes" aria-label="Notes"></textarea>
                 </div>
               </form>
             </div>

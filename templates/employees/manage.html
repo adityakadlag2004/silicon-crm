@@ -15,19 +15,19 @@
           <input type="hidden" name="action" value="create" />
           <div class="mb-3">
             <label class="form-label">Username</label>
-            <input type="text" name="username" class="form-control" required />
+            <input type="text" name="username" class="form-control" required aria-label="Username"/>
           </div>
           <div class="mb-3">
             <label class="form-label">Email</label>
-            <input type="email" name="email" class="form-control" />
+            <input type="email" name="email" class="form-control" aria-label="Email"/>
           </div>
           <div class="mb-3">
             <label class="form-label">Password</label>
-            <input type="password" name="password" class="form-control" required />
+            <input type="password" name="password" class="form-control" required aria-label="Password"/>
           </div>
           <div class="mb-3">
             <label class="form-label">Role</label>
-            <select name="role" class="form-select">
+            <select name="role" class="form-select" aria-label="Role">
               <option value="employee">Employee</option>
               <option value="manager">Manager</option>
               <option value="admin">Admin</option>
@@ -35,7 +35,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Salary</label>
-            <input type="number" step="0.01" name="salary" class="form-control" value="0" />
+            <input type="number" step="0.01" name="salary" class="form-control" value="0" aria-label="Salary"/>
           </div>
           <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Create</button>
         </form>

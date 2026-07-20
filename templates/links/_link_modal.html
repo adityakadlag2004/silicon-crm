@@ -10,14 +10,14 @@
         </div>
         <div class="modal-body">
           <div class="mb-3"><label class="form-label">Title</label>
-            <input type="text" name="title" id="linkTitle" class="form-control" required maxlength="200"></div>
+            <input type="text" name="title" id="linkTitle" class="form-control" required maxlength="200" aria-label="Title"></div>
           <div class="mb-3"><label class="form-label">URL</label>
             <input type="text" name="url" id="linkUrl" class="form-control" required placeholder="https://…" maxlength="500"></div>
           <div class="mb-3"><label class="form-label">Description</label>
-            <input type="text" name="description" id="linkDesc" class="form-control" maxlength="255"></div>
+            <input type="text" name="description" id="linkDesc" class="form-control" maxlength="255" aria-label="Description"></div>
           <div class="row g-3">
             <div class="col-md-7"><label class="form-label">Category</label>
-              <select name="category" id="linkCat" class="form-select" data-create-url="{% url 'clients:link_category_create' %}">
+              <select name="category" id="linkCat" class="form-select" data-create-url="{% url 'clients:link_category_create' %}" aria-label="Category">
                 <option value="">— Uncategorized —</option>
                 {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
                 <option value="__add__">＋ Add category…</option>

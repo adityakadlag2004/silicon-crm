@@ -9,11 +9,11 @@
       <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
         <div>
           <label class="form-label fw-semibold mb-1">From</label>
-          <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control">
+          <input type="date" name="start" value="{{ start|date:'Y-m-d' }}" class="form-control" aria-label="From">
         </div>
         <div>
           <label class="form-label fw-semibold mb-1">To</label>
-          <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control">
+          <input type="date" name="end" value="{{ end|date:'Y-m-d' }}" class="form-control" aria-label="To">
         </div>
         <button class="btn btn-primary">Apply</button>
         <span class="text-muted ms-2" style="font-size:.85rem;">
@@ -39,11 +39,11 @@
         <div class="d-flex gap-2 mb-2">
           <div class="flex-fill">
             <label class="form-label mb-1" style="font-size:.75rem;">From</label>
-            <input type="time" name="work_start" value="{{ cfg.work_start|time:'H:i' }}" class="form-control form-control-sm">
+            <input type="time" name="work_start" value="{{ cfg.work_start|time:'H:i' }}" class="form-control form-control-sm" aria-label="Working hours start">
           </div>
           <div class="flex-fill">
             <label class="form-label mb-1" style="font-size:.75rem;">To</label>
-            <input type="time" name="work_end" value="{{ cfg.work_end|time:'H:i' }}" class="form-control form-control-sm">
+            <input type="time" name="work_end" value="{{ cfg.work_end|time:'H:i' }}" class="form-control form-control-sm" aria-label="Working hours end">
           </div>
         </div>
         <div class="d-flex flex-wrap gap-1 mb-3">
@@ -65,11 +65,11 @@
         <div class="d-flex gap-2 mb-2">
           <div class="flex-fill">
             <label class="form-label mb-1" style="font-size:.75rem;">From</label>
-            <input type="time" name="popup_start" value="{{ cfg.popup_start|time:'H:i' }}" class="form-control form-control-sm">
+            <input type="time" name="popup_start" value="{{ cfg.popup_start|time:'H:i' }}" class="form-control form-control-sm" aria-label="Popup window start">
           </div>
           <div class="flex-fill">
             <label class="form-label mb-1" style="font-size:.75rem;">To</label>
-            <input type="time" name="popup_end" value="{{ cfg.popup_end|time:'H:i' }}" class="form-control form-control-sm">
+            <input type="time" name="popup_end" value="{{ cfg.popup_end|time:'H:i' }}" class="form-control form-control-sm" aria-label="Popup window end">
           </div>
         </div>
         <div class="d-flex flex-wrap gap-1 mb-3">
@@ -192,7 +192,7 @@
       <input type="hidden" name="end" value="{{ end|date:'Y-m-d' }}">
       <div>
         <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Employee</label>
-        <select name="calls_emp" class="form-select form-select-sm" onchange="this.form.submit()">
+        <select name="calls_emp" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Employee">
           <option value="">All employees</option>
           {% for e in employees %}
             <option value="{{ e.id }}" {% if e.id == calls_emp_id %}selected{% endif %}>
@@ -203,7 +203,7 @@
       </div>
       <div>
         <label class="form-label fw-semibold mb-1" style="font-size:.8rem;">Timeframe</label>
-        <select name="calls_range" class="form-select form-select-sm" onchange="this.form.submit()">
+        <select name="calls_range" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Timeframe">
           <option value="today" {% if calls_range == "today" %}selected{% endif %}>Today</option>
           <option value="week" {% if calls_range == "week" %}selected{% endif %}>This week</option>
           <option value="month" {% if calls_range == "month" %}selected{% endif %}>This month</option>

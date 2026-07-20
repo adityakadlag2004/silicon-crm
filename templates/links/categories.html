@@ -32,11 +32,11 @@
     <div class="ki-card"><div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-plus-circle"></i> New category</span></div>
       <div class="ki-card-body">
         <form method="post">{% csrf_token %}<input type="hidden" name="action" value="create">
-          <div class="mb-2"><label class="form-label">Name</label><input type="text" name="name" class="form-control form-control-sm" required maxlength="80"></div>
-          <div class="mb-2"><label class="form-label">Description</label><input type="text" name="description" class="form-control form-control-sm" maxlength="255"></div>
+          <div class="mb-2"><label class="form-label">Name</label><input type="text" name="name" class="form-control form-control-sm" required maxlength="80" aria-label="Name"></div>
+          <div class="mb-2"><label class="form-label">Description</label><input type="text" name="description" class="form-control form-control-sm" maxlength="255" aria-label="Description"></div>
           <div class="row g-2">
-            <div class="col-6"><label class="form-label">Color</label><input type="color" name="color" class="form-control form-control-sm form-control-color" value="#2563eb"></div>
-            <div class="col-6"><label class="form-label">Icon</label><input type="text" name="icon" class="form-control form-control-sm" value="bi-link-45deg"></div>
+            <div class="col-6"><label class="form-label">Color</label><input type="color" name="color" class="form-control form-control-sm form-control-color" value="#2563eb" aria-label="Color"></div>
+            <div class="col-6"><label class="form-label">Icon</label><input type="text" name="icon" class="form-control form-control-sm" value="bi-link-45deg" aria-label="Icon"></div>
           </div>
           <button class="ki-btn ki-btn-primary ki-btn-sm" style="width:100%;margin-top:.6rem;"><i class="bi bi-check-lg"></i> Add category</button>
         </form>

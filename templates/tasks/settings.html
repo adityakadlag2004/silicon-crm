@@ -40,7 +40,7 @@
             <label class="form-check-label" for="remind_same_day">On the due day</label>
           </div>
           <label class="form-label" style="margin-top:.6rem;">Reminder hour (0–23)</label>
-          <input type="number" name="same_day_hour" min="0" max="23" class="form-control form-control-sm" value="{{ reminder.same_day_hour }}" style="width:100px;">
+          <input type="number" name="same_day_hour" min="0" max="23" class="form-control form-control-sm" value="{{ reminder.same_day_hour }}" style="width:100px;" aria-label="Reminder hour (0–23)">
           <div class="form-text">Overdue alerts are always sent when a task passes its deadline.</div>
           <button class="ki-btn ki-btn-primary ki-btn-sm" style="margin-top:.7rem;"><i class="bi bi-save"></i> Save reminders</button>
         </form>

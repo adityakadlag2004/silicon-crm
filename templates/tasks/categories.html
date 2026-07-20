@@ -35,10 +35,10 @@
       <div class="ki-card-body">
         <form method="post">{% csrf_token %}
           <input type="hidden" name="action" value="create">
-          <div class="mb-2"><label class="form-label">Name</label><input type="text" name="name" class="form-control form-control-sm" required maxlength="80"></div>
-          <div class="mb-2"><label class="form-label">Description</label><input type="text" name="description" class="form-control form-control-sm" maxlength="255"></div>
+          <div class="mb-2"><label class="form-label">Name</label><input type="text" name="name" class="form-control form-control-sm" required maxlength="80" aria-label="Name"></div>
+          <div class="mb-2"><label class="form-label">Description</label><input type="text" name="description" class="form-control form-control-sm" maxlength="255" aria-label="Description"></div>
           <div class="row g-2">
-            <div class="col-6"><label class="form-label">Color</label><input type="color" name="color" class="form-control form-control-sm form-control-color" value="#E5B740"></div>
+            <div class="col-6"><label class="form-label">Color</label><input type="color" name="color" class="form-control form-control-sm form-control-color" value="#E5B740" aria-label="Color"></div>
             <div class="col-6"><label class="form-label">Icon</label><input type="text" name="icon" class="form-control form-control-sm" value="bi-folder-fill" placeholder="bi-briefcase-fill"></div>
           </div>
           <div class="form-text mb-2">Icon = a <a href="https://icons.getbootstrap.com/" target="_blank">Bootstrap Icons</a> class.</div>

@@ -135,27 +135,27 @@
       <div class="fp-section-title"><i class="bi bi-person-fill"></i> Personal Information</div>
       <div class="fp-grid">
         <div class="fp-field"><label>Name</label><input type="text" id="inp-name" placeholder="Your Name" value="Client"></div>
-        <div class="fp-field"><label>Current Age</label><input type="number" id="inp-age" value="30" min="18" max="80"></div>
-        <div class="fp-field"><label>Retirement Age</label><input type="number" id="inp-retire" value="60" min="40" max="85"></div>
-        <div class="fp-field"><label>Life Expectancy</label><input type="number" id="inp-life" value="85" min="60" max="100"></div>
+        <div class="fp-field"><label>Current Age</label><input type="number" id="inp-age" value="30" min="18" max="80" aria-label="Current Age"></div>
+        <div class="fp-field"><label>Retirement Age</label><input type="number" id="inp-retire" value="60" min="40" max="85" aria-label="Retirement Age"></div>
+        <div class="fp-field"><label>Life Expectancy</label><input type="number" id="inp-life" value="85" min="60" max="100" aria-label="Life Expectancy"></div>
       </div>
     </div>
 
     <div class="ki-card fp-section">
       <div class="fp-section-title"><i class="bi bi-cash-coin"></i> Income &amp; Expense Inputs</div>
       <div class="fp-grid">
-        <div class="fp-field"><label>Current Yearly Income (Post-Tax) ₹</label><input type="number" id="inp-income" value="1200000"></div>
-        <div class="fp-field"><label>Income Growth Rate (%)</label><input type="number" id="inp-income-growth" value="8" step="0.1"></div>
-        <div class="fp-field"><label>Current Yearly Expenses ₹</label><input type="number" id="inp-expense" value="1000000"></div>
-        <div class="fp-field"><label>Expense Inflation Rate (%)</label><input type="number" id="inp-expense-inflation" value="6" step="0.1"></div>
+        <div class="fp-field"><label>Current Yearly Income (Post-Tax) ₹</label><input type="number" id="inp-income" value="1200000" aria-label="Current Yearly Income (Post-Tax) ₹"></div>
+        <div class="fp-field"><label>Income Growth Rate (%)</label><input type="number" id="inp-income-growth" value="8" step="0.1" aria-label="Income Growth Rate (%)"></div>
+        <div class="fp-field"><label>Current Yearly Expenses ₹</label><input type="number" id="inp-expense" value="1000000" aria-label="Current Yearly Expenses ₹"></div>
+        <div class="fp-field"><label>Expense Inflation Rate (%)</label><input type="number" id="inp-expense-inflation" value="6" step="0.1" aria-label="Expense Inflation Rate (%)"></div>
       </div>
     </div>
 
     <div class="ki-card fp-section">
       <div class="fp-section-title"><i class="bi bi-sliders"></i> Investment Assumptions</div>
       <div class="fp-grid">
-        <div class="fp-field"><label>Expected Return Rate (%)</label><input type="number" id="inp-return" value="12" step="0.1"></div>
-        <div class="fp-field"><label>General Inflation Rate (%)</label><input type="number" id="inp-inflation" value="6" step="0.1"></div>
+        <div class="fp-field"><label>Expected Return Rate (%)</label><input type="number" id="inp-return" value="12" step="0.1" aria-label="Expected Return Rate (%)"></div>
+        <div class="fp-field"><label>General Inflation Rate (%)</label><input type="number" id="inp-inflation" value="6" step="0.1" aria-label="General Inflation Rate (%)"></div>
       </div>
     </div>
 
@@ -409,11 +409,11 @@
       <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1.2rem;padding:1rem;background:var(--ki-sidebar-bg,#f8fafc);border-radius:8px;border:1px solid var(--ki-border,#e2e8f0);">
         <div class="fp-field" style="min-width:160px;">
           <label>Custom Return Rate (%)</label>
-          <input type="number" id="st-custom-ret" value="10" step="0.5" oninput="buildStressGrid()">
+          <input type="number" id="st-custom-ret" value="10" step="0.5" oninput="buildStressGrid()" aria-label="Custom Return Rate (%)">
         </div>
         <div class="fp-field" style="min-width:160px;">
           <label>Custom Inflation Rate (%)</label>
-          <input type="number" id="st-custom-inf" value="7" step="0.5" oninput="buildStressGrid()">
+          <input type="number" id="st-custom-inf" value="7" step="0.5" oninput="buildStressGrid()" aria-label="Custom Inflation Rate (%)">
         </div>
         <div style="padding-bottom:0.1rem;">
           <button class="ki-btn ki-btn-primary" onclick="buildStressGrid()"><i class="bi bi-play-fill"></i> Run Stress Test</button>
@@ -471,10 +471,10 @@ function addGoal() {
     </div>
     <div class="fp-goal-row">
       <div class="fp-field"><label>Goal Name</label><input type="text" id="g${id}-name" placeholder="e.g. Child Education" oninput="recalc()"></div>
-      <div class="fp-field"><label>Cost Today ₹</label><input type="number" id="g${id}-cost" value="2000000" oninput="recalc()"></div>
-      <div class="fp-field"><label>Target Year</label><input type="number" id="g${id}-year" value="${currentYear + 15}" oninput="recalc()"></div>
-      <div class="fp-field"><label>Inflation Rate (%)</label><input type="number" id="g${id}-inf" value="6" step="0.1" oninput="recalc()"></div>
-      <div class="fp-field"><label>Expected Return (%)</label><input type="number" id="g${id}-ret" value="12" step="0.1" oninput="recalc()"></div>
+      <div class="fp-field"><label>Cost Today ₹</label><input type="number" id="g${id}-cost" value="2000000" oninput="recalc()" aria-label="Cost Today ₹"></div>
+      <div class="fp-field"><label>Target Year</label><input type="number" id="g${id}-year" value="${currentYear + 15}" oninput="recalc()" aria-label="Target Year"></div>
+      <div class="fp-field"><label>Inflation Rate (%)</label><input type="number" id="g${id}-inf" value="6" step="0.1" oninput="recalc()" aria-label="Inflation Rate (%)"></div>
+      <div class="fp-field"><label>Expected Return (%)</label><input type="number" id="g${id}-ret" value="12" step="0.1" oninput="recalc()" aria-label="Expected Return (%)"></div>
       <div class="fp-goal-result" id="g${id}-result"></div>
     </div>
   `;
@@ -518,14 +518,14 @@ function addAsset() {
       <div class="fp-field"><label>Asset Name</label><input type="text" id="a${id}-name" placeholder="e.g. SBI Bluechip Fund" oninput="recalc()"></div>
       <div class="fp-field">
         <label>Category</label>
-        <select id="a${id}-cat" onchange="autoFillReturn(${id})" >
+        <select id="a${id}-cat" onchange="autoFillReturn(${id})" aria-label="Category">
           ${ASSET_CATEGORIES.map(c => `<option value="${c.name}">${c.name} (${c.rate}%)</option>`).join('')}
         </select>
       </div>
       <div class="fp-field"><label>Current Value ₹</label><input type="number" id="a${id}-val" value="0" placeholder="Enter amount" oninput="recalc()"></div>
       <div class="fp-field">
         <label>Expected Return (%) <span style="font-weight:400;color:var(--ki-text-muted,#94a3b8);font-size:0.75rem;">— auto-filled</span></label>
-        <input type="number" id="a${id}-ret" value="${ASSET_CATEGORIES[0].rate}" step="0.1" oninput="recalc()">
+        <input type="number" id="a${id}-ret" value="${ASSET_CATEGORIES[0].rate}" step="0.1" oninput="recalc()" aria-label="Expected Return (%) — auto-filled">
       </div>
       <div class="fp-asset-result" id="a${id}-result"></div>
     </div>

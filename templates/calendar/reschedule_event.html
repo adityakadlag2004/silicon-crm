@@ -12,7 +12,7 @@
     {% csrf_token %}
     <div class="mb-3">
       <label for="scheduled_time" class="form-label">New Date & Time</label>
-      <input type="datetime-local" name="scheduled_time" class="form-control" required>
+      <input type="datetime-local" name="scheduled_time" class="form-control" required aria-label="New Date & Time">
     </div>
     <div class="d-flex gap-2">
       <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save</button>

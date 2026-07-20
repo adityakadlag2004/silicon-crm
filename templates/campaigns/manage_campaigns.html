@@ -71,7 +71,7 @@
 
         <div class="mb-2">
           <label class="form-label" style="font-size:.78rem;font-weight:600;">Benefit Type</label>
-          <select class="form-select form-select-sm" id="cp-benefit-{{ cp.id }}" onchange="changeBenefitType({{ cp.id }})">
+          <select class="form-select form-select-sm" id="cp-benefit-{{ cp.id }}" onchange="changeBenefitType({{ cp.id }})" aria-label="Benefit Type">
             <option value="unit" {% if cp.benefit_type == "unit" %}selected{% endif %}>Custom points per unit</option>
             <option value="target" {% if cp.benefit_type == "target" %}selected{% endif %}>One-time target payout</option>
           </select>
@@ -81,11 +81,11 @@
         <div class="row g-2 mb-2 cp-unit-config" id="cp-unit-{{ cp.id }}" style="{% if cp.benefit_type != "unit" %}display:none;{% endif %}">
           <div class="col-6">
             <label class="form-label" style="font-size:.78rem;font-weight:600;">Unit Amount (₹)</label>
-            <input type="number" step="0.01" class="form-control form-control-sm" id="cp-unitamt-{{ cp.id }}" value="{{ cp.unit_amount|default_if_none:'' }}" onchange="saveProductField({{ cp.id }})">
+            <input type="number" step="0.01" class="form-control form-control-sm" id="cp-unitamt-{{ cp.id }}" value="{{ cp.unit_amount|default_if_none:'' }}" onchange="saveProductField({{ cp.id }})" aria-label="Unit Amount (₹)">
           </div>
           <div class="col-6">
             <label class="form-label" style="font-size:.78rem;font-weight:600;">Points Per Unit</label>
-            <input type="number" step="0.001" class="form-control form-control-sm" id="cp-ppu-{{ cp.id }}" value="{{ cp.points_per_unit|default_if_none:'' }}" onchange="saveProductField({{ cp.id }})">
+            <input type="number" step="0.001" class="form-control form-control-sm" id="cp-ppu-{{ cp.id }}" value="{{ cp.points_per_unit|default_if_none:'' }}" onchange="saveProductField({{ cp.id }})" aria-label="Points Per Unit">
           </div>
         </div>
 
@@ -153,11 +153,11 @@
         <div class="row g-2">
           <div class="col-6">
             <label class="form-label fw-semibold">Start Date</label>
-            <input type="date" id="campaignStart" class="form-control">
+            <input type="date" id="campaignStart" class="form-control" aria-label="Start Date">
           </div>
           <div class="col-6">
             <label class="form-label fw-semibold">End Date</label>
-            <input type="date" id="campaignEnd" class="form-control">
+            <input type="date" id="campaignEnd" class="form-control" aria-label="End Date">
           </div>
         </div>
       </div>
@@ -181,7 +181,7 @@
         <input type="hidden" id="productModalCampaignId">
         <div class="mb-3">
           <label class="form-label fw-semibold">Product</label>
-          <select id="newProductSelect" class="form-select">
+          <select id="newProductSelect" class="form-select" aria-label="Product">
             <option value="">Select product…</option>
             {% for product in product_options %}
               <option value="{{ product.id }}">{{ product.name }}</option>
@@ -190,7 +190,7 @@
         </div>
         <div class="mb-3">
           <label class="form-label fw-semibold">Benefit Type</label>
-          <select id="newProductBenefit" class="form-select" onchange="toggleNewProductFields()">
+          <select id="newProductBenefit" class="form-select" onchange="toggleNewProductFields()" aria-label="Benefit Type">
             <option value="unit">Custom points per unit</option>
             <option value="target">One-time target payout (add slabs after)</option>
           </select>
@@ -198,11 +198,11 @@
         <div class="row g-2" id="newProductUnitFields">
           <div class="col-6">
             <label class="form-label fw-semibold">Unit Amount (₹)</label>
-            <input type="number" step="0.01" id="newProductUnit" class="form-control" value="1000">
+            <input type="number" step="0.01" id="newProductUnit" class="form-control" value="1000" aria-label="Unit Amount (₹)">
           </div>
           <div class="col-6">
             <label class="form-label fw-semibold">Points Per Unit</label>
-            <input type="number" step="0.001" id="newProductPPU" class="form-control" value="2">
+            <input type="number" step="0.001" id="newProductPPU" class="form-control" value="2" aria-label="Points Per Unit">
           </div>
         </div>
       </div>
