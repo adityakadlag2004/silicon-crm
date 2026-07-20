@@ -233,7 +233,9 @@ fun TaskCard(
                 Spacer(Modifier.height(6.dp))
                 val meta = buildList {
                     if (task.optString("category").isNotBlank()) add(task.optString("category"))
-                    if (task.optString("assignee").isNotBlank()) add("👤 " + task.optString("assignee"))
+                    // assignee_label collapses a multi-assignee group to "Mansi +4 others".
+                    val who = task.optString("assignee_label").ifBlank { task.optString("assignee") }
+                    if (who.isNotBlank()) add("👤 " + who)
                     if (task.optString("due_date").isNotBlank()) {
                         val d = fmtDate(task.optString("due_date")) +
                             (task.optString("due_time").takeIf { it.isNotBlank() }?.let { " $it" } ?: "")

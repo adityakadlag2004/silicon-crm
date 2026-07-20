@@ -10,6 +10,7 @@ categories). Every mutation logs a TaskActivity and notifies watchers via
 ``services.tasks`` (which reuses the CRM Notification→FCM pipeline).
 """
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -37,7 +38,15 @@ from ..models import (
     TaskReminderSetting,
     TaskSubscriber,
 )
-from ..services.tasks import create_notification, log_activity, notify_mentions, notify_task
+from ..services.tasks import (
+    assignee_label,
+    collapse_groups,
+    create_notification,
+    group_ack_roster,
+    log_activity,
+    notify_mentions,
+    notify_task,
+)
 from .helpers import parse_date_param
 
 # Priority order used for the "Priority" sort (Critical first).
@@ -78,6 +87,15 @@ def _can_edit(request, task):
     if task.created_by_id == request.user.id:
         return True
     return bool(task.assigned_to and task.assigned_to.user_id == request.user.id)
+
+
+def _can_delete(request, task):
+    """Only the person who assigned the task (or a manager/admin) may delete it.
+
+    Assignees can move the task through statuses and comment, but deleting
+    someone else's instruction is not theirs to do.
+    """
+    return _can_manage_all(request) or task.created_by_id == request.user.id
 
 
 def _base_qs():
@@ -270,7 +288,7 @@ def task_delegated(request):
     base = _base_qs().filter(created_by=request.user)
     ctx = _list_context(request, "delegated", "Delegated Tasks")
     ctx["counts"] = _status_counts(base)
-    ctx.update(_board_ctx(request, _apply_filters(base, request), 300))
+    ctx.update(_board_ctx(request, _apply_filters(base, request), 300, collapse=True))
     return render(request, "tasks/list.html", ctx)
 
 
@@ -373,13 +391,19 @@ def _status_counts(qs):
     )
 
 
-def _board_ctx(request, qs, limit):
+def _board_ctx(request, qs, limit, collapse=False):
     """Materialize a task queryset once for list/kanban/calendar rendering.
 
     Annotates each task with `can_check` so the list can show a mark-done
     checkbox only for tasks the current user is allowed to complete.
+
+    `collapse` folds multi-assignee sibling rows into a single entry labelled
+    "Mansi +4" — used by Delegated, where the creator wants one row per task
+    they assigned, not one per recipient.
     """
     items = list(qs[:limit])
+    if collapse:
+        items = collapse_groups(items)
     manage_all = _can_manage_all(request)
     uid = request.user.id
     for t in items:
@@ -388,6 +412,7 @@ def _board_ctx(request, qs, limit):
             or (t.assigned_to and t.assigned_to.user_id == uid)
             or t.created_by_id == uid
         )
+        t.assignee_label = assignee_label(t)
     return {"tasks": items, "kanban": _kanban(items), "cal_events": _cal_events(items)}
 
 
@@ -408,6 +433,9 @@ def task_detail(request, pk):
         "statuses": Task.STATUS_CHOICES,
         "priorities": Task.PRIORITY_CHOICES,
         "can_edit": _can_edit(request, task),
+        "can_delete": _can_delete(request, task),
+        # Who has actually seen this task — by name, for multi-assignee groups.
+        "ack_roster": group_ack_roster(task),
         "is_admin": _is_admin(request),
     }
     return render(request, "tasks/detail.html", ctx)
@@ -475,7 +503,8 @@ def task_create(request):
 
     # Multiple assignees → one task per person (each gets its own notification).
     emp_ids = [int(x) for x in request.POST.getlist("assigned_to") if x.isdigit()]
-    assignees = list(Employee.objects.filter(pk__in=emp_ids, active=True)) or [None]
+    by_id = {e.pk: e for e in Employee.objects.filter(pk__in=emp_ids, active=True)}
+    assignees = [by_id[i] for i in emp_ids if i in by_id] or [None]
 
     description = (request.POST.get("description") or "").strip()
     due_date = parse_date_param(request.POST.get("due_date"))
@@ -484,6 +513,10 @@ def task_create(request):
     checklist_titles = [c.strip() for c in request.POST.getlist("checklist_item") if c.strip()]
     subscriber_ids = [int(u) for u in request.POST.getlist("subscribers") if u.isdigit()]
 
+    # Several assignees → sibling rows sharing a group id, so the Delegated
+    # list shows one task ("Mansi +4"), not one row per person.
+    group = uuid4().hex if len(assignees) > 1 else ""
+
     created_tasks = []
     with transaction.atomic():
         for assignee in assignees:
@@ -491,6 +524,7 @@ def task_create(request):
                 title=title[:255], description=description, category=category,
                 priority=priority, created_by=request.user, assigned_to=assignee,
                 due_date=due_date, due_time=due_time, repeat_rule=repeat_rule,
+                assign_group=group,
             )
             for i, ct in enumerate(checklist_titles):
                 TaskChecklistItem.objects.create(task=task, title=ct[:255], order=i)
@@ -809,7 +843,7 @@ def task_attachment_download(request, att_id):
 @require_POST
 def task_delete(request, pk):
     task = _visible_task_or_404(request, pk)
-    if not (_can_manage_all(request) or task.created_by_id == request.user.id):
+    if not _can_delete(request, task):
         return HttpResponseForbidden("You cannot delete this task.")
     task.is_deleted = True
     task.deleted_at = timezone.now()
@@ -824,7 +858,7 @@ def task_delete(request, pk):
 @require_POST
 def task_restore(request, pk):
     task = get_object_or_404(Task, pk=pk, is_deleted=True)
-    if not (_can_manage_all(request) or task.created_by_id == request.user.id):
+    if not _can_delete(request, task):
         return HttpResponseForbidden("You cannot restore this task.")
     task.is_deleted = False
     task.deleted_at = None

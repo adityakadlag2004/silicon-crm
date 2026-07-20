@@ -18,7 +18,7 @@
     </div>
     <div class="tk-card-meta">
       {% if task.category %}<span class="tk-cat"><span class="dot" style="background:{{ task.category.color }}"></span>{{ task.category.name }}</span>{% endif %}
-      {% if task.assigned_to %}<span><i class="bi bi-person"></i> {{ task.assigned_to.user.get_full_name|default:task.assigned_to.user.username }}</span>{% endif %}
+      {% if task.assigned_to %}<span title="{{ task.group_assignees|join:", " }}"><i class="bi bi-person{% if task.group_extra %}s{% endif %}"></i> {{ task.assignee_label|default:task.assigned_to.user.get_full_name|default:task.assigned_to.user.username }}</span>{% endif %}
       {% if task.due_date %}<span><i class="bi bi-calendar-event"></i> {{ task.due_date|date:"d M" }}{% if task.due_time %} {{ task.due_time|time:"H:i" }}{% endif %}</span>{% endif %}
       {% with pct=task.checklist_percent %}{% if pct %}<span class="tk-prog" title="{{ pct }}% checklist"><span style="width:{{ pct }}%"></span></span>{% endif %}{% endwith %}
     </div>

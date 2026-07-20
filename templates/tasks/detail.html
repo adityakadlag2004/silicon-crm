@@ -36,6 +36,24 @@
           {% if task.due_date %}<span><i class="bi bi-calendar-event"></i> {{ task.due_date|date:"d M Y" }}{% if task.due_time %} {{ task.due_time|time:"H:i" }}{% endif %}</span>{% endif %}
           <span><i class="bi bi-clock-history"></i> {{ task.created_at|date:"d M Y H:i" }}</span>
         </div>
+
+        {# ── Who has seen this task (by name, across all assignees) ── #}
+        {% if ack_roster %}
+        <div class="tk-ack" style="margin-top:.9rem;border-top:1px solid var(--ki-border,#e5e7eb);padding-top:.7rem;">
+          <div style="font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:#6b7280;margin-bottom:.4rem;">
+            <i class="bi bi-eye"></i> Acknowledgement
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
+            {% for r in ack_roster %}
+            <span class="tk-cat" title="{{ r.status }}{% if r.acknowledged_at %} · seen {{ r.acknowledged_at|date:"d M H:i" }}{% endif %}">
+              <i class="bi bi-{% if r.acknowledged %}check-circle-fill{% else %}circle{% endif %}"
+                 style="color:{% if r.acknowledged %}#16a34a{% else %}#9ca3af{% endif %};"></i>
+              {{ r.name }}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
 
@@ -186,7 +204,7 @@
       </div>
     </div>
 
-    {% if not task.is_deleted and can_edit %}
+    {% if not task.is_deleted and can_delete %}
     <form method="post" action="{% url 'clients:task_delete' task.pk %}" onsubmit="return confirm('Move this task to the recycle bin?');">{% csrf_token %}
       <button class="ki-btn ki-btn-danger ki-btn-sm" style="width:100%;"><i class="bi bi-trash"></i> Delete task</button>
     </form>

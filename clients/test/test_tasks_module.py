@@ -506,3 +506,149 @@ class TaskV414Tests(TestCase):
             content_type="application/json")
         task.refresh_from_db()
         self.assertEqual(task.status, Task.STATUS_OVERDUE)
+
+
+class TaskMultiAssignTests(TestCase):
+    """Assigning one task to several people: collapsed in Delegated, deletable
+    only by the assigner, and acknowledged person by person."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.boss = User.objects.create_user(username="m_boss", password="pw")
+        Employee.objects.create(user=cls.boss, role="admin", salary=0, active=True)
+        cls.people = []
+        for name in ("mansi", "rohit", "amit"):
+            u = User.objects.create_user(username=f"m_{name}", password="pw",
+                                         first_name=name.title())
+            cls.people.append(Employee.objects.create(user=u, role="employee",
+                                                      salary=0, active=True))
+
+    def _client(self, user):
+        c = Client()
+        c.force_login(user)
+        return c
+
+    def _post_json(self, user, url, payload):
+        import json as _json
+        return self._client(user).post(url, data=_json.dumps(payload),
+                                       content_type="application/json")
+
+    def _assign_to_all(self):
+        """Assign one task to all three employees via the web create view."""
+        resp = self._client(self.boss).post(reverse("clients:task_create"), {
+            "title": "Quarterly review",
+            "priority": "high",
+            "assigned_to": [str(p.pk) for p in self.people],
+        })
+        self.assertEqual(resp.status_code, 302)
+        return list(Task.objects.filter(title="Quarterly review").order_by("pk"))
+
+    # ── issue 1: one row, not one per person ──
+    def test_multi_assign_shares_one_group(self):
+        tasks = self._assign_to_all()
+        self.assertEqual(len(tasks), 3)
+        groups = {t.assign_group for t in tasks}
+        self.assertEqual(len(groups), 1)
+        self.assertTrue(tasks[0].assign_group)
+
+    def test_single_assign_has_no_group(self):
+        self._client(self.boss).post(reverse("clients:task_create"), {
+            "title": "Solo job", "priority": "low",
+            "assigned_to": [str(self.people[0].pk)],
+        })
+        task = Task.objects.get(title="Solo job")
+        self.assertEqual(task.assign_group, "")
+
+    def test_delegated_list_collapses_siblings(self):
+        self._assign_to_all()
+        resp = self._client(self.boss).get(reverse("clients:task_delegated"))
+        rows = [t for t in resp.context["tasks"] if t.title == "Quarterly review"]
+        self.assertEqual(len(rows), 1, "the task must appear once, not once per assignee")
+        self.assertEqual(rows[0].group_count, 3)
+        self.assertEqual(rows[0].assignee_label, "Mansi +2 others")
+
+    def test_my_tasks_still_shows_each_person_their_own(self):
+        self._assign_to_all()
+        for emp in self.people:
+            resp = self._client(emp.user).get(reverse("clients:task_my"))
+            titles = [t.title for t in resp.context["tasks"]]
+            self.assertIn("Quarterly review", titles)
+
+    def test_app_delegated_collapses_but_my_does_not(self):
+        self._assign_to_all()
+        c = self._client(self.boss)
+        deleg = c.get(reverse("clients:app_tasks"), {"tab": "delegated"}).json()["tasks"]
+        self.assertEqual(len([r for r in deleg if r["title"] == "Quarterly review"]), 1)
+        mine = self._client(self.people[0].user).get(
+            reverse("clients:app_tasks"), {"tab": "my"}).json()["tasks"]
+        self.assertEqual(len([r for r in mine if r["title"] == "Quarterly review"]), 1)
+
+    # ── issue 2: only the assigner deletes ──
+    def test_assignee_cannot_delete_task_on_web(self):
+        task = self._assign_to_all()[0]
+        resp = self._client(task.assigned_to.user).post(
+            reverse("clients:task_delete", args=[task.pk]))
+        self.assertEqual(resp.status_code, 403)
+        task.refresh_from_db()
+        self.assertFalse(task.is_deleted)
+
+    def test_assignee_cannot_delete_task_in_app(self):
+        task = self._assign_to_all()[0]
+        resp = self._post_json(task.assigned_to.user,
+                               reverse("clients:app_task_action", args=[task.pk]),
+                               {"action": "delete"})
+        self.assertEqual(resp.status_code, 403)
+        task.refresh_from_db()
+        self.assertFalse(task.is_deleted)
+
+    def test_assignee_can_still_change_status_and_comment(self):
+        task = self._assign_to_all()[0]
+        for payload in ({"action": "status", "status": "in_progress"},
+                        {"action": "comment", "body": "on it"}):
+            resp = self._post_json(task.assigned_to.user,
+                                   reverse("clients:app_task_action", args=[task.pk]), payload)
+            self.assertEqual(resp.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.status, Task.STATUS_IN_PROGRESS)
+
+    def test_assigner_can_delete_and_app_flags_it(self):
+        task = self._assign_to_all()[0]
+        detail = self._client(self.boss).get(
+            reverse("clients:app_task_detail", args=[task.pk])).json()
+        self.assertTrue(detail["can_delete"])
+        assignee_view = self._client(task.assigned_to.user).get(
+            reverse("clients:app_task_detail", args=[task.pk])).json()
+        self.assertFalse(assignee_view["can_delete"])
+        self.assertTrue(assignee_view["can_edit"], "assignee still edits status etc.")
+
+        resp = self._client(self.boss).post(reverse("clients:task_delete", args=[task.pk]))
+        self.assertEqual(resp.status_code, 302)
+        task.refresh_from_db()
+        self.assertTrue(task.is_deleted)
+
+    # ── issue 3: acknowledgement by name ──
+    def test_ack_roster_names_who_has_seen_the_task(self):
+        tasks = self._assign_to_all()
+        seen = tasks[0]
+        self._post_json(seen.assigned_to.user,
+                        reverse("clients:app_task_action", args=[seen.pk]),
+                        {"action": "acknowledge"})
+
+        detail = self._client(self.boss).get(
+            reverse("clients:app_task_detail", args=[seen.pk])).json()
+        roster = {r["name"]: r["acknowledged"] for r in detail["ack_roster"]}
+        self.assertEqual(set(roster), {"Mansi", "Rohit", "Amit"})
+        self.assertTrue(roster["Mansi"])
+        self.assertFalse(roster["Rohit"])
+        self.assertFalse(roster["Amit"])
+
+    def test_ack_roster_on_web_detail(self):
+        tasks = self._assign_to_all()
+        resp = self._client(self.boss).get(reverse("clients:task_detail", args=[tasks[0].pk]))
+        self.assertEqual(len(resp.context["ack_roster"]), 3)
+
+    def test_solo_task_roster_has_one_entry(self):
+        task = Task.objects.create(title="Solo", created_by=self.boss,
+                                   assigned_to=self.people[0])
+        resp = self._client(self.boss).get(reverse("clients:task_detail", args=[task.pk]))
+        self.assertEqual(len(resp.context["ack_roster"]), 1)

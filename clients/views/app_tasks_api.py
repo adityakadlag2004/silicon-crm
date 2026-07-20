@@ -6,6 +6,7 @@ service helpers so activity logging and notifications stay identical.
 """
 import json
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -31,8 +32,11 @@ from ..models import (
     TaskTemplate,
 )
 from ..services.tasks import (
+    assignee_label,
     build_recurrence,
+    collapse_groups,
     create_notification,
+    group_ack_roster,
     log_activity,
     notify_mentions,
     notify_task,
@@ -70,6 +74,11 @@ def _can_edit(request, task):
         return True
     return (task.created_by_id == request.user.id
             or (task.assigned_to and task.assigned_to.user_id == request.user.id))
+
+
+def _can_delete(request, task):
+    """Only the assigner (or a manager/admin) may delete — see views.tasks."""
+    return _can_manage_all(request) or task.created_by_id == request.user.id
 
 
 def _visible_or_404(request, pk):
@@ -119,6 +128,9 @@ def _task_row(task):
         "assignee": (task.assigned_to.user.get_full_name() or task.assigned_to.user.username)
         if task.assigned_to else None,
         "assignee_user_id": task.assigned_to.user_id if task.assigned_to else None,
+        # "Mansi +4 others" when several people share this assignment.
+        "assignee_label": assignee_label(task),
+        "group_count": getattr(task, "group_count", 1),
         "client": task.client.name if task.client_id else None,
         "client_id": task.client_id,
         "due_date": task.due_date.isoformat() if task.due_date else None,
@@ -210,9 +222,14 @@ def app_tasks(request):
         completed=Count("id", filter=Q(status=Task.STATUS_COMPLETED)),
         overdue=Count("id", filter=Q(status=Task.STATUS_OVERDUE) | (Q(status=Task.STATUS_PENDING) & past_due)),
     )
+    rows = list(qs[:200])
+    # Delegated is the assigner's view: one row per task they handed out,
+    # labelled "Mansi +4" — not one identical row per recipient.
+    if tab == "delegated":
+        rows = collapse_groups(rows)
     return JsonResponse({
         "counts": counts,
-        "tasks": [_task_row(t) for t in qs[:200]],
+        "tasks": [_task_row(t) for t in rows],
     })
 
 
@@ -398,8 +415,12 @@ def app_task_detail(request, pk):
         "description": task.description,
         "created_by": task.created_by.username if task.created_by else None,
         "can_edit": _can_edit(request, task),
+        "can_delete": _can_delete(request, task),
         # Only the assignee acknowledges — drives the app's Acknowledge button.
         "is_assignee": bool(task.assigned_to and task.assigned_to.user_id == request.user.id),
+        # Who has seen it, by name — the app lists these under Acknowledgement.
+        "ack_roster": [{"name": r["name"], "acknowledged": r["acknowledged"],
+                        "status": r["status"]} for r in group_ack_roster(task)],
         "client_phone": task.client.phone if task.client_id else None,
         # ids so the edit sheet can pre-select the right options
         "category_id": task.category_id,
@@ -443,7 +464,8 @@ def app_task_create(request):
     # Accept a list of assignees ("assignees") or a single "assigned_to".
     raw_ids = body.get("assignees") or ([body.get("assigned_to")] if body.get("assigned_to") else [])
     emp_ids = [int(x) for x in raw_ids if str(x).isdigit()]
-    assignees = list(Employee.objects.filter(pk__in=emp_ids, active=True)) or [None]
+    by_id = {e.pk: e for e in Employee.objects.filter(pk__in=emp_ids, active=True)}
+    assignees = [by_id[i] for i in emp_ids if i in by_id] or [None]
 
     description = (body.get("description") or "").strip()
     due_date = parse_date_param(body.get("due_date"))
@@ -453,12 +475,16 @@ def app_task_create(request):
     freq = (body.get("repeat_rule") or "").strip()
     client = Client.objects.filter(pk=body.get("client_id")).first() if body.get("client_id") else None
 
+    # Several assignees → sibling rows sharing a group id (see views.tasks).
+    group = uuid4().hex if len(assignees) > 1 else ""
+
     created_ids = []
     for assignee in assignees:
         task = Task.objects.create(
             title=title[:255], description=description, category=category,
             priority=priority, created_by=request.user, assigned_to=assignee,
             due_date=due_date, due_time=due_time, client=client,
+            assign_group=group,
         )
         for i, ct in enumerate(checklist):
             TaskChecklistItem.objects.create(task=task, title=ct.strip()[:255], order=i)
@@ -668,7 +694,7 @@ def app_task_action(request, pk):
         notify_task(task, request.user, "Task updated",
                     f"“{task.title}” was updated.", event="status_changed")
     elif action == "delete":
-        if not (_can_manage_all(request) or task.created_by_id == request.user.id):
+        if not _can_delete(request, task):
             return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
         task.is_deleted = True
         task.deleted_at = timezone.now()

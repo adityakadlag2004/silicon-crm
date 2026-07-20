@@ -128,6 +128,8 @@ fun TaskDetailScreen(
     if (error != null) { ErrorBox(error!!) { error = null; reloadKey++ }; return }
     val t = task ?: run { LoadingBox(); return }
     val canEdit = t.optBoolean("can_edit")
+    // Deleting is the assigner's call alone — assignees only move status/comment.
+    val canDelete = t.optBoolean("can_delete")
     val status = t.optString("status")
     val done = status == "completed"
 
@@ -212,8 +214,24 @@ fun TaskDetailScreen(
                 if (t.optString("category").isNotBlank()) Pill(t.optString("category"), MaterialTheme.colorScheme.primary)
             }
             Spacer(Modifier.height(10.dp))
-            InfoRow("Assigned", t.optString("assignee").ifBlank { "—" })
-            if (t.optString("assignee").isNotBlank() && !done) {
+            InfoRow("Assigned", t.optString("assignee_label").ifBlank { t.optString("assignee").ifBlank { "—" } })
+            // Acknowledgement, name by name — with several assignees you need to
+            // see who has actually looked at it, not one combined yes/no.
+            val roster = t.optJSONArray("ack_roster")
+            if ((roster?.length() ?: 0) > 1) {
+                Spacer(Modifier.height(4.dp))
+                Text("Seen", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                for (i in 0 until roster!!.length()) {
+                    val r = roster.optJSONObject(i) ?: continue
+                    val seen = r.optBoolean("acknowledged")
+                    Text(
+                        (if (seen) "✓ " else "○ ") + r.optString("name") + "  ·  " + r.optString("status"),
+                        fontSize = 13.sp,
+                        color = if (seen) StatusGreen else StatusAmber,
+                        modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+                    )
+                }
+            } else if (t.optString("assignee").isNotBlank() && !done) {
                 InfoRow(
                     "Seen",
                     if (t.optBoolean("acknowledged")) "✓ Acknowledged" else "Awaiting acknowledgement",
@@ -417,6 +435,8 @@ fun TaskDetailScreen(
                 OutlinedButton(onClick = { onEdit(t) }, modifier = Modifier.weight(1f)) {
                     Text("Edit", fontSize = 13.sp)
                 }
+            }
+            if (canDelete) {
                 OutlinedButton(onClick = { confirmDelete = true }) {
                     Text("🗑", color = StatusRed)
                 }

@@ -100,6 +100,11 @@ class Task(models.Model):
     # Exact due-time ring dispatched by tasks_ring_due (cleared on due change).
     due_alarm_sent_at = models.DateTimeField(null=True, blank=True)
 
+    # One assignment to several people = one Task row per person (each tracks
+    # its own status/acknowledgement) sharing an assign_group, so the creator's
+    # Delegated list can show them collapsed as "Mansi +4".
+    assign_group = models.CharField(max_length=32, blank=True, db_index=True)
+
     # Soft delete → recycle bin.
     is_deleted = models.BooleanField(default=False, db_index=True)
     deleted_at = models.DateTimeField(null=True, blank=True)

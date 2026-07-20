@@ -30,6 +30,86 @@ def log_activity(task, actor, action, detail=""):
     )
 
 
+# ────────────────────── multi-assignee groups ──────────────────────
+#
+# Assigning one task to N people creates N sibling Task rows sharing an
+# `assign_group`, so each person owns their own status and acknowledgement.
+# These helpers present that group as the single task it really is.
+
+def _display_name(employee):
+    if not employee or not employee.user:
+        return "Unassigned"
+    return employee.user.get_full_name() or employee.user.username
+
+
+def group_siblings(task):
+    """All tasks in this task's assignment group (just itself when solo)."""
+    from ..models import Task
+    if not task.assign_group:
+        return Task.objects.filter(pk=task.pk)
+    return (Task.objects.filter(assign_group=task.assign_group, is_deleted=False)
+            .select_related("assigned_to__user").order_by("pk"))
+
+
+def group_ack_roster(task):
+    """Per-person acknowledgement for the group: who has seen this task.
+
+    Returns [{"name", "acknowledged", "acknowledged_at", "status"}, …] — the
+    detail page lists them by name instead of a single yes/no flag.
+    """
+    return [
+        {
+            "name": _display_name(t.assigned_to),
+            "acknowledged": t.acknowledged_at is not None,
+            "acknowledged_at": t.acknowledged_at,
+            "status": t.get_status_display(),
+        }
+        for t in group_siblings(task) if t.assigned_to_id
+    ]
+
+
+def collapse_groups(tasks):
+    """Collapse sibling tasks into one row each, keeping the first assignee.
+
+    Annotates every returned task with `group_count` (people on it),
+    `group_extra` (how many beyond the first) and `group_assignees` (all
+    names), so a list can render "Mansi +4" instead of five identical rows.
+    """
+    by_group, members, out = {}, {}, []
+    for t in tasks:
+        t.group_count, t.group_extra, t.group_assignees = 1, 0, [_display_name(t.assigned_to)]
+        if not t.assign_group:
+            out.append(t)
+            continue
+        head = by_group.get(t.assign_group)
+        if head is None:
+            by_group[t.assign_group] = t
+            members[t.assign_group] = [t]
+            out.append(t)
+            continue
+        members[t.assign_group].append(t)
+        head.group_count += 1
+        head.group_extra += 1
+
+    # Name the group after whoever was assigned first (lowest pk) — the list
+    # may arrive in any sort order, but "Mansi +4" must stay stable.
+    for gid, group in members.items():
+        head = by_group[gid]
+        head.group_assignees = [_display_name(t.assigned_to)
+                                for t in sorted(group, key=lambda t: t.pk)]
+        head.group_first_name = head.group_assignees[0]
+    return out
+
+
+def assignee_label(task):
+    """"Mansi +4 others" for a collapsed group, plain name otherwise."""
+    extra = getattr(task, "group_extra", 0)
+    name = getattr(task, "group_first_name", None) or _display_name(task.assigned_to)
+    if not extra:
+        return name
+    return f"{name} +{extra} other{'s' if extra > 1 else ''}"
+
+
 def user_wants(user, event):
     """Whether `user` wants a notification for `event` (default: yes).
 
