@@ -110,3 +110,26 @@ fun rdp(base: Int): Dp =
  * app were hard to hit.
  */
 val TouchTarget: Dp = 48.dp
+
+/**
+ * A row of action buttons that wraps instead of squeezing.
+ *
+ * Several screens put three or four buttons in a plain Row. On a 360dp phone
+ * that left each around 70dp and truncated the labels — "🕑 Reschedule"
+ * became "🕑 Resc…". Wrapping to a second line is always better than a row of
+ * unreadable buttons, and on a wide screen it stays on one line anyway.
+ */
+// The content lambda is deliberately un-scoped: FlowRowScope is experimental,
+// and exposing it would force every caller to opt in too.
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun ActionRow(
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier,
+    content: @Composable () -> Unit,
+) {
+    androidx.compose.foundation.layout.FlowRow(
+        modifier = modifier,
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
+    ) { content() }
+}

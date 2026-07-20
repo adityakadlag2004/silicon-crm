@@ -280,7 +280,7 @@ private fun LeadDetail(
         }
 
         val phone = d.optString("phone")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ActionRow {
             if (phone.isNotEmpty()) {
                 Button(onClick = {
                     context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))

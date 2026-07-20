@@ -232,7 +232,7 @@ fun FollowupsScreen(
                     if (f.optString("note").isNotEmpty()) {
                         Text(f.optString("note"), fontSize = rsp(13))
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ActionRow {
                         Button(onClick = {
                             context.startActivity(
                                 Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + f.optString("phone")))

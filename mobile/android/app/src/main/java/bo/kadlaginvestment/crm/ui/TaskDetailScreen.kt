@@ -413,12 +413,7 @@ fun TaskDetailScreen(
         // sees up to five buttons here, which on a 360dp phone left each about
         // 60dp and truncated the labels. Wrapping to a second line is better
         // than five unreadable buttons.
-        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-        androidx.compose.foundation.layout.FlowRow(
-            Modifier.fillMaxWidth().padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        ActionRow(Modifier.fillMaxWidth().padding(12.dp)) {
             if (canEdit && (status == "pending" || status == "overdue")) {
                 OutlinedButton(
                     onClick = {
