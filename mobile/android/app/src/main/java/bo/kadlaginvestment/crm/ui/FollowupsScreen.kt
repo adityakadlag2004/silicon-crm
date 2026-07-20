@@ -4,6 +4,9 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
+import android.provider.ContactsContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -263,16 +266,54 @@ private fun AddFollowupDialog(
 ) {
     val context = LocalContext.current
     var phone by remember { mutableStateOf("") }
+    var pickedName by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var iso by remember { mutableStateOf("") }
+
+    // ACTION_PICK on the Phone table: the user picks one *number*, so contacts
+    // with several numbers resolve themselves, and the returned row is readable
+    // without READ_CONTACTS (the picker grants access to just that row).
+    val pickContact = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+        try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ),
+                null, null, null,
+            )?.use { c ->
+                if (c.moveToFirst()) {
+                    phone = c.getString(0).orEmpty().filterNot { it.isWhitespace() }
+                    pickedName = c.getString(1).orEmpty()
+                }
+            }
+        } catch (_: Exception) {
+            // provider hiccup → the number can still be typed in by hand
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New follow-up") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        pickContact.launch(
+                            Intent(
+                                Intent.ACTION_PICK,
+                                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (pickedName.isEmpty()) "👤 Pick from contacts" else "👤 $pickedName") }
                 OutlinedTextField(
-                    phone, { phone = it },
+                    phone, { phone = it; pickedName = "" },
                     label = { Text("Phone number") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
