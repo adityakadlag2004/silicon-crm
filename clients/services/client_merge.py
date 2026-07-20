@@ -9,6 +9,7 @@ then deletes the emptied duplicate.
 import logging
 
 from django.db import transaction
+from django.db.models import Count
 
 logger = logging.getLogger(__name__)
 
@@ -24,26 +25,40 @@ _FILL_FIELDS = (
 )
 
 
+def business_record_counts_bulk(clients):
+    """{client id: {relation label: count}} for many clients at once.
+
+    Same answer as business_record_counts() per client, but one grouped query
+    per relation instead of one per relation *per client* — the KYC duplicates
+    screen counts hundreds of profiles in a single render.
+    """
+    from ..models import Client
+
+    ids = [getattr(c, "pk", c) for c in clients]
+    counts = {cid: {} for cid in ids}
+    if not ids:
+        return counts
+
+    for rel in Client._meta.related_objects:
+        accessor = rel.get_accessor_name()
+        if not accessor:  # related_name="+" — no reverse accessor to report
+            continue
+        field_name = rel.field.name
+        rows = (rel.related_model._default_manager
+                .filter(**{f"{field_name}__in": ids})
+                .values(field_name)
+                .annotate(n=Count("pk")))
+        for row in rows:
+            n = row["n"]
+            if n:
+                counts[row[field_name]][accessor] = 1 if rel.one_to_one else n
+    return counts
+
+
 def business_record_counts(client):
     """{relation label: count} of every non-empty reverse relation — used to
     decide whether a plain delete is safe and to describe what a merge moves."""
-    from ..models import Client
-
-    counts = {}
-    for rel in Client._meta.related_objects:
-        accessor = rel.get_accessor_name()
-        try:
-            related = getattr(client, accessor)
-        except AttributeError:
-            continue
-        if rel.one_to_one:
-            if related is not None:
-                counts[accessor] = 1
-        else:
-            n = related.count()
-            if n:
-                counts[accessor] = n
-    return counts
+    return business_record_counts_bulk([client])[client.pk]
 
 
 @transaction.atomic

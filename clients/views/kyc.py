@@ -8,10 +8,12 @@ profiles with merge / safe-delete actions.
 """
 import re
 from collections import defaultdict
+from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -32,11 +34,28 @@ def _is_admin(request):
     return permissions.is_admin(request.user)
 
 
-def _missing_pan_qs(request):
+MISSING_PAN_PER_PAGE = 100
+
+
+def _missing_pan_qs(request, search=""):
     qs = Client.objects.filter(Q(pan__isnull=True) | Q(pan="")).select_related("mapped_to__user")
     if _role(request) == "employee":
         qs = qs.filter(mapped_to=request.user.employee)
+    if search:
+        qs = qs.filter(Q(name__icontains=search)
+                       | Q(phone__icontains=search)
+                       | Q(mapped_to__user__username__icontains=search))
     return qs.order_by("mapped_to__user__username", "name")
+
+
+def _kyc_redirect(request):
+    """Back to the KYC screen on the page/search the row was saved from —
+    without this, every save bounced the user to the top of 1800+ rows."""
+    url = redirect("clients:client_kyc_issues").url
+    params = urlencode({k: v for k, v in (("q", request.POST.get("q", "").strip()),
+                                          ("page", request.POST.get("page", "").strip()))
+                        if v})
+    return redirect(f"{url}?{params}#missing-pan" if params else f"{url}#missing-pan")
 
 
 def missing_pan_count_for(user):
@@ -72,9 +91,14 @@ def _duplicate_groups():
     add_groups(lambda c: re.sub(r"\D", "", c.phone or "")[-10:] or None, "Same phone", clients)
     add_groups(lambda c: (c.name or "").strip().upper() or None, "Same name", clients)
 
+    # One batched pass for every profile on the page — counting per client here
+    # meant thousands of queries once the duplicate list grew.
+    counts_by_id = client_merge.business_record_counts_bulk(
+        {c.id for group in groups for c in group["clients"]}
+    )
     for group in groups:
         for c in group["clients"]:
-            c.record_counts = client_merge.business_record_counts(c)
+            c.record_counts = counts_by_id.get(c.id, {})
             c.record_total = sum(c.record_counts.values())
     return groups
 
@@ -161,11 +185,17 @@ def client_kyc_issues(request):
     from ..models import MutualFundFolio
     from ..services import rta_feed
 
-    missing = list(_missing_pan_qs(request))
     is_admin = _is_admin(request)
+    search = (request.GET.get("q") or "").strip()
+
+    # Paginated: rendering all ~1800 missing-PAN rows built a 2MB page, and
+    # every inline PAN save reloaded the whole thing.
+    page_obj = Paginator(_missing_pan_qs(request, search), MISSING_PAN_PER_PAGE) \
+        .get_page(request.GET.get("page"))
+    missing = list(page_obj)
 
     # Folio name-matches suggest PANs for the missing-PAN rows: investor name
-    # shown alongside for a visual cross-check before bulk-applying.
+    # shown alongside for a visual cross-check before saving.
     suggestions = rta_feed.suggest_folio_matches()
     best_by_client = {}
     for s in suggestions:
@@ -178,6 +208,9 @@ def client_kyc_issues(request):
     context = {
         "page_title": "Client KYC & Data Health",
         "missing": missing,
+        "page_obj": page_obj,
+        "missing_total": page_obj.paginator.count,
+        "search": search,
         "is_admin": is_admin,
         "duplicate_groups": _duplicate_groups() if is_admin else [],
     }
@@ -241,7 +274,7 @@ def client_kyc_update_pan(request, client_id):
         pan = validate_pan(request.POST.get("pan"), required=True)
     except forms.ValidationError as exc:
         messages.error(request, f"{client.name}: {'; '.join(exc.messages)}")
-        return redirect("clients:client_kyc_issues")
+        return _kyc_redirect(request)
 
     duplicate = Client.objects.filter(pan__iexact=pan).exclude(id=client.id).first()
     if duplicate:
@@ -250,14 +283,14 @@ def client_kyc_update_pan(request, client_id):
             f"PAN {pan} already belongs to '{duplicate.name}' (#{duplicate.id}) — "
             f"merge the two profiles instead of assigning the same PAN twice.",
         )
-        return redirect("clients:client_kyc_issues")
+        return _kyc_redirect(request)
 
     client.pan = pan
     client.save(update_fields=["pan"])
     linked = rta_feed.relink_folios()
     note = f" — {linked} MF record(s) auto-linked" if linked else ""
     messages.success(request, f"PAN saved for {client.name}{note}.")
-    return redirect("clients:client_kyc_issues")
+    return _kyc_redirect(request)
 
 
 @login_required

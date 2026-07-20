@@ -7,8 +7,10 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import Client as TestClient
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from clients.forms import ClientForm
@@ -159,6 +161,68 @@ class MergeDeleteTests(TestCase):
         web = self._login()
         resp = web.get(reverse("clients:client_kyc_issues"))
         self.assertContains(resp, "Same phone")
+
+    def test_missing_pan_list_is_paginated(self):
+        from clients.views.kyc import MISSING_PAN_PER_PAGE
+        # Client.id is assigned in save(), so create() — not bulk_create()
+        for i in range(MISSING_PAN_PER_PAGE + 25):
+            Client.objects.create(name=f"NoPan {i:03d}", phone="9000000000")
+        resp = self._login().get(reverse("clients:client_kyc_issues"))
+        self.assertEqual(len(resp.context["missing"]), MISSING_PAN_PER_PAGE)
+        # the header count stays the true total, not the page size
+        self.assertGreater(resp.context["missing_total"], MISSING_PAN_PER_PAGE)
+        self.assertTrue(resp.context["page_obj"].has_next())
+
+        page2 = self._login().get(reverse("clients:client_kyc_issues"), {"page": 2})
+        self.assertEqual(page2.context["page_obj"].number, 2)
+        self.assertNotEqual([c.id for c in page2.context["missing"]],
+                            [c.id for c in resp.context["missing"]])
+
+    def test_missing_pan_search_filters(self):
+        Client.objects.create(name="Zzz Findme", phone="9111111111")
+        resp = self._login().get(reverse("clients:client_kyc_issues"), {"q": "Findme"})
+        names = [c.name for c in resp.context["missing"]]
+        self.assertEqual(names, ["Zzz Findme"])
+        self.assertEqual(resp.context["missing_total"], 1)
+
+    def test_pan_save_returns_to_same_page_and_search(self):
+        target = Client.objects.create(name="Paginated Guy", phone="9222222222")
+        resp = self._login().post(
+            reverse("clients:client_kyc_update_pan", args=[target.id]),
+            {"pan": "AAAPZ1234C", "page": "3", "q": "guy"},
+        )
+        self.assertIn("page=3", resp.url)
+        self.assertIn("q=guy", resp.url)
+        target.refresh_from_db()
+        self.assertEqual(target.pan, "AAAPZ1234C")
+
+    def test_bulk_counts_match_per_client_counts(self):
+        Sale.objects.create(client=self.dup, employee=self.admin_emp, product="SIP",
+                            amount=Decimal("5000"))
+        MutualFundFolio.objects.create(folio_number="88", amc_name="H", client=self.dup)
+
+        bulk = client_merge.business_record_counts_bulk([self.keep, self.dup])
+        self.assertEqual(bulk[self.dup.id], client_merge.business_record_counts(self.dup))
+        self.assertEqual(bulk[self.keep.id], client_merge.business_record_counts(self.keep))
+        self.assertEqual(bulk[self.dup.id]["sales"], 1)
+        self.assertEqual(bulk[self.keep.id], {})  # no records — empty, not missing
+
+    def test_bulk_counts_accepts_ids_and_empty_input(self):
+        Sale.objects.create(client=self.dup, employee=self.admin_emp, product="SIP",
+                            amount=Decimal("5000"))
+        by_id = client_merge.business_record_counts_bulk([self.dup.id])
+        self.assertEqual(by_id[self.dup.id]["sales"], 1)
+        self.assertEqual(client_merge.business_record_counts_bulk([]), {})
+
+    def test_bulk_counts_query_count_is_flat(self):
+        """Guards the N+1 this replaced: 20 clients must cost the same as 2."""
+        extra = [Client.objects.create(name=f"Dup {i}", phone="9876543210")
+                 for i in range(18)]
+        with CaptureQueriesContext(connection) as small:
+            client_merge.business_record_counts_bulk([self.keep, self.dup])
+        with CaptureQueriesContext(connection) as large:
+            client_merge.business_record_counts_bulk([self.keep, self.dup] + extra)
+        self.assertEqual(len(small.captured_queries), len(large.captured_queries))
 
 
 class MfSummaryTests(TestCase):
