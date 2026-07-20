@@ -489,9 +489,10 @@ def app_followup_action(request, followup_id):
     if not (_is_admin(request) or (emp and fu.employee_id == emp.id)):
         return JsonResponse({"ok": False, "error": "Not your follow-up."}, status=403)
     try:
-        action = json.loads(request.body.decode("utf-8")).get("action")
+        body = json.loads(request.body.decode("utf-8"))
     except Exception:
-        action = None
+        body = {}
+    action = body.get("action")
 
     if action == "done":
         fu.status = CallFollowUp.STATUS_DONE
@@ -501,10 +502,20 @@ def app_followup_action(request, followup_id):
         fu.status = CallFollowUp.STATUS_DISMISSED
         fu.completed_at = timezone.now()
         fu.save(update_fields=["status", "completed_at"])
-    elif action == "snooze":
-        fu.scheduled_at = timezone.now() + timedelta(hours=1)
+    elif action in ("snooze", "reschedule"):
+        # snooze = the old fixed +1h; reschedule = an exact moment picked on
+        # the phone. Both re-arm the reminder.
+        if action == "reschedule":
+            from .calls import parse_custom_at
+            scheduled, err = parse_custom_at(body.get("at"))
+            if err:
+                return JsonResponse({"ok": False, "error": err}, status=400)
+        else:
+            scheduled = timezone.now() + timedelta(hours=1)
+        fu.scheduled_at = scheduled
+        fu.status = CallFollowUp.STATUS_PENDING
         fu.reminded = False
-        fu.save(update_fields=["scheduled_at", "reminded"])
+        fu.save(update_fields=["scheduled_at", "status", "reminded"])
     else:
         return JsonResponse({"ok": False, "error": "Unknown action."}, status=400)
     return JsonResponse({"ok": True})

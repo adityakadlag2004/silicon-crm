@@ -235,6 +235,55 @@ class FollowUpTests(_CallSetup):
         fu.refresh_from_db()
         self.assertEqual(fu.status, CallFollowUp.STATUS_DONE)
 
+    def test_reschedule_to_a_picked_moment(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="123", scheduled_at=timezone.now(), reminded=True
+        )
+        target = (timezone.localtime() + timedelta(days=3)).replace(
+            hour=15, minute=30, second=0, microsecond=0
+        )
+        resp = self.employee.post(
+            reverse("clients:app_followup_action", args=[fu.id]),
+            data=json.dumps({"action": "reschedule", "at": target.strftime("%Y-%m-%dT%H:%M")}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        fu.refresh_from_db()
+        self.assertEqual(timezone.localtime(fu.scheduled_at), target)
+        self.assertFalse(fu.reminded)  # reminder re-arms
+
+    def test_reschedule_rejects_past(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="123", scheduled_at=timezone.now()
+        )
+        before = fu.scheduled_at
+        resp = self.employee.post(
+            reverse("clients:app_followup_action", args=[fu.id]),
+            data=json.dumps({"action": "reschedule", "at": "2020-01-01T10:00"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        fu.refresh_from_db()
+        self.assertEqual(fu.scheduled_at, before)
+
+    def test_manual_followup_needs_no_call(self):
+        """The + button: a number and a moment, no CallLogEntry involved."""
+        target = (timezone.localtime() + timedelta(days=1)).replace(
+            hour=11, minute=0, second=0, microsecond=0
+        )
+        resp = self.employee.post(
+            reverse("clients:call_followup_create"),
+            data=json.dumps({
+                "phone": "9876543210", "note": "cold call back",
+                "custom_at": target.strftime("%Y-%m-%dT%H:%M"),
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        fu = CallFollowUp.objects.get()
+        self.assertEqual(timezone.localtime(fu.scheduled_at), target)
+        self.assertEqual(fu.note, "cold call back")
+
     def test_cannot_touch_others_followup(self):
         fu = CallFollowUp.objects.create(
             employee=self.admin_emp, phone="123", scheduled_at=timezone.now()

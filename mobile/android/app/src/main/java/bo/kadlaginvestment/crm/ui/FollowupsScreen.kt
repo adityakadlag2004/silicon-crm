@@ -1,9 +1,12 @@
 package bo.kadlaginvestment.crm.ui
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,12 +16,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +45,8 @@ import bo.kadlaginvestment.crm.net.ApiClient
 import bo.kadlaginvestment.crm.net.ContactResolver
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.util.Calendar
+import java.util.Locale
 
 /** CRM client name if present, else the device-saved contact name, else the number. */
 private fun displayName(context: android.content.Context, f: JSONObject): String {
@@ -46,6 +55,23 @@ private fun displayName(context: android.content.Context, f: JSONObject): String
     val phone = f.optString("phone")
     return ContactResolver.nameFor(context, phone) ?: phone
 }
+
+/** Native date → time pickers, chained. Hands back an ISO local timestamp
+ * ("2026-07-21T15:30") — what the backend's custom_at expects. */
+private fun pickDateTime(context: android.content.Context, onPicked: (String) -> Unit) {
+    val cal = Calendar.getInstance()
+    DatePickerDialog(context, { _, y, mo, d ->
+        TimePickerDialog(context, { _, h, mi ->
+            onPicked(String.format(Locale.US, "%04d-%02d-%02dT%02d:%02d", y, mo + 1, d, h, mi))
+        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), false).show()
+    }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).apply {
+        datePicker.minDate = System.currentTimeMillis() - 1000
+    }.show()
+}
+
+/** "2026-07-21T15:30" → "21/07 15:30" for the dialog's confirmation line. */
+private fun prettyIso(iso: String): String =
+    if (iso.length >= 16) "${iso.substring(8, 10)}/${iso.substring(5, 7)} ${iso.substring(11, 16)}" else iso
 
 /** Call Follow-ups: today's personal call performance on top, then the
  * pending follow-up list (completed/dismissed items disappear). */
@@ -76,13 +102,34 @@ fun FollowupsScreen(
         }
     }
 
-    fun act(id: Int, action: String) {
+    var showAdd by remember { mutableStateOf(false) }
+
+    fun act(id: Int, action: String, at: String? = null) {
         scope.launch {
-            when (ApiClient.post("/clients/api/app/followups/$id/action/", JSONObject().put("action", action))) {
+            val body = JSONObject().put("action", action)
+            at?.let { body.put("at", it) }
+            when (ApiClient.post("/clients/api/app/followups/$id/action/", body)) {
                 is ApiClient.Result.NotLoggedIn -> onSessionExpired()
                 else -> { data = null; reloadKey++ }
             }
         }
+    }
+
+    if (showAdd) {
+        AddFollowupDialog(
+            onDismiss = { showAdd = false },
+            onSave = { phone, note, iso ->
+                showAdd = false
+                scope.launch {
+                    val body = JSONObject()
+                        .put("phone", phone).put("note", note).put("custom_at", iso)
+                    when (ApiClient.post("/clients/api/calls/followup/", body)) {
+                        is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                        else -> { data = null; reloadKey++ }
+                    }
+                }
+            },
+        )
     }
 
     if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
@@ -92,10 +139,11 @@ fun FollowupsScreen(
     val pending = d.optJSONArray("pending")
     val pendingRows = (0 until (pending?.length() ?: 0)).map { pending!!.getJSONObject(it) }
 
+    Box(modifier.fillMaxSize()) {
     LazyColumn(
-        modifier.fillMaxSize().padding(horizontal = 16.dp),
+        Modifier.fillMaxSize().padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 16.dp, bottom = 88.dp),
     ) {
         item {
             Row(
@@ -146,7 +194,7 @@ fun FollowupsScreen(
         if (pendingRows.isEmpty()) {
             item {
                 Text(
-                    "Nothing pending — schedule follow-ups from the popup after calls.",
+                    "Nothing pending — schedule from the post-call popup, or tap ＋ to add one yourself.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                 )
@@ -188,7 +236,9 @@ fun FollowupsScreen(
                             )
                         }) { Text("📞 Call") }
                         OutlinedButton(onClick = { act(f.getInt("id"), "done") }) { Text("Done") }
-                        OutlinedButton(onClick = { act(f.getInt("id"), "snooze") }) { Text("+1h") }
+                        OutlinedButton(onClick = {
+                            pickDateTime(context) { iso -> act(f.getInt("id"), "reschedule", iso) }
+                        }) { Text("🕑 Reschedule") }
                         OutlinedButton(onClick = { act(f.getInt("id"), "dismiss") }) { Text("✕") }
                     }
                 }
@@ -197,6 +247,55 @@ fun FollowupsScreen(
 
         item { Spacer(Modifier.height(12.dp)) }
     }
+
+        ExtendedFloatingActionButton(
+            onClick = { showAdd = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) { Text("＋  Follow-up") }
+    }
+}
+
+/** Manual follow-up: a number and a moment, no call required. */
+@Composable
+private fun AddFollowupDialog(
+    onDismiss: () -> Unit,
+    onSave: (phone: String, note: String, iso: String) -> Unit,
+) {
+    val context = LocalContext.current
+    var phone by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    var iso by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New follow-up") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    phone, { phone = it },
+                    label = { Text("Phone number") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    note, { note = it },
+                    label = { Text("Note (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedButton(
+                    onClick = { pickDateTime(context) { iso = it } },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (iso.isEmpty()) "Pick date & time" else "🕑 ${prettyIso(iso)}") }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(phone.trim(), note.trim(), iso) },
+                enabled = phone.isNotBlank() && iso.isNotEmpty(),
+            ) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

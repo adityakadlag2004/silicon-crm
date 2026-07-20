@@ -197,6 +197,21 @@ FOLLOWUP_CATALOG = [
 _CATALOG_LABELS = dict(FOLLOWUP_CATALOG)
 
 
+def parse_custom_at(value):
+    """Parse an exact moment picked on the phone → (datetime, error message).
+    Naive timestamps are the user's wall-clock intent → server-local (IST)."""
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None, "invalid custom_at"
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt)
+    now = timezone.localtime()
+    if dt <= now or dt > now + timedelta(days=400):
+        return None, "custom_at must be in the future"
+    return dt, None
+
+
 @login_required
 @require_POST
 def call_followup_create(request):
@@ -220,16 +235,9 @@ def call_followup_create(request):
 
     now = timezone.localtime()
     if custom_at:
-        # Exact moment picked on the phone. Naive timestamps are the user's
-        # wall-clock intent → interpret in server-local time (IST).
-        try:
-            scheduled = datetime.fromisoformat(str(custom_at).replace("Z", "+00:00"))
-        except ValueError:
-            return JsonResponse({"ok": False, "error": "invalid custom_at"}, status=400)
-        if timezone.is_naive(scheduled):
-            scheduled = timezone.make_aware(scheduled)
-        if scheduled <= now or scheduled > now + timedelta(days=400):
-            return JsonResponse({"ok": False, "error": "custom_at must be in the future"}, status=400)
+        scheduled, err = parse_custom_at(custom_at)
+        if err:
+            return JsonResponse({"ok": False, "error": err}, status=400)
     elif choice in _FOLLOWUP_MINUTES:
         scheduled = now + timedelta(minutes=_FOLLOWUP_MINUTES[choice])
     elif choice in _FOLLOWUP_SEMANTIC:
