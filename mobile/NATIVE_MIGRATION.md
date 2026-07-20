@@ -34,7 +34,7 @@ in the WebView.
 | 1 | Shell + Dashboard (role-aware) | `/api/app/dashboard/` | **v3.0** |
 | 2 | Add Sale (client search, product picker) | `/api/app/sale-meta/`, `/api/app/sales/create/` | **v3.1** |
 | 3 | My/All Clients list + Client profile | `/api/app/clients/…` | **v3.1** |
-| 4 | Call Follow-ups (native list + actions) | `/api/app/followups/…` | **v3.1** |
+| 4 | Call Follow-ups (native list + actions; v4.16: pick an exact date/time instead of the fixed +1h snooze, and a ＋ FAB to add a follow-up without a call) | `/api/app/followups/…` (`reschedule` action), `/api/calls/followup/` (`custom_at`) | **v3.1** |
 | 5 | Sales list + Approve (admin) | `/api/app/sales/…` | **v3.1** |
 | 6 | Native Menu + logout | `/api/app/logout/` | **v3.1** |
 | 7 | Renewals (list + add) | `/api/app/renewals/…` | **v3.2** |
