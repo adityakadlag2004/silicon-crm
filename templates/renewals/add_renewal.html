@@ -228,51 +228,79 @@ document.addEventListener("DOMContentLoaded", function () {
     if (newRow) newRow.style.display = policyId ? "none" : "block";
   }
 
-  // Load the client's existing Health/Life policies as tick options; if there
-  // are none, drop straight to the new-policy field.
-  window.loadClientPolicies = function(clientId) {
+  // All Health/Life policies fetched for the chosen client (filtered per
+  // product line when rendered).
+  let fetchedPolicies = [];
+
+  // The renewal's product line — "Health" / "Life" / "" (Other or unset) —
+  // read from the selected product option's text.
+  function currentPolicyType() {
+    if (!productType) return "";
+    const opt = productType.options[productType.selectedIndex];
+    const label = (opt ? opt.textContent : "").toLowerCase();
+    if (label.indexOf("health") !== -1) return "Health";
+    if (label.indexOf("life") !== -1) return "Life";
+    return "";
+  }
+
+  // Render the policy tick options for the CURRENT product line only, so a
+  // Health policy can never be offered for a Life renewal (and vice versa).
+  // Auto-selects an existing policy only when exactly one of that type exists;
+  // otherwise defaults to "New policy" so nothing is linked by accident.
+  function renderPolicies() {
     const box = document.getElementById("client-policies");
     const list = document.getElementById("client-policies-list");
-    if (!box) return;
+    if (!box || !list) return;
+    const kind = currentPolicyType();
+
+    // No product line chosen, or a non-insurance product → no linking at all.
+    if (!kind) { box.style.display = "none"; selectPolicy(""); return; }
     box.style.display = "block";
-    list.innerHTML = '<span class="text-muted" style="font-size:.84rem;">Checking records…</span>';
+
+    const matching = fetchedPolicies.filter(function(p) { return p.type === kind; });
+    list.innerHTML = "";
+    matching.forEach(function(p) {
+      const opt = document.createElement("button");
+      opt.type = "button";
+      opt.className = "policy-pick ki-rel-row";
+      opt.dataset.pid = String(p.id);
+      opt.style.cssText = "width:100%;text-align:left;border:1px solid var(--ki-card-border);border-radius:8px;background:#fff;cursor:pointer;gap:.5rem;";
+      const dot = p.type === "Health" ? "#15803D" : "#4338CA";
+      const ends = p.end ? " · renews " + p.end : "";
+      opt.innerHTML =
+        '<span class="ki-mono ki-mono-sm" style="--c:' + dot + ';width:26px;height:26px;font-size:.62rem;">' + p.type[0] + '</span>' +
+        '<span style="min-width:0;"><strong>' + p.type + '</strong> — ' + (p.insurer || p.plan || p.number) +
+        '<span class="k" style="display:block;">' + p.number + ends + '</span></span>' +
+        '<i class="bi bi-check-circle-fill add" style="margin-left:auto;color:#15803D;display:none;"></i>';
+      opt.onclick = function () { selectPolicy(String(p.id)); };
+      list.appendChild(opt);
+    });
+    const newOpt = document.createElement("button");
+    newOpt.type = "button";
+    newOpt.className = "policy-pick ki-rel-row";
+    newOpt.dataset.pid = "new";
+    newOpt.style.cssText = "width:100%;text-align:left;border:1px dashed var(--ki-card-border);border-radius:8px;background:#fff;cursor:pointer;gap:.5rem;";
+    newOpt.innerHTML = '<i class="bi bi-plus-circle" style="color:var(--ki-primary);"></i> <span>New ' + kind + ' policy for this client</span>';
+    newOpt.onclick = function () { selectPolicy(""); };
+    list.appendChild(newOpt);
+
+    // Auto-select only when unambiguous — exactly one policy of this type.
+    selectPolicy(matching.length === 1 ? String(matching[0].id) : "");
+  }
+
+  // Fetch the client's policies once; rendering is filtered by product line.
+  window.loadClientPolicies = function(clientId) {
+    const list = document.getElementById("client-policies-list");
+    if (list) list.innerHTML = '<span class="text-muted" style="font-size:.84rem;">Checking records…</span>';
     const url = "{% url 'clients:client_policies_json' 0 %}".replace("/0/", "/" + clientId + "/");
     fetch(url)
       .then(r => r.json())
-      .then(data => {
-        list.innerHTML = "";
-        const pols = data.policies || [];
-        pols.forEach(function(p) {
-          const opt = document.createElement("button");
-          opt.type = "button";
-          opt.className = "policy-pick ki-rel-row";
-          opt.dataset.pid = String(p.id);
-          opt.style.cssText = "width:100%;text-align:left;border:1px solid var(--ki-card-border);border-radius:8px;background:#fff;cursor:pointer;gap:.5rem;";
-          const dot = p.type === "Health" ? "#15803D" : "#4338CA";
-          const ends = p.end ? " · renews " + p.end : "";
-          opt.innerHTML =
-            '<span class="ki-mono ki-mono-sm" style="--c:' + dot + ';width:26px;height:26px;font-size:.62rem;">' + p.type[0] + '</span>' +
-            '<span style="min-width:0;"><strong>' + p.type + '</strong> — ' + (p.insurer || p.plan || p.number) +
-            '<span class="k" style="display:block;">' + p.number + ends + '</span></span>' +
-            '<i class="bi bi-check-circle-fill add" style="margin-left:auto;color:#15803D;display:none;"></i>';
-          opt.onclick = function () { selectPolicy(String(p.id)); };
-          list.appendChild(opt);
-        });
-        const newOpt = document.createElement("button");
-        newOpt.type = "button";
-        newOpt.className = "policy-pick ki-rel-row";
-        newOpt.dataset.pid = "new";
-        newOpt.style.cssText = "width:100%;text-align:left;border:1px dashed var(--ki-card-border);border-radius:8px;background:#fff;cursor:pointer;gap:.5rem;";
-        newOpt.innerHTML = '<i class="bi bi-plus-circle" style="color:var(--ki-primary);"></i> <span>New policy for this client</span>';
-        newOpt.onclick = function () { selectPolicy(""); };
-        list.appendChild(newOpt);
-        selectPolicy(pols.length ? String(pols[0].id) : "");
-      })
-      .catch(function() {
-        list.innerHTML = '<span class="text-danger" style="font-size:.84rem;">Could not load records.</span>';
-        selectPolicy("");
-      });
+      .then(data => { fetchedPolicies = data.policies || []; renderPolicies(); })
+      .catch(function() { fetchedPolicies = []; renderPolicies(); });
   };
+
+  // Re-filter the policy options whenever the product line changes.
+  if (productType) productType.addEventListener("change", renderPolicies);
 
   // If the page opened with a client already chosen, show their policies now.
   if (clientIdField.value) { window.loadClientPolicies(clientIdField.value); }

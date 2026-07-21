@@ -163,19 +163,24 @@ def link_renewal_to_policy(renewal, *, selected_policy_id=None, new_policy_numbe
 
     Sets and saves ``renewal.policy``. Returns the policy, or None.
     """
-    if selected_policy_id:
-        policy = InsurancePolicy.objects.filter(
-            pk=selected_policy_id, client=renewal.client).first()
-        if policy:
-            renewal.policy = policy
-            renewal.save(update_fields=["policy"])
-            return policy
-
     kind_name = renewal.insurance_kind
     kind = {"health": InsurancePolicy.TYPE_HEALTH,
             "life": InsurancePolicy.TYPE_LIFE}.get(kind_name)
     if kind is None:
-        return None
+        return None          # "Other" renewals (FD etc.) carry no policy
+
+    if selected_policy_id:
+        # The ticked policy must match this renewal's product line AND belong
+        # to the client — otherwise a Health policy could silently absorb a
+        # Life renewal (the pre-selection bug). On any mismatch, ignore the
+        # selection and fall through to creating the right-type policy.
+        policy = InsurancePolicy.objects.filter(
+            pk=selected_policy_id, client=renewal.client,
+            insurance_type=kind).first()
+        if policy:
+            renewal.policy = policy
+            renewal.save(update_fields=["policy"])
+            return policy
 
     number = (new_policy_number or "").strip()
     policy = InsurancePolicy.objects.create(

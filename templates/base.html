@@ -381,10 +381,6 @@
             <ul class="kn-menu">
               <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:family_list' %}"><i class="bi bi-house-heart-fill"></i> Households</a></li>
-              <li><div class="kn-menu-divider"></div></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:policy_list' %}"><i class="bi bi-shield-check"></i> Insurance Tracker</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:claim_list' %}"><i class="bi bi-file-medical"></i> Claim Tracker</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:meeting_list' %}"><i class="bi bi-calendar-event"></i> Meetings</a></li>
               {% if nav.show_my_clients %}<li><a class="kn-menu-item" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a></li>{% endif %}
               <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-person-vcard"></i> KYC Issues</a></li>
@@ -400,9 +396,6 @@
               <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
               <li><a class="kn-menu-item" href="{% if nav.is_admin %}{% url 'clients:admin_add_sale' %}{% else %}{% url 'clients:add_sale' %}{% endif %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
               {% if nav.can_approve %}<li><a class="kn-menu-item" href="{% url 'clients:approve_sales' %}"><i class="bi bi-check-circle-fill"></i> Approve Sales</a></li>{% endif %}
-              <li><div class="kn-menu-divider"></div></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
               {% if nav.can_incentives or nav.can_recalc or nav.can_analysis %}<li><div class="kn-menu-divider"></div></li>{% endif %}
               {% if nav.can_incentives %}
@@ -419,6 +412,21 @@
               {% endif %}
               {% if nav.can_analysis %}<li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>{% endif %}
               <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
+            </ul>
+          </div>
+
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <span class="kn-mono" style="--c:#0F766E;">In</span> Insurance <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              <li><a class="kn-menu-item" href="{% url 'clients:policy_list' %}"><i class="bi bi-shield-check"></i> Insurance Tracker</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:claim_list' %}"><i class="bi bi-file-medical"></i> Claim Tracker</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:meeting_list' %}"><i class="bi bi-calendar-event"></i> Meetings</a></li>
             </ul>
           </div>
 

@@ -282,3 +282,46 @@ class PolicyNumberAndLinkingTests(TestCase):
         html = tc.get(reverse("clients:policy_detail", args=[policy.id])).content.decode()
         self.assertIn("Renewal history", html)
         self.assertIn("8,000", html)
+
+
+class PolicyTypeMismatchTests(TestCase):
+    """A renewal must never link to a policy of a different product line."""
+
+    @classmethod
+    def setUpTestData(cls):
+        _products()
+        u = User.objects.create_user("mm_admin", password="pw")
+        cls.admin = Employee.objects.create(user=u, role="admin", salary=0, active=True)
+        cls.client_rec = Client.objects.create(id=6200, name="Aarav Malhotra")
+        cls.life = Product.objects.get(code="LIFE_INS")
+
+    def test_life_renewal_ignores_a_selected_health_policy(self):
+        health = InsurancePolicy.objects.create(
+            client=self.client_rec, policy_number="HEALTH1", insurer="Star",
+            insurance_type=InsurancePolicy.TYPE_HEALTH)
+        r = Renewal.objects.create(client=self.client_rec, employee=self.admin,
+                                   product_ref=self.life, product_type=Renewal.PRODUCT_TYPE_LIFE,
+                                   frequency="yearly", renewal_date=date(2026, 2, 10),
+                                   premium_amount=9000)
+        # User's stale selection is the Health policy — must NOT link to it.
+        policy = insurance_sync.link_renewal_to_policy(
+            r, selected_policy_id=health.id, new_policy_number="LIFE-NEW-1")
+        r.refresh_from_db()
+        self.assertNotEqual(r.policy_id, health.id)
+        self.assertEqual(r.policy.insurance_type, InsurancePolicy.TYPE_LIFE)
+        self.assertEqual(r.policy.policy_number, "LIFE-NEW-1")
+
+    def test_life_renewal_links_to_the_life_policy_when_both_exist(self):
+        InsurancePolicy.objects.create(
+            client=self.client_rec, policy_number="HEALTH1", insurer="Star",
+            insurance_type=InsurancePolicy.TYPE_HEALTH)
+        life_pol = InsurancePolicy.objects.create(
+            client=self.client_rec, policy_number="LIFE1", insurer="LIC",
+            insurance_type=InsurancePolicy.TYPE_LIFE)
+        r = Renewal.objects.create(client=self.client_rec, employee=self.admin,
+                                   product_ref=self.life, product_type=Renewal.PRODUCT_TYPE_LIFE,
+                                   frequency="yearly", renewal_date=date(2026, 2, 10),
+                                   premium_amount=9000)
+        insurance_sync.link_renewal_to_policy(r, selected_policy_id=life_pol.id)
+        r.refresh_from_db()
+        self.assertEqual(r.policy_id, life_pol.id)
