@@ -20,6 +20,15 @@
                placeholder="Filter by client or investor name…" value="{{ q }}">
         <button class="ki-btn ki-btn-primary ki-btn-sm" aria-label="Search"><i class="bi bi-search"></i></button>
       </form>
+      <form method="post" action="{% url 'clients:mf_folio_auto_link' %}" style="display:inline;">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button class="ki-btn ki-btn-primary ki-btn-sm"
+                title="Link every unlinked folio whose name matches exactly one client (exact or middle-name match only)"
+                onclick="return confirm('Auto-link all folios whose investor name matches exactly one client?\n\nWeak or ambiguous matches are skipped for you to do by hand.');">
+          <i class="bi bi-magic"></i> Auto-link matches
+        </button>
+      </form>
       <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_folios' %}?linked=no">Unmatched folios</a>
       <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-arrow-left"></i> Back</a>
     </div>

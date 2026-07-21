@@ -215,6 +215,25 @@ def mf_folio_batches(request):
 
 
 @_admin_required
+@require_POST
+def mf_folio_auto_link(request):
+    """Link every unlinked folio whose investor name matches exactly one
+    client. Weak and ambiguous matches are left for a human."""
+    linked, ambiguous = rta_feed.auto_link_by_name()
+    if linked:
+        messages.success(request, f"{linked} folio(s) auto-linked by name.")
+    else:
+        messages.info(request, "Nothing to auto-link — no unambiguous name matches left.")
+    if ambiguous:
+        messages.warning(
+            request,
+            f"{ambiguous} folio(s) skipped: the name matches more than one client. "
+            f"Link those from the row buttons so the right person is picked.",
+        )
+    return redirect(_safe_next(request))
+
+
+@_admin_required
 def mf_folio_link(request, folio_id):
     folio = get_object_or_404(MutualFundFolio.objects.select_related("client"), id=folio_id)
 

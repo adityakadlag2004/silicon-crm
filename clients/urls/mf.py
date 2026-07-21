@@ -13,6 +13,7 @@ urlpatterns = [
     path("mf/folios/", mf.mf_folios, name="mf_folios"),
     path("mf/folio-match/", mf.mf_folio_match, name="mf_folio_match"),
     path("mf/folios/batches/", mf.mf_folio_batches, name="mf_folio_batches"),
+    path("mf/folios/auto-link/", mf.mf_folio_auto_link, name="mf_folio_auto_link"),
     path("mf/folios/<int:folio_id>/link/", mf.mf_folio_link, name="mf_folio_link"),
     path("mf/folios/<int:folio_id>/create-client/", mf.mf_folio_create_client, name="mf_folio_create_client"),
     path("mf/transactions/", mf.mf_transactions, name="mf_transactions"),

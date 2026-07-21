@@ -802,16 +802,19 @@ def _client_name_index():
     return by_full, by_first
 
 
-def _best_client_match(tokens, by_full, by_first):
-    """Strongest (level, client) for an investor name, or None. Shared by the
-    Match Folios screen and the Folios list's inline suggestion so the two
-    never disagree about who a folio belongs to."""
+def _clients_at_best_level(tokens, by_full, by_first):
+    """``(level, [clients])`` for an investor name's strongest match, or None.
+
+    Every client tying at that level is returned, not just the first — two
+    clients really named "Rahul Sharma" is exactly the case auto-linking must
+    refuse to guess at.
+    """
     if not tokens:
         return None
     full_hits = by_full.get(" ".join(tokens))
     if full_hits:
-        return 3, full_hits[0][0]
-    best = None
+        return 3, [c for c, _ in full_hits]
+    best_level, hits = 0, []
     for client, client_tokens in by_first.get(tokens[0], []):
         folio_set, client_set = set(tokens), set(client_tokens)
         # middle names: "ADITYA KADLAG" ⊆ "ADITYA SUNIL KADLAG"
@@ -824,9 +827,62 @@ def _best_client_match(tokens, by_full, by_first):
             level = 1
         else:
             continue
-        if best is None or level > best[0]:
-            best = (level, client)
-    return best
+        if level > best_level:
+            best_level, hits = level, [client]
+        elif level == best_level:
+            hits.append(client)
+    return (best_level, hits) if hits else None
+
+
+def _best_client_match(tokens, by_full, by_first):
+    """Strongest (level, client) for an investor name, or None — the display
+    suggestion. Shared by the Match Folios screen and the Folios list so the
+    two never disagree about who a folio belongs to."""
+    best = _clients_at_best_level(tokens, by_full, by_first)
+    return (best[0], best[1][0]) if best else None
+
+
+# Levels safe to link without a human looking: an exact name, or one name
+# contained in the other (a middle name or an "NSE"/"NJ" routing suffix).
+# Level 1 is deliberately excluded — "ADITYA SUNIL KADLAG" vs "ADITYA RAMESH
+# KADLAG" matches first+last and is usually a different person in the family.
+AUTO_LINK_MIN_LEVEL = 2
+
+
+def auto_link_by_name(min_level=AUTO_LINK_MIN_LEVEL):
+    """Link every unlinked folio whose investor name matches exactly one
+    client at ``min_level`` or better.
+
+    Returns ``(linked, skipped_ambiguous)`` — skipped counts folios whose name
+    matched two or more clients, which stay in the list for a human to decide.
+    """
+    from ..models import MutualFundFolio, SipRegistration
+
+    folios = list(MutualFundFolio.objects.filter(client__isnull=True).exclude(investor_name=""))
+    if not folios:
+        return 0, 0
+    by_full, by_first = _client_name_index()
+
+    linked, ambiguous, touched_clients = 0, 0, set()
+    for folio in folios:
+        best = _clients_at_best_level(_name_tokens(folio.investor_name), by_full, by_first)
+        if not best or best[0] < min_level:
+            continue
+        clients = {c.id: c for c in best[1]}
+        if len(clients) > 1:
+            ambiguous += 1
+            continue
+        client = next(iter(clients.values()))
+        folio.client = client
+        folio.save(update_fields=["client", "updated_at"])
+        SipRegistration.objects.filter(
+            folio_number=folio.folio_number, client__isnull=True).update(client=client)
+        touched_clients.add(client.id)
+        linked += 1
+
+    if touched_clients:
+        refresh_client_sip_fields(client_ids=list(touched_clients))
+    return linked, ambiguous
 
 
 def suggest_clients_for_folios(folios):

@@ -1394,3 +1394,70 @@ class InlineFolioSuggestionTests(TestCase):
             reverse("clients:mf_folio_link", args=[self.matched.id]),
             {"client_id": self.aditya.id, "next": "https://evil.example.com/x"})
         self.assertRedirects(resp, reverse("clients:mf_folios"))
+
+
+class AutoLinkByNameTests(TestCase):
+    """Bulk auto-link: strong, unambiguous name matches only. Everything else
+    stays unlinked rather than being guessed at."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="al_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.aditya = Client.objects.create(name="Aditya Kadlag NSE")
+        cls.priya = Client.objects.create(name="Priya Patel")
+        # two real people share a name — must never be auto-picked
+        Client.objects.create(name="Rahul Sharma")
+        Client.objects.create(name="Rahul Sharma")
+        # different middle name, same first + last = level 1, NOT auto-linkable
+        Client.objects.create(name="Vikram Anand Rao")
+
+        cls.exact = MutualFundFolio.objects.create(
+            folio_number="A1", amc_name="HDFC", investor_name="PRIYA PATEL")
+        cls.middle = MutualFundFolio.objects.create(
+            folio_number="A2", amc_name="Axis", investor_name="ADITYA SUNIL KADLAG")
+        cls.ambiguous = MutualFundFolio.objects.create(
+            folio_number="A3", amc_name="SBI", investor_name="RAHUL SHARMA")
+        cls.weak = MutualFundFolio.objects.create(
+            folio_number="A4", amc_name="UTI", investor_name="VIKRAM SURESH RAO")
+        cls.nobody = MutualFundFolio.objects.create(
+            folio_number="A5", amc_name="DSP", investor_name="ZZZ NOBODY")
+
+    def test_links_strong_matches_and_refuses_the_rest(self):
+        linked, ambiguous = rta_feed.auto_link_by_name()
+        self.assertEqual((linked, ambiguous), (2, 1))
+        self.exact.refresh_from_db()
+        self.middle.refresh_from_db()
+        self.assertEqual(self.exact.client, self.priya)      # exact name
+        self.assertEqual(self.middle.client, self.aditya)    # middle name + suffix
+        for folio in (self.ambiguous, self.weak, self.nobody):
+            folio.refresh_from_db()
+            self.assertIsNone(folio.client)  # two Rahuls / weak / no match
+
+    def test_does_not_touch_pan_or_already_linked_folios(self):
+        someone = Client.objects.create(name="Someone Else")
+        self.exact.client = someone
+        self.exact.save(update_fields=["client"])
+        rta_feed.auto_link_by_name()
+        self.exact.refresh_from_db()
+        self.priya.refresh_from_db()
+        self.assertEqual(self.exact.client, someone)   # not re-pointed
+        self.assertEqual(self.priya.pan or "", "")     # PAN system untouched
+
+    def test_button_reports_both_counts_and_returns_to_page(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        nxt = reverse("clients:mf_folios") + "?linked=no"
+        resp = c.post(reverse("clients:mf_folio_auto_link"), {"next": nxt}, follow=True)
+        self.assertRedirects(resp, nxt)
+        text = " ".join(str(m) for m in resp.context["messages"])
+        self.assertIn("2 folio(s) auto-linked", text)
+        self.assertIn("1 folio(s) skipped", text)
+
+    def test_admin_only(self):
+        c = TestClient()
+        user = User.objects.create_user(username="al_emp", password="x")
+        Employee.objects.create(user=user, role="employee", salary=0, active=True)
+        c.force_login(user)
+        self.assertEqual(c.post(reverse("clients:mf_folio_auto_link")).status_code, 403)
+        self.assertIsNone(MutualFundFolio.objects.get(id=self.exact.id).client)
