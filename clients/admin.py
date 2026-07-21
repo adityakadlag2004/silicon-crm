@@ -30,6 +30,9 @@ from .models import (
     RTAFeedImport,
     InsurancePolicy,
     InsuranceClaim,
+    ClaimActivity,
+    ClaimDocument,
+    ClaimReminder,
     Meeting,
 )
 
@@ -448,3 +451,23 @@ class MeetingAdmin(admin.ModelAdmin):
     search_fields = ("client__name", "outcome")
     autocomplete_fields = ("client",)
     date_hierarchy = "scheduled_at"
+
+
+@admin.register(ClaimDocument)
+class ClaimDocumentAdmin(admin.ModelAdmin):
+    list_display = ("filename", "claim", "kind", "uploaded_by", "created_at")
+    list_filter = ("kind",)
+    search_fields = ("filename", "claim__policy__policy_number")
+
+
+@admin.register(ClaimReminder)
+class ClaimReminderAdmin(admin.ModelAdmin):
+    list_display = ("claim", "employee", "scheduled_at", "status", "reminded")
+    list_filter = ("status", "reminded")
+    date_hierarchy = "scheduled_at"
+
+
+@admin.register(ClaimActivity)
+class ClaimActivityAdmin(admin.ModelAdmin):
+    list_display = ("claim", "action", "actor", "created_at")
+    list_filter = ("action",)

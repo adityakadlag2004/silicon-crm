@@ -584,3 +584,34 @@ class EmployeeAdminForm(forms.ModelForm):
             qs = qs.exclude(pk=self.instance.pk)
         self.fields["reports_to"].queryset = qs.select_related("user")
         self.fields["reports_to"].required = False
+
+
+class ClaimForm(forms.ModelForm):
+    """Raise or edit a claim. The policy is set by the view (from the policy
+    page or a picker), so it isn't a form field here."""
+
+    class Meta:
+        from .models import InsuranceClaim
+        model = InsuranceClaim
+        fields = [
+            "claim_type", "claim_mode", "status",
+            "intimation_date", "admission_date", "submission_date", "settlement_date",
+            "claimed_amount", "settled_amount", "settlement_details", "handled_by",
+        ]
+        widgets = {
+            "intimation_date": forms.DateInput(attrs={"type": "date"}),
+            "admission_date": forms.DateInput(attrs={"type": "date"}),
+            "submission_date": forms.DateInput(attrs={"type": "date"}),
+            "settlement_date": forms.DateInput(attrs={"type": "date"}),
+            "settlement_details": forms.Textarea(attrs={"rows": 2}),
+            "claim_type": forms.TextInput(attrs={"placeholder": "e.g. Hospitalisation Claim"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["handled_by"].queryset = Employee.objects.filter(active=True).select_related("user")
+        self.fields["handled_by"].required = False
+        self.fields["claim_type"].required = True
+        for name, field in self.fields.items():
+            css = "form-select" if isinstance(field.widget, (forms.Select, forms.SelectMultiple)) else "form-control"
+            field.widget.attrs.setdefault("class", css)

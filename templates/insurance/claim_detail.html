@@ -16,28 +16,183 @@
     </div>
   </div>
   <div class="ki-rec-summary">
-    <div class="ki-sum-item"><span class="k">Policy</span><span class="v"><a href="{% url 'clients:policy_detail' claim.policy.id %}">{{ claim.policy.policy_number|mask_pan }}</a></span></div>
-    <div class="ki-sum-item"><span class="k">Insurer</span><span class="v">{{ claim.policy.insurer }}</span></div>
+    <div class="ki-sum-item"><span class="k">Policy</span><span class="v"><a href="{% url 'clients:policy_detail' claim.policy.id %}">{{ claim.policy.policy_number }}</a></span></div>
+    <div class="ki-sum-item"><span class="k">Insurer</span><span class="v">{{ claim.policy.insurer|default:"—" }}</span></div>
     <div class="ki-sum-item"><span class="k">Handled By</span><span class="v">{% if claim.handled_by %}{{ claim.handled_by.user.get_full_name|default:claim.handled_by.user.username }}{% else %}—{% endif %}</span></div>
   </div>
 </div>
 
-
-<div class="ki-card">
-  <h3 class="ki-section-title" style="margin-top:0;">Claim Details</h3>
-  <div class="ki-fields">
-    <div class="ki-field"><span class="k">Claim Type</span><span class="v">{{ claim.claim_type|default:"—" }}</span></div>
-    <div class="ki-field"><span class="k">Claim Mode</span><span class="v">{{ claim.get_claim_mode_display }}</span></div>
-    <div class="ki-field"><span class="k">Intimation Date</span><span class="v">{{ claim.intimation_date|date:"d M Y"|default:"—" }}</span></div>
-    <div class="ki-field"><span class="k">Admission Date</span><span class="v">{{ claim.admission_date|date:"d M Y"|default:"—" }}</span></div>
-    <div class="ki-field"><span class="k">Submission Date</span><span class="v">{{ claim.submission_date|date:"d M Y"|default:"—" }}</span></div>
-    <div class="ki-field"><span class="k">Settlement Date</span><span class="v">{{ claim.settlement_date|date:"d M Y"|default:"—" }}</span></div>
-    <div class="ki-field"><span class="k">Claimed Amount</span><span class="v">₹{{ claim.claimed_amount|inr }}</span></div>
-    <div class="ki-field"><span class="k">Settled Amount</span><span class="v">₹{{ claim.settled_amount|inr }}</span></div>
-    <div class="ki-field"><span class="k">Shortfall</span><span class="v">₹{{ claim.shortfall|inr }}</span></div>
+{# ── Stage stepper ── #}
+<div class="ki-card mb-3">
+  <div class="claim-steps">
+    {% for st in stages %}
+      {% with reached=claim.status|claim_stage_reached:st %}
+      <div class="claim-step {% if claim.status == st %}current{% elif reached %}done{% endif %}">
+        <span class="dot">{% if reached and claim.status != st %}<i class="bi bi-check"></i>{% else %}{{ forloop.counter }}{% endif %}</span>
+        <span class="lbl">{{ st|claim_status_label }}</span>
+      </div>
+      {% endwith %}
+    {% endfor %}
+    {% if claim.status == 'rejected' %}
+      <div class="claim-step current" style="--c:#BE123C;"><span class="dot"><i class="bi bi-x"></i></span><span class="lbl">Rejected</span></div>
+    {% endif %}
   </div>
-  {% if claim.settlement_details %}
-  <p style="margin-top:.9rem;"><strong>Settlement details:</strong><br><span style="white-space:pre-wrap;">{{ claim.settlement_details }}</span></p>
-  {% endif %}
 </div>
+
+<div class="ki-rec-layout">
+  <div>
+    {# ── Update stage ── #}
+    <div class="ki-card">
+      <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-arrow-right-circle"></i> Update stage</h3>
+      <form method="post" action="{% url 'clients:claim_update_status' claim.id %}">
+        {% csrf_token %}
+        <div class="row g-2 align-items-end">
+          <div class="col-md-5">
+            <label class="form-label" for="status-sel">Move to</label>
+            <select name="status" id="status-sel" class="form-select" onchange="document.getElementById('settled-wrap').style.display=this.value==='settled'?'block':'none';">
+              {% for val, label in statuses %}<option value="{{ val }}" {% if val == claim.status %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4" id="settled-wrap" style="{% if claim.status != 'settled' %}display:none;{% endif %}">
+            <label class="form-label" for="settled-amt">Settled amount (₹)</label>
+            <input type="number" step="0.01" name="settled_amount" id="settled-amt" class="form-control" value="{{ claim.settled_amount|floatformat:0 }}">
+          </div>
+          <div class="col-md-3">
+            <button class="ki-btn ki-btn-primary" style="width:100%;"><i class="bi bi-check-lg"></i> Update</button>
+          </div>
+          <div class="col-12">
+            <input type="text" name="note" class="form-control form-control-sm" placeholder="Note for this update (optional)">
+          </div>
+        </div>
+        {# follow-up reminder rides along with any update #}
+        <div class="claim-reminder-inline mt-2">
+          <span class="text-muted" style="font-size:.82rem;"><i class="bi bi-alarm"></i> Remind me to follow up on</span>
+          <input type="datetime-local" name="reminder_at" class="form-control form-control-sm" style="max-width:210px;">
+          <input type="text" name="reminder_note" class="form-control form-control-sm" placeholder="reminder note" style="max-width:220px;">
+        </div>
+      </form>
+    </div>
+
+    {# ── Claim facts ── #}
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;">Claim Details</h3>
+      <div class="ki-fields">
+        <div class="ki-field"><span class="k">Claim Type</span><span class="v">{{ claim.claim_type|default:"—" }}</span></div>
+        <div class="ki-field"><span class="k">Claim Mode</span><span class="v">{{ claim.get_claim_mode_display }}</span></div>
+        <div class="ki-field"><span class="k">Intimation Date</span><span class="v">{{ claim.intimation_date|date:"d M Y"|default:"—" }}</span></div>
+        <div class="ki-field"><span class="k">Admission Date</span><span class="v">{{ claim.admission_date|date:"d M Y"|default:"—" }}</span></div>
+        <div class="ki-field"><span class="k">Submission Date</span><span class="v">{{ claim.submission_date|date:"d M Y"|default:"—" }}</span></div>
+        <div class="ki-field"><span class="k">Settlement Date</span><span class="v">{{ claim.settlement_date|date:"d M Y"|default:"—" }}</span></div>
+        <div class="ki-field"><span class="k">Claimed</span><span class="v">₹{{ claim.claimed_amount|inr }}</span></div>
+        <div class="ki-field"><span class="k">Settled</span><span class="v">₹{{ claim.settled_amount|inr }}</span></div>
+        <div class="ki-field"><span class="k">Shortfall</span><span class="v">₹{{ claim.shortfall|inr }}</span></div>
+      </div>
+      {% if claim.settlement_details %}
+      <p style="margin-top:.9rem;"><strong>Settlement details:</strong><br><span style="white-space:pre-wrap;">{{ claim.settlement_details }}</span></p>
+      {% endif %}
+    </div>
+
+    {# ── Documents ── #}
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-paperclip"></i> Documents ({{ documents|length }})</h3>
+      {% for d in documents %}
+      <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--ki-card-border);">
+        <i class="bi bi-file-earmark-text" style="color:var(--ki-primary);"></i>
+        <a href="{% url 'clients:claim_document_download' d.id %}" target="_blank" class="name-link" style="min-width:0;">{{ d.filename }}</a>
+        <span class="ki-tag" style="--c:#57534E;">{{ d.get_kind_display }}</span>
+        <form method="post" action="{% url 'clients:claim_delete_document' d.id %}" style="margin-left:auto;" onsubmit="return confirm('Remove this document?');">
+          {% csrf_token %}<button class="ki-btn ki-btn-sm" style="color:var(--ki-danger);" aria-label="Remove document"><i class="bi bi-trash"></i></button>
+        </form>
+      </div>
+      {% empty %}
+      <div class="ki-empty" style="padding:1rem;"><i class="bi bi-paperclip"></i>No documents yet.</div>
+      {% endfor %}
+      <form method="post" action="{% url 'clients:claim_upload_document' claim.id %}" enctype="multipart/form-data" class="mt-2" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;">
+        {% csrf_token %}
+        <div>
+          <label class="form-label" style="font-size:.8rem;" for="doc-kind">Type</label>
+          <select name="kind" id="doc-kind" class="form-select form-select-sm">
+            {% for val, label in doc_kinds %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div style="flex:1;min-width:180px;">
+          <label class="form-label" style="font-size:.8rem;" for="doc-file">File</label>
+          <input type="file" name="document" id="doc-file" class="form-control form-control-sm" required>
+        </div>
+        <button class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-upload"></i> Upload</button>
+      </form>
+      <small class="text-muted d-block mt-1"><i class="bi bi-info-circle"></i> Saved to {{ claim.policy.client.name }}'s Drive folder.</small>
+    </div>
+  </div>
+
+  {# ── Right rail: reminders + activity ── #}
+  <div>
+    <div class="ki-card">
+      <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-alarm"></i> Follow-ups</h3>
+      {% for r in reminders %}
+      <div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid var(--ki-card-border);">
+        <i class="bi bi-{% if r.status == 'done' %}check-circle-fill{% elif r.is_overdue %}exclamation-circle-fill{% else %}clock{% endif %}"
+           style="color:{% if r.status == 'done' %}#15803D{% elif r.is_overdue %}#BE123C{% else %}#0369A1{% endif %};"></i>
+        <span style="min-width:0;font-size:.85rem;">
+          {{ r.scheduled_at|date:"d M Y, H:i" }}{% if r.note %} · {{ r.note }}{% endif %}
+        </span>
+        {% if r.status == 'pending' %}
+        <form method="post" action="{% url 'clients:claim_reminder_done' r.id %}" style="margin-left:auto;">
+          {% csrf_token %}<button class="ki-btn ki-btn-sm ki-btn-secondary" title="Mark done" aria-label="Mark follow-up done"><i class="bi bi-check"></i></button>
+        </form>
+        {% endif %}
+      </div>
+      {% empty %}
+      <div class="ki-empty" style="padding:1rem;"><i class="bi bi-alarm"></i>No follow-ups scheduled.</div>
+      {% endfor %}
+      <form method="post" action="{% url 'clients:claim_add_reminder' claim.id %}" class="mt-2">
+        {% csrf_token %}
+        <input type="datetime-local" name="reminder_at" class="form-control form-control-sm mb-1" required>
+        <div style="display:flex;gap:.4rem;">
+          <input type="text" name="reminder_note" class="form-control form-control-sm" placeholder="Note">
+          <button class="ki-btn ki-btn-primary ki-btn-sm" style="white-space:nowrap;"><i class="bi bi-plus"></i> Add</button>
+        </div>
+      </form>
+      <small class="text-muted d-block mt-1"><i class="bi bi-phone"></i> Rings on the mobile app at the set time.</small>
+    </div>
+
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-chat-left-text"></i> Add note</h3>
+      <form method="post" action="{% url 'clients:claim_add_note' claim.id %}">
+        {% csrf_token %}
+        <textarea name="note" rows="2" class="form-control form-control-sm" placeholder="Add a note to the timeline…" required></textarea>
+        <button class="ki-btn ki-btn-primary ki-btn-sm mt-2"><i class="bi bi-plus"></i> Add note</button>
+      </form>
+    </div>
+
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-clock-history"></i> Timeline</h3>
+      <ul class="tk-activity">
+        {% for a in activities %}
+        <li>
+          <span class="ic"><i class="bi bi-dot"></i></span>
+          <span style="min-width:0;">
+            <strong>{{ a.get_action_display }}</strong>{% if a.detail %} — {{ a.detail }}{% endif %}
+            <span class="k" style="display:block;">{{ a.actor.get_full_name|default:a.actor.username|default:"System" }} · {{ a.created_at|date:"d M H:i" }}</span>
+          </span>
+        </li>
+        {% empty %}<li class="text-muted">No activity yet.</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<style>
+  .claim-steps { display:flex; gap:.4rem; overflow-x:auto; }
+  .claim-step { display:flex; flex-direction:column; align-items:center; gap:.3rem; flex:1; min-width:70px; position:relative; }
+  .claim-step .dot { width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:.8rem;
+    background:var(--ki-card-border); color:var(--ki-text-secondary); }
+  .claim-step .lbl { font-size:.72rem; text-align:center; color:var(--ki-text-secondary); }
+  .claim-step.done .dot { background:#15803D; color:#fff; }
+  .claim-step.current .dot { background:var(--c,var(--ki-primary)); color:#fff; box-shadow:0 0 0 4px var(--ki-primary-pale); }
+  .claim-step.current .lbl { color:var(--ki-text-primary); font-weight:600; }
+  .claim-reminder-inline { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+</style>
 {% endblock %}
+EOF
+echo "written"

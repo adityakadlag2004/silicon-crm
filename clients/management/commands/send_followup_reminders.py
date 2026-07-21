@@ -23,7 +23,7 @@ from django.core.management.base import BaseCommand
 from django.urls import reverse
 from django.utils import timezone
 
-from clients.models import CalendarEvent, CallFollowUp, LeadFollowUp, Notification
+from clients.models import CalendarEvent, CallFollowUp, ClaimReminder, LeadFollowUp, Notification
 from clients.services.push import send_data_push_to_user
 
 
@@ -32,7 +32,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         now = timezone.now()
-        sent = self._call_followups(now) + self._lead_followups(now) + self._events(now)
+        sent = (self._call_followups(now) + self._lead_followups(now)
+                + self._events(now) + self._claim_reminders(now))
         if sent:
             self.stdout.write(self.style.SUCCESS(f"Sent {sent} reminder(s)."))
 
@@ -116,5 +117,33 @@ class Command(BaseCommand):
             )
             ev.reminded = True
             ev.save(update_fields=["reminded"])
+            sent += 1
+        return sent
+
+    def _claim_reminders(self, now):
+        """Push a due claim follow-up to the handler's phone. A regular
+        Notification mirrors to FCM via signals.push_on_notification, so no
+        new push wiring is needed."""
+        due = ClaimReminder.objects.filter(
+            status=ClaimReminder.STATUS_PENDING,
+            reminded=False,
+            scheduled_at__lte=now,
+        ).select_related("employee__user", "claim__policy__client")
+
+        sent = 0
+        for r in due:
+            if not (r.employee and r.employee.user_id):
+                r.reminded = True
+                r.save(update_fields=["reminded"])
+                continue
+            client = r.claim.policy.client
+            Notification.objects.create(
+                recipient=r.employee.user,
+                title=f"Claim follow-up: {client.name}",
+                body=r.note or f"Follow up on the claim for {r.claim.policy.policy_number}.",
+                link=f"/clients/claims/{r.claim_id}/",
+            )
+            r.reminded = True
+            r.save(update_fields=["reminded"])
             sent += 1
         return sent

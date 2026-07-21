@@ -28,6 +28,9 @@ from .clients import (  # noqa: F401
     Renewal,
 )
 from .insurance import (  # noqa: F401
+    ClaimActivity,
+    ClaimDocument,
+    ClaimReminder,
     InsuranceClaim,
     InsurancePolicy,
     Meeting,

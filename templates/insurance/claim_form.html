@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Raise Claim{% endblock %}
+{% block page_title %}Raise Claim{% endblock %}
+{% block content %}
+{% include "_shell/crumb.html" with crumbs=crumbs %}
+
+<div class="ki-card" style="max-width:760px;">
+  <form method="post">
+    {% csrf_token %}
+
+    {% if policy %}
+      <div class="ki-rec-summary" style="margin:0 0 1rem;">
+        <div class="ki-sum-item"><span class="k">Client</span><span class="v">{{ policy.client.name }}</span></div>
+        <div class="ki-sum-item"><span class="k">Policy</span><span class="v">{{ policy.policy_number }} · {{ policy.get_insurance_type_display }}</span></div>
+        <div class="ki-sum-item"><span class="k">Insurer</span><span class="v">{{ policy.insurer|default:"—" }}</span></div>
+      </div>
+    {% else %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="policy-select">Policy this claim is against <span class="text-danger">*</span></label>
+        <select name="policy" id="policy-select" class="form-select" required>
+          <option value="">— Choose a policy —</option>
+          {% for p in policies %}
+            <option value="{{ p.id }}">{{ p.client.name }} — {{ p.get_insurance_type_display }} · {{ p.policy_number }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    {% endif %}
+
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.claim_type.id_for_label }}">Claim Type <span class="text-danger">*</span></label>
+        {{ form.claim_type }}
+        {% if form.claim_type.errors %}<div class="text-danger small mt-1">{{ form.claim_type.errors|striptags }}</div>{% endif %}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.claim_mode.id_for_label }}">Mode</label>
+        {{ form.claim_mode }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.status.id_for_label }}">Stage</label>
+        {{ form.status }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.handled_by.id_for_label }}">Handled By</label>
+        {{ form.handled_by }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.intimation_date.id_for_label }}">Intimation Date</label>
+        {{ form.intimation_date }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.admission_date.id_for_label }}">Admission Date</label>
+        {{ form.admission_date }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.claimed_amount.id_for_label }}">Claimed Amount (₹)</label>
+        {{ form.claimed_amount }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label fw-semibold" for="{{ form.settled_amount.id_for_label }}">Settled Amount (₹)</label>
+        {{ form.settled_amount }}
+      </div>
+      <div class="col-12">
+        <label class="form-label fw-semibold" for="{{ form.settlement_details.id_for_label }}">Notes / Settlement Details</label>
+        {{ form.settlement_details }}
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 justify-content-end mt-3">
+      <a href="{% if policy %}{% url 'clients:policy_detail' policy.id %}{% else %}{% url 'clients:claim_list' %}{% endif %}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Cancel</a>
+      <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-plus-lg"></i> Raise Claim</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

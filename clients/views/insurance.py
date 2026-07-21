@@ -152,11 +152,22 @@ def claim_detail(request, claim_id):
     claim = get_object_or_404(
         InsuranceClaim.objects.select_related("policy__client", "handled_by__user"),
         pk=claim_id)
+    ctx_extra = {
+        "activities": claim.activities.select_related("actor")[:100],
+        "documents": claim.documents.select_related("uploaded_by"),
+        "reminders": claim.reminders.select_related("employee__user").order_by("status", "scheduled_at"),
+        "doc_kinds": ClaimDocument.KIND_CHOICES,
+        "statuses": InsuranceClaim.STATUS_CHOICES,
+        # ordered stage list for the stepper; rejected shown separately
+        "stages": [InsuranceClaim.STATUS_INTIMATED, InsuranceClaim.STATUS_FILE_RECEIVED,
+                   InsuranceClaim.STATUS_SUBMITTED, InsuranceClaim.STATUS_SETTLED],
+    }
     return render(request, "insurance/claim_detail.html", {
         "crumbs": [
             {"label": "Claim Tracker", "url": reverse("clients:claim_list")},
             {"label": f"Claim #{claim.pk}"},
         ],
+        **ctx_extra,
         "kpis": [
             {"label": "Claimed", "value": f"₹{inr(claim.claimed_amount)}", "color": "#4338CA"},
             {"label": "Settled", "value": f"₹{inr(claim.settled_amount)}", "color": "#15803D"},
@@ -254,3 +265,178 @@ def client_policies_json(request, client_id):
             for p in policies
         ],
     })
+
+
+# ─────────────────────────── claim workflow ───────────────────────────
+
+from datetime import datetime as _dt
+from django.contrib import messages
+from django.http import HttpResponse
+from django.shortcuts import redirect
+from django.views.decorators.http import require_POST
+
+from ..forms import ClaimForm
+from ..models import ClaimDocument, ClaimReminder
+from ..services import claims as claims_service
+
+
+def _emp(request):
+    return getattr(request.user, "employee", None)
+
+
+@login_required
+def raise_claim(request, policy_id=None):
+    """Raise a new claim. Reached from a policy (policy pre-filled) or from the
+    nav, where a policy is picked first."""
+    policy = get_object_or_404(InsurancePolicy.objects.select_related("client"),
+                               pk=policy_id) if policy_id else None
+
+    if request.method == "POST":
+        if policy is None:
+            pid = request.POST.get("policy")
+            policy = get_object_or_404(InsurancePolicy, pk=pid) if pid else None
+            if policy is None:
+                messages.error(request, "Choose the policy this claim is against.")
+                return redirect("clients:claim_list")
+        form = ClaimForm(request.POST)
+        if form.is_valid():
+            claim = form.save(commit=False)
+            claim.policy = policy
+            claim.created_by = request.user
+            if not claim.handled_by_id:
+                claim.handled_by = _emp(request)
+            if not claim.intimation_date:
+                claim.intimation_date = timezone.localdate()
+            claim.save()
+            claims_service.log(claim, request.user, "created",
+                               f"{claim.claim_type or 'Claim'} on {policy.policy_number}")
+            messages.success(request, "Claim raised.")
+            return redirect("clients:claim_detail", claim_id=claim.pk)
+    else:
+        form = ClaimForm(initial={"intimation_date": timezone.localdate(),
+                                  "status": InsuranceClaim.STATUS_INTIMATED})
+
+    # Policies to choose from when raising without a pre-set one.
+    policies = None
+    if policy is None:
+        policies = (InsurancePolicy.objects.select_related("client")
+                    .order_by("client__name")[:500])
+    return render(request, "insurance/claim_form.html", {
+        "crumbs": [{"label": "Claim Tracker", "url": reverse("clients:claim_list")},
+                   {"label": "Raise Claim"}],
+        "form": form, "policy": policy, "policies": policies,
+        "statuses": InsuranceClaim.STATUS_CHOICES,
+    })
+
+
+@login_required
+@require_POST
+def claim_update_status(request, claim_id):
+    claim = get_object_or_404(InsuranceClaim.objects.select_related("policy__client"), pk=claim_id)
+    new_status = request.POST.get("status")
+    settled_raw = (request.POST.get("settled_amount") or "").strip()
+    settled = None
+    if new_status == InsuranceClaim.STATUS_SETTLED and settled_raw:
+        try:
+            settled = float(settled_raw)
+        except ValueError:
+            settled = None
+    claims_service.advance_stage(claim, new_status, request.user,
+                                 settled_amount=settled,
+                                 note=(request.POST.get("note") or "").strip())
+    # Optional follow-up reminder attached to this update.
+    _maybe_add_reminder(request, claim)
+    messages.success(request, "Claim updated.")
+    return redirect("clients:claim_detail", claim_id=claim.pk)
+
+
+@login_required
+@require_POST
+def claim_add_note(request, claim_id):
+    claim = get_object_or_404(InsuranceClaim, pk=claim_id)
+    claims_service.add_note(claim, request.user, request.POST.get("note"))
+    _maybe_add_reminder(request, claim)
+    return redirect("clients:claim_detail", claim_id=claim.pk)
+
+
+def _maybe_add_reminder(request, claim):
+    """If the form carried a follow-up date, schedule a reminder for it."""
+    raw = (request.POST.get("reminder_at") or "").strip()
+    if not raw:
+        return
+    dt = None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+        try:
+            dt = _dt.strptime(raw, fmt)
+            break
+        except ValueError:
+            continue
+    if dt is None:
+        return
+    aware = timezone.make_aware(dt, timezone.get_current_timezone())
+    claims_service.create_reminder(claim, request.user, aware,
+                                   note=request.POST.get("reminder_note", ""))
+
+
+@login_required
+@require_POST
+def claim_add_reminder(request, claim_id):
+    claim = get_object_or_404(InsuranceClaim, pk=claim_id)
+    _maybe_add_reminder(request, claim)
+    messages.success(request, "Follow-up scheduled.")
+    return redirect("clients:claim_detail", claim_id=claim.pk)
+
+
+@login_required
+@require_POST
+def claim_reminder_done(request, reminder_id):
+    reminder = get_object_or_404(ClaimReminder, pk=reminder_id)
+    claims_service.complete_reminder(reminder, request.user)
+    return redirect("clients:claim_detail", claim_id=reminder.claim_id)
+
+
+@login_required
+@require_POST
+def claim_upload_document(request, claim_id):
+    claim = get_object_or_404(InsuranceClaim.objects.select_related("policy__client"), pk=claim_id)
+    f = request.FILES.get("document")
+    if not f:
+        messages.error(request, "Choose a file to upload.")
+        return redirect("clients:claim_detail", claim_id=claim.pk)
+    _doc, err = claims_service.upload_document(
+        claim, f, request.user, kind=request.POST.get("kind", "other"))
+    messages.error(request, err) if err else messages.success(request, "Document uploaded.")
+    return redirect("clients:claim_detail", claim_id=claim.pk)
+
+
+@login_required
+def claim_document_download(request, doc_id):
+    doc = get_object_or_404(ClaimDocument.objects.select_related("claim"), pk=doc_id)
+    from ..services.google_drive import stream_file, DriveNotConfigured
+    try:
+        data, mime = stream_file(doc.drive_file_id)
+    except DriveNotConfigured:
+        messages.error(request, "Google Drive is not configured.")
+        return redirect("clients:claim_detail", claim_id=doc.claim_id)
+    except Exception:
+        messages.error(request, "Could not fetch the document.")
+        return redirect("clients:claim_detail", claim_id=doc.claim_id)
+    resp = HttpResponse(data, content_type=mime or doc.mime or "application/octet-stream")
+    resp["Content-Disposition"] = f'inline; filename="{doc.filename}"'
+    return resp
+
+
+@login_required
+@require_POST
+def claim_delete_document(request, doc_id):
+    doc = get_object_or_404(ClaimDocument.objects.select_related("claim"), pk=doc_id)
+    claim_id = doc.claim_id
+    from ..services.google_drive import delete_file
+    try:
+        delete_file(doc.drive_file_id)
+    except Exception:
+        pass
+    claims_service.log(doc.claim, request.user, "document_removed", doc.filename)
+    doc.delete()
+    messages.success(request, "Document removed.")
+    return redirect("clients:claim_detail", claim_id=claim_id)

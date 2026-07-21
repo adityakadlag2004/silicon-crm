@@ -154,3 +154,30 @@ def mask_pan(value):
     if len(text) < 6:
         return text or "—"
     return f"{text[:4]}{'*' * (len(text) - 6)}{text[-2:]}"
+
+
+# ── Claim stage stepper helpers ──────────────────────────────────────────
+_CLAIM_STAGE_ORDER = ["intimated", "file_received", "submitted", "settled"]
+_CLAIM_STAGE_LABELS = {
+    "intimated": "Intimated", "file_received": "File Received",
+    "submitted": "Submitted", "settled": "Settled", "rejected": "Rejected",
+}
+
+
+@register.filter
+def claim_status_label(status):
+    return _CLAIM_STAGE_LABELS.get(status, status)
+
+
+@register.filter
+def claim_stage_reached(current_status, stage):
+    """True when a claim at `current_status` has reached/passed `stage`.
+
+    Rejected claims never count as having reached later stages.
+    """
+    if current_status == "rejected":
+        return False
+    try:
+        return _CLAIM_STAGE_ORDER.index(current_status) >= _CLAIM_STAGE_ORDER.index(stage)
+    except ValueError:
+        return False

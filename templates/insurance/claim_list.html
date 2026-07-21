@@ -3,6 +3,9 @@
 {% block title %}Claim Tracker{% endblock %}
 {% block page_title %}Claim Tracker{% endblock %}
 {% block content %}
+<div style="display:flex;justify-content:flex-end;margin-bottom:.6rem;">
+  <a href="{% url 'clients:raise_claim' %}" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-plus-lg"></i> Raise Claim</a>
+</div>
 {% include "insurance/_searchbar.html" with count=claims|length noun="claim" %}
 
 <div class="ki-table-wrap">

@@ -31,10 +31,10 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import CalendarEvent, CallFollowUp, Client, LeadFollowUp, Sale, Task
+from ..models import CalendarEvent, CallFollowUp, ClaimReminder, Client, LeadFollowUp, Sale, Task
 
 ALL_SOURCES = ("event", "birthday", "lead_followup", "call_followup", "task",
-               "insurance_renewal")
+               "insurance_renewal", "claim_reminder")
 
 SOURCE_LABELS = {
     "event": "Event",
@@ -43,6 +43,7 @@ SOURCE_LABELS = {
     "call_followup": "Call",
     "task": "Task",
     "insurance_renewal": "Renewal",
+    "claim_reminder": "Claim",
 }
 
 
@@ -221,6 +222,29 @@ def _insurance_renewals(employee, start, end):
     return items
 
 
+def _claim_reminders(employee, start, end):
+    """Pending claim follow-ups for this employee, on their due date/time."""
+    qs = ClaimReminder.objects.filter(
+        status=ClaimReminder.STATUS_PENDING,
+    ).select_related("claim__policy__client")
+    if employee is not None:
+        qs = qs.filter(employee=employee)
+    if start:
+        qs = qs.filter(scheduled_at__gte=start)
+    if end:
+        qs = qs.filter(scheduled_at__lte=end)
+    items = []
+    for r in qs:
+        client = r.claim.policy.client
+        items.append(_item(
+            f"claimrem-{r.id}", "claim_reminder",
+            f"Claim follow-up: {client.name}", r.scheduled_at,
+            note=r.note or f"Claim on {r.claim.policy.policy_number}",
+            url=reverse("clients:claim_detail", args=[r.claim_id]),
+        ))
+    return items
+
+
 def feed_items(employee, *, start=None, end=None, sources=None,
                team_followups=False, employee_id=None):
     """Collect unified calendar items.
@@ -250,6 +274,8 @@ def feed_items(employee, *, start=None, end=None, sources=None,
         items += _tasks(employee, start, end)
     if "insurance_renewal" in sources:
         items += _insurance_renewals(employee, b_start, b_end)
+    if "claim_reminder" in sources:
+        items += _claim_reminders(employee, start, end)
 
     now_ts = timezone.now()
     for it in items:

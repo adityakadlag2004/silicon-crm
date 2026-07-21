@@ -67,6 +67,24 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   client's Drive folder to upload the policy (created on first click) — a
   link, never a forced redirect, so daily bulk entry isn't interrupted.
 
+## Claim workflow
+
+- Claims are raised and worked **in-app** now (not just admin): "Raise Claim"
+  in the Insurance nav and on each policy. `services/claims.py` owns the
+  workflow; every change logs a `ClaimActivity` (the timeline + notes share
+  that model).
+- Stages: Intimated → File Received → Submitted → Settled / Rejected.
+  `advance_stage` stamps the matching date once and logs it. The detail page
+  shows a stepper + an update form.
+- `ClaimDocument` stores files in the **client's** Drive folder (reuses
+  `get_or_create_client_folder`), served through a proxy like task
+  attachments.
+- `ClaimReminder` = a dated follow-up. It surfaces on the common calendar
+  (`claim_reminder` feed source) and fires a **mobile push** at its time via
+  the existing `send_followup_reminders` cron (a plain Notification mirrors to
+  FCM). No new cron — it rides the every-minute one already in CRONJOBS. Every
+  stage update / note can attach a follow-up in the same submit.
+
 ## UI conventions (record shell)
 
 - Every module screen leads with a breadcrumb and, for list screens, a KPI

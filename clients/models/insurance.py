@@ -174,3 +174,114 @@ class Meeting(models.Model):
         """Scheduled, but the slot has passed and nobody closed it off."""
         from django.utils import timezone
         return self.status == self.STATUS_SCHEDULED and self.scheduled_at < timezone.now()
+
+
+class ClaimActivity(models.Model):
+    """Append-only trail for a claim: stage changes, notes, documents.
+
+    Notes and the audit log share one model — a note is just an activity whose
+    action is ``NOTE`` with the text in ``detail``. The claim workspace renders
+    them as one timeline.
+    """
+
+    CREATED = "created"
+    STATUS_CHANGED = "status_changed"
+    NOTE = "note"
+    DOCUMENT_ADDED = "document_added"
+    DOCUMENT_REMOVED = "document_removed"
+    REMINDER_SET = "reminder_set"
+    REMINDER_DONE = "reminder_done"
+    ACTION_CHOICES = [
+        (CREATED, "Claim raised"),
+        (STATUS_CHANGED, "Stage changed"),
+        (NOTE, "Note added"),
+        (DOCUMENT_ADDED, "Document added"),
+        (DOCUMENT_REMOVED, "Document removed"),
+        (REMINDER_SET, "Reminder set"),
+        (REMINDER_DONE, "Reminder completed"),
+    ]
+
+    claim = models.ForeignKey(InsuranceClaim, on_delete=models.CASCADE, related_name="activities")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                              on_delete=models.SET_NULL, related_name="+")
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, db_index=True)
+    detail = models.CharField(max_length=1000, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name_plural = "Claim activities"
+
+    def __str__(self):
+        return f"{self.get_action_display()} on claim {self.claim_id}"
+
+
+class ClaimDocument(models.Model):
+    """A supporting document for a claim, stored in the client's Drive folder
+    and served through a proxy view (same pattern as task attachments)."""
+
+    KIND_CHOICES = [
+        ("claim_form", "Claim Form"),
+        ("bill", "Bill / Invoice"),
+        ("discharge", "Discharge Summary"),
+        ("prescription", "Prescription / Reports"),
+        ("id_proof", "ID Proof"),
+        ("settlement", "Settlement Letter"),
+        ("other", "Other"),
+    ]
+
+    claim = models.ForeignKey(InsuranceClaim, on_delete=models.CASCADE, related_name="documents")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="+")
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="other")
+    filename = models.CharField(max_length=255)
+    mime = models.CharField(max_length=120, blank=True)
+    size = models.PositiveBigIntegerField(default=0)
+    drive_file_id = models.CharField(max_length=128)
+    drive_view_link = models.URLField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return self.filename
+
+
+class ClaimReminder(models.Model):
+    """A dated follow-up on a claim. Surfaces on the common calendar and fires
+    a mobile push at its time (via the send_followup_reminders cron), so a
+    claim never stalls silently between stages."""
+
+    STATUS_PENDING = "pending"
+    STATUS_DONE = "done"
+    STATUS_DISMISSED = "dismissed"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_DONE, "Done"),
+        (STATUS_DISMISSED, "Dismissed"),
+    ]
+
+    claim = models.ForeignKey(InsuranceClaim, on_delete=models.CASCADE, related_name="reminders")
+    employee = models.ForeignKey("Employee", null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name="claim_reminders")
+    scheduled_at = models.DateTimeField(db_index=True)
+    note = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES,
+                              default=STATUS_PENDING, db_index=True)
+    reminded = models.BooleanField(default=False)   # push fired once
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["status", "scheduled_at"]
+
+    def __str__(self):
+        return f"Reminder for claim {self.claim_id} @ {self.scheduled_at:%d %b %Y %H:%M}"
+
+    @property
+    def is_overdue(self):
+        from django.utils import timezone
+        return self.status == self.STATUS_PENDING and self.scheduled_at < timezone.now()
