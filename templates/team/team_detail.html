@@ -127,12 +127,12 @@
       <div class="ki-field"><span class="k">Date of birth</span><span class="v">{{ emp.date_of_birth|date:"d M Y"|default:"—" }}</span></div>
       <div class="ki-field"><span class="k">Phone</span><span class="v">{{ emp.phone|default:"—" }}</span></div>
       <div class="ki-field"><span class="k">Personal email</span><span class="v">{{ emp.personal_email|default:"—" }}</span></div>
-      <div class="ki-field"><span class="k">Blood group</span><span class="v">{{ emp.blood_group|default:"—" }}</span></div>
+      <div class="ki-field"><span class="k">Marital status</span><span class="v">{{ emp.get_marital_status_display|default:"—" }}</span></div>
       <div class="ki-field"><span class="k">Qualification</span><span class="v">{{ emp.qualification|default:"—" }}</span></div>
-      <div class="ki-field"><span class="k">Experience</span><span class="v">{{ emp.experience_display }} total ({{ emp.tenure_display }} here)</span></div>
+      <div class="ki-field"><span class="k">Joined</span><span class="v">{{ emp.joining_date|date:"d M Y"|default:"—" }} ({{ emp.tenure_display }})</span></div>
       <div class="ki-field"><span class="k">Address</span><span class="v">{{ emp.address|default:"—"|linebreaksbr }}</span></div>
       <div class="ki-field"><span class="k">Emergency contact</span>
-        <span class="v">{% if emp.emergency_contact_name %}{{ emp.emergency_contact_name }}{% if emp.emergency_contact_relation %} ({{ emp.emergency_contact_relation }}){% endif %}{% if emp.emergency_contact_phone %} · {{ emp.emergency_contact_phone }}{% endif %}{% else %}—{% endif %}</span>
+        <span class="v">{% if emp.emergency_contact_name %}{{ emp.emergency_contact_name }}{% if emp.emergency_contact_phone %} · {{ emp.emergency_contact_phone }}{% endif %}{% else %}—{% endif %}</span>
       </div>
     </div>
     {% if emp.skill_list %}

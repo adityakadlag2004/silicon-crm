@@ -188,7 +188,6 @@ def team_detail(request, employee_id):
                    {"label": emp.full_name}],
         "kpis": [
             {"label": "With the firm", "value": emp.tenure_display, "color": "#4338CA"},
-            {"label": "Total experience", "value": emp.experience_display, "color": "#0369A1"},
             {"label": "Profile", "value": f"{emp.profile_completeness}%",
              "color": "#15803D" if emp.profile_is_complete else "#B45309"},
             {"label": "Clients", "value": Client.objects.filter(mapped_to=emp).count(),
@@ -271,9 +270,9 @@ def team_edit(request, employee_id):
         # so a half-filled form never wipes a known joining date.
         text_fields = [
             "first_name", "middle_name", "last_name", "position", "phone",
-            "personal_email", "address", "blood_group", "qualification",
+            "personal_email", "address", "qualification",
             "skills", "emergency_contact_name", "emergency_contact_phone",
-            "emergency_contact_relation", "notes",
+            "notes",
         ]
         for field in text_fields:
             if field in request.POST:
@@ -287,9 +286,8 @@ def team_edit(request, employee_id):
                 parsed = parse_date_param(raw)
                 if parsed:
                     setattr(emp, field, parsed)
-        raw_prior = (request.POST.get("prior_experience_months") or "").strip()
-        if raw_prior.isdigit():
-            emp.prior_experience_months = int(raw_prior)
+        if request.POST.get("marital_status") in dict(Employee.Marital.choices):
+            emp.marital_status = request.POST["marital_status"]
         raw_manager = (request.POST.get("reports_to") or "").strip()
         if raw_manager.isdigit():
             emp.reports_to = Employee.objects.filter(pk=int(raw_manager)).exclude(pk=emp.pk).first()
@@ -488,7 +486,6 @@ def my_profile(request):
             {"label": "Profile Complete", "value": f"{emp.profile_completeness}%",
              "color": "#15803D" if emp.profile_is_complete else "#B45309"},
             {"label": "With the firm", "value": emp.tenure_display, "color": "#4338CA"},
-            {"label": "Total experience", "value": emp.experience_display, "color": "#0369A1"},
         ],
         "emp": emp,
         "form": form,

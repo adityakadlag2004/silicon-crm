@@ -13,6 +13,10 @@ class Employee(models.Model):
         MANAGER = "manager", "Manager"
         EMPLOYEE = "employee", "Employee"
 
+    class Marital(models.TextChoices):
+        SINGLE = "single", "Single"
+        MARRIED = "married", "Married"
+
     class Domain(models.TextChoices):
         SALES = "sales", "Sales"
         SERVICE = "service", "Service / Operations"
@@ -37,7 +41,7 @@ class Employee(models.Model):
     personal_email = models.EmailField(blank=True)
     phone = models.CharField(max_length=20, blank=True)
     address = models.TextField(blank=True)
-    blood_group = models.CharField(max_length=8, blank=True)
+    marital_status = models.CharField(max_length=10, choices=Marital.choices, blank=True)
 
     # ── The job ───────────────────────────────────────────────────────
     position = models.CharField(max_length=80, blank=True,
@@ -47,8 +51,6 @@ class Employee(models.Model):
     joining_date = models.DateField(null=True, blank=True)
     reports_to = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL,
                                    related_name="reportees")
-    prior_experience_months = models.PositiveIntegerField(
-        default=0, help_text="Experience before joining, in months.")
     qualification = models.CharField(max_length=120, blank=True)
     skills = models.CharField(max_length=255, blank=True,
                               help_text="Comma-separated, e.g. 'MFD, NISM-VA, Excel'.")
@@ -56,7 +58,6 @@ class Employee(models.Model):
     # ── In case of emergency ──────────────────────────────────────────
     emergency_contact_name = models.CharField(max_length=80, blank=True)
     emergency_contact_phone = models.CharField(max_length=20, blank=True)
-    emergency_contact_relation = models.CharField(max_length=40, blank=True)
 
     notes = models.TextField(blank=True)
     profile_updated_at = models.DateTimeField(null=True, blank=True)
@@ -89,11 +90,6 @@ class Employee(models.Model):
             months -= 1
         return max(months, 0)
 
-    @property
-    def total_experience_months(self):
-        """Tenure here plus whatever they brought with them."""
-        return self.tenure_months + (self.prior_experience_months or 0)
-
     @staticmethod
     def humanise_months(months):
         """36 -> '3y', 14 -> '1y 2m', 5 -> '5m', 0 -> '—'."""
@@ -107,10 +103,6 @@ class Employee(models.Model):
     @property
     def tenure_display(self):
         return self.humanise_months(self.tenure_months)
-
-    @property
-    def experience_display(self):
-        return self.humanise_months(self.total_experience_months)
 
     def skill_list(self):
         return [s.strip() for s in (self.skills or "").split(",") if s.strip()]

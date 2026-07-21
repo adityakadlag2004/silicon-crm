@@ -35,13 +35,6 @@ class TenureTests(TestCase):
         self.assertEqual(e.tenure_months, 0)
         self.assertEqual(e.tenure_display, "—")
 
-    def test_total_experience_adds_prior(self):
-        today = timezone.localdate()
-        e = _emp("t4", joining_date=today - timedelta(days=365), prior_experience_months=30)
-        self.assertEqual(e.tenure_months, 12)
-        self.assertEqual(e.total_experience_months, 42)
-        self.assertEqual(e.experience_display, "3y 6m")
-
     def test_humanise_months(self):
         cases = [(0, "—"), (5, "5m"), (12, "1y"), (14, "1y 2m"), (36, "3y")]
         for months, expected in cases:
@@ -233,11 +226,11 @@ class TeamEditRoundTripTests(TestCase):
             "role": "employee", "salary": "25000",
             "position": "Relationship Manager", "domain": "sales",
             "joining_date": "2021-06-15", "date_of_birth": "1996-03-09",
-            "prior_experience_months": "18", "phone": "9812345678",
+            "marital_status": "married", "phone": "9812345678",
             "personal_email": "m@example.com", "qualification": "B.Com",
             "skills": "MFD, NISM-VA", "emergency_contact_name": "Ravi",
             "emergency_contact_phone": "9800000000",
-            "emergency_contact_relation": "Father", "address": "Pune",
+            "address": "Pune",
         }
         data.update(overrides)
         tc = TC(); tc.force_login(self.admin_user)
@@ -251,7 +244,7 @@ class TeamEditRoundTripTests(TestCase):
         self.assertEqual(self.emp.domain, "sales")
         self.assertEqual(self.emp.joining_date, date(2021, 6, 15))
         self.assertEqual(self.emp.date_of_birth, date(1996, 3, 9))
-        self.assertEqual(self.emp.prior_experience_months, 18)
+        self.assertEqual(self.emp.marital_status, "married")
         self.assertEqual(self.emp.skill_list(), ["MFD", "NISM-VA"])
         self.assertEqual(self.emp.emergency_contact_name, "Ravi")
 
@@ -289,9 +282,7 @@ class MyProfileTests(TestCase):
             "personal_email": "m@example.com", "address": "Pune",
             "qualification": "B.Com", "emergency_contact_name": "Ravi",
             "emergency_contact_phone": "9800000000",
-            "emergency_contact_relation": "Father",
-            "middle_name": "", "blood_group": "", "skills": "",
-            "prior_experience_months": "0",
+            "middle_name": "", "marital_status": "single", "skills": "",
         })
         self.assertEqual(r.status_code, 302)
         self.emp.refresh_from_db()

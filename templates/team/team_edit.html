@@ -97,10 +97,6 @@
         </select>
       </div>
       <div>
-        <label class="form-label" for="id_prior_exp">Experience before joining (months)</label>
-        <input type="number" min="0" id="id_prior_exp" name="prior_experience_months" class="form-control" value="{{ emp.prior_experience_months }}">
-      </div>
-      <div>
         <label class="form-label" for="id_phone">Phone</label>
         <input type="text" id="id_phone" name="phone" class="form-control" value="{{ emp.phone }}">
       </div>
@@ -113,8 +109,12 @@
         <input type="text" id="id_qualification" name="qualification" class="form-control" value="{{ emp.qualification }}">
       </div>
       <div>
-        <label class="form-label" for="id_blood_group">Blood Group</label>
-        <input type="text" id="id_blood_group" name="blood_group" class="form-control" value="{{ emp.blood_group }}">
+        <label class="form-label" for="id_marital_status">Marital Status</label>
+        <select id="id_marital_status" name="marital_status" class="form-select">
+          <option value="">— Not set —</option>
+          <option value="single" {% if emp.marital_status == "single" %}selected{% endif %}>Single</option>
+          <option value="married" {% if emp.marital_status == "married" %}selected{% endif %}>Married</option>
+        </select>
       </div>
       <div>
         <label class="form-label" for="id_ec_name">Emergency Contact</label>
@@ -123,10 +123,6 @@
       <div>
         <label class="form-label" for="id_ec_phone">Emergency Phone</label>
         <input type="text" id="id_ec_phone" name="emergency_contact_phone" class="form-control" value="{{ emp.emergency_contact_phone }}">
-      </div>
-      <div>
-        <label class="form-label" for="id_ec_rel">Relationship</label>
-        <input type="text" id="id_ec_rel" name="emergency_contact_relation" class="form-control" value="{{ emp.emergency_contact_relation }}">
       </div>
       <div class="full-width">
         <label class="form-label" for="id_skills">Skills</label>

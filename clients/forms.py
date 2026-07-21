@@ -526,10 +526,9 @@ class MyProfileForm(forms.ModelForm):
         model = Employee
         fields = [
             "first_name", "middle_name", "last_name", "date_of_birth",
-            "personal_email", "phone", "address", "blood_group",
-            "qualification", "skills", "prior_experience_months",
+            "personal_email", "phone", "address", "marital_status",
+            "qualification", "skills",
             "emergency_contact_name", "emergency_contact_phone",
-            "emergency_contact_relation",
         ]
         widgets = {
             "date_of_birth": forms.DateInput(attrs={"type": "date"}),
@@ -537,9 +536,8 @@ class MyProfileForm(forms.ModelForm):
             "skills": forms.TextInput(attrs={"placeholder": "MFD, NISM-VA, Excel"}),
         }
         labels = {
-            "prior_experience_months": "Experience before joining (months)",
             "personal_email": "Personal email",
-            "emergency_contact_relation": "Relationship",
+            "marital_status": "Marital status",
         }
 
     def __init__(self, *args, **kwargs):
@@ -559,12 +557,11 @@ class EmployeeAdminForm(forms.ModelForm):
         model = Employee
         fields = [
             "first_name", "middle_name", "last_name", "date_of_birth",
-            "personal_email", "phone", "address", "blood_group",
+            "personal_email", "phone", "address", "marital_status",
             "role", "position", "domain", "joining_date", "reports_to",
-            "salary", "employee_number", "prior_experience_months",
+            "salary", "employee_number",
             "qualification", "skills",
-            "emergency_contact_name", "emergency_contact_phone",
-            "emergency_contact_relation", "notes",
+            "emergency_contact_name", "emergency_contact_phone", "notes",
         ]
         widgets = {
             "date_of_birth": forms.DateInput(attrs={"type": "date"}),
