@@ -184,3 +184,101 @@ class RenewalViewEndToEndTests(TestCase):
         self.assertEqual(len(data["policies"]), 1)
         self.assertEqual(data["policies"][0]["type"], "Health")
         self.assertEqual(data["policies"][0]["insurer"], "Star Health")
+
+
+class PolicyNumberAndLinkingTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        _products()
+        u = User.objects.create_user("pl_admin", password="pw")
+        cls.admin = Employee.objects.create(user=u, role="admin", salary=0, active=True)
+        cls.client_rec = Client.objects.create(id=6100, name="Rahul Sharma")
+        cls.health = Product.objects.get(code="HEALTH_INS")
+
+    def test_sale_policy_number_becomes_the_tracker_number(self):
+        sale = Sale(client=self.client_rec, employee=self.admin, product="Health Insurance",
+                    amount=12000, policy_date=date(2026, 1, 5), date=date(2026, 3, 20),
+                    policy_number="INS76123499")
+        sales_service.finalize_new_sale(sale, self.admin.user, auto_approve=True)
+        self.assertEqual(sale.policy.policy_number, "INS76123499")
+
+    def test_insurance_sale_form_requires_policy_number(self):
+        from clients.forms import AdminSaleForm
+        data = {"client": self.client_rec.id, "employee": self.admin.id,
+                "product": "Health Insurance", "amount": "12000", "policy_type": "fresh",
+                "date": "2026-03-20", "policy_date": "2026-01-05", "policy_number": ""}
+        form = AdminSaleForm(data=data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("policy_number", form.errors)
+
+    def test_renewal_links_to_selected_existing_policy(self):
+        policy = InsurancePolicy.objects.create(
+            client=self.client_rec, policy_number="EXIST9", insurer="Star Health",
+            insurance_type=InsurancePolicy.TYPE_HEALTH)
+        r = Renewal.objects.create(client=self.client_rec, employee=self.admin,
+                                   product_ref=self.health, product_type=Renewal.PRODUCT_TYPE_HEALTH,
+                                   frequency="yearly", renewal_date=date(2026, 2, 10),
+                                   premium_amount=8000)
+        insurance_sync.link_renewal_to_policy(r, selected_policy_id=policy.id)
+        r.refresh_from_db()
+        self.assertEqual(r.policy_id, policy.id)
+        # No new policy created — it linked to the existing one.
+        self.assertEqual(InsurancePolicy.objects.filter(client=self.client_rec).count(), 1)
+
+    def test_renewal_with_new_number_creates_and_links_policy(self):
+        r = Renewal.objects.create(client=self.client_rec, employee=self.admin,
+                                   product_ref=self.health, product_type=Renewal.PRODUCT_TYPE_HEALTH,
+                                   frequency="yearly", renewal_date=date(2026, 2, 10),
+                                   premium_amount=8000)
+        policy = insurance_sync.link_renewal_to_policy(r, new_policy_number="NEWPOL123")
+        r.refresh_from_db()
+        self.assertEqual(policy.policy_number, "NEWPOL123")
+        self.assertEqual(r.policy_id, policy.id)
+        self.assertEqual(policy.insurance_type, InsurancePolicy.TYPE_HEALTH)
+
+    def test_selecting_a_policy_from_another_client_is_ignored(self):
+        other = Client.objects.create(id=6101, name="Someone Else")
+        other_policy = InsurancePolicy.objects.create(
+            client=other, policy_number="OTHER1", insurer="X",
+            insurance_type=InsurancePolicy.TYPE_HEALTH)
+        r = Renewal.objects.create(client=self.client_rec, employee=self.admin,
+                                   product_ref=self.health, product_type=Renewal.PRODUCT_TYPE_HEALTH,
+                                   frequency="yearly", renewal_date=date(2026, 2, 10),
+                                   premium_amount=8000)
+        # Selecting another client's policy must not link it; falls through to new.
+        policy = insurance_sync.link_renewal_to_policy(r, selected_policy_id=other_policy.id,
+                                                       new_policy_number="MINE1")
+        r.refresh_from_db()
+        self.assertNotEqual(r.policy_id, other_policy.id)
+        self.assertEqual(r.policy.client, self.client_rec)
+
+    def test_posting_renewal_with_selected_policy_links_it(self):
+        from django.test import Client as TC
+        from django.urls import reverse
+        policy = InsurancePolicy.objects.create(
+            client=self.client_rec, policy_number="PICKME", insurer="HDFC",
+            insurance_type=InsurancePolicy.TYPE_HEALTH)
+        tc = TC(); tc.force_login(self.admin.user)
+        tc.post(reverse("clients:add_renewal"), {
+            "client": self.client_rec.id, "employee": self.admin.id,
+            "product_ref": self.health.id, "frequency": "yearly",
+            "renewal_date": "2026-02-10", "premium_amount": "8000",
+            "premium_collected_on": "2026-07-21", "policy": policy.id,
+        })
+        r = Renewal.objects.filter(client=self.client_rec).latest("id")
+        self.assertEqual(r.policy_id, policy.id)
+
+    def test_policy_detail_shows_renewal_history(self):
+        from django.test import Client as TC
+        from django.urls import reverse
+        policy = InsurancePolicy.objects.create(
+            client=self.client_rec, policy_number="HIST1", insurer="ICICI",
+            insurance_type=InsurancePolicy.TYPE_HEALTH)
+        Renewal.objects.create(client=self.client_rec, employee=self.admin, policy=policy,
+                               product_ref=self.health, product_type=Renewal.PRODUCT_TYPE_HEALTH,
+                               frequency="yearly", renewal_date=date(2026, 2, 10),
+                               premium_amount=8000, premium_collected_on=date(2026, 2, 11))
+        tc = TC(); tc.force_login(self.admin.user)
+        html = tc.get(reverse("clients:policy_detail", args=[policy.id])).content.decode()
+        self.assertIn("Renewal history", html)
+        self.assertIn("8,000", html)

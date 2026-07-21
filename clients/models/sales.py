@@ -69,6 +69,10 @@ class Sale(models.Model):
         help_text="Policy commencement date from the policy document "
                   "(drives the annual renewal reminder). Insurance only.",
     )
+    # The insurer's policy number, read off the document. Mandatory for
+    # Health/Life in the sale forms — it's what links this sale to its policy
+    # on the Insurance Tracker and to future renewals of the same policy.
+    policy_number = models.CharField(max_length=60, blank=True, db_index=True)
 
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     incentive_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))

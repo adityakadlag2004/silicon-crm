@@ -81,6 +81,9 @@ def policy_detail(request, policy_id):
         InsurancePolicy.objects.select_related("client", "relationship_manager__user"),
         pk=policy_id)
     claims = policy.claims.select_related("handled_by__user")
+    # Every renewal logged against this policy — its collection history.
+    renewals = policy.renewals.select_related("employee__user").order_by("-premium_collected_on")
+    renewals_total = sum((r.premium_amount or 0) for r in renewals)
     return render(request, "insurance/policy_detail.html", {
         "crumbs": [
             {"label": "Insurance Tracker", "url": reverse("clients:policy_list")},
@@ -89,9 +92,12 @@ def policy_detail(request, policy_id):
         "kpis": [
             {"label": "Sum Insured", "value": f"₹{inr(policy.sum_insured)}", "color": "#15803D"},
             {"label": "Premium", "value": f"₹{inr(policy.premium_amount)}", "color": "#B45309"},
+            {"label": "Renewals", "value": renewals.count(), "color": "#0369A1",
+             "sub": f"₹{inr(renewals_total)} collected"},
             {"label": "Claims", "value": claims.count(), "color": "#BE123C"},
         ],
         "policy": policy, "claims": claims,
+        "renewals": renewals, "renewals_total": renewals_total,
     })
 
 

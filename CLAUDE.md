@@ -47,15 +47,19 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 
 ## Insurance Tracker sync
 
+- Health/Life **sales** require a `policy_number` (and `policy_date`); it's
+  the number that links a sale to its tracker policy and to future renewals.
 - An approved Health/Life **sale** auto-creates one `InsurancePolicy`
   (idempotent, linked via `InsurancePolicy.source_sale`), start date = the
   sale's `policy_date`. Un-approving/rejecting removes it unless someone has
   filled in a real policy number/insurer, in which case it's just detached.
   Lives in `services/insurance_sync.py`, hooked from `services/sales.py`.
-- A **renewal** for a client with no policy of that type back-fills one —
-  captures the old book sold before the tracker existed. The add-renewal page
-  shows the client's existing Health/Life policies (via
-  `client_policies_json`) once a client is picked.
+- The add-renewal page shows the client's existing Health/Life policies (via
+  `client_policies_json`) as tick options once a client is picked. Picking one
+  links the renewal to it (`Renewal.policy`); picking "New policy" reveals a
+  policy-number field and creates+links a fresh policy — how the old book,
+  sold before the tracker existed, gets captured. `link_renewal_to_policy`
+  owns this. A policy's detail page lists its full renewal history.
 - `Renewal.insurance_kind` / `Renewal.kind_q()` classify by `product_ref`
   first (product_type wasn't persisted on historical rows — the form derives
   it but it isn't a model-form field, so the view now copies it across).

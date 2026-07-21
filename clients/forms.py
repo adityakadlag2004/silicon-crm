@@ -55,13 +55,22 @@ class SalePolicyTypeMixin:
             self.fields["policy_type"].widget = forms.RadioSelect(
                 choices=Sale.POLICY_TYPE_CHOICES,
             )
-        # policy_date is optional at the field level (non-insurance sales don't
-        # have one); clean() makes it mandatory for Health/Life insurance.
+        # policy_date / policy_number are optional at the field level
+        # (non-insurance sales have neither); clean() makes them mandatory for
+        # Health/Life insurance.
         if "policy_date" in self.fields:
             self.fields["policy_date"].required = False
             self.fields["policy_date"].help_text = (
                 "Read the policy commencement date from the policy document — "
                 "not the sale date. This drives the annual renewal reminder."
+            )
+        if "policy_number" in self.fields:
+            self.fields["policy_number"].required = False
+            self.fields["policy_number"].widget.attrs.update(
+                {"class": "form-control", "placeholder": "e.g. INS76123499"})
+            self.fields["policy_number"].help_text = (
+                "The insurer's policy number from the document. Links this sale "
+                "to its policy on the Insurance Tracker."
             )
 
     def clean(self):
@@ -83,6 +92,13 @@ class SalePolicyTypeMixin:
                                    "Enter the policy date from the policy document.")
             else:
                 cleaned_data["policy_date"] = None
+        if "policy_number" in self.fields:
+            if _is_insurance_product_name(product):
+                if not (cleaned_data.get("policy_number") or "").strip():
+                    self.add_error("policy_number",
+                                   "Enter the policy number from the policy document.")
+            else:
+                cleaned_data["policy_number"] = ""
 
         return cleaned_data
 
@@ -91,7 +107,7 @@ class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["client", "product", "amount", "cover_amount", "policy_type", "date", "policy_date"]
+        fields = ["client", "product", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number"]
         widgets = {
             "client": ModelSelect2Widget(
                 model=Client,
@@ -125,7 +141,7 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["client", "employee", "product", "amount", "cover_amount", "policy_type", "date", "policy_date"]
+        fields = ["client", "employee", "product", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),
@@ -158,7 +174,7 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["product", "amount", "policy_type", "date", "policy_date"]
+        fields = ["product", "amount", "policy_type", "date", "policy_date", "policy_number"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),

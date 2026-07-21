@@ -45,6 +45,12 @@
         This drives the annual renewal reminder.
       </small>
     </div>
+    <div class="mb-3" id="policy-number-group" {% if not sale.is_insurance %}style="display:none;"{% endif %}>
+      <label for="id_policy_number" class="form-label fw-semibold">Policy Number <span class="text-danger">*</span></label>
+      {{ form.policy_number }}
+      {% if form.policy_number.errors %}<div class="text-danger small mt-1">{{ form.policy_number.errors|striptags }}</div>{% endif %}
+      <small class="form-text text-muted"><i class="bi bi-hash"></i> The insurer's policy number — links this sale to its policy on the tracker.</small>
+    </div>
     <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save Changes</button>
     <a href="{% url 'clients:all_sales' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Cancel</a>
   </form>
@@ -82,6 +88,12 @@ document.addEventListener("DOMContentLoaded", function () {
     if (policyDateGroup) {
       policyDateGroup.style.display = isInsurance ? "block" : "none";
       if (policyDateInput) policyDateInput.required = isInsurance;
+    }
+    const policyNumGroup = document.getElementById("policy-number-group");
+    const policyNumInput = document.getElementById("id_policy_number");
+    if (policyNumGroup) {
+      policyNumGroup.style.display = isInsurance ? "block" : "none";
+      if (policyNumInput) policyNumInput.required = isInsurance;
     }
   }
 

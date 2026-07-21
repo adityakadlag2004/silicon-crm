@@ -96,6 +96,14 @@
             This drives the annual renewal reminder.
           </small>
         </div>
+        <div class="col-md-6" id="policy-number-group" style="display:none;">
+          <label for="id_policy_number" class="form-label fw-semibold">Policy Number <span class="text-danger">*</span></label>
+          {{ form.policy_number }}
+          {% if form.policy_number.errors %}<div class="text-danger small mt-1">{{ form.policy_number.errors|striptags }}</div>{% endif %}
+          <small class="form-text text-muted">
+            <i class="bi bi-hash"></i> The insurer's policy number — links this sale to its policy on the tracker.
+          </small>
+        </div>
       </div>
     </div>
 
@@ -205,6 +213,14 @@ document.addEventListener("DOMContentLoaded", function () {
         if (policyDateInput) policyDateInput.required = isInsurance;
         if (!isInsurance && policyDateInput) policyDateInput.value = "";
       }
+      const policyNumGroup = document.getElementById("policy-number-group");
+      const policyNumInput = document.getElementById("id_policy_number");
+      if (policyNumGroup) {
+        policyNumGroup.style.display = isInsurance ? "block" : "none";
+        if (policyNumInput) policyNumInput.required = isInsurance;
+        if (!isInsurance && policyNumInput) policyNumInput.value = "";
+      }
+
       if (!isHealthInsurance) {
         policyTypeInputs.forEach(input => {
           input.checked = false;

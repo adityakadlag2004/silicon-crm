@@ -60,20 +60,24 @@ def sync_policy_from_sale(sale: Sale) -> InsurancePolicy | None:
         return None
 
     start = sale.renewal_basis          # policy_date, or sale date for legacy rows
+    number = (sale.policy_number or "").strip() or f"SALE-{sale.pk}"
     policy, _created = InsurancePolicy.objects.get_or_create(
         source_sale=sale,
         defaults={
             "client": sale.client,
-            "policy_number": f"SALE-{sale.pk}",   # placeholder until the real number is entered
+            "policy_number": number,
             "insurer": "",
             "insurance_type": kind,
             "status": InsurancePolicy.STATUS_ACTIVE,
         },
     )
-    # Refresh the derived fields on every sync so an edited sale stays in step,
-    # but never clobber a policy_number/insurer an admin has since filled in.
+    # Refresh the derived fields on every sync so an edited sale stays in step.
+    # The policy number comes from the sale now that it's mandatory, so keep it
+    # current; a blank sale number never overwrites an existing real one.
     policy.client = sale.client
     policy.insurance_type = kind
+    if (sale.policy_number or "").strip():
+        policy.policy_number = number
     policy.premium_amount = sale.amount or 0
     policy.sum_insured = sale.cover_amount or 0
     policy.start_date = start
@@ -92,7 +96,8 @@ def unsync_policy_for_sale(sale: Sale) -> None:
     policy = InsurancePolicy.objects.filter(source_sale=sale).first()
     if not policy:
         return
-    untouched = (not policy.insurer) and policy.policy_number == f"SALE-{sale.pk}"
+    untouched = (not policy.insurer) and policy.policy_number in (
+        f"SALE-{sale.pk}", (sale.policy_number or "").strip())
     if untouched:
         policy.delete()
     else:
@@ -143,3 +148,49 @@ def sync_policy_from_renewal(renewal: Renewal) -> InsurancePolicy | None:
         relationship_manager=renewal.employee,
         notes="Auto-created from a renewal entry — confirm the policy details.",
     )
+
+
+def link_renewal_to_policy(renewal, *, selected_policy_id=None, new_policy_number=""):
+    """Attach a renewal to a policy on the tracker.
+
+    Priority:
+      1. an existing policy the user ticked (``selected_policy_id``) — the
+         renewal is logged against it;
+      2. otherwise, for a Health/Life renewal, create a policy — using the
+         ``new_policy_number`` the user typed when the client had none, else a
+         placeholder — and link to it;
+      3. non-insurance renewals link to nothing.
+
+    Sets and saves ``renewal.policy``. Returns the policy, or None.
+    """
+    if selected_policy_id:
+        policy = InsurancePolicy.objects.filter(
+            pk=selected_policy_id, client=renewal.client).first()
+        if policy:
+            renewal.policy = policy
+            renewal.save(update_fields=["policy"])
+            return policy
+
+    kind_name = renewal.insurance_kind
+    kind = {"health": InsurancePolicy.TYPE_HEALTH,
+            "life": InsurancePolicy.TYPE_LIFE}.get(kind_name)
+    if kind is None:
+        return None
+
+    number = (new_policy_number or "").strip()
+    policy = InsurancePolicy.objects.create(
+        client=renewal.client,
+        policy_number=number or f"RENEWAL-{renewal.pk}",
+        insurer="",
+        plan_name=(renewal.product_name or "").strip(),
+        insurance_type=kind,
+        status=InsurancePolicy.STATUS_ACTIVE,
+        premium_amount=renewal.premium_amount or 0,
+        start_date=renewal.renewal_date,
+        end_date=renewal.renewal_end_date or _plus_one_year(renewal.renewal_date),
+        relationship_manager=renewal.employee,
+        notes="Auto-created from a renewal entry — confirm the policy details.",
+    )
+    renewal.policy = policy
+    renewal.save(update_fields=["policy"])
+    return policy

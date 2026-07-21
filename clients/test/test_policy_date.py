@@ -72,7 +72,7 @@ class PolicyDateFormTests(TestCase):
             "client": self.client_rec.id, "employee": self.emp.id,
             "product": "Health Insurance", "amount": "12000",
             "policy_type": "fresh", "date": "2026-03-20",
-            "policy_date": "2026-01-05",
+            "policy_date": "2026-01-05", "policy_number": "INS76123499",
         }
         data.update(overrides)
         return AdminSaleForm(data=data)
@@ -162,6 +162,7 @@ class AddSaleEndToEndTests(TestCase):
             "product": "Health Insurance", "amount": "12000",
             "policy_type": "fresh", "date": "2026-03-20",
             "policy_date": "2026-01-05", "cover_amount": "500000",
+            "policy_number": "INS76123499",
         })
         self.assertIn(resp.status_code, (302, 200))
         sale = Sale.objects.filter(client=self.client_rec, product="Health Insurance").first()

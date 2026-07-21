@@ -107,12 +107,16 @@ def add_renewal(request, client_id=None):
 			renewal.created_by = request.user
 			renewal.save()
 
-			# Back-fill the Insurance Tracker for old policies sold before it
-			# existed: if this client has no Health/Life policy on the tracker,
-			# create one from the renewal.
+			# Link this renewal to a policy on the Insurance Tracker: the
+			# existing one the user ticked, or a new one created from the
+			# number they typed (old book sold before the tracker existed).
 			from ..services import insurance_sync
 			try:
-				insurance_sync.sync_policy_from_renewal(renewal)
+				insurance_sync.link_renewal_to_policy(
+					renewal,
+					selected_policy_id=(request.POST.get("policy") or "").strip() or None,
+					new_policy_number=request.POST.get("policy_number") or "",
+				)
 			except Exception:
 				pass
 

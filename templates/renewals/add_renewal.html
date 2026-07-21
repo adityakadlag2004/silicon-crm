@@ -43,16 +43,29 @@
             </span>
           </div>
 
-          {# Existing Health/Life policies on the tracker for the chosen client #}
+          {% comment %}
+          Link this renewal to a policy on the Insurance Tracker. Existing
+          Health/Life policies for the chosen client load as tick options; if
+          there are none (or "New policy" is picked) a policy-number field
+          appears so a fresh policy is created and linked.
+          {% endcomment %}
           <div id="client-policies" class="mt-3" style="display:none;">
             <div class="ki-field" style="border:0;padding:0;margin-bottom:.4rem;">
-              <span class="k" style="font-weight:600;"><i class="bi bi-shield-check"></i> Existing insurance on record</span>
+              <span class="k" style="font-weight:600;"><i class="bi bi-shield-check"></i> Link this renewal to a policy</span>
             </div>
+            {# selected existing policy id — empty means "new policy" #}
+            <input type="hidden" name="policy" id="policy-id" value="">
             <div id="client-policies-list" class="d-flex flex-column gap-2"></div>
-            <div id="client-policies-none" class="text-muted" style="font-size:.84rem;display:none;">
-              <i class="bi bi-info-circle"></i>
-              No Health/Life policy on record for this client — logging this renewal will
-              add one to the Insurance Tracker.
+            <div id="new-policy-row" class="mt-2" style="display:none;">
+              <label for="policy_number" class="form-label fw-semibold" style="font-size:.85rem;">
+                New policy number <span class="text-muted" style="font-weight:400;">(creates a policy on the tracker)</span>
+              </label>
+              <input type="text" name="policy_number" id="policy_number" class="form-control"
+                     placeholder="e.g. INS76123499" autocomplete="off">
+              <small class="form-text text-muted">
+                <i class="bi bi-info-circle"></i>
+                No matching policy selected — this renewal will start a new policy for the client.
+              </small>
             </div>
           </div>
         </div>
@@ -199,37 +212,66 @@ document.addEventListener("DOMContentLoaded", function () {
     if (box) box.style.display = "none";
   };
 
-  // Show the client's existing Health/Life policies once one is picked, so the
-  // user knows if they're renewing a known policy or logging a fresh one.
+  // Reflect which policy (if any) is picked: set the hidden id and reveal the
+  // new-policy-number field only when "New policy" is chosen.
+  function selectPolicy(policyId) {
+    const idField = document.getElementById("policy-id");
+    const newRow = document.getElementById("new-policy-row");
+    if (idField) idField.value = policyId || "";
+    document.querySelectorAll(".policy-pick").forEach(function(el) {
+      const on = el.dataset.pid === (policyId || "new");
+      el.style.borderColor = on ? "var(--ki-primary)" : "var(--ki-card-border)";
+      el.style.background = on ? "var(--ki-primary-pale)" : "#fff";
+      const tick = el.querySelector(".add");
+      if (tick) tick.style.display = on && el.dataset.pid !== "new" ? "inline" : "none";
+    });
+    if (newRow) newRow.style.display = policyId ? "none" : "block";
+  }
+
+  // Load the client's existing Health/Life policies as tick options; if there
+  // are none, drop straight to the new-policy field.
   window.loadClientPolicies = function(clientId) {
     const box = document.getElementById("client-policies");
     const list = document.getElementById("client-policies-list");
-    const none = document.getElementById("client-policies-none");
     if (!box) return;
     box.style.display = "block";
     list.innerHTML = '<span class="text-muted" style="font-size:.84rem;">Checking records…</span>';
-    none.style.display = "none";
     const url = "{% url 'clients:client_policies_json' 0 %}".replace("/0/", "/" + clientId + "/");
     fetch(url)
       .then(r => r.json())
       .then(data => {
         list.innerHTML = "";
-        if (!data.policies || data.policies.length === 0) {
-          none.style.display = "block";
-          return;
-        }
-        data.policies.forEach(p => {
-          const a = document.createElement("a");
-          a.href = p.url;
-          a.target = "_blank";
-          a.className = "ki-tag";
-          a.style.cssText = "--c:" + (p.type === "Health" ? "#15803D" : "#4338CA") + ";text-decoration:none;";
+        const pols = data.policies || [];
+        pols.forEach(function(p) {
+          const opt = document.createElement("button");
+          opt.type = "button";
+          opt.className = "policy-pick ki-rel-row";
+          opt.dataset.pid = String(p.id);
+          opt.style.cssText = "width:100%;text-align:left;border:1px solid var(--ki-card-border);border-radius:8px;background:#fff;cursor:pointer;gap:.5rem;";
+          const dot = p.type === "Health" ? "#15803D" : "#4338CA";
           const ends = p.end ? " · renews " + p.end : "";
-          a.textContent = p.type + " — " + (p.insurer || p.plan || p.number) + ends;
-          list.appendChild(a);
+          opt.innerHTML =
+            '<span class="ki-mono ki-mono-sm" style="--c:' + dot + ';width:26px;height:26px;font-size:.62rem;">' + p.type[0] + '</span>' +
+            '<span style="min-width:0;"><strong>' + p.type + '</strong> — ' + (p.insurer || p.plan || p.number) +
+            '<span class="k" style="display:block;">' + p.number + ends + '</span></span>' +
+            '<i class="bi bi-check-circle-fill add" style="margin-left:auto;color:#15803D;display:none;"></i>';
+          opt.onclick = function () { selectPolicy(String(p.id)); };
+          list.appendChild(opt);
         });
+        const newOpt = document.createElement("button");
+        newOpt.type = "button";
+        newOpt.className = "policy-pick ki-rel-row";
+        newOpt.dataset.pid = "new";
+        newOpt.style.cssText = "width:100%;text-align:left;border:1px dashed var(--ki-card-border);border-radius:8px;background:#fff;cursor:pointer;gap:.5rem;";
+        newOpt.innerHTML = '<i class="bi bi-plus-circle" style="color:var(--ki-primary);"></i> <span>New policy for this client</span>';
+        newOpt.onclick = function () { selectPolicy(""); };
+        list.appendChild(newOpt);
+        selectPolicy(pols.length ? String(pols[0].id) : "");
       })
-      .catch(() => { list.innerHTML = '<span class="text-danger" style="font-size:.84rem;">Could not load records.</span>'; });
+      .catch(function() {
+        list.innerHTML = '<span class="text-danger" style="font-size:.84rem;">Could not load records.</span>';
+        selectPolicy("");
+      });
   };
 
   // If the page opened with a client already chosen, show their policies now.
