@@ -18,6 +18,14 @@
 .ki-crumb a:hover { color: var(--ki-primary); }
 .ki-crumb .sep { color: var(--ki-text-light); font-size: .8rem; }
 .ki-crumb .cur { color: var(--ki-text-primary); font-weight: 600; font-size: .88rem; }
+.ki-crumb-actions { margin-left: auto; display: flex; gap: .4rem; }
+.ki-icon-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--ki-card-border); background: var(--ki-card-bg);
+  display: grid; place-items: center; cursor: pointer;
+  color: var(--ki-text-secondary); transition: var(--ki-transition);
+}
+.ki-icon-btn:hover { background: var(--ki-primary-pale); color: var(--ki-primary); }
 
 /* ─── KPI strip ─────────────────────────────────────────────
    Each card carries its own accent via --c. On a phone these
@@ -42,15 +50,19 @@ a.ki-kpi:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
 .ki-kpi .v { font-size: 1.6rem; font-weight: 800; line-height: 1; color: var(--c, var(--ki-primary)); }
 .ki-kpi .sub { font-size: .72rem; color: var(--ki-text-muted); margin-top: .25rem; }
 .ki-kpi.is-active { background: var(--ki-primary-pale); }
+
+@media (max-width: 640px) {
   .ki-kpis {
     display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
     padding-bottom: .4rem; margin-inline: -.25rem; padding-inline: .25rem;
   }
   .ki-kpi { flex: 0 0 46%; scroll-snap-align: start; }
   .ki-kpi .v { font-size: 1.35rem; }
+}
 
 /* ─── Record layout: main + related rail ─── */
-.ki-rec-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.1rem; align-items: start; } .ki-rec-layout { grid-template-columns: minmax(0, 1fr); }
+.ki-rec-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.1rem; align-items: start; }
+@media (max-width: 1024px) { .ki-rec-layout { grid-template-columns: minmax(0, 1fr); } }
 
 /* ─── Record header card ─── */
 .ki-rec {
@@ -70,11 +82,14 @@ a.ki-kpi:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
   display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
   margin: 0 0 .35rem; font-size: 1.3rem; font-weight: 700; color: var(--ki-text-primary);
 }
+.ki-star { color: var(--ki-text-light); cursor: pointer; background: none; border: none; font-size: 1rem; }
 .ki-star.on { color: var(--ki-primary); }
 .ki-rec-actions { display: flex; gap: .45rem; flex-wrap: wrap; margin-left: auto; }
+@media (max-width: 640px) {
   .ki-rec-actions { margin-left: 0; width: 100%; }
   .ki-rec-actions > * { flex: 1 1 auto; }
   .ki-rec-title { font-size: 1.1rem; }
+}
 
 /* Tag pills under the title */
 .ki-tags { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .5rem; }
@@ -122,8 +137,10 @@ a.ki-kpi:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
 .ki-field .v a { color: var(--ki-info); text-decoration: none; }
 .ki-field .v a:hover { text-decoration: underline; }
 .ki-field .v.empty { color: var(--ki-text-light); }
+@media (max-width: 520px) {
   .ki-field { grid-template-columns: 1fr; gap: .1rem; }
   .ki-field .k { font-size: .76rem; }
+}
 
 /* ─── Related modules rail ─── */
 .ki-related { background: var(--ki-card-bg); border: 1px solid var(--ki-card-border); border-radius: var(--ki-radius-lg); overflow: hidden; }
@@ -171,6 +188,10 @@ a.ki-kpi:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
 .ki-showbar a { color: var(--ki-text-secondary); text-decoration: none; padding: .1rem .35rem; border-radius: 4px; }
 .ki-showbar a.active { color: var(--ki-primary); font-weight: 700; text-decoration: underline; }
 .ki-showbar .right { margin-left: auto; display: flex; gap: .4rem; align-items: center; }
+
+/* Card fallback for tables on phones — the table itself scrolls, but
+   list pages may opt into stacked cards instead via .ki-cardify. */
+@media (max-width: 640px) {
   .ki-cardify thead { display: none; }
   .ki-cardify tbody tr {
     display: block; border: 1px solid var(--ki-card-border);
@@ -182,6 +203,7 @@ a.ki-kpi:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
     font-size: .76rem; color: var(--ki-text-secondary); font-weight: 600;
   }
   .ki-cardify tbody td.num { text-align: left; }
+}
 
 /* ─── Empty state ─── */
 .ki-empty { text-align: center; padding: 2.5rem 1rem; color: var(--ki-text-secondary); }
@@ -218,7 +240,8 @@ a.ki-kpi:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
 /* ─── Page header (rendered by base.html for every page) ─── */
 .kn-page-header { flex-wrap: wrap; }
 .kn-page-header h1 { font-size: 1.4rem; font-weight: 700; margin: 0; }
-.kn-page-head-actions { margin-left: auto; display: flex; gap: .4rem; } .kn-page-header h1 { font-size: 1.15rem; }
+.kn-page-head-actions { margin-left: auto; display: flex; gap: .4rem; }
+@media (max-width: 640px) { .kn-page-header h1 { font-size: 1.15rem; } }
 
 /* ─── Mutual Funds module ────────────────────────────────────────────────
    Lifted out of seven MF templates that each redefined the same rules.
@@ -260,8 +283,10 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
   font-size: .85rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .04em; color: var(--ki-text-secondary); margin: 0 0 .6rem;
 }
+@media (max-width: 640px) {
   .sip-tiles { grid-template-columns: repeat(2, 1fr); }
   .sip-grid-2 { grid-template-columns: 1fr; }
+}
 
 /* Inline bars: the number carries the meaning, the bar supports it. */
 .bar-track { background: var(--ki-card-border); border-radius: 4px; height: 10px; min-width: 60px; flex: 1; }
@@ -287,6 +312,11 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
 .leak-list .amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sip-tab { text-decoration: none; }
 .sip-tab.on { background: var(--ki-primary) !important; color: #fff !important; border-color: var(--ki-primary) !important; }
+
+/* ─── Print ──────────────────────────────────────────────────────────────
+   Reports are printed and PDF'd; the three report templates each carried an
+   identical copy of this. Applies app-wide, which is what you want anyway. */
+@media print {
   @page { size: landscape; margin: 1cm; }
   nav, footer, .no-print,
   .kn-navbar, .kn-nav, .kn-overlay, .ki-sidebar, .ki-topbar { display: none !important; }
@@ -295,6 +325,7 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
   .ki-card, .ki-table-wrap, .ki-rec, .ki-kpi { border: none !important; box-shadow: none !important; }
   .ki-kpis { break-inside: avoid; }
   .zero { color: #bbb; }
+}
 .zero { color: var(--ki-text-light); }
 
 /* ─── Segmented radio toggle ─────────────────────────────────────────────
@@ -316,7 +347,8 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
   color: var(--ki-primary);
 }
 /* Keyboard users need the focus ring the hidden radio would have given. */
-.policy-toggle-option:has(input:focus-visible) { outline: 2px solid var(--ki-primary); outline-offset: 2px; } .policy-toggle-option { min-width: 0; flex: 1 1 45%; }
+.policy-toggle-option:has(input:focus-visible) { outline: 2px solid var(--ki-primary); outline-offset: 2px; }
+@media (max-width: 480px) { .policy-toggle-option { min-width: 0; flex: 1 1 45%; } }
 
 /* ─── Forms ──────────────────────────────────────────────────────────────
    Applies to all 62 form pages. Two things matter here beyond looks:
@@ -333,6 +365,8 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
   color: var(--ki-text-secondary); margin-bottom: .3rem;
 }
 .form-text { font-size: .78rem; color: var(--ki-text-muted); }
+
+@media (pointer: coarse) {
   .form-control, .form-select, textarea.form-control {
     font-size: 16px;      /* never below 16px — see note above */
     min-height: 44px;
@@ -340,8 +374,13 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
   .form-control-sm, .form-select-sm { font-size: 16px; min-height: 40px; }
   .form-check-input { width: 1.15em; height: 1.15em; }
   .ki-btn, .btn { min-height: 40px; }
+}
+
+/* Form rows stack rather than squeeze on a narrow screen. */
+@media (max-width: 640px) {
   .row > [class*="col-"] { margin-bottom: .6rem; }
   .ki-card { padding-inline: .9rem; }
+}
 
 /* ─── Error pages (404 / 500) ─── */
 .error-container { min-height: 70vh; display: grid; place-items: center; padding: 2rem 1rem; }

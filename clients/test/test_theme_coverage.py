@@ -225,3 +225,40 @@ class AccessibilityTests(TestCase):
         self.assertEqual(
             offenders, [],
             f"icon-only controls need aria-label or title: {offenders}")
+
+
+class NavbarNotHiddenTests(TestCase):
+    """The print stylesheet hides the navbar; it must stay inside @media print.
+
+    A CSS minifier once flattened the @media print wrapper, dropping
+    `.kn-navbar { display:none !important }` to global scope and blanking the
+    navbar on every screen. This makes that specific regression loud.
+    """
+
+    def test_navbar_display_none_only_inside_media_print(self):
+        import re
+        import pathlib
+        css = pathlib.Path("static/css/ki-record.css").read_text()
+        # Walk top level; only descend into @media print.
+        for m in re.finditer(r"display:\s*none\s*!important", css):
+            before = css[:m.start()]
+            # Which @media block, if any, are we inside?
+            depth = before.count("{") - before.count("}")
+            self.assertGreater(depth, 0,
+                "display:none !important is at top level in ki-record.css — "
+                "it must stay inside @media print or it hides the navbar")
+            # The nearest unclosed @media must be print.
+            last_media = before.rfind("@media")
+            self.assertIn("print", css[last_media:last_media + 20],
+                "a display:none rule sits inside a non-print @media block")
+
+    def test_render_includes_the_navbar(self):
+        u = User.objects.filter(is_superuser=True).first() or User.objects.create_user(
+            "navcheck", password="pw", is_superuser=True)
+        if not hasattr(u, "employee"):
+            Employee.objects.create(user=u, role="admin", salary=0, active=True)
+        tc = TC(); tc.force_login(u)
+        html = tc.get(reverse("clients:all_clients")).content.decode()
+        self.assertIn('class="kn-navbar"', html)
+        self.assertIn('id="navMenu"', html)
+        self.assertIn("kn-mono", html)   # sidebar module chips
