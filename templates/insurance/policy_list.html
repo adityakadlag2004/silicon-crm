@@ -3,7 +3,6 @@
 {% block title %}Insurance Tracker{% endblock %}
 {% block page_title %}Insurance Tracker{% endblock %}
 {% block content %}
-{% include "_shell/crumb.html" with crumbs=crumbs %}
 {% include "insurance/_searchbar.html" with count=policies|length noun="policy" %}
 
 <div class="ki-table-wrap">
