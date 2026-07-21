@@ -33,14 +33,28 @@
       <label for="id_date" class="form-label fw-semibold">Sale Date</label>
       {{ form.date }}
       {% if form.date.errors %}<div class="text-danger small mt-1">{{ form.date.errors|striptags }}</div>{% endif %}
+      <small class="form-text text-muted">The day the sale is booked (policy approved by the company).</small>
+    </div>
+    <div class="mb-3" id="policy-date-group" {% if not sale.is_insurance %}style="display:none;"{% endif %}>
+      <label for="id_policy_date" class="form-label fw-semibold">Policy Date <span class="text-danger">*</span></label>
+      {{ form.policy_date }}
+      {% if form.policy_date.errors %}<div class="text-danger small mt-1">{{ form.policy_date.errors|striptags }}</div>{% endif %}
+      <small class="form-text text-muted">
+        <i class="bi bi-file-earmark-text"></i>
+        Read the policy commencement date from the <strong>policy document</strong> — not the sale date.
+        This drives the annual renewal reminder.
+      </small>
     </div>
     <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save Changes</button>
     <a href="{% url 'clients:all_sales' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Cancel</a>
   </form>
 </div>
+{{ insurance_product_names|json_script:"edit-insurance-product-names" }}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const healthProductName = "{{ health_product_name|default:''|escapejs }}";
+  const insEl = document.getElementById("edit-insurance-product-names");
+  const insuranceProductNames = insEl ? JSON.parse(insEl.textContent) : [];
   const productSelect = document.getElementById("id_product");
   const policyTypeGroup = document.getElementById("policy-type-group");
   const policyTypeInputs = document.querySelectorAll('input[name="policy_type"]');
@@ -60,6 +74,14 @@ document.addEventListener("DOMContentLoaded", function () {
       policyTypeInputs.forEach(input => {
         input.checked = false;
       });
+    }
+    // Policy date: shown + required for Health/Life insurance.
+    const isInsurance = productSelect && insuranceProductNames.includes(productSelect.value);
+    const policyDateGroup = document.getElementById("policy-date-group");
+    const policyDateInput = document.getElementById("id_policy_date");
+    if (policyDateGroup) {
+      policyDateGroup.style.display = isInsurance ? "block" : "none";
+      if (policyDateInput) policyDateInput.required = isInsurance;
     }
   }
 

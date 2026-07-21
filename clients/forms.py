@@ -39,12 +39,29 @@ def _renewal_type_from_product(product_ref):
     return Renewal.PRODUCT_TYPE_OTHER
 
 
+def _is_insurance_product_name(product_name):
+    """Health or Life insurance — the products that need a policy date."""
+    product = Product.objects.filter(name=(product_name or "").strip()).only("code", "name").first()
+    if product:
+        return (product.code in {"HEALTH_INS", "LIFE_INS"}
+                or (product.name or "").strip().lower() in {"health insurance", "life insurance"})
+    return (product_name or "").strip().lower() in {"health insurance", "life insurance"}
+
+
 class SalePolicyTypeMixin:
     def _configure_policy_field(self):
         if "policy_type" in self.fields:
             self.fields["policy_type"].required = False
             self.fields["policy_type"].widget = forms.RadioSelect(
                 choices=Sale.POLICY_TYPE_CHOICES,
+            )
+        # policy_date is optional at the field level (non-insurance sales don't
+        # have one); clean() makes it mandatory for Health/Life insurance.
+        if "policy_date" in self.fields:
+            self.fields["policy_date"].required = False
+            self.fields["policy_date"].help_text = (
+                "Read the policy commencement date from the policy document — "
+                "not the sale date. This drives the annual renewal reminder."
             )
 
     def clean(self):
@@ -57,6 +74,16 @@ class SalePolicyTypeMixin:
         elif not _is_health_product_name(product):
             cleaned_data["policy_type"] = ""
 
+        # Policy date is mandatory for insurance (the sale date is the approval
+        # day, not when the policy actually starts), and meaningless otherwise.
+        if "policy_date" in self.fields:
+            if _is_insurance_product_name(product):
+                if not cleaned_data.get("policy_date"):
+                    self.add_error("policy_date",
+                                   "Enter the policy date from the policy document.")
+            else:
+                cleaned_data["policy_date"] = None
+
         return cleaned_data
 
 class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
@@ -64,7 +91,7 @@ class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["client", "product", "amount", "cover_amount", "policy_type", "date"]
+        fields = ["client", "product", "amount", "cover_amount", "policy_type", "date", "policy_date"]
         widgets = {
             "client": ModelSelect2Widget(
                 model=Client,
@@ -72,6 +99,7 @@ class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
                 attrs={"data-placeholder": "Search Client"}
             ),
             "date": forms.DateInput(attrs={"type": "date"}),
+            "policy_date": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -97,9 +125,10 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["client", "employee", "product", "amount", "cover_amount", "policy_type", "date"]
+        fields = ["client", "employee", "product", "amount", "cover_amount", "policy_type", "date", "policy_date"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
+            "policy_date": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -129,9 +158,10 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["product", "amount", "policy_type", "date"]
+        fields = ["product", "amount", "policy_type", "date", "policy_date"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
+            "policy_date": forms.DateInput(attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):

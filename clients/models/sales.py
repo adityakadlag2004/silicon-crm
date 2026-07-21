@@ -58,6 +58,18 @@ class Sale(models.Model):
     rejection_reason = models.TextField(blank=True)
 
     date = models.DateField(default=timezone.now, db_index=True)   # not auto_now_add
+
+    # The sale is booked when the company APPROVES the policy, which is not the
+    # day the policy actually starts. For Health/Life insurance the renewal
+    # anniversary must track the policy's own commencement date (read off the
+    # policy document), never the sale date — so it is captured separately and
+    # made mandatory for those products in the sale forms.
+    policy_date = models.DateField(
+        null=True, blank=True, db_index=True,
+        help_text="Policy commencement date from the policy document "
+                  "(drives the annual renewal reminder). Insurance only.",
+    )
+
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     incentive_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
     # Records which campaign (if any) awarded the points on this sale; null = regular mechanism.
@@ -76,6 +88,49 @@ class Sale(models.Model):
         if self.product_ref_id:
             return self.product_ref.code == "HEALTH_INS" or (self.product_ref.name or "").strip().lower() == "health insurance"
         return (self.product or "").strip().lower() == "health insurance"
+
+    @property
+    def is_insurance(self):
+        """Health or Life insurance — the products that carry a policy date
+        and an annual renewal anniversary distinct from the sale date."""
+        codes = {"HEALTH_INS", "LIFE_INS"}
+        names = {"health insurance", "life insurance"}
+        if self.product_ref_id:
+            return (self.product_ref.code in codes
+                    or (self.product_ref.name or "").strip().lower() in names)
+        return (self.product or "").strip().lower() in names
+
+    @property
+    def renewal_basis(self):
+        """The date the annual renewal anniversary is measured from.
+
+        Policy date when known; the sale date is only a fallback for legacy
+        rows entered before policy_date existed.
+        """
+        return self.policy_date or self.date
+
+    def policy_anniversary(self, on_or_after=None):
+        """Next yearly renewal date on/after `on_or_after` (default today).
+
+        Returns None for non-insurance sales or when there is no basis date.
+        A 29 Feb policy renews on 28 Feb in common years (insurers treat the
+        policy as continuous, unlike a birthday we'd rather skip)."""
+        if not self.is_insurance:
+            return None
+        basis = self.renewal_basis
+        if not basis:
+            return None
+        from datetime import date as _date
+        ref = on_or_after or timezone.localdate()
+        year = ref.year
+        for candidate_year in (year, year + 1):
+            try:
+                anniversary = basis.replace(year=candidate_year)
+            except ValueError:                      # 29 Feb → 28 Feb
+                anniversary = basis.replace(year=candidate_year, day=28)
+            if anniversary >= ref:
+                return anniversary
+        return None
 
     def _effective_product_label(self):
         if self.product_ref_id:

@@ -32,6 +32,19 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - Every schema change: `makemigrations` in the same commit as the model change. `makemigrations --check` must stay clean.
 - Every feature commit includes/updates tests. Full suite green before push: `.venv/bin/python manage.py test clients`.
 
+## Insurance sales & renewals
+
+- A sale is booked when the company APPROVES the policy, so `Sale.date` (sale
+  date) is NOT the policy start. Health/Life insurance sales carry a separate
+  mandatory `Sale.policy_date` — the commencement date read off the policy
+  document. The three sale forms require it for those products and hide it for
+  the rest (JS toggle + server-side `clean()`).
+- Annual renewal reminders are measured from `Sale.renewal_basis`
+  (`policy_date`, falling back to `date` only for legacy rows). The calendar
+  feed's `insurance_renewal` source expands each approved Health/Life sale's
+  yearly `policy_anniversary` onto the selling employee's calendar. Never key
+  insurance renewals off the sale date.
+
 ## UI conventions (record shell)
 
 - Every module screen leads with a breadcrumb and, for list screens, a KPI

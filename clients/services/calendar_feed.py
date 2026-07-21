@@ -12,6 +12,8 @@ Sources:
   lead_followup  LeadFollowUp   — pending follow-ups from the Lead Pipeline
   call_followup  CallFollowUp   — pending follow-ups from call tracking
   task           Task           — open tasks with a due date
+  insurance_renewal  Sale       — annual policy renewal, on the policy-date
+                                  anniversary (Health/Life insurance)
 
 Each item is a plain dict:
   key          "lead-42" — source-prefixed, unique across the feed
@@ -25,12 +27,14 @@ Each item is a plain dict:
 """
 from datetime import date, datetime, time, timedelta
 
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import CalendarEvent, CallFollowUp, Client, LeadFollowUp, Task
+from ..models import CalendarEvent, CallFollowUp, Client, LeadFollowUp, Sale, Task
 
-ALL_SOURCES = ("event", "birthday", "lead_followup", "call_followup", "task")
+ALL_SOURCES = ("event", "birthday", "lead_followup", "call_followup", "task",
+               "insurance_renewal")
 
 SOURCE_LABELS = {
     "event": "Event",
@@ -38,6 +42,7 @@ SOURCE_LABELS = {
     "lead_followup": "Lead",
     "call_followup": "Call",
     "task": "Task",
+    "insurance_renewal": "Renewal",
 }
 
 
@@ -174,6 +179,48 @@ def _tasks(employee, start, end):
     return items
 
 
+def _insurance_renewals(employee, start, end):
+    """Expand Health/Life insurance policy renewals into per-year items.
+
+    The anniversary is measured from the policy's commencement date
+    (``Sale.policy_date``), read off the policy document — never the sale
+    (approval) date, which legacy rows without a policy_date still fall back
+    to. Only approved sales generate a renewal reminder.
+    """
+    qs = Sale.objects.filter(
+        employee=employee,
+        status=Sale.STATUS_APPROVED,
+    ).select_related("client", "product_ref").filter(
+        Q(product_ref__code__in=["HEALTH_INS", "LIFE_INS"])
+        | Q(product__iexact="Health Insurance")
+        | Q(product__iexact="Life Insurance")
+    )
+    items = []
+    for sale in qs:
+        basis = sale.renewal_basis
+        if not basis:
+            continue
+        for yr in range(start.year, end.year + 1):
+            try:
+                anniv = date(yr, basis.month, basis.day)
+            except ValueError:                 # 29 Feb → 28 Feb in common years
+                anniv = date(yr, basis.month, 28)
+            # Only future/annual renewals, never the commencement year itself.
+            if anniv <= basis:
+                continue
+            anniv_dt = timezone.make_aware(datetime.combine(anniv, time(10, 0)))
+            if not (start <= anniv_dt <= end):
+                continue
+            label = sale.product_ref.name if sale.product_ref_id else sale.product
+            items.append(_item(
+                f"insrenew-{sale.id}-{yr}", "insurance_renewal",
+                f"{label} renewal: {sale.client.name}", anniv_dt,
+                note=f"Policy started {basis:%d %b %Y}. Confirm renewal with the client.",
+                url=reverse("clients:client_profile", args=[sale.client.id]),
+            ))
+    return items
+
+
 def feed_items(employee, *, start=None, end=None, sources=None,
                team_followups=False, employee_id=None):
     """Collect unified calendar items.
@@ -201,6 +248,8 @@ def feed_items(employee, *, start=None, end=None, sources=None,
         items += _call_followups(fu_employee, start, end, employee_id=employee_id)
     if "task" in sources:
         items += _tasks(employee, start, end)
+    if "insurance_renewal" in sources:
+        items += _insurance_renewals(employee, b_start, b_end)
 
     now_ts = timezone.now()
     for it in items:
