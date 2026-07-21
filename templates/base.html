@@ -539,13 +539,14 @@
           <div class="kn-dropdown">
             <button class="kn-user-toggle" type="button">
               <i class="bi bi-person-circle"></i>
-              <span class="d-none d-md-inline">{{ request.user.username }}</span>
+              <span class="d-none d-md-inline">{{ request.user.get_full_name|default:request.user.username }}</span>
               <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu kn-user-menu">
               <li class="kn-menu-section">Signed in as</li>
               <li style="padding: 0 0.7rem 0.4rem; font-size: 0.85rem; color: var(--kn-fg);">
-                <strong>{{ request.user.username }}</strong>
+                <strong>{{ request.user.get_full_name|default:request.user.username }}</strong>
+                <div style="font-size:0.75rem;color:var(--kn-fg-muted);">ID: {{ request.user.username }}</div>
                 {% if request.user.employee.role %}<div style="font-size:0.75rem;color:var(--kn-fg-muted);text-transform:capitalize;">{{ request.user.employee.role }}</div>{% endif %}
               </li>
               <li><div class="kn-menu-divider"></div></li>

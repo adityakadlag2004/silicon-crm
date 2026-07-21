@@ -5,6 +5,7 @@ from itertools import cycle
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -20,7 +21,8 @@ from django.utils import timezone
 
 from .. import permissions
 from ..models import AuditLog, Client, Sale, Employee, EmployeeMilestone, ManagerAccessConfig
-from ..forms import EmployeeAdminForm, EmployeeCreateForm, EmployeeDeactivateForm, MyProfileForm
+from ..forms import (EmployeeAdminForm, EmployeeCreateForm, EmployeeDeactivateForm,
+                     MyLoginIdForm, MyPasswordForm, MyProfileForm)
 from ..services import people
 from .helpers import parse_date_param
 
@@ -466,18 +468,36 @@ def my_profile(request):
         messages.error(request, "You are not set up as a team member yet.")
         return redirect("clients:employee_dashboard")
 
+    form = MyProfileForm(instance=emp)
+    login_form = MyLoginIdForm(instance=request.user)
+    password_form = MyPasswordForm(request.user)
+
     if request.method == "POST":
-        form = MyProfileForm(request.POST, instance=emp)
-        if form.is_valid():
-            obj = form.save(commit=False)
-            obj.profile_updated_at = timezone.now()
-            obj.save()
-            # Newly-known dates mean new milestones to celebrate.
-            people.generate_for(obj)
-            messages.success(request, "Thanks — your profile is up to date.")
-            return redirect("clients:my_profile")
-    else:
-        form = MyProfileForm(instance=emp)
+        which = request.POST.get("form")
+        if which == "login_id":
+            login_form = MyLoginIdForm(request.POST, instance=request.user)
+            if login_form.is_valid():
+                login_form.save()
+                messages.success(request, "Login ID updated — use it the next time you sign in.")
+                return redirect("clients:my_profile")
+        elif which == "password":
+            password_form = MyPasswordForm(request.user, request.POST)
+            if password_form.is_valid():
+                password_form.save()
+                # Keep them signed in on this device after the change.
+                update_session_auth_hash(request, request.user)
+                messages.success(request, "Password changed.")
+                return redirect("clients:my_profile")
+        else:
+            form = MyProfileForm(request.POST, instance=emp)
+            if form.is_valid():
+                obj = form.save(commit=False)
+                obj.profile_updated_at = timezone.now()
+                obj.save()
+                # Newly-known dates mean new milestones to celebrate.
+                people.generate_for(obj)
+                messages.success(request, "Thanks — your profile is up to date.")
+                return redirect("clients:my_profile")
 
     return render(request, "team/my_profile.html", {
         "page_title": "My Profile",
@@ -489,6 +509,8 @@ def my_profile(request):
         ],
         "emp": emp,
         "form": form,
+        "login_form": login_form,
+        "password_form": password_form,
         "missing": emp.missing_fields(),
         "milestones": emp.milestones.order_by("-occurs_on")[:10],
     })

@@ -2,13 +2,18 @@
 pipeline: import dashboard, ARN account management, folio↔client linking and
 the imported transaction ledger. Business logic lives in services/rta_feed.py.
 """
+import io
 import re
+import zipfile
 
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
+from django.http import HttpResponse
 from django.urls import reverse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from ..models import (
@@ -158,6 +163,13 @@ def mf_folios(request):
         qs = qs.filter(arn_id=int(arn_id))
 
     page = Paginator(qs, 50).get_page(request.GET.get("page"))
+    # Name suggestion beside each unlinked row — the feed often omits PAN, so
+    # PAN auto-linking can't help and someone has to say who this is.
+    page.object_list = list(page.object_list)
+    suggestions = rta_feed.suggest_clients_for_folios(page.object_list)
+    for folio in page.object_list:
+        folio.suggestion = suggestions.get(folio.id)
+
     all_folios = MutualFundFolio.objects.all()
     base_url = reverse("clients:mf_folios")
     return render(request, "mf/folios.html", {
@@ -181,6 +193,28 @@ def mf_folios(request):
 
 
 @_admin_required
+def mf_folio_batches(request):
+    """Download our folios as RTA request files — one folio per line, 500 per
+    file, zipped. Attach the file to the CAMS/KFintech by-folio mailback
+    request to pull back history for folios the daily feed missed."""
+    size = (request.GET.get("size") or "").strip()
+    size = int(size) if size.isdigit() and 0 < int(size) <= 5000 else rta_feed.FOLIO_BATCH_SIZE
+    files = rta_feed.folio_request_batches(size=size, rta=request.GET.get("rta") or "")
+    if not files:
+        messages.error(request, "No folios to export yet.")
+        return redirect("clients:mf_folios")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, text in files:
+            zf.writestr(name, text)
+    response = HttpResponse(buf.getvalue(), content_type="application/zip")
+    response["Content-Disposition"] = (
+        f'attachment; filename="folio_batches_{timezone.localdate()}.zip"')
+    return response
+
+
+@_admin_required
 def mf_folio_link(request, folio_id):
     folio = get_object_or_404(MutualFundFolio.objects.select_related("client"), id=folio_id)
 
@@ -196,7 +230,7 @@ def mf_folio_link(request, folio_id):
                 folio=folio, client_id=old_client_id).update(client=None)
             rta_feed.refresh_client_sip_fields(client_ids=[old_client_id])
             messages.success(request, f"Folio {folio.folio_number} unlinked.")
-            return redirect("clients:mf_folios")
+            return redirect(_safe_next(request))
         client_id = request.POST.get("client_id")
         if client_id and client_id.isdigit():
             client = get_object_or_404(Client, id=int(client_id))
@@ -206,7 +240,7 @@ def mf_folio_link(request, folio_id):
                 folio_number=folio.folio_number, client__isnull=True).update(client=client)
             rta_feed.refresh_client_sip_fields(client_ids=[client.id])
             messages.success(request, f"Folio {folio.folio_number} linked to {client.name}.")
-            return redirect("clients:mf_folios")
+            return redirect(_safe_next(request))
         messages.error(request, "Pick a client to link.")
 
     q = (request.GET.get("q") or "").strip()
@@ -234,7 +268,7 @@ def mf_folio_create_client(request, folio_id):
     investor exists at the RTA but not in the CRM. Name and PAN come from
     the folio; everything sharing that PAN links immediately."""
     folio = get_object_or_404(MutualFundFolio, id=folio_id)
-    next_url = request.POST.get("next") or "clients:mf_folios"
+    next_url = _safe_next(request)
     if folio.client_id:
         messages.info(request, f"Folio {folio.folio_number} is already linked.")
         return redirect(next_url)
@@ -301,6 +335,16 @@ def mf_transactions(request):
 
 
 _PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
+
+
+def _safe_next(request):
+    """The posted `next` when it points back into this site, else the folios
+    list. Never hand a caller-supplied URL straight to redirect()."""
+    nxt = request.POST.get("next") or ""
+    if nxt and url_has_allowed_host_and_scheme(
+            nxt, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return nxt
+    return reverse("clients:mf_folios")
 
 
 @_admin_required

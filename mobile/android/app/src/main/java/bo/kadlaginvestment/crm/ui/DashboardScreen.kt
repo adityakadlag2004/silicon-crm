@@ -120,6 +120,23 @@ private fun Dashboard(
             }
         }
 
+        val profilePercent = d.optInt("profile_percent", 100)
+        if (profilePercent < 100) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { onOpenWeb("/clients/me/profile/") },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                ) {
+                    Column(Modifier.padding(rdp(14))) {
+                        Text("Your profile is $profilePercent% complete",
+                            fontWeight = FontWeight.SemiBold, fontSize = rsp(15))
+                        Text("Add your name and details so the CRM greets you properly →",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
+                    }
+                }
+            }
+        }
+
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatCard(

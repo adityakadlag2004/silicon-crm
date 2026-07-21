@@ -266,6 +266,12 @@ a.ki-kpi:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
 .mf-pill.unlinked, .mf-pill.ceased { background: #fee2e2; color: #b91c1c; }
 .mf-pill.expired                   { background: #f1f5f9; color: #475569; }
 .mf-pill.at-risk                   { background: #fef3c7; color: #92400e; }
+/* Name-match strength — shared by Match Folios and the Folios list. */
+.mf-pill.lvl3 { background: #dcfce7; color: #166534; }
+.mf-pill.lvl2 { background: #dbeafe; color: #1e40af; }
+.mf-pill.lvl1 { background: #fef3c7; color: #92400e; }
+.mf-pill.haspan { background: #fee2e2; color: #b91c1c; }
+.mf-suggest { margin-top: .2rem; font-size: .8rem; }
 
 /* SIP register tiles — same shape as .ki-kpi but linkable and denser. */
 .sip-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; margin-bottom: 1rem; }

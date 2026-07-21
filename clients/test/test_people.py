@@ -289,6 +289,62 @@ class MyProfileTests(TestCase):
         self.assertEqual(self.emp.profile_completeness, 100)
         self.assertIsNotNone(self.emp.profile_updated_at)
 
+    def test_name_mirrors_onto_user_so_greetings_use_it(self):
+        """Empty profile → greeted by login id; filled → greeted by name."""
+        self.assertEqual(self.emp.user.get_full_name(), "")
+
+        self.emp.first_name, self.emp.last_name = "Mansi", "Upasane"
+        self.emp.save()
+        self.emp.user.refresh_from_db()
+        self.assertEqual(self.emp.user.get_full_name(), "Mansi Upasane")
+
+    def test_employee_can_change_their_login_id(self):
+        from django.test import Client as TC
+        tc = TC(); tc.force_login(self.emp.user)
+        r = tc.post(reverse("clients:my_profile"),
+                    {"form": "login_id", "username": "mansi.u"})
+        self.assertEqual(r.status_code, 302)
+        self.emp.user.refresh_from_db()
+        self.assertEqual(self.emp.user.username, "mansi.u")
+
+    def test_login_id_must_stay_unique(self):
+        from django.test import Client as TC
+        other = _emp("taken")
+        tc = TC(); tc.force_login(self.emp.user)
+        r = tc.post(reverse("clients:my_profile"),
+                    {"form": "login_id", "username": other.user.username})
+        self.assertEqual(r.status_code, 200)  # re-rendered with the error
+        self.emp.user.refresh_from_db()
+        self.assertEqual(self.emp.user.username, "selfserve")
+
+    def test_employee_can_change_their_password_and_stays_logged_in(self):
+        from django.test import Client as TC
+        self.emp.user.set_password("oldpass123")
+        self.emp.user.save()
+        tc = TC()
+        self.assertTrue(tc.login(username="selfserve", password="oldpass123"))
+        r = tc.post(reverse("clients:my_profile"), {
+            "form": "password", "old_password": "oldpass123",
+            "new_password1": "Str0ng!Passw0rd", "new_password2": "Str0ng!Passw0rd",
+        })
+        self.assertEqual(r.status_code, 302)
+        self.emp.user.refresh_from_db()
+        self.assertTrue(self.emp.user.check_password("Str0ng!Passw0rd"))
+        # Session survived the change — no surprise logout.
+        self.assertEqual(tc.get(reverse("clients:my_profile")).status_code, 200)
+
+    def test_wrong_old_password_is_rejected(self):
+        from django.test import Client as TC
+        self.emp.user.set_password("oldpass123")
+        self.emp.user.save()
+        tc = TC(); tc.force_login(self.emp.user)
+        tc.post(reverse("clients:my_profile"), {
+            "form": "password", "old_password": "nope",
+            "new_password1": "Str0ng!Passw0rd", "new_password2": "Str0ng!Passw0rd",
+        })
+        self.emp.user.refresh_from_db()
+        self.assertTrue(self.emp.user.check_password("oldpass123"))
+
     def test_profile_form_cannot_change_salary_or_role(self):
         """Self-service must not be a path to a pay rise."""
         from clients.forms import MyProfileForm

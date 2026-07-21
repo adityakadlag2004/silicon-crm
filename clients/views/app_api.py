@@ -63,6 +63,8 @@ def app_dashboard(request):
     data = {
         "role": "admin" if is_admin else (emp.role if emp else "unknown"),
         "name": request.user.get_full_name() or request.user.username,
+        # Drives the app's "complete your profile" nudge (web has its own).
+        "profile_percent": emp.profile_completeness if emp else 100,
         "today": {
             "sales_count": today_agg["n"] or 0,
             "amount": _money(today_agg["amount"]),

@@ -783,15 +783,82 @@ def _name_tokens(name):
     return words
 
 
+# Match levels: 3 = full name match, 2 = one name contains the other,
+# 1 = same first two words (or same surname).
+MATCH_LEVEL_LABELS = {3: "exact name", 2: "name contains", 1: "first + last name"}
+
+
+def _client_name_index():
+    """Every client bucketed by full name and by first name, for matching."""
+    from ..models import Client
+
+    by_full, by_first = {}, {}
+    for client in Client.objects.all():
+        tokens = _name_tokens(client.name)
+        if not tokens:
+            continue
+        by_full.setdefault(" ".join(tokens), []).append((client, tokens))
+        by_first.setdefault(tokens[0], []).append((client, tokens))
+    return by_full, by_first
+
+
+def _best_client_match(tokens, by_full, by_first):
+    """Strongest (level, client) for an investor name, or None. Shared by the
+    Match Folios screen and the Folios list's inline suggestion so the two
+    never disagree about who a folio belongs to."""
+    if not tokens:
+        return None
+    full_hits = by_full.get(" ".join(tokens))
+    if full_hits:
+        return 3, full_hits[0][0]
+    best = None
+    for client, client_tokens in by_first.get(tokens[0], []):
+        folio_set, client_set = set(tokens), set(client_tokens)
+        # middle names: "ADITYA KADLAG" ⊆ "ADITYA SUNIL KADLAG"
+        if len(folio_set & client_set) >= 2 and (
+                folio_set <= client_set or client_set <= folio_set):
+            level = 2
+        elif (len(tokens) >= 2 and len(client_tokens) >= 2
+              and (tokens[:2] == client_tokens[:2]
+                   or tokens[-1] == client_tokens[-1])):
+            level = 1
+        else:
+            continue
+        if best is None or level > best[0]:
+            best = (level, client)
+    return best
+
+
+def suggest_clients_for_folios(folios):
+    """``{folio_id: {"client", "level", "level_label"}}`` for the unlinked
+    folios handed in — the Folios list shows this beside each row so a folio
+    the feed gave no PAN for can be linked without opening a second screen.
+
+    Scoped to the folios passed (i.e. one page), not the whole unlinked book.
+    """
+    pending = [f for f in folios if f.client_id is None and f.investor_name]
+    if not pending:
+        return {}
+    by_full, by_first = _client_name_index()
+    suggestions = {}
+    for folio in pending:
+        best = _best_client_match(_name_tokens(folio.investor_name), by_full, by_first)
+        if best:
+            suggestions[folio.id] = {
+                "client": best[1], "level": best[0],
+                "level_label": MATCH_LEVEL_LABELS[best[0]],
+            }
+    return suggestions
+
+
 def suggest_folio_matches():
     """Pair unlinked folios with clients by name for the Match Folios screen.
 
     Unlinked folios are grouped by (PAN, investor name) — one row per
     investor identity, so a single action links every folio of that PAN.
-    Match levels: 3 = full name match, 2 = one name contains the other,
-    1 = same first two words. Sorted strongest first.
+    Sorted strongest match first.
     """
-    from ..models import Client, MutualFundFolio
+    from ..models import MutualFundFolio
 
     groups = {}
     for folio in MutualFundFolio.objects.filter(client__isnull=True).order_by("investor_name"):
@@ -805,37 +872,10 @@ def suggest_folio_matches():
         })
         group["folios"].append(folio)
 
-    by_full, by_first = {}, {}
-    for client in Client.objects.all():
-        tokens = _name_tokens(client.name)
-        if not tokens:
-            continue
-        by_full.setdefault(" ".join(tokens), []).append((client, tokens))
-        by_first.setdefault(tokens[0], []).append((client, tokens))
-
-    LEVEL_LABELS = {3: "exact name", 2: "name contains", 1: "first + last name"}
+    by_full, by_first = _client_name_index()
     suggestions = []
     for group in groups.values():
-        tokens = group["tokens"]
-        best = None
-        full_hits = by_full.get(" ".join(tokens))
-        if full_hits:
-            best = (3, full_hits[0][0])
-        else:
-            for client, client_tokens in by_first.get(tokens[0], []):
-                folio_set, client_set = set(tokens), set(client_tokens)
-                # middle names: "ADITYA KADLAG" ⊆ "ADITYA SUNIL KADLAG"
-                if len(folio_set & client_set) >= 2 and (
-                        folio_set <= client_set or client_set <= folio_set):
-                    level = 2
-                elif (len(tokens) >= 2 and len(client_tokens) >= 2
-                      and (tokens[:2] == client_tokens[:2]
-                           or tokens[-1] == client_tokens[-1])):
-                    level = 1
-                else:
-                    continue
-                if best is None or level > best[0]:
-                    best = (level, client)
+        best = _best_client_match(group["tokens"], by_full, by_first)
         if best is None:
             continue
         level, client = best
@@ -845,7 +885,7 @@ def suggest_folio_matches():
             "folios": group["folios"],
             "client": client,
             "level": level,
-            "level_label": LEVEL_LABELS[level],
+            "level_label": MATCH_LEVEL_LABELS[level],
         })
     suggestions.sort(key=lambda s: (-s["level"], s["investor_name"]))
     return suggestions
@@ -1186,6 +1226,47 @@ def outside_flows_by_client(days=365):
         g["codes"] = sorted(g["codes"])
         g["folios"] = sorted(g["folios"])
     return results
+
+
+# ─── Folio-list request files (by-folio mailback requests) ──────────────────
+
+FOLIO_BATCH_SIZE = 500
+
+
+def folio_request_batches(size=FOLIO_BATCH_SIZE, rta=""):
+    """Our folio numbers packaged the way CAMS/KFintech want them for a
+    by-folio mailback request: one folio per line, no separators, capped at
+    ``size`` folios per file.
+
+    Grouped per RTA — a folio only exists at the RTA that reported it, and each
+    RTA is sent its own list. Folios imported before the RTA was recorded land
+    in an ``UNKNOWN`` file; send those to both and the wrong one ignores them.
+
+    Returns ``[(filename, text)]``.
+    """
+    from ..models import MutualFundFolio
+
+    qs = MutualFundFolio.objects.all()
+    if rta:
+        qs = qs.filter(rta=rta)
+    groups = {}
+    for number, folio_rta in qs.values_list("folio_number", "rta"):
+        number = (number or "").strip()
+        if number:
+            groups.setdefault(folio_rta or "UNKNOWN", set()).add(number)
+
+    files = []
+    for group, numbers in sorted(groups.items()):
+        ordered = sorted(numbers)
+        for start in range(0, len(ordered), size):
+            batch = ordered[start:start + size]
+            # Byte-for-byte KFintech's own sample (rta_formats/): bare numbers,
+            # LF, and NO trailing newline — a blank last line reads as an empty
+            # folio to the RTA's parser. CAMS gets the same shape until a CAMS
+            # sample says otherwise.
+            files.append((f"{group}_folios_{start // size + 1:03d}.txt",
+                          "\n".join(batch)))
+    return files
 
 
 # ─── Mailbox fetcher (cron) ─────────────────────────────────────────────────

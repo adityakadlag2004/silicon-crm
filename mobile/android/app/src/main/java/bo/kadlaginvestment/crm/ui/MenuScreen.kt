@@ -49,6 +49,7 @@ private val ENTRIES = listOf(
     MenuEntry("🔁", "Renewals", native = "renewals"),
     MenuEntry("🫧", "Lead Pipeline", native = "leads"),
     MenuEntry("📈", "Reports", native = "reports"),
+    MenuEntry("🪪", "My Profile (login ID · password)", webPath = "/clients/me/profile/"),
     MenuEntry("📅", "Calendar", webPath = "/clients/calendar/view/"),
     MenuEntry("🧮", "Financial Planner", webPath = "/clients/sales/financial-planner/"),
     MenuEntry("📊", "Client Analysis", webPath = "/clients/analysis/"),

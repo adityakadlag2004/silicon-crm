@@ -65,6 +65,22 @@ class Employee(models.Model):
     def __str__(self):
         return self.full_name or self.user.username
 
+    def save(self, *args, **kwargs):
+        """Mirror the name onto User so every ``user.get_full_name()`` in the
+        codebase greets the person, not their login id. Blank names leave User
+        blank, which is what makes the username show through as the fallback."""
+        super().save(*args, **kwargs)
+        if not self.user_id:
+            return
+        # Only push names we actually have — a blank field here must never
+        # wipe a name an admin set straight on the User.
+        changed = {f: getattr(self, f) for f in ("first_name", "last_name")
+                   if getattr(self, f) and getattr(self, f) != getattr(self.user, f)}
+        if changed:
+            User.objects.filter(pk=self.user_id).update(**changed)
+            for field, value in changed.items():
+                setattr(self.user, field, value)
+
     # ── Derived ───────────────────────────────────────────────────────
 
     @property

@@ -1,6 +1,8 @@
 import re
 
 from django import forms
+from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib.auth.models import User
 from django_select2.forms import ModelSelect2Widget
 from django.forms import inlineformset_factory
 from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings, Renewal, Product
@@ -548,6 +550,29 @@ class MyProfileForm(forms.ModelForm):
         # Nudge the fields that drive the completeness prompt.
         for name in ("first_name", "last_name", "date_of_birth", "phone"):
             self.fields[name].required = True
+
+
+class MyPasswordForm(PasswordChangeForm):
+    """Django's own change-password form, Bootstrap-dressed."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-control")
+
+
+class MyLoginIdForm(forms.ModelForm):
+    """Employees fix their own login id — some were typed wrong at setup.
+    ModelForm brings User's uniqueness check and username validator along."""
+
+    class Meta:
+        model = User
+        fields = ["username"]
+        labels = {"username": "Login ID"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["username"].widget.attrs.setdefault("class", "form-control")
 
 
 class EmployeeAdminForm(forms.ModelForm):

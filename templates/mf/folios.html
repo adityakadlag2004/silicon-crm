@@ -2,13 +2,6 @@
 {% block title %}MF Folios{% endblock %}
 {% block page_title %}Mutual Fund Folios{% endblock %}
 
-{% block extra_css %}
-<style>
-  .mf-pill.linked { background:#dcfce7; color:#166534; }
-  .mf-pill.unlinked { background:#fee2e2; color:#b91c1c; }
-</style>
-{% endblock %}
-
 {% block content %}
   <form method="get" style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;">
     <input type="text" name="q" class="form-control form-control-sm" style="flex:1 1 220px;"
@@ -25,6 +18,9 @@
       {% endfor %}
     </select>
     <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-search"></i> Filter</button>
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_folio_batches' %}"
+       title="Folio numbers as .txt files, 500 per file — attach to a CAMS/KFintech by-folio mailback request">
+      <i class="bi bi-download"></i> Request Files (500/batch)</a>
     <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-arrow-left"></i> Back</a>
   </form>
 
@@ -47,14 +43,32 @@
                 <a href="{% url 'clients:client_profile' folio.client.id %}">{{ folio.client.name }}</a>
               {% else %}
                 <span class="mf-pill unlinked">unlinked</span>
+                {% if folio.suggestion %}
+                  <div class="mf-suggest">
+                    <span class="mf-pill lvl{{ folio.suggestion.level }}">{{ folio.suggestion.level_label }}</span>
+                    <a href="{% url 'clients:client_profile' folio.suggestion.client.id %}" target="_blank">{{ folio.suggestion.client.name }}</a>
+                  </div>
+                {% endif %}
               {% endif %}
             </td>
             <td style="white-space:nowrap;">
+              {% if folio.suggestion %}
+              <form method="post" action="{% url 'clients:mf_folio_link' folio.id %}" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="client_id" value="{{ folio.suggestion.client.id }}">
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button class="ki-btn ki-btn-primary ki-btn-sm"
+                        title="Link this folio to {{ folio.suggestion.client.name }} (PAN untouched)">
+                  <i class="bi bi-link-45deg"></i> Link to {{ folio.suggestion.client.name|truncatechars:22 }}
+                </button>
+              </form>
+              {% endif %}
               <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_folio_link' folio.id %}">
-                {% if folio.client %}Re-link{% else %}Link{% endif %}</a>
+                {% if folio.client %}Re-link{% elif folio.suggestion %}Someone else{% else %}<i class="bi bi-search"></i> Search client{% endif %}</a>
               {% if not folio.client %}
               <form method="post" action="{% url 'clients:mf_folio_create_client' folio.id %}" style="display:inline;">
                 {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 <button class="ki-btn ki-btn-primary ki-btn-sm"
                         title="Create a new client from this folio's name & PAN and link it"
                         onclick="return confirm('Create client “{{ folio.investor_name|title|escapejs }}” from this folio?');">

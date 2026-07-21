@@ -6,6 +6,7 @@ Run: .venv/bin/python manage.py test clients.test.test_mf_rta_feeds -v 2
 """
 import io
 import struct
+import zipfile
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -1283,3 +1284,113 @@ class MsoffcryptoPatchTests(TestCase):
         # second call must not re-wrap or raise
         rta_feed._patch_msoffcrypto_biff()
         self.assertTrue(getattr(xls97._BIFFStream.iter_record, "_ki_patched", False))
+
+
+class FolioRequestBatchTests(TestCase):
+    """The by-folio mailback request files: one folio per line, 500 per file,
+    split per RTA, downloadable as a zip."""
+
+    def setUp(self):
+        for i in range(1201):
+            MutualFundFolio.objects.create(folio_number=f"C{i:06d}", amc_name=f"AMC{i}",
+                                           rta=RTA_CAMS)
+        MutualFundFolio.objects.create(folio_number="K001", amc_name="Axis", rta=RTA_KFIN)
+        MutualFundFolio.objects.create(folio_number="  L001  ", amc_name="Old", rta="")
+        MutualFundFolio.objects.create(folio_number="", amc_name="Junk", rta=RTA_CAMS)
+        # same folio at two AMCs of the same RTA must be listed once
+        MutualFundFolio.objects.create(folio_number="C000000", amc_name="Other", rta=RTA_CAMS)
+
+    def test_batches_split_per_rta_and_capped(self):
+        files = dict(rta_feed.folio_request_batches())
+        self.assertEqual(
+            sorted(files),
+            ["CAMS_folios_001.txt", "CAMS_folios_002.txt", "CAMS_folios_003.txt",
+             "KFIN_folios_001.txt", "UNKNOWN_folios_001.txt"])
+        first = files["CAMS_folios_001.txt"].split("\n")
+        self.assertEqual(len(first), 500)
+        self.assertEqual(len(files["CAMS_folios_003.txt"].split("\n")), 201)
+        # exactly rta_formats/sample.txt's shape: LF, no trailing newline
+        self.assertNotIn("\r", files["CAMS_folios_001.txt"])
+        self.assertFalse(files["CAMS_folios_001.txt"].endswith("\n"))
+        # bare numbers only — no commas, no header, no blank lines, no dupes
+        self.assertNotIn(",", files["CAMS_folios_001.txt"])
+        self.assertEqual(first[0], "C000000")
+        self.assertEqual(len(set(first)), 500)
+        self.assertEqual(files["UNKNOWN_folios_001.txt"], "L001")  # whitespace stripped
+
+    def test_size_and_rta_filters(self):
+        files = dict(rta_feed.folio_request_batches(size=500, rta=RTA_KFIN))
+        self.assertEqual(list(files), ["KFIN_folios_001.txt"])
+        self.assertEqual(len(rta_feed.folio_request_batches(size=100)), 13 + 1 + 1)
+
+    def test_download_zip(self):
+        c = TestClient()
+        admin = User.objects.create_user(username="fb_admin", password="x")
+        Employee.objects.create(user=admin, role="admin", salary=0, active=True)
+        c.force_login(admin)
+        resp = c.get(reverse("clients:mf_folio_batches"), {"size": "600"})
+        self.assertEqual(resp["Content-Type"], "application/zip")
+        with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+            names = sorted(zf.namelist())
+            self.assertEqual(names[0], "CAMS_folios_001.txt")
+            self.assertEqual(len(zf.read(names[0]).decode().split("\n")), 600)
+
+    def test_download_is_admin_only(self):
+        c = TestClient()
+        user = User.objects.create_user(username="fb_emp", password="x")
+        Employee.objects.create(user=user, role="employee", salary=0, active=True)
+        c.force_login(user)
+        self.assertEqual(c.get(reverse("clients:mf_folio_batches")).status_code, 403)
+
+
+class InlineFolioSuggestionTests(TestCase):
+    """The Folios list suggests a client per unlinked row (feeds often omit
+    PAN) and links it in one click, without touching the PAN system."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin_user = User.objects.create_user(username="ifs_admin", password="x")
+        Employee.objects.create(user=cls.admin_user, role="admin", salary=0, active=True)
+        cls.aditya = Client.objects.create(name="Aditya Kadlag NSE")
+        # no PAN in the feed — PAN auto-linking can't help, this is the case
+        cls.matched = MutualFundFolio.objects.create(
+            folio_number="911", amc_name="HDFC", investor_name="ADITYA SUNIL KADLAG")
+        cls.unmatched = MutualFundFolio.objects.create(
+            folio_number="912", amc_name="Axis", investor_name="ZZZ NOBODY")
+
+    def _http(self):
+        c = TestClient()
+        c.force_login(self.admin_user)
+        return c
+
+    def test_row_shows_suggestion_only_where_a_name_matches(self):
+        html = self._http().get(reverse("clients:mf_folios")).content.decode()
+        self.assertIn("Link to Aditya Kadlag NSE", html)
+        self.assertIn("name contains", html)   # middle name, suffix stripped
+        # the unmatched row falls back to search, and offers no one to link to
+        self.assertIn("Search client", html)
+        self.assertNotIn("Link to ZZZ", html)
+
+    def test_linked_rows_get_no_suggestion(self):
+        self.matched.client = self.aditya
+        self.matched.save(update_fields=["client"])
+        html = self._http().get(reverse("clients:mf_folios")).content.decode()
+        self.assertNotIn("Link to Aditya Kadlag NSE", html)
+
+    def test_inline_link_returns_to_the_filtered_page_and_leaves_pan_alone(self):
+        nxt = reverse("clients:mf_folios") + "?linked=no&page=1"
+        resp = self._http().post(
+            reverse("clients:mf_folio_link", args=[self.matched.id]),
+            {"client_id": self.aditya.id, "next": nxt})
+        self.assertRedirects(resp, nxt)
+        self.matched.refresh_from_db()
+        self.aditya.refresh_from_db()
+        self.assertEqual(self.matched.client, self.aditya)
+        self.assertEqual(self.aditya.pan or "", "")   # PAN system untouched
+        self.assertEqual(self.matched.pan or "", "")
+
+    def test_offsite_next_is_refused(self):
+        resp = self._http().post(
+            reverse("clients:mf_folio_link", args=[self.matched.id]),
+            {"client_id": self.aditya.id, "next": "https://evil.example.com/x"})
+        self.assertRedirects(resp, reverse("clients:mf_folios"))
