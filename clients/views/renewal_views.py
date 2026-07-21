@@ -16,7 +16,11 @@ from ..forms import EditRenewalForm, RenewalForm
 from ..templatetags.custom_filters import inr
 from ..models import Client, Renewal, Product
 from .helpers import parse_date_param
-from .helpers import get_manager_access
+from .helpers import get_manager_access, success_with_drive_link as _success_with_drive_link
+
+
+def _renewal_is_insurance(renewal):
+	return renewal.insurance_kind in ("health", "life")
 
 
 def _no_name_product_ids():
@@ -81,6 +85,11 @@ def add_renewal(request, client_id=None):
 		if form.is_valid():
 			renewal = form.save(commit=False)
 
+			# product_type is derived in the form's clean() but isn't a model-
+			# form field, so it must be copied onto the instance explicitly —
+			# the Health/Life breakdown and tracker sync both key off it.
+			renewal.product_type = form.cleaned_data.get("product_type") or renewal.product_type
+
 			if client is not None:
 				renewal.client = client
 			elif not renewal.client_id:
@@ -97,7 +106,22 @@ def add_renewal(request, client_id=None):
 
 			renewal.created_by = request.user
 			renewal.save()
-			messages.success(request, "Renewal business entry added successfully!")
+
+			# Back-fill the Insurance Tracker for old policies sold before it
+			# existed: if this client has no Health/Life policy on the tracker,
+			# create one from the renewal.
+			from ..services import insurance_sync
+			try:
+				insurance_sync.sync_policy_from_renewal(renewal)
+			except Exception:
+				pass
+
+			# Offer to file the policy document in the client's Drive folder —
+			# a link, not a forced redirect, so daily bulk entry isn't
+			# interrupted. The Drive view creates the folder if it's missing.
+			_success_with_drive_link(
+				request, "Renewal business entry added.", renewal.client,
+				insurance=_renewal_is_insurance(renewal))
 			return redirect("clients:all_renewals")
 	else:
 		initial = {
@@ -205,6 +229,22 @@ def all_renewals(request):
 	qstring = qdict.urlencode()
 
 	today = timezone.localdate()
+
+	# This-month renewal business, split by Health / Life / Other \u2014 the figure
+	# the team actually reports on. Scoped like the list (an employee sees only
+	# their own), measured on when the premium was collected.
+	month_start = today.replace(day=1)
+	month_biz = scoped_qs.filter(premium_collected_on__range=[month_start, today])
+
+	def _type_biz(kind):
+		rows = month_biz.filter(Renewal.kind_q(kind)).aggregate(
+			amount=Sum("premium_amount"), count=Count("id"))
+		return {"amount": rows["amount"] or 0, "count": rows["count"] or 0}
+
+	health_biz = _type_biz("health")
+	life_biz = _type_biz("life")
+	other_biz = _type_biz("other")
+
 	agg = Renewal.objects.aggregate(
 		total=Count("id"),
 		due_30=Count("id", filter=Q(renewal_end_date__gte=today,
@@ -213,12 +253,24 @@ def all_renewals(request):
 		premium=Sum("premium_amount"),
 	)
 	context = {
+		# KPI strip leads with this month's business split by product line,
+		# since that is what the renewals desk tracks day to day.
 		"kpis": [
-			{"label": "All Renewals", "value": agg["total"], "color": "#4338CA"},
-			{"label": "Due \u226430 days", "value": agg["due_30"], "color": "#B45309"},
+			{"label": f"Health \u00b7 {month_label}", "color": "#15803D",
+			 "value": f"\u20b9{inr(health_biz['amount'])}",
+			 "sub": f"{health_biz['count']} renewal{'' if health_biz['count'] == 1 else 's'}"},
+			{"label": f"Life \u00b7 {month_label}", "color": "#4338CA",
+			 "value": f"\u20b9{inr(life_biz['amount'])}",
+			 "sub": f"{life_biz['count']} renewal{'' if life_biz['count'] == 1 else 's'}"},
+			{"label": f"This Month", "color": "#B45309",
+			 "value": f"\u20b9{inr(month_submission_total)}",
+			 "sub": f"{month_submission_count} total"},
+			{"label": "Due \u226430 days", "value": agg["due_30"], "color": "#0369A1"},
 			{"label": "Overdue", "value": agg["overdue"], "color": "#BE123C"},
-			{"label": "Premium Booked", "value": f"\u20b9{inr(agg['premium'] or 0)}", "color": "#15803D"},
 		],
+		"health_biz": health_biz,
+		"life_biz": life_biz,
+		"other_biz": other_biz,
 		"renewals": page_obj,
 		"is_employee": bool(user_emp and user_emp.role == "employee"),
 		"is_manager": is_manager,

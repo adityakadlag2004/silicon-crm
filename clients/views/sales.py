@@ -21,7 +21,7 @@ from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Produ
 from ..forms import AdminSaleForm, EditSaleForm, SaleForm
 from ..services import sales as sales_service
 from ..templatetags.custom_filters import inr
-from .helpers import get_manager_access, parse_date_param
+from .helpers import get_manager_access, parse_date_param, success_with_drive_link
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +110,8 @@ def add_sale(request):
                     )
 
             sales_service.finalize_new_sale(sale, request.user, auto_approve=is_admin_user)
-            messages.success(request, "Sale added successfully!")
+            success_with_drive_link(request, "Sale added.", sale.client,
+                                    insurance=sale.is_insurance)
             return redirect("clients:all_sales")
     else:
         initial = {}
@@ -251,7 +252,8 @@ def admin_add_sale(request):
                 form.add_error("employee", "Please select an employee for this sale.")
             else:
                 sales_service.finalize_new_sale(sale, request.user, auto_approve=True)
-                messages.success(request, "Sale added successfully!")
+                success_with_drive_link(request, "Sale added.", sale.client,
+                                        insurance=sale.is_insurance)
                 return redirect("clients:all_sales")
     else:
         form = AdminSaleForm()

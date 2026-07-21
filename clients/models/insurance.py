@@ -49,6 +49,13 @@ class InsurancePolicy(models.Model):
     relationship_manager = models.ForeignKey("Employee", null=True, blank=True,
                                              on_delete=models.SET_NULL, related_name="policies")
     notes = models.TextField(blank=True)
+
+    # The insurance sale this tracker entry was auto-created from, if any.
+    # Keeps sale→policy sync idempotent (one policy per insurance sale) and
+    # lets the tracker trace back to the booking. Manually-added policies and
+    # ones synced from renewals leave this null.
+    source_sale = models.OneToOneField("Sale", null=True, blank=True,
+                                        on_delete=models.SET_NULL, related_name="policy")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

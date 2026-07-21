@@ -121,3 +121,31 @@ def throttle_view(max_requests, window_seconds, key_prefix="throttle", methods=(
         return wrapped
 
     return decorator
+
+
+def _client_has_drive(client):
+    return bool(getattr(client, "drive_folder_url", "") or getattr(client, "drive_folder_id", ""))
+
+
+def success_with_drive_link(request, message, client, *, insurance):
+    """Success message that, for insurance, links to the client's Drive folder
+    so the policy document can be uploaded there.
+
+    A link rather than a forced redirect: daily bulk entry shouldn't be
+    interrupted, but the offer to file the policy is right there. The Drive
+    view creates the folder on first click if it doesn't exist yet.
+    """
+    from django.urls import reverse
+    from django.utils.safestring import mark_safe
+    from django.utils.html import escape
+
+    if insurance and client is not None:
+        url = reverse("clients:client_drive_folder", args=[client.id])
+        verb = "Open" if _client_has_drive(client) else "Create &amp; open"
+        messages.success(request, mark_safe(
+            f"{escape(message)} "
+            f'<a href="{url}" target="_blank" rel="noopener" class="alert-link">'
+            f'📎 {verb} {escape(client.name)}’s Drive folder to upload the policy</a>.'
+        ))
+    else:
+        messages.success(request, message)

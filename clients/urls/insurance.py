@@ -9,4 +9,6 @@ urlpatterns = [
     path("claims/", insurance.claim_list, name="claim_list"),
     path("claims/<int:claim_id>/", insurance.claim_detail, name="claim_detail"),
     path("meetings/", insurance.meeting_list, name="meeting_list"),
+    path("api/client/<int:client_id>/policies/", insurance.client_policies_json,
+         name="client_policies_json"),
 ]

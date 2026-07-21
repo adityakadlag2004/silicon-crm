@@ -53,7 +53,22 @@ def finalize_new_sale(sale, actor, *, auto_approve):
     sale.rejection_reason = ""
     sale._audit_actor = actor  # picked up by the AuditLog signal
     sale.save()
+    _sync_insurance_tracker(sale)
     return sale
+
+
+def _sync_insurance_tracker(sale):
+    """Mirror an insurance sale into the Insurance Tracker (or remove it if the
+    sale is no longer approved). Best-effort — a tracker hiccup must never
+    block booking a sale."""
+    from . import insurance_sync
+    try:
+        if sale.status == Sale.STATUS_APPROVED:
+            insurance_sync.sync_policy_from_sale(sale)
+        else:
+            insurance_sync.unsync_policy_for_sale(sale)
+    except Exception:
+        pass
 
 
 def approve_sale(sale, actor):
@@ -74,6 +89,7 @@ def _finish_review(sale, actor):
     sale._audit_actor = actor  # picked up by the AuditLog signal
     sale.save()
     recompute_sibling_sales(sale)
+    _sync_insurance_tracker(sale)
 
 
 def delete_sale(sale, actor):

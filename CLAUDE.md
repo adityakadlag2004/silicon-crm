@@ -45,6 +45,24 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   yearly `policy_anniversary` onto the selling employee's calendar. Never key
   insurance renewals off the sale date.
 
+## Insurance Tracker sync
+
+- An approved Health/Life **sale** auto-creates one `InsurancePolicy`
+  (idempotent, linked via `InsurancePolicy.source_sale`), start date = the
+  sale's `policy_date`. Un-approving/rejecting removes it unless someone has
+  filled in a real policy number/insurer, in which case it's just detached.
+  Lives in `services/insurance_sync.py`, hooked from `services/sales.py`.
+- A **renewal** for a client with no policy of that type back-fills one —
+  captures the old book sold before the tracker existed. The add-renewal page
+  shows the client's existing Health/Life policies (via
+  `client_policies_json`) once a client is picked.
+- `Renewal.insurance_kind` / `Renewal.kind_q()` classify by `product_ref`
+  first (product_type wasn't persisted on historical rows — the form derives
+  it but it isn't a model-form field, so the view now copies it across).
+- After adding an insurance sale/renewal, the success message links to the
+  client's Drive folder to upload the policy (created on first click) — a
+  link, never a forced redirect, so daily bulk entry isn't interrupted.
+
 ## UI conventions (record shell)
 
 - Every module screen leads with a breadcrumb and, for list screens, a KPI

@@ -197,6 +197,33 @@ class Renewal(models.Model):
         if self.product_type != self.PRODUCT_TYPE_OTHER:
             self.product_name = None
 
+    @property
+    def insurance_kind(self):
+        """'health' / 'life' / 'other' — derived from product_ref first, since
+        product_type wasn't always persisted on historical rows."""
+        if self.product_ref_id:
+            code = (self.product_ref.code or "").upper()
+            if code == "HEALTH_INS":
+                return "health"
+            if code == "LIFE_INS":
+                return "life"
+        if self.product_type == self.PRODUCT_TYPE_HEALTH:
+            return "health"
+        if self.product_type == self.PRODUCT_TYPE_LIFE:
+            return "life"
+        return "other"
+
+    # DB-level classifiers matching insurance_kind, for aggregate queries.
+    @staticmethod
+    def kind_q(kind):
+        from django.db.models import Q
+        if kind == "health":
+            return Q(product_ref__code="HEALTH_INS") | Q(product_type="health_insurance")
+        if kind == "life":
+            return Q(product_ref__code="LIFE_INS") | Q(product_type="life_insurance")
+        return ~(Q(product_ref__code__in=["HEALTH_INS", "LIFE_INS"])
+                 | Q(product_type__in=["health_insurance", "life_insurance"]))
+
     def __str__(self):
         product_label = self.product_ref.name if self.product_ref_id else self.get_product_type_display()
         return f"{self.client} - {product_label} - {self.renewal_date}"

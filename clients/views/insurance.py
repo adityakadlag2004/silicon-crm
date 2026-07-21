@@ -7,6 +7,8 @@ admin proves too clunky for daily use.
 from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.views.decorators.http import require_GET
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -216,3 +218,33 @@ def _next_meeting_by_rm():
         name = r["employee__user__first_name"] or r["employee__user__username"] or "Unassigned"
         out.append({"name": name, "count": r["n"]})
     return out
+
+
+@login_required
+@require_GET
+def client_policies_json(request, client_id):
+    """Health/Life policies already on the tracker for a client.
+
+    The add-renewal screen shows these once a client is picked, so the user
+    knows whether they're renewing a known policy or logging a new one.
+    """
+    from ..models import Client
+    from ..services import insurance_sync
+    client = get_object_or_404(Client, pk=client_id)
+    policies = insurance_sync.client_health_life_policies(client)
+    return JsonResponse({
+        "policies": [
+            {
+                "id": p.id,
+                "type": p.get_insurance_type_display(),
+                "insurer": p.insurer or "—",
+                "plan": p.plan_name or "",
+                "number": p.policy_number,
+                "premium": float(p.premium_amount or 0),
+                "start": p.start_date.isoformat() if p.start_date else None,
+                "end": p.end_date.isoformat() if p.end_date else None,
+                "url": reverse("clients:policy_detail", args=[p.id]),
+            }
+            for p in policies
+        ],
+    })

@@ -42,6 +42,19 @@
               <button type="button" class="btn-close btn-close-sm ms-2" style="font-size:.6rem;" onclick="clearClient()"></button>
             </span>
           </div>
+
+          {# Existing Health/Life policies on the tracker for the chosen client #}
+          <div id="client-policies" class="mt-3" style="display:none;">
+            <div class="ki-field" style="border:0;padding:0;margin-bottom:.4rem;">
+              <span class="k" style="font-weight:600;"><i class="bi bi-shield-check"></i> Existing insurance on record</span>
+            </div>
+            <div id="client-policies-list" class="d-flex flex-column gap-2"></div>
+            <div id="client-policies-none" class="text-muted" style="font-size:.84rem;display:none;">
+              <i class="bi bi-info-circle"></i>
+              No Health/Life policy on record for this client — logging this renewal will
+              add one to the Insurance Tracker.
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -182,7 +195,45 @@ document.addEventListener("DOMContentLoaded", function () {
     searchInput.style.display = "";
     searchInput.value = "";
     searchInput.focus();
+    const box = document.getElementById("client-policies");
+    if (box) box.style.display = "none";
   };
+
+  // Show the client's existing Health/Life policies once one is picked, so the
+  // user knows if they're renewing a known policy or logging a fresh one.
+  window.loadClientPolicies = function(clientId) {
+    const box = document.getElementById("client-policies");
+    const list = document.getElementById("client-policies-list");
+    const none = document.getElementById("client-policies-none");
+    if (!box) return;
+    box.style.display = "block";
+    list.innerHTML = '<span class="text-muted" style="font-size:.84rem;">Checking records…</span>';
+    none.style.display = "none";
+    const url = "{% url 'clients:client_policies_json' 0 %}".replace("/0/", "/" + clientId + "/");
+    fetch(url)
+      .then(r => r.json())
+      .then(data => {
+        list.innerHTML = "";
+        if (!data.policies || data.policies.length === 0) {
+          none.style.display = "block";
+          return;
+        }
+        data.policies.forEach(p => {
+          const a = document.createElement("a");
+          a.href = p.url;
+          a.target = "_blank";
+          a.className = "ki-tag";
+          a.style.cssText = "--c:" + (p.type === "Health" ? "#15803D" : "#4338CA") + ";text-decoration:none;";
+          const ends = p.end ? " · renews " + p.end : "";
+          a.textContent = p.type + " — " + (p.insurer || p.plan || p.number) + ends;
+          list.appendChild(a);
+        });
+      })
+      .catch(() => { list.innerHTML = '<span class="text-danger" style="font-size:.84rem;">Could not load records.</span>'; });
+  };
+
+  // If the page opened with a client already chosen, show their policies now.
+  if (clientIdField.value) { window.loadClientPolicies(clientIdField.value); }
 
   let debounceTimer;
   searchInput.addEventListener("input", function () {
@@ -213,6 +264,7 @@ document.addEventListener("DOMContentLoaded", function () {
               selectedName.textContent = client.text;
               selectedDiv.style.display = "block";
               resultsDiv.innerHTML = "";
+              loadClientPolicies(client.id);
             };
             resultsDiv.appendChild(item);
           });

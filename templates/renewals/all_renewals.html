@@ -3,33 +3,40 @@
 {% block page_title %}All Renewals{% endblock %}
 
 {% block content %}
-<h2 class="ki-section-title"><i class="bi bi-arrow-repeat"></i> All Renewals</h2>
+{% load custom_filters %}
 
-<div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="ki-card">
-      <div class="text-muted small">Today's Premium Collection</div>
-      <div style="font-size:1.35rem;font-weight:700;">Rs {{ today_submission_total|floatformat:2 }}</div>
-      <div class="text-muted small" style="margin-top:0.15rem;">{{ today_submission_count }} renewal{{ today_submission_count|pluralize }} today</div>
-    </div>
+{% comment %}
+This month's renewal business, split by product line — the numbers the
+renewals desk reports on. The KPI strip above carries the headline; this
+panel breaks it out with counts and today's collection.
+{% endcomment %}
+<div class="ki-card mb-4">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem;">
+    <h3 class="ki-section-title" style="margin:0;"><i class="bi bi-arrow-repeat"></i> {{ month_label }} — renewal business</h3>
+    <span class="text-muted" style="font-size:.85rem;">
+      Today: <strong>₹{{ today_submission_total|inr }}</strong> ({{ today_submission_count }} renewal{{ today_submission_count|pluralize }})
+    </span>
   </div>
-  <div class="col-md-3">
-    <div class="ki-card">
-      <div class="text-muted small">{{ month_label }} (so far)</div>
-      <div style="font-size:1.35rem;font-weight:700;">Rs {{ month_submission_total|floatformat:2 }}</div>
-      <div class="text-muted small" style="margin-top:0.15rem;">{{ month_submission_count }} renewal{{ month_submission_count|pluralize }} this month</div>
+  <div class="ki-kpis" style="margin-bottom:0;">
+    <div class="ki-kpi" style="--c:#15803D;">
+      <div class="l"><i class="bi bi-heart-pulse"></i> Health Insurance</div>
+      <div class="v">₹{{ health_biz.amount|inr }}</div>
+      <div class="sub">{{ health_biz.count }} renewal{{ health_biz.count|pluralize }}</div>
     </div>
-  </div>
-  <div class="col-md-3">
-    <div class="ki-card">
-      <div class="text-muted small">Today's Submission Count</div>
-      <div style="font-size:1.35rem;font-weight:700;">{{ today_submission_count }}</div>
+    <div class="ki-kpi" style="--c:#4338CA;">
+      <div class="l"><i class="bi bi-shield-check"></i> Life Insurance</div>
+      <div class="v">₹{{ life_biz.amount|inr }}</div>
+      <div class="sub">{{ life_biz.count }} renewal{{ life_biz.count|pluralize }}</div>
     </div>
-  </div>
-  <div class="col-md-3">
-    <div class="ki-card">
-      <div class="text-muted small">Filtered Premium Total</div>
-      <div style="font-size:1.35rem;font-weight:700;">Rs {{ filtered_total_premium|floatformat:2 }}</div>
+    <div class="ki-kpi" style="--c:#6B7280;">
+      <div class="l"><i class="bi bi-three-dots"></i> Other</div>
+      <div class="v">₹{{ other_biz.amount|inr }}</div>
+      <div class="sub">{{ other_biz.count }} renewal{{ other_biz.count|pluralize }}</div>
+    </div>
+    <div class="ki-kpi" style="--c:#B45309;">
+      <div class="l"><i class="bi bi-cash-stack"></i> Month Total</div>
+      <div class="v">₹{{ month_submission_total|inr }}</div>
+      <div class="sub">{{ month_submission_count }} renewal{{ month_submission_count|pluralize }}</div>
     </div>
   </div>
 </div>
@@ -78,7 +85,7 @@
 </div>
 
 <div class="ki-card ki-table-wrap">
-  <table class="ki-table">
+  <table class="ki-table ki-dtable">
     <thead>
       <tr>
         <th>Renewal Date</th>
