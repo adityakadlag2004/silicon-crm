@@ -94,6 +94,21 @@ class TemplateHygieneTests(TestCase):
             "multi-line {# #} comments render as visible text; "
             f"use {{% comment %}} instead: {offenders}")
 
+    def test_no_shell_heredoc_leftovers_in_any_template(self):
+        """A template written via `cat <<'EOF'` must not keep the terminator.
+
+        claim_detail.html shipped with `EOF` + `echo "written"` after its
+        {% endblock %}, and both rendered as visible text on the page.
+        """
+        import pathlib
+        offenders = []
+        for path in pathlib.Path("templates").rglob("*.html"):
+            for num, line in enumerate(path.read_text().splitlines(), 1):
+                if line.strip() in ("EOF", "'EOF'") or line.startswith("echo "):
+                    offenders.append(f"{path}:{num}: {line.strip()}")
+        self.assertEqual(offenders, [],
+                         f"shell heredoc leftovers render as page text: {offenders}")
+
     def test_rendered_pages_contain_no_leaked_template_syntax(self):
         """Unrendered tags/comments must not appear in the visible markup.
 
