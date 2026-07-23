@@ -69,8 +69,22 @@
         </div>
         <div class="col-md-6" id="subproduct-group" style="display:none;">
           <label for="id_subproduct" class="form-label fw-semibold">Sub-product <span class="text-danger">*</span></label>
+          <input type="search" id="subproduct-search" class="form-control mb-1" placeholder="Type to search…" autocomplete="off" aria-label="Search sub-products">
           {{ form.subproduct }}
           {% if form.subproduct.errors %}<div class="text-danger small mt-1">{{ form.subproduct.errors|striptags }}</div>{% endif %}
+        </div>
+        <div class="col-md-6" id="ppt-group" style="display:none;">
+          <label for="id_ppt" class="form-label fw-semibold">Premium Paying Term (PPT) <span class="text-danger">*</span></label>
+          {{ form.ppt }}
+          {% if form.ppt.errors %}<div class="text-danger small mt-1">{{ form.ppt.errors|striptags }}</div>{% endif %}
+          {% if show_margin %}
+          <div id="ppt-margin" class="mt-2" style="display:none;">
+            <span class="badge bg-success" style="font-size:.85rem;">
+              <i class="bi bi-graph-up-arrow"></i> Margin (FYC): <strong id="ppt-margin-val"></strong>%
+            </span>
+            <span class="text-muted small ms-1" id="ppt-margin-desig"></span>
+          </div>
+          {% endif %}
         </div>
         <div class="col-md-6">
           <label for="id_amount" class="form-label fw-semibold">Business Amount (₹) <span class="text-danger">*</span></label>
@@ -147,6 +161,11 @@
 {{ insurance_product_names|json_script:"insurance-product-names" }}
 {{ health_product_names|json_script:"health-product-names" }}
 {{ product_children|json_script:"product-children" }}
+{{ ppt_options|json_script:"ppt-options" }}
+{% if show_margin %}
+{{ ppt_fyc|json_script:"ppt-fyc" }}
+{{ mdrt_active|json_script:"mdrt-active" }}
+{% endif %}
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -159,19 +178,32 @@ document.addEventListener("DOMContentLoaded", function () {
   const productChildren = JSON.parse(document.getElementById("product-children").textContent);
   const subproductGroup = document.getElementById("subproduct-group");
   const subproductSelect = document.getElementById("id_subproduct");
+  const subproductSearch = document.getElementById("subproduct-search");
+  const pptOptions = JSON.parse(document.getElementById("ppt-options").textContent);
+  const pptFycEl = document.getElementById("ppt-fyc");            // admin-only
+  const pptFyc = pptFycEl ? JSON.parse(pptFycEl.textContent) : null;
+  const mdrtEl = document.getElementById("mdrt-active");
+  const mdrtActive = mdrtEl ? JSON.parse(mdrtEl.textContent) : false;
+  const pptGroup = document.getElementById("ppt-group");
+  const pptSelect = document.getElementById("id_ppt");
+  const pptMargin = document.getElementById("ppt-margin");
+  const pptMarginVal = document.getElementById("ppt-margin-val");
+  const pptMarginDesig = document.getElementById("ppt-margin-desig");
 
   // Second dropdown: shown + required only when the chosen product has
-  // sub-products; otherwise the main product is what gets sold.
+  // sub-products; otherwise the main product is what gets sold. The search box
+  // filters the list (only the active plans appear here in the first place).
   function updateSubproductUI() {
     const kids = productChildren[productSelect.value] || [];
     const prev = subproductSelect ? subproductSelect.value : "";
     if (!subproductSelect) return;
     if (kids.length) {
+      const q = (subproductSearch ? subproductSearch.value : "").trim().toLowerCase();
       subproductSelect.innerHTML = "";
       const blank = document.createElement("option");
       blank.value = ""; blank.textContent = "— Select sub-product —";
       subproductSelect.appendChild(blank);
-      kids.forEach(n => {
+      kids.filter(n => n.toLowerCase().includes(q)).forEach(n => {
         const o = document.createElement("option");
         o.value = n; o.textContent = n;
         if (n === prev) o.selected = true;
@@ -184,7 +216,59 @@ document.addEventListener("DOMContentLoaded", function () {
       subproductSelect.required = false;
       subproductGroup.style.display = "none";
     }
+    updatePptUI();
   }
+
+  // Effective plan sold = the sub-product if one is in play, else the product.
+  function effectivePlan() {
+    if (subproductGroup.style.display !== "none" && subproductSelect && subproductSelect.value) {
+      return subproductSelect.value;
+    }
+    return productSelect.value;
+  }
+
+  // PPT dropdown: shown + required only for PPT-priced plans.
+  function updatePptUI() {
+    const ppts = pptOptions[effectivePlan()] || [];
+    const prev = pptSelect.value;
+    if (ppts.length) {
+      pptSelect.innerHTML = "";
+      const blank = document.createElement("option");
+      blank.value = ""; blank.textContent = "— Select PPT —";
+      pptSelect.appendChild(blank);
+      ppts.forEach(v => {
+        const o = document.createElement("option");
+        o.value = v; o.textContent = "PPT " + v;
+        if (v === prev) o.selected = true;
+        pptSelect.appendChild(o);
+      });
+      pptGroup.style.display = "";
+      pptSelect.required = true;
+    } else {
+      pptSelect.innerHTML = "";
+      pptSelect.required = false;
+      pptGroup.style.display = "none";
+    }
+    updateMargin();
+  }
+
+  // Live FYC margin for the picked plan + PPT, at the active designation.
+  // Admin-only: skipped entirely when the margin data wasn't sent to the page.
+  function updateMargin() {
+    if (!pptFyc || !pptMargin) return;
+    const fyc = (pptFyc[effectivePlan()] || {})[pptSelect.value];
+    if (fyc !== undefined) {
+      pptMarginVal.textContent = fyc;
+      pptMarginDesig.textContent = mdrtActive ? "MDRT rate" : "Advisor rate";
+      pptMargin.style.display = "";
+    } else {
+      pptMargin.style.display = "none";
+    }
+  }
+
+  if (subproductSelect) subproductSelect.addEventListener("change", updatePptUI);
+  if (subproductSearch) subproductSearch.addEventListener("input", updateSubproductUI);
+  pptSelect.addEventListener("change", updateMargin);
 
   const coverAmountGroup = document.getElementById("cover-amount-group");
   const policyTypeGroup = document.getElementById("policy-type-group");

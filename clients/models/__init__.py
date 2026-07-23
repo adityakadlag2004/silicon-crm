@@ -14,6 +14,7 @@ from .hr import (  # noqa: F401
 from .catalog import (  # noqa: F401
     Product,
     ProductMarginSlab,
+    PlanPptRate,
 )
 from .ops import (  # noqa: F401
     ExpenseCategory,

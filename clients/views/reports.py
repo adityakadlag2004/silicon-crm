@@ -726,6 +726,9 @@ def _month_margin_breakdown(year, month):
     """
     approved = Sale.objects.filter(status="approved", date__year=year, date__month=month)
     products = list(Product.objects.all().select_related("parent").order_by("display_order", "name"))
+    # PPT-priced plans carry a per-sale FYC snapshot, so their margin is summed
+    # from the sales, not resolved from a revenue band.
+    ppt_ids = set(Product.objects.filter(ppt_rates__isnull=False).values_list("id", flat=True))
 
     rows = []
     total_rev = Decimal("0")
@@ -741,7 +744,23 @@ def _month_margin_breakdown(year, month):
         )
         matched_pks.append(p.pk)
 
-        if p.is_health:
+        if p.id in ppt_ids:
+            # Each sale's frozen FYC snapshot values its own amount.
+            rev = Decimal("0")
+            amt = Decimal("0")
+            for s_amount, s_pct in base.values_list("amount", "margin_percent_snapshot"):
+                rev += s_amount or Decimal("0")
+                if s_amount and s_pct:
+                    amt += (s_amount * s_pct / Decimal("100"))
+            if rev <= 0:
+                continue
+            amt = amt.quantize(Decimal("0.01"))
+            pct = (amt / rev * Decimal("100")).quantize(Decimal("0.01")) if rev else Decimal("0.00")
+            rows.append({"product": plabel, "policy": "", "revenue": rev,
+                         "margin_percent": pct, "margin_amount": amt})
+            total_rev += rev
+            total_margin += amt
+        elif p.is_health:
             buckets = [("fresh", "Fresh"), ("port", "Port")]
             seen_codes = []
             for code, label in buckets:

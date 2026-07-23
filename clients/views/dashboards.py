@@ -1126,14 +1126,54 @@ def product_management_page(request):
             messages.success(request, f"Margin slab removed from '{pname}'.")
             return redirect("clients:product_management")
 
+        if action == "toggle_mdrt":
+            fs = FirmSettings.get_settings()
+            this_year = FirmSettings.current_mdrt_year()
+            if fs.is_mdrt_active():
+                fs.mdrt_active_year = None
+                messages.success(request, "MDRT turned off — Advisor rates now apply to new sales.")
+            else:
+                fs.mdrt_active_year = this_year
+                messages.success(request, f"MDRT active for {this_year} — MDRT rates apply to new sales until 1 January.")
+            fs.save(update_fields=["mdrt_active_year", "updated_at"])
+            return redirect("clients:product_management")
+
+        if action == "set_active_life_plans":
+            # Bulk "tick what you sell": the checked plans become active, the
+            # rest inactive. Scoped to Life Insurance plans so it never touches
+            # other products.
+            parent = Product.objects.filter(code="LIFE_INS").first()
+            if parent:
+                checked = {int(i) for i in request.POST.getlist("plan_id") if i.isdigit()}
+                for plan in parent.children.all():
+                    active = plan.id in checked
+                    if plan.is_active != active or (active and plan.archived_at):
+                        plan.is_active = active
+                        if active:
+                            plan.archived_at = None
+                            plan.archived_reason = ""
+                        plan.save(update_fields=["is_active", "archived_at",
+                                                 "archived_reason", "updated_at"])
+                messages.success(request, f"{len(checked)} life-insurance plan(s) marked active.")
+            return redirect("clients:product_management")
+
         messages.error(request, "Unsupported action.")
         return redirect("clients:product_management")
 
+    life_parent = Product.objects.filter(code="LIFE_INS").first()
+    life_plan_ids = set(
+        Product.objects.filter(parent__code="LIFE_INS").values_list("id", flat=True)
+    )
+    # Life plans get their own picker below; keep them out of the main table.
     products = (
-        Product.objects.all()
+        Product.objects.exclude(id__in=life_plan_ids)
         .order_by("display_order", "name")
         .select_related("parent")
         .prefetch_related("margin_slabs")
+    )
+    life_plans = (
+        Product.objects.filter(parent__code="LIFE_INS").order_by("name")
+        if life_parent else []
     )
     # Categories a (sub-)product may sit under: top-level products only.
     categories = [p for p in products if not p.parent_id]
@@ -1143,6 +1183,10 @@ def product_management_page(request):
         {
             "products": products,
             "categories": categories,
+            "life_plans": life_plans,
+            "life_active_count": sum(1 for p in life_plans if p.is_active),
+            "mdrt_active": FirmSettings.get_settings().is_mdrt_active(),
+            "mdrt_year": FirmSettings.current_mdrt_year(),
         },
     )
 

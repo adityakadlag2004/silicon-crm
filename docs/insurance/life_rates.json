@@ -1,0 +1,6402 @@
+[
+ {
+  "name": "Smart Value Income Plan (SVIP)",
+  "type": "Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 1.9,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 2.11,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 2.32,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 2.53,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 2.74,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 2.95,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 3.16,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 3.3,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "SVIP"
+ },
+ {
+  "name": "Value Income Plan (VIP)",
+  "type": "Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": 0.15,
+    "ryc3": 0.15,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 1.9,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 2.11,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 2.32,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 2.53,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 2.74,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 2.95,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 3.16,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 3.3,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 2.0,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "VIP"
+ },
+ {
+  "name": "Shubh Flexi Income Plan (SFIP)",
+  "type": "Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 1.9,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 2.11,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 2.32,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 2.53,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 2.74,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 2.95,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 3.16,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 3.3,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "SFIP"
+ },
+ {
+  "name": "Diamond Savings Plan (DSP)",
+  "type": "Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 3.59,
+    "ryc3": 3.59,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 3.8,
+    "ryc3": 3.8,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 4.01,
+    "ryc3": 4.01,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 5.92,
+    "ryc3": 5.92,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 6.13,
+    "ryc3": 6.13,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 6.34,
+    "ryc3": 6.34,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 6.55,
+    "ryc3": 6.55,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 6.69,
+    "ryc3": 6.69,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   }
+  ],
+  "code": "DSP"
+ },
+ {
+  "name": "Diamond Savings Plan Plus (DSP Plus)",
+  "type": "Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 3.59,
+    "ryc3": 3.59,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 3.8,
+    "ryc3": 3.8,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 4.01,
+    "ryc3": 4.01,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 5.92,
+    "ryc3": 5.92,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 6.13,
+    "ryc3": 6.13,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 6.34,
+    "ryc3": 6.34,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 6.55,
+    "ryc3": 6.55,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 6.69,
+    "ryc3": 6.69,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   }
+  ],
+  "code": "DSP_PLUS"
+ },
+ {
+  "name": "Shubh Maha Life Plus & Shubh Maha Life Plus Health (SMLP & SMLPH)",
+  "type": "Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 5.29,
+    "ryc3": 5.29,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 5.5,
+    "ryc3": 5.5,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 5.71,
+    "ryc3": 5.71,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 5.92,
+    "ryc3": 5.92,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 6.13,
+    "ryc3": 6.13,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 6.34,
+    "ryc3": 6.34,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 6.55,
+    "ryc3": 6.55,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 6.69,
+    "ryc3": 6.69,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "SMLP_SMLPH"
+ },
+ {
+  "name": "Shubh Maha Life Gold & Shubh Maha Life Gold Health (SMLG & SMLGH)",
+  "type": "Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 5.29,
+    "ryc3": 5.29,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 5.5,
+    "ryc3": 5.5,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 5.71,
+    "ryc3": 5.71,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 5.92,
+    "ryc3": 5.92,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 6.13,
+    "ryc3": 6.13,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 6.34,
+    "ryc3": 6.34,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 6.55,
+    "ryc3": 6.55,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 6.69,
+    "ryc3": 6.69,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "SMLG_SMLGH"
+ },
+ {
+  "name": "Fortune Guarantee Supreme - Immediate Income | Deferred Inocme ROP or NROP | Power of 6 | Premium Offset (FG Supreme)",
+  "type": "Non-Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 1.9,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 2.11,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 2.32,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 2.53,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 2.74,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 2.95,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 3.16,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 3.3,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "FG_SUPREME"
+ },
+ {
+  "name": "Fortune Guarantee Secure - Regular Income Plus (FG Secure)",
+  "type": "Non-Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 3.59,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 3.8,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 4.01,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 4.22,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 4.43,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 4.64,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 4.85,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 4.99,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "FG_SECURE"
+ },
+ {
+  "name": "Fortune Guarantee Secure - Early Income Plus & Regular Income (FG Secure)",
+  "type": "Non-Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 1.9,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 2.11,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 2.32,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 2.53,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 2.74,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 2.95,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 3.16,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 3.3,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "FG_SECURE_EARLY"
+ },
+ {
+  "name": "Smart Income Plus - Regular Income & Endowment (SIP)",
+  "type": "Non-Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 3.59,
+    "ryc3": 3.59,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 3.8,
+    "ryc3": 3.8,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 4.01,
+    "ryc3": 4.01,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 5.92,
+    "ryc3": 5.92,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 6.13,
+    "ryc3": 6.13,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 6.34,
+    "ryc3": 6.34,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 6.55,
+    "ryc3": 6.55,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 6.69,
+    "ryc3": 6.69,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 2.54,
+    "ryc3": 2.54,
+    "ryc4": 2.54,
+    "ryc5": 2.54
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 4.24,
+    "ryc3": 4.24,
+    "ryc4": 4.24,
+    "ryc5": 4.24
+   }
+  ],
+  "code": "SMART_INCOME_PLUS"
+ },
+ {
+  "name": "Fortune Guarantee Plus (FG Plus)",
+  "type": "Non-Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 3.59,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 3.8,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 4.01,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 4.22,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 4.43,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 4.64,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 4.85,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 4.99,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "FG_PLUS"
+ },
+ {
+  "name": "Guaranteed Return Income Plan (GRIP)",
+  "type": "Non-Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 3.59,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 3.8,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 4.01,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 4.22,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 4.43,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 4.64,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 4.85,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 4.99,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "GRIP"
+ },
+ {
+  "name": "Fortune Guarantee (FG)",
+  "type": "Non-Par",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 3.59,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 3.8,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 4.01,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 4.22,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 4.43,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 4.64,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 4.85,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 4.99,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "FG"
+ },
+ {
+  "name": "FG Pension (Op 1)",
+  "type": "Annuity",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   }
+  ],
+  "code": "OP_1"
+ },
+ {
+  "name": "FG Pension (Op 2)",
+  "type": "Annuity",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   }
+  ],
+  "code": "OP_2"
+ },
+ {
+  "name": "FG Pension - GA 1 (Option 3)",
+  "type": "Annuity",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 2.74,
+    "ryc3": 2.74,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 2.95,
+    "ryc3": 2.95,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 3.16,
+    "ryc3": 3.16,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 3.37,
+    "ryc3": 3.37,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 3.58,
+    "ryc3": 3.58,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 3.79,
+    "ryc3": 3.79,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 4.0,
+    "ryc3": 4.0,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 4.14,
+    "ryc3": 4.14,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   }
+  ],
+  "code": "OPTION_3"
+ },
+ {
+  "name": "FG Pension - GA 2 (Option 4)",
+  "type": "Annuity",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "mdrt",
+    "fyc": 5.16,
+    "ryc2": 2.11,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "mdrt",
+    "fyc": 7.74,
+    "ryc2": 2.32,
+    "ryc3": 2.32,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "mdrt",
+    "fyc": 10.32,
+    "ryc2": 2.53,
+    "ryc3": 2.53,
+    "ryc4": 1.69,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 2.74,
+    "ryc3": 2.74,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 2.95,
+    "ryc3": 2.95,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 3.16,
+    "ryc3": 3.16,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 3.37,
+    "ryc3": 3.37,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 3.58,
+    "ryc3": 3.58,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 3.79,
+    "ryc3": 3.79,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 4.0,
+    "ryc3": 4.0,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 4.14,
+    "ryc3": 4.14,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "advisor",
+    "fyc": 2.4,
+    "ryc2": 1.69,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "advisor",
+    "fyc": 3.6,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "advisor",
+    "fyc": 4.8,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   }
+  ],
+  "code": "OPTION_4"
+ },
+ {
+  "name": "Fortune Guarantee Retirement Ready (FGRR)",
+  "type": "Pension",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "mdrt",
+    "fyc": 5.16,
+    "ryc2": 2.96,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "mdrt",
+    "fyc": 7.74,
+    "ryc2": 3.17,
+    "ryc3": 1.48,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "mdrt",
+    "fyc": 10.32,
+    "ryc2": 3.38,
+    "ryc3": 1.69,
+    "ryc4": 0.85,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 3.59,
+    "ryc3": 1.9,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 3.8,
+    "ryc3": 2.11,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 4.01,
+    "ryc3": 2.32,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 4.22,
+    "ryc3": 2.53,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 4.43,
+    "ryc3": 2.74,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 4.64,
+    "ryc3": 2.95,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 4.85,
+    "ryc3": 3.16,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 4.99,
+    "ryc3": 3.3,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "advisor",
+    "fyc": 2.4,
+    "ryc2": 2.54,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "advisor",
+    "fyc": 3.6,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "advisor",
+    "fyc": 4.8,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 2.54,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "FGRR"
+ },
+ {
+  "name": "Saral Pension",
+  "type": "Annuity",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   }
+  ],
+  "code": "SARAL_PENSION"
+ },
+ {
+  "name": "Smart Annuity Plan (SAP)",
+  "type": "Pension",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 4.7,
+    "ryc2": 4.7,
+    "ryc3": 4.7,
+    "ryc4": 4.7,
+    "ryc5": 4.7
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 4.7,
+    "ryc2": 4.7,
+    "ryc3": 4.7,
+    "ryc4": 4.7,
+    "ryc5": 4.7
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 5.6,
+    "ryc2": 5.6,
+    "ryc3": 5.6,
+    "ryc4": 5.6,
+    "ryc5": 5.6
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 5.6,
+    "ryc2": 5.6,
+    "ryc3": 5.6,
+    "ryc4": 5.6,
+    "ryc5": 5.6
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 6.45,
+    "ryc2": 6.45,
+    "ryc3": 6.45,
+    "ryc4": 6.45,
+    "ryc5": 6.45
+   },
+   {
+    "ppt": "10+",
+    "desig": "mdrt",
+    "fyc": 7.3,
+    "ryc2": 7.3,
+    "ryc3": 7.3,
+    "ryc4": 7.3,
+    "ryc5": 7.3
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 2.2,
+    "ryc2": 4.7,
+    "ryc3": 4.7,
+    "ryc4": 4.7,
+    "ryc5": 4.7
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 2.2,
+    "ryc2": 4.7,
+    "ryc3": 4.7,
+    "ryc4": 4.7,
+    "ryc5": 4.7
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 2.6,
+    "ryc2": 5.6,
+    "ryc3": 5.6,
+    "ryc4": 5.6,
+    "ryc5": 5.6
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 2.6,
+    "ryc2": 5.6,
+    "ryc3": 5.6,
+    "ryc4": 5.6,
+    "ryc5": 5.6
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 3.0,
+    "ryc2": 6.45,
+    "ryc3": 6.45,
+    "ryc4": 6.45,
+    "ryc5": 6.45
+   },
+   {
+    "ppt": "10+",
+    "desig": "advisor",
+    "fyc": 3.4,
+    "ryc2": 7.3,
+    "ryc3": 7.3,
+    "ryc4": 7.3,
+    "ryc5": 7.3
+   }
+  ],
+  "code": "SAP"
+ },
+ {
+  "name": "Sampoorna Raksha Promise (SR Promise)",
+  "type": "Term",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "mdrt",
+    "fyc": 8.5,
+    "ryc2": 2.44,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "mdrt",
+    "fyc": 8.5,
+    "ryc2": 2.44,
+    "ryc3": 2.44,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "mdrt",
+    "fyc": 8.5,
+    "ryc2": 2.44,
+    "ryc3": 2.44,
+    "ryc4": 1.69,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 4.69,
+    "ryc3": 4.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 4.69,
+    "ryc3": 4.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 4.69,
+    "ryc3": 4.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "advisor",
+    "fyc": 4.0,
+    "ryc2": 1.69,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "advisor",
+    "fyc": 4.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "advisor",
+    "fyc": 4.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 17.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 17.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 17.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   }
+  ],
+  "code": "SR_PROMISE"
+ },
+ {
+  "name": "Maha Raksha Supreme Select (MRSS)",
+  "type": "Term",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "mdrt",
+    "fyc": 6.8,
+    "ryc2": 2.29,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "mdrt",
+    "fyc": 6.8,
+    "ryc2": 2.29,
+    "ryc3": 2.29,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "mdrt",
+    "fyc": 6.8,
+    "ryc2": 2.29,
+    "ryc3": 2.29,
+    "ryc4": 1.69,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 13.0,
+    "ryc2": 2.69,
+    "ryc3": 2.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 13.0,
+    "ryc2": 2.69,
+    "ryc3": 2.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 13.0,
+    "ryc2": 2.69,
+    "ryc3": 2.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 13.0,
+    "ryc2": 2.69,
+    "ryc3": 2.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 13.0,
+    "ryc2": 2.69,
+    "ryc3": 2.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 25.0,
+    "ryc2": 4.19,
+    "ryc3": 4.19,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "advisor",
+    "fyc": 3.0,
+    "ryc2": 1.69,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "advisor",
+    "fyc": 3.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "advisor",
+    "fyc": 3.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 5.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 5.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 5.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 5.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 5.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 8.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 8.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 10.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   }
+  ],
+  "code": "MRSS"
+ },
+ {
+  "name": "Saral Jeevan Bima (SJB)",
+  "type": "Term",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 3.69,
+    "ryc3": 3.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 4.69,
+    "ryc3": 4.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 4.69,
+    "ryc3": 4.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 4.69,
+    "ryc3": 4.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 13.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 17.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 17.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 17.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   }
+  ],
+  "code": "SJB"
+ },
+ {
+  "name": "PR Life Pro PR Life Pro+ PR Life Advantage+ PR Life Growth+ PR Life Maxima+ (SSR Supreme) Base (ONLINE / OFFLINE)",
+  "type": "ILP",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "SSR_SUPREME"
+ },
+ {
+  "name": "PR Life PR Plus 2.0 (SSR Supreme) Base (ONLINE / OFFLINE)",
+  "type": "New ILP",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 15.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 18.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 21.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 24.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 27.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 30.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 33.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 35.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "SSR_SUPREME_2"
+ },
+ {
+  "name": "Pro-Fit (Health Pro)",
+  "type": "Health",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "HEALTH_PRO"
+ },
+ {
+  "name": "Pro-Fit (Vita Health)",
+  "type": "Health",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   }
+  ],
+  "code": "VITA_HEALTH"
+ },
+ {
+  "name": "Shubh Health Plus Shubh Health Pro Shubh Health Criti (Health SIP)",
+  "type": "Health",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": null,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "HEALTH_SIP"
+ },
+ {
+  "name": "Fortune Pro | Fortune Maxima | Wealth Pro | Wealth Maxima | Smart Fortune Plus | Smart SIP | Premier SIP | Smart Pension Secure | Premier Pension Secure (WNBP >= 10 Lacs) SSR+ (Any Premium)",
+  "type": "ULIP",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 4.25,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "ANY_PREMIUM"
+ },
+ {
+  "name": "Health Buddy ROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 6.36,
+    "ryc3": 6.36,
+    "ryc4": 6.36,
+    "ryc5": 6.36
+   }
+  ],
+  "code": "HEALTH_BUDDY_ROP"
+ },
+ {
+  "name": "Health Buddy NROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   }
+  ],
+  "code": "HEALTH_BUDDY_NROP"
+ },
+ {
+  "name": "Benefit Protection Rider (BPR) NROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 21.5,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 21.5,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 21.5,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 21.5,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 21.5,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 34.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 10.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 10.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 10.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 10.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   }
+  ],
+  "code": "BPR"
+ },
+ {
+  "name": "Riders with Par Products NROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   }
+  ],
+  "code": "RIDERS_WITH_PAR_PROD"
+ },
+ {
+  "name": "Riders with Par Products ROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   }
+  ],
+  "code": "RIDERS_WITH_PAR_PROD_ROP"
+ },
+ {
+  "name": "Riders with Non-Par Products NROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   }
+  ],
+  "code": "RIDERS_WITH_NON_PAR"
+ },
+ {
+  "name": "Riders with Non-Par Products ROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   }
+  ],
+  "code": "RIDERS_WITH_NON_PAR_ROP"
+ },
+ {
+  "name": "Riders with Term Products NROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 8.47,
+    "ryc3": 8.47,
+    "ryc4": 8.47,
+    "ryc5": 8.47
+   }
+  ],
+  "code": "RIDERS_WITH_TERM_PRO"
+ },
+ {
+  "name": "Riders with Term Products ROP",
+  "type": "Rider",
+  "rates": [
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 34.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 16.0,
+    "ryc2": 0.85,
+    "ryc3": 0.85,
+    "ryc4": 0.85,
+    "ryc5": 0.85
+   }
+  ],
+  "code": "RIDERS_WITH_TERM_PRO_ROP"
+ },
+ {
+  "name": "Shubh Flexi Pension Plan (SFPP)",
+  "type": "Annuity",
+  "rates": [
+   {
+    "ppt": "SP",
+    "desig": "mdrt",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "mdrt",
+    "fyc": 5.16,
+    "ryc2": 2.11,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "mdrt",
+    "fyc": 7.74,
+    "ryc2": 2.32,
+    "ryc3": 2.32,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "mdrt",
+    "fyc": 10.32,
+    "ryc2": 2.53,
+    "ryc3": 2.53,
+    "ryc4": 1.69,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "mdrt",
+    "fyc": 12.9,
+    "ryc2": 2.74,
+    "ryc3": 2.74,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "mdrt",
+    "fyc": 15.48,
+    "ryc2": 2.95,
+    "ryc3": 2.95,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "mdrt",
+    "fyc": 18.06,
+    "ryc2": 3.16,
+    "ryc3": 3.16,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "mdrt",
+    "fyc": 20.64,
+    "ryc2": 3.37,
+    "ryc3": 3.37,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "mdrt",
+    "fyc": 23.22,
+    "ryc2": 3.58,
+    "ryc3": 3.58,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "mdrt",
+    "fyc": 25.8,
+    "ryc2": 3.79,
+    "ryc3": 3.79,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "mdrt",
+    "fyc": 28.38,
+    "ryc2": 4.0,
+    "ryc3": 4.0,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "mdrt",
+    "fyc": 30.1,
+    "ryc2": 4.14,
+    "ryc3": 4.14,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "SP",
+    "desig": "advisor",
+    "fyc": 1.7,
+    "ryc2": null,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "2",
+    "desig": "advisor",
+    "fyc": 2.4,
+    "ryc2": 1.69,
+    "ryc3": null,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "3",
+    "desig": "advisor",
+    "fyc": 3.6,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": null,
+    "ryc5": null
+   },
+   {
+    "ppt": "4",
+    "desig": "advisor",
+    "fyc": 4.8,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": null
+   },
+   {
+    "ppt": "5",
+    "desig": "advisor",
+    "fyc": 6.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "6",
+    "desig": "advisor",
+    "fyc": 7.2,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "7",
+    "desig": "advisor",
+    "fyc": 8.4,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "8",
+    "desig": "advisor",
+    "fyc": 9.6,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "9",
+    "desig": "advisor",
+    "fyc": 10.8,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "10",
+    "desig": "advisor",
+    "fyc": 12.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "11",
+    "desig": "advisor",
+    "fyc": 13.2,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   },
+   {
+    "ppt": "12+",
+    "desig": "advisor",
+    "fyc": 14.0,
+    "ryc2": 1.69,
+    "ryc3": 1.69,
+    "ryc4": 1.69,
+    "ryc5": 1.69
+   }
+  ],
+  "code": "SFPP"
+ }
+]

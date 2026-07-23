@@ -74,6 +74,19 @@ class Sale(models.Model):
     # on the Insurance Tracker and to future renewals of the same policy.
     policy_number = models.CharField(max_length=60, blank=True, db_index=True)
 
+    # PPT-priced life plans: the Premium Paying Term chosen, and the FYC (sale
+    # margin %) resolved from it at sale time — using Advisor or MDRT rates per
+    # the toggle then in effect. margin_percent_snapshot is FROZEN: flipping the
+    # MDRT toggle later never rewrites past sales (reports read this snapshot).
+    ppt = models.CharField(
+        max_length=4, blank=True, default="",
+        help_text="Premium Paying Term for PPT-priced life plans (e.g. '10', '12+', 'SP').",
+    )
+    margin_percent_snapshot = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True,
+        help_text="FYC % locked in at sale time for PPT-priced plans.",
+    )
+
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     incentive_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
     # Records which campaign (if any) awarded the points on this sale; null = regular mechanism.

@@ -17,6 +17,88 @@
 
 <p class="text-muted mb-3">Create, edit, archive, and restore products. Archived products remain available in historical records.</p>
 
+{% if life_plans %}
+<div class="ki-card mb-3">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+      <h3 class="ki-section-title mb-0" style="font-size:1.05rem;">
+        <i class="bi bi-award"></i> MDRT Status
+        {% if mdrt_active %}<span class="badge bg-success">Active — {{ mdrt_year }}</span>
+        {% else %}<span class="badge bg-secondary">Advisor rates</span>{% endif %}
+      </h3>
+      <p class="text-muted small mb-0 mt-1">
+        {% if mdrt_active %}
+          MDRT commission rates apply to new sales. Reverts to Advisor rates automatically on 1 January {{ mdrt_year|add:1 }}.
+        {% else %}
+          Advisor rates apply. Turn on once you've qualified for MDRT this year — MDRT rates then apply to new sales for {{ mdrt_year }}.
+        {% endif %}
+        Past sales keep the rate they were booked at.
+      </p>
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="toggle_mdrt">
+      {% if mdrt_active %}
+        <button type="submit" class="ki-btn ki-btn-secondary"><i class="bi bi-toggle-on"></i> Turn MDRT off</button>
+      {% else %}
+        <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-toggle-off"></i> I've achieved MDRT for {{ mdrt_year }}</button>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<div class="ki-card mb-3">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+    <h3 class="ki-section-title mb-0" style="font-size:1.05rem;">
+      <i class="bi bi-shield-check"></i> Life Insurance Plans
+      <span class="badge bg-success">{{ life_active_count }} active</span>
+    </h3>
+    <input type="search" id="planSearch" class="form-control form-control-sm"
+           style="max-width:260px;" placeholder="Search plan or code…"
+           aria-label="Search life insurance plans">
+  </div>
+  <p class="text-muted small mb-2">Tick the plans you actually sell. Only ticked
+    plans appear in the sale product dropdown. Margins come from the PPT chart —
+    the rest stay filed here but hidden.</p>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="set_active_life_plans">
+    <div class="ki-table-scroll" style="max-height:340px;overflow:auto;border:1px solid var(--ki-border,#e5e7eb);border-radius:8px;">
+      <table class="ki-table" id="planPicker">
+        <tbody>
+        {% for plan in life_plans %}
+          <tr data-search="{{ plan.name|lower }} {{ plan.code|lower }}">
+            <td style="width:2.4rem;">
+              <input class="form-check-input plan-tick" type="checkbox" name="plan_id"
+                     value="{{ plan.id }}" id="plan{{ plan.id }}"
+                     {% if plan.is_active %}checked{% endif %}
+                     aria-label="Sell {{ plan.name }}">
+            </td>
+            <td><label for="plan{{ plan.id }}" class="mb-0">{{ plan.name }}</label></td>
+            <td><span class="text-muted small">{{ plan.code }}</span></td>
+            <td><span class="text-muted small">{{ plan.ppt_rates.count }} PPT rates</span></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex justify-content-end mt-2">
+      <button type="submit" class="ki-btn ki-btn-primary">
+        <i class="bi bi-check2-square"></i> Save active plans
+      </button>
+    </div>
+  </form>
+</div>
+<script>
+  document.getElementById('planSearch').addEventListener('input', function () {
+    var q = this.value.trim().toLowerCase();
+    document.querySelectorAll('#planPicker tbody tr').forEach(function (tr) {
+      tr.style.display = tr.dataset.search.indexOf(q) === -1 ? 'none' : '';
+    });
+  });
+</script>
+{% endif %}
+
 <div class="ki-card">
   <div class="ki-table-wrap">
     <table class="ki-table">

@@ -31,6 +31,24 @@ def recompute_sibling_sales(sale):
         sibling.save()  # save() recomputes points
 
 
+def snapshot_ppt_margin(sale):
+    """Lock in the FYC (sale margin %) for a PPT-priced life plan at the current
+    designation. Called on create and edit so the sale carries a frozen margin —
+    a later MDRT toggle change never rewrites it. No-op for non-PPT products."""
+    from ..models import FirmSettings
+
+    if sale.product_ref_id and sale.ppt:
+        mdrt = FirmSettings.get_settings().is_mdrt_active()
+        fyc = sale.product_ref.fyc_for_ppt(sale.ppt, mdrt=mdrt)
+        if fyc is not None:
+            sale.margin_percent_snapshot = fyc
+            return
+    # No PPT (or no matching rate) → clear any stale snapshot.
+    sale.margin_percent_snapshot = None
+    if not (sale.product_ref_id and sale.product_ref.has_ppt_rates):
+        sale.ppt = ""
+
+
 def finalize_new_sale(sale, actor, *, auto_approve):
     """Apply the shared creation rules to an unsaved Sale and persist it.
 
@@ -41,6 +59,8 @@ def finalize_new_sale(sale, actor, *, auto_approve):
     """
     if sale.product and not sale.product_ref_id:
         sale.product_ref = Product.objects.filter(name=sale.product).first()
+
+    snapshot_ppt_margin(sale)
 
     if auto_approve:
         sale.status = Sale.STATUS_APPROVED

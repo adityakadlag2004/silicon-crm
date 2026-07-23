@@ -26,25 +26,41 @@ from .helpers import get_manager_access, parse_date_param, success_with_drive_li
 logger = logging.getLogger(__name__)
 
 
-def _sale_product_meta():
+def _sale_product_meta(show_margin=False):
     # Includes sub-products: is_health / is_insurance are parent-aware, so a
     # child of Health/Life reports the same and toggles the same form fields.
-    from ..forms import _product_children_map
+    # Margin (FYC) figures are ADMIN-ONLY: they're only put on the page (and only
+    # rendered) when show_margin is true, so a non-admin sale page never even
+    # ships the rates in its source.
+    from ..forms import _product_children_map, _ppt_options_map
+    from ..models import FirmSettings, PlanPptRate
     products = list(
         Product.objects.filter(domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH])
         .select_related("parent")
     )
-    return {
+    meta = {
         "health_product_names": sorted({p.name for p in products if p.is_health}),
         "insurance_product_names": sorted({p.name for p in products if p.is_insurance}),
         "product_children": _product_children_map(),
+        "ppt_options": _ppt_options_map(),
+        "show_margin": show_margin,
     }
+    if show_margin:
+        mdrt = FirmSettings.get_settings().is_mdrt_active()
+        # FYC per (plan name, ppt) for the currently-active designation.
+        desig = PlanPptRate.DESIG_MDRT if mdrt else PlanPptRate.DESIG_ADVISOR
+        fyc_by_plan = {}
+        for r in PlanPptRate.objects.filter(designation=desig).exclude(fyc__isnull=True).select_related("product"):
+            fyc_by_plan.setdefault(r.product.name, {})[r.ppt] = str(r.fyc)
+        meta["ppt_fyc"] = fyc_by_plan
+        meta["mdrt_active"] = mdrt
+    return meta
 
 
 @login_required
 def add_sale(request):
-    product_meta = _sale_product_meta()
     is_admin_user = permissions.is_admin(request.user)
+    product_meta = _sale_product_meta(show_margin=is_admin_user)
     if request.method == "POST":
         form = AdminSaleForm(request.POST)
         if form.is_valid():
@@ -256,7 +272,7 @@ def admin_add_sale(request):
     else:
         form = AdminSaleForm()
 
-    return render(request, "sales/admin_add_sale.html", {"form": form, **_sale_product_meta()})
+    return render(request, "sales/admin_add_sale.html", {"form": form, **_sale_product_meta(show_margin=True)})
 
 
 @login_required
@@ -585,6 +601,7 @@ def edit_sale(request, sale_id):
             updated = form.save(commit=False)
             if updated.product:
                 updated.product_ref = Product.objects.filter(name=updated.product).first()
+            sales_service.snapshot_ppt_margin(updated)
             # Edits by anyone other than an admin invalidate a prior approval:
             # the sale goes back to pending so an admin re-reviews the new numbers.
             needs_reapproval = not is_admin_user and updated.status != Sale.STATUS_PENDING
@@ -604,7 +621,7 @@ def edit_sale(request, sale_id):
     else:
         form = EditSaleForm(instance=sale)
 
-    return render(request, "sales/edit_sale.html", {"form": form, "sale": sale, **_sale_product_meta()})
+    return render(request, "sales/edit_sale.html", {"form": form, "sale": sale, **_sale_product_meta(show_margin=is_admin_user)})
 
 
 @login_required

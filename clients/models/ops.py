@@ -153,8 +153,15 @@ class FirmSettings(models.Model):
         help_text="Primary brand color (hex format, e.g., #E5B740)"
     )
     
+    # MDRT qualification: the calendar year (e.g. 2026) the agency has achieved
+    # MDRT for. MDRT runs Jan–Dec. When this equals the current calendar year,
+    # MDRT commission rates apply to new sales; otherwise Advisor rates. Stored
+    # as a year rather than a boolean so it auto-reverts every 1 January with no
+    # cron — see is_mdrt_active().
+    mdrt_active_year = models.IntegerField(null=True, blank=True)
+
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         verbose_name = "Firm Settings"
         verbose_name_plural = "Firm Settings"
@@ -173,3 +180,15 @@ class FirmSettings(models.Model):
         """Get or create the singleton settings instance."""
         settings, created = cls.objects.get_or_create(pk=1)
         return settings
+
+    @staticmethod
+    def current_mdrt_year(today=None):
+        """The calendar year MDRT is measured over (MDRT runs Jan–Dec)."""
+        from django.utils import timezone
+        return (today or timezone.localdate()).year
+
+    def is_mdrt_active(self, today=None):
+        """True only during the calendar year MDRT was stamped for. Reverts to
+        Advisor rates automatically on 1 January — no cron."""
+        return (self.mdrt_active_year is not None
+                and self.mdrt_active_year == self.current_mdrt_year(today))

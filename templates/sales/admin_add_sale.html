@@ -60,8 +60,20 @@
         </div>
         <div class="col-md-6" id="subproduct-group" style="display:none;">
           <label for="id_subproduct" class="form-label fw-semibold">Sub-product <span class="text-danger">*</span></label>
+          <input type="search" id="subproduct-search" class="form-control mb-1" placeholder="Type to search…" autocomplete="off" aria-label="Search sub-products">
           {{ form.subproduct }}
           {% if form.subproduct.errors %}<div class="text-danger small mt-1">{{ form.subproduct.errors|striptags }}</div>{% endif %}
+        </div>
+        <div class="col-md-6" id="ppt-group" style="display:none;">
+          <label for="id_ppt" class="form-label fw-semibold">Premium Paying Term (PPT) <span class="text-danger">*</span></label>
+          {{ form.ppt }}
+          {% if form.ppt.errors %}<div class="text-danger small mt-1">{{ form.ppt.errors|striptags }}</div>{% endif %}
+          <div id="ppt-margin" class="mt-2" style="display:none;">
+            <span class="badge bg-success" style="font-size:.85rem;">
+              <i class="bi bi-graph-up-arrow"></i> Margin (FYC): <strong id="ppt-margin-val"></strong>%
+            </span>
+            <span class="text-muted small ms-1" id="ppt-margin-desig"></span>
+          </div>
         </div>
         <div class="col-md-6">
           <label for="id_amount" class="form-label fw-semibold">Business Amount (₹) <span class="text-danger">*</span></label>
@@ -274,6 +286,68 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 });
+</script>
+
+{{ ppt_options|json_script:"ppt-options" }}
+{{ ppt_fyc|json_script:"ppt-fyc" }}
+{{ mdrt_active|json_script:"mdrt-active" }}
+<script>
+// PPT-priced life plans: pick a plan then a Premium Paying Term, and show the
+// FYC (sale margin) live at the active designation. Self-contained — keys off
+// the stable field IDs, so it rides alongside each sale form's own cascade JS.
+(function () {
+  const productSelect = document.getElementById("id_product");
+  const subproductSelect = document.getElementById("id_subproduct");
+  const subproductGroup = document.getElementById("subproduct-group");
+  const subproductSearch = document.getElementById("subproduct-search");
+  const pptSelect = document.getElementById("id_ppt");
+  const pptGroup = document.getElementById("ppt-group");
+  if (!pptSelect || !productSelect) return;
+  const pptOptions = JSON.parse(document.getElementById("ppt-options").textContent);
+  const pptFyc = JSON.parse(document.getElementById("ppt-fyc").textContent);
+  const mdrtActive = JSON.parse(document.getElementById("mdrt-active").textContent);
+  const pptMargin = document.getElementById("ppt-margin");
+  const pptMarginVal = document.getElementById("ppt-margin-val");
+  const pptMarginDesig = document.getElementById("ppt-margin-desig");
+
+  function effectivePlan() {
+    if (subproductGroup && subproductGroup.style.display !== "none" && subproductSelect && subproductSelect.value) {
+      return subproductSelect.value;
+    }
+    return productSelect.value;
+  }
+  function updatePptUI() {
+    const ppts = pptOptions[effectivePlan()] || [];
+    const prev = pptSelect.value;
+    if (ppts.length) {
+      pptSelect.innerHTML = "";
+      const b = document.createElement("option"); b.value = ""; b.textContent = "— Select PPT —"; pptSelect.appendChild(b);
+      ppts.forEach(v => { const o = document.createElement("option"); o.value = v; o.textContent = "PPT " + v; if (v === prev) o.selected = true; pptSelect.appendChild(o); });
+      pptGroup.style.display = ""; pptSelect.required = true;
+    } else {
+      pptSelect.innerHTML = ""; pptSelect.required = false; pptGroup.style.display = "none";
+    }
+    updateMargin();
+  }
+  function updateMargin() {
+    const fyc = (pptFyc[effectivePlan()] || {})[pptSelect.value];
+    if (fyc !== undefined) {
+      pptMarginVal.textContent = fyc;
+      pptMarginDesig.textContent = mdrtActive ? "MDRT rate" : "Advisor rate";
+      pptMargin.style.display = "";
+    } else { pptMargin.style.display = "none"; }
+  }
+  if (subproductSearch && subproductSelect) {
+    subproductSearch.addEventListener("input", function () {
+      const q = this.value.trim().toLowerCase();
+      Array.from(subproductSelect.options).forEach(o => { if (o.value) o.hidden = o.textContent.toLowerCase().indexOf(q) === -1; });
+    });
+  }
+  productSelect.addEventListener("change", () => setTimeout(updatePptUI, 0));
+  if (subproductSelect) subproductSelect.addEventListener("change", updatePptUI);
+  pptSelect.addEventListener("change", updateMargin);
+  setTimeout(updatePptUI, 0);
+})();
 </script>
 
 {% endblock %}

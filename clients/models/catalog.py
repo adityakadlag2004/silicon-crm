@@ -121,6 +121,71 @@ class Product(models.Model):
             return slab.margin_percent
         return self.margin_percent
 
+    @property
+    def has_ppt_rates(self):
+        """True for plans whose margin is driven by Premium Paying Term."""
+        return self.ppt_rates.exists()
+
+    def ppt_choices(self, mdrt=False):
+        """[(ppt, fyc)] for the active designation, in the chart's PPT order."""
+        desig = PlanPptRate.DESIG_MDRT if mdrt else PlanPptRate.DESIG_ADVISOR
+        rows = self.ppt_rates.filter(designation=desig).exclude(fyc__isnull=True)
+        return [(r.ppt, r.fyc) for r in sorted(rows, key=_ppt_sort_key)]
+
+    def fyc_for_ppt(self, ppt, mdrt=False):
+        """The FYC (sale margin %) for a PPT at the active designation, or None."""
+        desig = PlanPptRate.DESIG_MDRT if mdrt else PlanPptRate.DESIG_ADVISOR
+        row = self.ppt_rates.filter(designation=desig, ppt=str(ppt)).first()
+        return row.fyc if row else None
+
+
+def _ppt_sort_key(rate):
+    """SP first, then numeric PPT ('12+' sorts as 12)."""
+    p = (rate.ppt if hasattr(rate, "ppt") else rate).strip()
+    if p.upper() == "SP":
+        return (0, 0)
+    return (1, int(p.rstrip("+") or 0))
+
+
+class PlanPptRate(models.Model):
+    """Commission rate for a life-insurance plan at a given Premium Paying Term.
+
+    Sourced from the insurer's Agency FYC-RYC chart (docs/insurance/). FYC (first
+    year commission %) is the sale margin and rises with PPT. Rates are stored per
+    designation — Advisor by default, MDRT when the agency has qualified for the
+    financial year (see FirmSettings.is_mdrt_active). Renewal (RYC) rates are the
+    without-rider figures; the with-rider distinction only moves MDRT rider rows
+    and is intentionally not modelled.
+    """
+
+    DESIG_ADVISOR = "advisor"
+    DESIG_MDRT = "mdrt"
+    DESIG_CHOICES = [(DESIG_ADVISOR, "Advisor"), (DESIG_MDRT, "MDRT")]
+
+    product = models.ForeignKey("Product", on_delete=models.CASCADE, related_name="ppt_rates")
+    designation = models.CharField(max_length=10, choices=DESIG_CHOICES, default=DESIG_ADVISOR)
+    ppt = models.CharField(
+        max_length=4,
+        help_text='Premium Paying Term: "SP" (single premium), or years like "5", "12+".',
+    )
+    fyc = models.DecimalField(
+        "First-year commission %", max_digits=6, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    ryc_2nd = models.DecimalField("Renewal % (2nd yr)", max_digits=6, decimal_places=2, null=True, blank=True)
+    ryc_3rd = models.DecimalField("Renewal % (3rd yr)", max_digits=6, decimal_places=2, null=True, blank=True)
+    ryc_4th = models.DecimalField("Renewal % (4th yr)", max_digits=6, decimal_places=2, null=True, blank=True)
+    ryc_5plus = models.DecimalField("Renewal % (5+ yr)", max_digits=6, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Plan PPT Rate"
+        verbose_name_plural = "Plan PPT Rates"
+        unique_together = [("product", "designation", "ppt")]
+        ordering = ["product", "designation", "ppt"]
+
+    def __str__(self):
+        return f"{self.product.code} {self.get_designation_display()} PPT {self.ppt}: {self.fyc}%"
+
 
 class ProductMarginSlab(models.Model):
     """Revenue-band margin override for a product.

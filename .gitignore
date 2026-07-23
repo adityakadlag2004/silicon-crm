@@ -40,3 +40,6 @@ Thumbs.db
 
 # UI reference screenshots (competitor/design refs — local only, never committed)
 design-refs/
+
+# Raw insurer chart uploads (parsed into life_rates.json)
+docs/insurance/uploads/

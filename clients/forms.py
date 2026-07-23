@@ -5,7 +5,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django_select2.forms import ModelSelect2Widget
 from django.forms import inlineformset_factory
-from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings, Renewal, Product
+from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings, Renewal, Product, PlanPptRate
 
 # Indian PAN: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).
 PAN_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]")
@@ -66,11 +66,35 @@ def _product_children_map():
     return m
 
 
+def _ppt_choices():
+    """All PPT values that appear on any plan, in chart order. The JS narrows
+    this to the chosen plan's own PPTs; clean() validates the final pick."""
+    from .models.catalog import _ppt_sort_key
+    vals = sorted(
+        set(PlanPptRate.objects.values_list("ppt", flat=True)),
+        key=lambda p: _ppt_sort_key(type("R", (), {"ppt": p})()),
+    )
+    return [("", "— Select PPT —")] + [(v, f"PPT {v}") for v in vals]
+
+
+def _ppt_options_map():
+    """{sub-product name: [ppt, ...]} for the PPT dropdown cascade. Advisor and
+    MDRT share the same PPT set, so one list per plan suffices."""
+    m = {}
+    for r in PlanPptRate.objects.filter(designation=PlanPptRate.DESIG_ADVISOR).select_related("product"):
+        m.setdefault(r.product.name, []).append(r.ppt)
+    from .models.catalog import _ppt_sort_key
+    return {name: sorted(ppts, key=lambda p: _ppt_sort_key(type("R", (), {"ppt": p})()))
+            for name, ppts in m.items()}
+
+
 def _init_product_fields(form):
     """Wire the two-step product picker on a sale form and, on edit, split an
     already-saved sub-product back into (main = category, subproduct = child)."""
     form.fields["product"].choices = _main_product_choices(form.instance)
     form.fields["subproduct"].choices = _subproduct_choices()
+    if "ppt" in form.fields:
+        form.fields["ppt"].choices = _ppt_choices()
 
     inst = form.instance
     saved = (
@@ -156,6 +180,20 @@ class SalePolicyTypeMixin:
             else:
                 cleaned_data["subproduct"] = ""
 
+        # PPT is mandatory for PPT-priced plans (the FYC margin is read off it)
+        # and meaningless for everything else.
+        if "ppt" in self.fields:
+            eff = Product.objects.filter(name=cleaned_data.get("product")).first()
+            ppt = (cleaned_data.get("ppt") or "").strip()
+            if eff and eff.has_ppt_rates:
+                valid = set(eff.ppt_rates.values_list("ppt", flat=True))
+                if not ppt:
+                    self.add_error("ppt", "Select the Premium Paying Term for this plan.")
+                elif ppt not in valid:
+                    self.add_error("ppt", "That PPT isn't available for the selected plan.")
+            else:
+                cleaned_data["ppt"] = ""
+
         product = cleaned_data.get("product")
         policy_type = (cleaned_data.get("policy_type") or "").strip()
 
@@ -186,10 +224,11 @@ class SalePolicyTypeMixin:
 class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
     product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
     subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
+    ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
 
     class Meta:
         model = Sale
-        fields = ["client", "product", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number"]
+        fields = ["client", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number"]
         widgets = {
             "client": ModelSelect2Widget(
                 model=Client,
@@ -211,10 +250,11 @@ class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
 class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
     subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
+    ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
 
     class Meta:
         model = Sale
-        fields = ["client", "employee", "product", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number"]
+        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),
@@ -235,10 +275,11 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
     subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
+    ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
 
     class Meta:
         model = Sale
-        fields = ["product", "amount", "policy_type", "date", "policy_date", "policy_number"]
+        fields = ["product", "ppt", "amount", "policy_type", "date", "policy_date", "policy_number"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),
