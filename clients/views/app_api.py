@@ -216,6 +216,16 @@ def app_sale_meta(request):
         if p.parent_id in ids:
             kids.setdefault(p.parent_id, []).append(p)
 
+    # PPT options per product (PPT-priced life plans). Advisor and MDRT share the
+    # same PPT set, so one list per product suffices for the picker.
+    from ..models import PlanPptRate
+    from ..models.catalog import _ppt_sort_key
+    ppt_by_prod = {}
+    for r in PlanPptRate.objects.filter(product_id__in=ids, designation=PlanPptRate.DESIG_ADVISOR):
+        ppt_by_prod.setdefault(r.product_id, []).append(r.ppt)
+    for k, v in ppt_by_prod.items():
+        ppt_by_prod[k] = sorted(v, key=lambda p: _ppt_sort_key(type("R", (), {"ppt": p})()))
+
     # Top-level products, each carrying its sub-products. The app shows the
     # second picker (mandatory) only when `subproducts` is non-empty; otherwise
     # the main product is booked as before. Insurance flags are parent-level,
@@ -228,7 +238,11 @@ def app_sale_meta(request):
         products.append({
             "id": p.id, "name": p.name,
             "is_health": is_health, "is_insurance": is_insurance,
-            "subproducts": [{"id": c.id, "name": c.name} for c in kids.get(p.id, [])],
+            "ppt_options": ppt_by_prod.get(p.id, []),
+            "subproducts": [
+                {"id": c.id, "name": c.name, "ppt_options": ppt_by_prod.get(c.id, [])}
+                for c in kids.get(p.id, [])
+            ],
         })
     data = {
         "is_admin": is_admin,
@@ -236,6 +250,18 @@ def app_sale_meta(request):
         "products": products,
     }
     if is_admin:
+        # FYC (sale margin %) per plan+PPT at the active designation — admin-only,
+        # matching the web (non-admins never receive commission figures).
+        from ..models import FirmSettings
+        mdrt = FirmSettings.get_settings().is_mdrt_active()
+        desig = PlanPptRate.DESIG_MDRT if mdrt else PlanPptRate.DESIG_ADVISOR
+        fyc = {}
+        for r in PlanPptRate.objects.filter(
+            product_id__in=ids, designation=desig
+        ).exclude(fyc__isnull=True).select_related("product"):
+            fyc.setdefault(r.product.name, {})[r.ppt] = str(r.fyc)
+        data["ppt_fyc"] = fyc
+        data["mdrt_active"] = mdrt
         data["employees"] = [
             {"id": e.id, "name": e.user.get_full_name() or e.user.username}
             for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username")
@@ -273,6 +299,16 @@ def app_sale_create(request):
     ).exists():
         return JsonResponse({"ok": False, "error": "Select a sub-product."}, status=400)
 
+    # PPT is mandatory for PPT-priced life plans (its FYC is the sale margin).
+    ppt = (body.get("ppt") or "").strip()
+    if product.has_ppt_rates:
+        if not ppt:
+            return JsonResponse({"ok": False, "error": "Select the Premium Paying Term (PPT)."}, status=400)
+        if ppt not in set(product.ppt_rates.values_list("ppt", flat=True)):
+            return JsonResponse({"ok": False, "error": "Invalid PPT for this plan."}, status=400)
+    else:
+        ppt = ""
+
     try:
         amount = Decimal(str(body.get("amount")))
         if amount <= 0:
@@ -300,7 +336,7 @@ def app_sale_create(request):
 
     sale = Sale(
         client=client, employee=sale_emp, product=product.name, product_ref=product,
-        amount=amount, cover_amount=cover_amount, policy_type=policy_type,
+        amount=amount, cover_amount=cover_amount, policy_type=policy_type, ppt=ppt,
     )
     sales_service.finalize_new_sale(sale, request.user, auto_approve=is_admin)
     return JsonResponse({"ok": True, "id": sale.id, "status": sale.status})

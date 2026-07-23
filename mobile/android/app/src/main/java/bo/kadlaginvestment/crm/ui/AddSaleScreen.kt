@@ -60,6 +60,8 @@ fun AddSaleScreen(
     var productMenuOpen by remember { mutableStateOf(false) }
     var selectedSubproduct by remember { mutableStateOf<JSONObject?>(null) }
     var subproductMenuOpen by remember { mutableStateOf(false) }
+    var selectedPpt by remember { mutableStateOf<String?>(null) }
+    var pptMenuOpen by remember { mutableStateOf(false) }
 
     var amount by remember { mutableStateOf("") }
     var coverAmount by remember { mutableStateOf("") }
@@ -177,7 +179,8 @@ fun AddSaleScreen(
                         text = { Text(p.optString("name")) },
                         onClick = {
                             selectedProduct = p
-                            selectedSubproduct = null  // reset dependent choice
+                            selectedSubproduct = null  // reset dependent choices
+                            selectedPpt = null
                             productMenuOpen = false
                         },
                     )
@@ -207,9 +210,54 @@ fun AddSaleScreen(
                         val sp = subproducts.getJSONObject(i)
                         DropdownMenuItem(
                             text = { Text(sp.optString("name")) },
-                            onClick = { selectedSubproduct = sp; subproductMenuOpen = false },
+                            onClick = { selectedSubproduct = sp; selectedPpt = null; subproductMenuOpen = false },
                         )
                     }
+                }
+            }
+        }
+
+        // ── PPT picker (PPT-priced life plans only) + admin-only live margin ──
+        val effectiveProduct = selectedSubproduct ?: selectedProduct
+        val pptOptions = effectiveProduct?.optJSONArray("ppt_options")
+        if (pptOptions != null && pptOptions.length() > 0) {
+            Box {
+                OutlinedTextField(
+                    value = selectedPpt?.let { "PPT $it" } ?: "",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Premium Paying Term (PPT)") },
+                    modifier = Modifier.fillMaxWidth().clickable { pptMenuOpen = true },
+                    enabled = false,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+                DropdownMenu(expanded = pptMenuOpen, onDismissRequest = { pptMenuOpen = false }) {
+                    for (i in 0 until pptOptions.length()) {
+                        val v = pptOptions.optString(i)
+                        DropdownMenuItem(
+                            text = { Text("PPT $v") },
+                            onClick = { selectedPpt = v; pptMenuOpen = false },
+                        )
+                    }
+                }
+            }
+            // Admin-only: the FYC (sale margin) for the chosen plan + PPT.
+            if (isAdmin && selectedPpt != null) {
+                val fyc = m.optJSONObject("ppt_fyc")
+                    ?.optJSONObject(effectiveProduct?.optString("name") ?: "")
+                    ?.optString(selectedPpt!!) ?: ""
+                if (fyc.isNotEmpty()) {
+                    val desig = if (m.optBoolean("mdrt_active")) "MDRT rate" else "Advisor rate"
+                    Text(
+                        "Margin (FYC): $fyc%  ·  $desig",
+                        color = StatusGreen,
+                        fontSize = rsp(13),
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
@@ -296,6 +344,7 @@ fun AddSaleScreen(
                     val body = JSONObject()
                         .put("client_id", selectedClient?.first ?: 0)
                         .put("product_id", effectiveProductId)
+                        .put("ppt", selectedPpt ?: "")
                         .put("amount", amount)
                         .put("cover_amount", coverAmount)
                         .put("policy_type", policyType)
@@ -305,7 +354,7 @@ fun AddSaleScreen(
                             val approved = r.json.optString("status") == "approved"
                             message = true to if (approved) "Sale added and approved ✓" else "Sale added — pending approval ✓"
                             selectedClient = null; clientQuery = ""
-                            selectedProduct = null; selectedSubproduct = null
+                            selectedProduct = null; selectedSubproduct = null; selectedPpt = null
                             amount = ""; coverAmount = ""; policyType = ""
                             selectedEmployee = null
                         }
@@ -318,7 +367,9 @@ fun AddSaleScreen(
             enabled = !submitting && selectedClient != null && selectedProduct != null &&
                 amount.isNotBlank() &&
                 // A product with sub-products requires one to be chosen.
-                ((selectedProduct?.optJSONArray("subproducts")?.length() ?: 0) == 0 || selectedSubproduct != null),
+                ((selectedProduct?.optJSONArray("subproducts")?.length() ?: 0) == 0 || selectedSubproduct != null) &&
+                // A PPT-priced plan requires a PPT.
+                ((effectiveProduct?.optJSONArray("ppt_options")?.length() ?: 0) == 0 || selectedPpt != null),
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
         ) {
             Text(if (submitting) "Saving…" else "Save Sale", fontSize = rsp(16))
