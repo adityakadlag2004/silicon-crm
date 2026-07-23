@@ -196,10 +196,8 @@ def app_dashboard(request):
 # ── Screen 2: Add Sale ───────────────────────────────────────────────────────
 
 def _product_flags(p):
-    name = (p.name or "").strip().lower()
-    is_health = p.code == "HEALTH_INS" or name == "health insurance"
-    is_insurance = is_health or p.code == "LIFE_INS" or name == "life insurance"
-    return is_health, is_insurance
+    # Parent-aware: a sub-product of Health/Life reports the same as its parent.
+    return p.is_health, p.is_insurance
 
 
 @login_required
@@ -208,15 +206,29 @@ def app_sale_meta(request):
     """Products + (for admins) employee list for the Add Sale screen."""
     emp = _emp(request)
     is_admin = _is_admin(request)
-    products = []
-    for p in Product.objects.filter(
+    rows = list(Product.objects.filter(
         is_active=True, archived_at__isnull=True,
         domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
-    ).order_by("display_order", "name"):
+    ).select_related("parent").order_by("display_order", "name"))
+    ids = {p.id for p in rows}
+    kids = {}
+    for p in rows:
+        if p.parent_id in ids:
+            kids.setdefault(p.parent_id, []).append(p)
+
+    # Top-level products, each carrying its sub-products. The app shows the
+    # second picker (mandatory) only when `subproducts` is non-empty; otherwise
+    # the main product is booked as before. Insurance flags are parent-level,
+    # so a sub-product inherits its parent's cover/policy fields.
+    products = []
+    for p in rows:
+        if p.parent_id in ids:
+            continue
         is_health, is_insurance = _product_flags(p)
         products.append({
             "id": p.id, "name": p.name,
             "is_health": is_health, "is_insurance": is_insurance,
+            "subproducts": [{"id": c.id, "name": c.name} for c in kids.get(p.id, [])],
         })
     data = {
         "is_admin": is_admin,
@@ -253,6 +265,13 @@ def app_sale_create(request):
     ).first()
     if product is None:
         return JsonResponse({"ok": False, "error": "Select a product."}, status=400)
+    # If the chosen product is a category with sub-products, a sub-product must
+    # be picked (its own margin applies) — the client should send that id.
+    if product.children.filter(
+        is_active=True, archived_at__isnull=True,
+        domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
+    ).exists():
+        return JsonResponse({"ok": False, "error": "Select a sub-product."}, status=400)
 
     try:
         amount = Decimal(str(body.get("amount")))

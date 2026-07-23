@@ -58,6 +58,11 @@
           <label for="id_product" class="form-label fw-semibold">Product <span class="text-danger">*</span></label>
           {{ form.product }}
         </div>
+        <div class="col-md-6" id="subproduct-group" style="display:none;">
+          <label for="id_subproduct" class="form-label fw-semibold">Sub-product <span class="text-danger">*</span></label>
+          {{ form.subproduct }}
+          {% if form.subproduct.errors %}<div class="text-danger small mt-1">{{ form.subproduct.errors|striptags }}</div>{% endif %}
+        </div>
         <div class="col-md-6">
           <label for="id_amount" class="form-label fw-semibold">Business Amount (₹) <span class="text-danger">*</span></label>
           {{ form.amount }}
@@ -128,11 +133,16 @@
 </div>
 
 {{ insurance_product_names|json_script:"admin-insurance-product-names" }}
+{{ health_product_names|json_script:"admin-health-product-names" }}
+{{ product_children|json_script:"admin-product-children" }}
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const insuranceProductNames = JSON.parse(document.getElementById("admin-insurance-product-names").textContent);
-  const healthProductName = "{{ health_product_name|default:''|escapejs }}";
+  const healthProductNames = JSON.parse(document.getElementById("admin-health-product-names").textContent);
+  const productChildren = JSON.parse(document.getElementById("admin-product-children").textContent);
+  const subproductGroup = document.getElementById("subproduct-group");
+  const subproductSelect = document.getElementById("id_subproduct");
   const searchInput = document.getElementById("client-search");
   const resultsDiv = document.getElementById("client-results");
   const clientSelect = document.getElementById("id_client");
@@ -198,12 +208,38 @@ document.addEventListener("DOMContentLoaded", function () {
     searchInput.focus();
   };
 
+  // Second dropdown: shown + required only when the product has sub-products.
+  function updateSubproductUI() {
+    if (!subproductSelect) return;
+    const kids = productChildren[productSelect.value] || [];
+    const prev = subproductSelect.value;
+    if (kids.length) {
+      subproductSelect.innerHTML = "";
+      const blank = document.createElement("option");
+      blank.value = ""; blank.textContent = "— Select sub-product —";
+      subproductSelect.appendChild(blank);
+      kids.forEach(n => {
+        const o = document.createElement("option");
+        o.value = n; o.textContent = n;
+        if (n === prev) o.selected = true;
+        subproductSelect.appendChild(o);
+      });
+      subproductGroup.style.display = "";
+      subproductSelect.required = true;
+    } else {
+      subproductSelect.innerHTML = "";
+      subproductSelect.required = false;
+      subproductGroup.style.display = "none";
+    }
+  }
+
   // Show cover field for insurance products
   if (productSelect) {
     function updateCover() {
+      updateSubproductUI();
       const sel = productSelect.value;
       const isInsurance = insuranceProductNames.includes(sel);
-      const isHealthInsurance = healthProductName && sel === healthProductName;
+      const isHealthInsurance = healthProductNames.includes(sel);
       coverAmountGroup.style.display = isInsurance ? "block" : "none";
       policyTypeGroup.style.display = isHealthInsurance ? "block" : "none";
       const policyDateGroup = document.getElementById("policy-date-group");

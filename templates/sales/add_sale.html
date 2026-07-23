@@ -67,6 +67,11 @@
           <label for="id_product" class="form-label fw-semibold">Product <span class="text-danger">*</span></label>
           {{ form.product }}
         </div>
+        <div class="col-md-6" id="subproduct-group" style="display:none;">
+          <label for="id_subproduct" class="form-label fw-semibold">Sub-product <span class="text-danger">*</span></label>
+          {{ form.subproduct }}
+          {% if form.subproduct.errors %}<div class="text-danger small mt-1">{{ form.subproduct.errors|striptags }}</div>{% endif %}
+        </div>
         <div class="col-md-6">
           <label for="id_amount" class="form-label fw-semibold">Business Amount (₹) <span class="text-danger">*</span></label>
           {{ form.amount }}
@@ -140,15 +145,47 @@
 </div>
 
 {{ insurance_product_names|json_script:"insurance-product-names" }}
+{{ health_product_names|json_script:"health-product-names" }}
+{{ product_children|json_script:"product-children" }}
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const insuranceProductNames = JSON.parse(document.getElementById("insurance-product-names").textContent);
-  const healthProductName = "{{ health_product_name|default:''|escapejs }}";
+  const healthProductNames = JSON.parse(document.getElementById("health-product-names").textContent);
   const searchInput = document.getElementById("client-search");
   const resultsDiv = document.getElementById("client-results");
   const clientIdField = document.getElementById("client-id");
   const productSelect = document.getElementById("id_product");
+  const productChildren = JSON.parse(document.getElementById("product-children").textContent);
+  const subproductGroup = document.getElementById("subproduct-group");
+  const subproductSelect = document.getElementById("id_subproduct");
+
+  // Second dropdown: shown + required only when the chosen product has
+  // sub-products; otherwise the main product is what gets sold.
+  function updateSubproductUI() {
+    const kids = productChildren[productSelect.value] || [];
+    const prev = subproductSelect ? subproductSelect.value : "";
+    if (!subproductSelect) return;
+    if (kids.length) {
+      subproductSelect.innerHTML = "";
+      const blank = document.createElement("option");
+      blank.value = ""; blank.textContent = "— Select sub-product —";
+      subproductSelect.appendChild(blank);
+      kids.forEach(n => {
+        const o = document.createElement("option");
+        o.value = n; o.textContent = n;
+        if (n === prev) o.selected = true;
+        subproductSelect.appendChild(o);
+      });
+      subproductGroup.style.display = "";
+      subproductSelect.required = true;
+    } else {
+      subproductSelect.innerHTML = "";
+      subproductSelect.required = false;
+      subproductGroup.style.display = "none";
+    }
+  }
+
   const coverAmountGroup = document.getElementById("cover-amount-group");
   const policyTypeGroup = document.getElementById("policy-type-group");
   const policyTypeInputs = document.querySelectorAll('input[name="policy_type"]');
@@ -212,9 +249,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Show cover field & incentive info based on product
   function updateProductUI() {
+    updateSubproductUI();
     const selected = productSelect.value;
     const isInsurance = insuranceProductNames.includes(selected);
-    const isHealthInsurance = healthProductName && selected === healthProductName;
+    const isHealthInsurance = healthProductNames.includes(selected);
     coverAmountGroup.style.display = isInsurance ? "block" : "none";
     policyTypeGroup.style.display = isHealthInsurance ? "block" : "none";
     // Policy date is required for Health/Life insurance; hide + clear otherwise.

@@ -58,6 +58,8 @@ fun AddSaleScreen(
 
     var selectedProduct by remember { mutableStateOf<JSONObject?>(null) }
     var productMenuOpen by remember { mutableStateOf(false) }
+    var selectedSubproduct by remember { mutableStateOf<JSONObject?>(null) }
+    var subproductMenuOpen by remember { mutableStateOf(false) }
 
     var amount by remember { mutableStateOf("") }
     var coverAmount by remember { mutableStateOf("") }
@@ -173,8 +175,41 @@ fun AddSaleScreen(
                     val p = products!!.getJSONObject(i)
                     DropdownMenuItem(
                         text = { Text(p.optString("name")) },
-                        onClick = { selectedProduct = p; productMenuOpen = false },
+                        onClick = {
+                            selectedProduct = p
+                            selectedSubproduct = null  // reset dependent choice
+                            productMenuOpen = false
+                        },
                     )
+                }
+            }
+        }
+
+        // ── Sub-product picker (only when the product has sub-products) ──
+        val subproducts = selectedProduct?.optJSONArray("subproducts")
+        if (subproducts != null && subproducts.length() > 0) {
+            Box {
+                OutlinedTextField(
+                    value = selectedSubproduct?.optString("name") ?: "",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Sub-product") },
+                    modifier = Modifier.fillMaxWidth().clickable { subproductMenuOpen = true },
+                    enabled = false,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+                DropdownMenu(expanded = subproductMenuOpen, onDismissRequest = { subproductMenuOpen = false }) {
+                    for (i in 0 until subproducts.length()) {
+                        val sp = subproducts.getJSONObject(i)
+                        DropdownMenuItem(
+                            text = { Text(sp.optString("name")) },
+                            onClick = { selectedSubproduct = sp; subproductMenuOpen = false },
+                        )
+                    }
                 }
             }
         }
@@ -255,9 +290,12 @@ fun AddSaleScreen(
                 message = null
                 submitting = true
                 scope.launch {
+                    // The sub-product is the product sold when one is required.
+                    val effectiveProductId = selectedSubproduct?.optInt("id")
+                        ?: selectedProduct?.optInt("id") ?: 0
                     val body = JSONObject()
                         .put("client_id", selectedClient?.first ?: 0)
-                        .put("product_id", selectedProduct?.optInt("id") ?: 0)
+                        .put("product_id", effectiveProductId)
                         .put("amount", amount)
                         .put("cover_amount", coverAmount)
                         .put("policy_type", policyType)
@@ -267,7 +305,8 @@ fun AddSaleScreen(
                             val approved = r.json.optString("status") == "approved"
                             message = true to if (approved) "Sale added and approved ✓" else "Sale added — pending approval ✓"
                             selectedClient = null; clientQuery = ""
-                            selectedProduct = null; amount = ""; coverAmount = ""; policyType = ""
+                            selectedProduct = null; selectedSubproduct = null
+                            amount = ""; coverAmount = ""; policyType = ""
                             selectedEmployee = null
                         }
                         is ApiClient.Result.NotLoggedIn -> onSessionExpired()
@@ -276,7 +315,10 @@ fun AddSaleScreen(
                     submitting = false
                 }
             },
-            enabled = !submitting && selectedClient != null && selectedProduct != null && amount.isNotBlank(),
+            enabled = !submitting && selectedClient != null && selectedProduct != null &&
+                amount.isNotBlank() &&
+                // A product with sub-products requires one to be chosen.
+                ((selectedProduct?.optJSONArray("subproducts")?.length() ?: 0) == 0 || selectedSubproduct != null),
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
         ) {
             Text(if (submitting) "Saving…" else "Save Sale", fontSize = rsp(16))

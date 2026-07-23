@@ -89,20 +89,18 @@ class Sale(models.Model):
         ]
 
     def _is_health_product(self):
+        # Sub-products inherit their category's kind, so ask the linked Product.
         if self.product_ref_id:
-            return self.product_ref.code == "HEALTH_INS" or (self.product_ref.name or "").strip().lower() == "health insurance"
+            return self.product_ref.is_health
         return (self.product or "").strip().lower() == "health insurance"
 
     @property
     def is_insurance(self):
         """Health or Life insurance — the products that carry a policy date
         and an annual renewal anniversary distinct from the sale date."""
-        codes = {"HEALTH_INS", "LIFE_INS"}
-        names = {"health insurance", "life insurance"}
         if self.product_ref_id:
-            return (self.product_ref.code in codes
-                    or (self.product_ref.name or "").strip().lower() in names)
-        return (self.product or "").strip().lower() in names
+            return self.product_ref.is_insurance
+        return (self.product or "").strip().lower() in {"health insurance", "life insurance"}
 
     @property
     def renewal_basis(self):

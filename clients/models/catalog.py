@@ -32,6 +32,13 @@ class Product(models.Model):
 
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=30, unique=True)
+    parent = models.ForeignKey(
+        "self", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="children",
+        help_text="Optional category. Set this to make the product a sub-product "
+                  "(e.g. 'Term Plan' under 'Life Insurance') — it inherits the "
+                  "category's insurance behaviour and carries its own margin.",
+    )
     domain = models.CharField(max_length=20, choices=DOMAIN_CHOICES, default=DOMAIN_BOTH)
     rta_match = models.CharField(
         max_length=10, blank=True, default=RTA_MATCH_NONE, choices=RTA_MATCH_CHOICES,
@@ -72,9 +79,27 @@ class Product(models.Model):
         self.save(update_fields=["is_active", "archived_at", "archived_reason", "updated_at"])
 
     @property
+    def category(self):
+        """The top-level product this rolls up to (itself if it has no parent).
+
+        Insurance behaviour (Health vs Life, Fresh/Port) is a property of the
+        category, so a sub-product like 'Term Plan' answers as its 'Life
+        Insurance' parent would.
+        """
+        return self.parent if self.parent_id else self
+
+    @property
     def is_health(self):
         """Health-insurance products carry Fresh/Port margin distinctions."""
-        return self.code == "HEALTH_INS" or (self.name or "").strip().lower() == "health insurance"
+        c = self.category
+        return c.code == "HEALTH_INS" or (c.name or "").strip().lower() == "health insurance"
+
+    @property
+    def is_insurance(self):
+        """Health or Life — products (and their sub-products) that need a policy date."""
+        c = self.category
+        return (c.code in {"HEALTH_INS", "LIFE_INS"}
+                or (c.name or "").strip().lower() in {"health insurance", "life insurance"})
 
     @property
     def tracks_renewals(self):

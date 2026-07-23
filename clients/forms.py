@@ -24,10 +24,68 @@ def validate_pan(raw, required=False):
     return value
 
 
+def _sale_products():
+    return (
+        Product.objects.filter(is_active=True, archived_at__isnull=True)
+        .filter(domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH])
+        .select_related("parent")
+        .order_by("display_order", "name")
+    )
+
+
+def _main_product_choices(instance=None):
+    """First dropdown: top-level products (categories + standalone)."""
+    products = list(_sale_products())
+    top = [p for p in products if not p.parent_id]
+    choices = [(p.name, p.name) for p in top]
+    listed = {p.name for p in top}
+    # On edit the saved product may be a sub-product — show its category as the
+    # selected main; also keep a since-removed value selectable.
+    existing = getattr(instance, "product", "") if instance and instance.pk else ""
+    if existing:
+        saved = next((p for p in products if p.name == existing), None)
+        main = saved.parent.name if (saved and saved.parent_id) else existing
+        if main not in listed:
+            choices.append((main, main))
+            listed.add(main)
+    return choices
+
+
+def _subproduct_choices():
+    """Second dropdown: every sub-product. The JS filters to the chosen main
+    and clean() enforces the link, so all children are valid choices here."""
+    return [(p.name, p.name) for p in _sale_products() if p.parent_id]
+
+
+def _product_children_map():
+    """{main product name: [sub-product name, ...]} — drives the cascade JS."""
+    m = {}
+    for p in _sale_products():
+        if p.parent_id:
+            m.setdefault(p.parent.name, []).append(p.name)
+    return m
+
+
+def _init_product_fields(form):
+    """Wire the two-step product picker on a sale form and, on edit, split an
+    already-saved sub-product back into (main = category, subproduct = child)."""
+    form.fields["product"].choices = _main_product_choices(form.instance)
+    form.fields["subproduct"].choices = _subproduct_choices()
+
+    inst = form.instance
+    saved = (
+        Product.objects.filter(name=inst.product).select_related("parent").first()
+        if inst and inst.pk and inst.product else None
+    )
+    if saved and saved.parent_id:
+        form.initial["product"] = saved.parent.name
+        form.initial["subproduct"] = saved.name
+
+
 def _is_health_product_name(product_name):
-    product = Product.objects.filter(name=(product_name or "").strip()).only("code", "name").first()
+    product = Product.objects.filter(name=(product_name or "").strip()).select_related("parent").first()
     if product:
-        return product.code == "HEALTH_INS" or (product.name or "").strip().lower() == "health insurance"
+        return product.is_health
     return (product_name or "").strip().lower() == "health insurance"
 
 
@@ -43,10 +101,9 @@ def _renewal_type_from_product(product_ref):
 
 def _is_insurance_product_name(product_name):
     """Health or Life insurance — the products that need a policy date."""
-    product = Product.objects.filter(name=(product_name or "").strip()).only("code", "name").first()
+    product = Product.objects.filter(name=(product_name or "").strip()).select_related("parent").first()
     if product:
-        return (product.code in {"HEALTH_INS", "LIFE_INS"}
-                or (product.name or "").strip().lower() in {"health insurance", "life insurance"})
+        return product.is_insurance
     return (product_name or "").strip().lower() in {"health insurance", "life insurance"}
 
 
@@ -77,6 +134,28 @@ class SalePolicyTypeMixin:
 
     def clean(self):
         cleaned_data = super().clean()
+
+        # Two-step product picker: when the chosen main product has sub-products,
+        # a sub-product is mandatory and becomes the effective product sold (so
+        # margin/analytics read at the sub-product level). Mains with no
+        # sub-products behave as before.
+        if "subproduct" in self.fields:
+            main = (cleaned_data.get("product") or "").strip()
+            sub = (cleaned_data.get("subproduct") or "").strip()
+            main_prod = Product.objects.filter(name=main).first() if main else None
+            child_names = (
+                set(main_prod.children.values_list("name", flat=True)) if main_prod else set()
+            )
+            if child_names:
+                if not sub:
+                    self.add_error("subproduct", "Select a sub-product.")
+                elif sub not in child_names:
+                    self.add_error("subproduct", "That sub-product doesn't belong to the selected product.")
+                else:
+                    cleaned_data["product"] = sub  # effective product sold
+            else:
+                cleaned_data["subproduct"] = ""
+
         product = cleaned_data.get("product")
         policy_type = (cleaned_data.get("policy_type") or "").strip()
 
@@ -105,7 +184,8 @@ class SalePolicyTypeMixin:
         return cleaned_data
 
 class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
-    product = forms.ChoiceField(choices=(), widget=forms.Select())
+    product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
+    subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
 
     class Meta:
         model = Sale
@@ -123,23 +203,14 @@ class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         employee = kwargs.pop("employee", None)
         super().__init__(*args, **kwargs)
-        product_choices = [
-            (p.name, p.name)
-            for p in Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
-                domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]
-            )
-        ]
-        if self.instance and self.instance.pk and self.instance.product:
-            existing = self.instance.product
-            if existing and all(existing != v for v, _ in product_choices):
-                product_choices.append((existing, existing))
-        self.fields["product"].choices = product_choices
+        _init_product_fields(self)
         self.fields["cover_amount"].required = False
         self._configure_policy_field()
 
 
 class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
-    product = forms.ChoiceField(choices=(), widget=forms.Select())
+    product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
+    subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
 
     class Meta:
         model = Sale
@@ -151,17 +222,7 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        product_choices = [
-            (p.name, p.name)
-            for p in Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
-                domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]
-            )
-        ]
-        if self.instance and self.instance.pk and self.instance.product:
-            existing = self.instance.product
-            if existing and all(existing != v for v, _ in product_choices):
-                product_choices.append((existing, existing))
-        self.fields["product"].choices = product_choices
+        _init_product_fields(self)
         if "employee" in self.fields:
             self.fields["employee"].queryset = Employee.objects.filter(active=True)
             # Non-admins don't submit an employee (the field is hidden for them);
@@ -172,7 +233,8 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
         self._configure_policy_field()
 
 class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
-    product = forms.ChoiceField(choices=(), widget=forms.Select())
+    product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
+    subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
 
     class Meta:
         model = Sale
@@ -184,17 +246,7 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        product_choices = [
-            (p.name, p.name)
-            for p in Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
-                domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]
-            )
-        ]
-        if self.instance and self.instance.pk and self.instance.product:
-            existing = self.instance.product
-            if existing and all(existing != v for v, _ in product_choices):
-                product_choices.append((existing, existing))
-        self.fields["product"].choices = product_choices
+        _init_product_fields(self)
         self._configure_policy_field()
 
 

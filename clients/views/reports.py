@@ -725,7 +725,7 @@ def _month_margin_breakdown(year, month):
     margin_percent and margin_amount.
     """
     approved = Sale.objects.filter(status="approved", date__year=year, date__month=month)
-    products = list(Product.objects.all().order_by("display_order", "name"))
+    products = list(Product.objects.all().select_related("parent").order_by("display_order", "name"))
 
     rows = []
     total_rev = Decimal("0")
@@ -733,6 +733,9 @@ def _month_margin_breakdown(year, month):
     matched_pks = []
 
     for p in products:
+        # Sub-products show as "Category › Sub-product" so the margin is read at
+        # the level it was set; top-level products keep their plain name.
+        plabel = f"{p.parent.name} › {p.name}" if p.parent_id else p.name
         base = approved.filter(
             Q(product_ref=p) | (Q(product_ref__isnull=True) & Q(product=p.name))
         )
@@ -748,7 +751,7 @@ def _month_margin_breakdown(year, month):
                     continue
                 pct = p.margin_for(rev, code)
                 amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
-                rows.append({"product": p.name, "policy": label, "revenue": rev,
+                rows.append({"product": plabel, "policy": label, "revenue": rev,
                              "margin_percent": pct, "margin_amount": amt})
                 total_rev += rev
                 total_margin += amt
@@ -756,7 +759,7 @@ def _month_margin_breakdown(year, month):
             if rev_unset > 0:
                 pct = p.margin_for(rev_unset, "")
                 amt = (rev_unset * pct / Decimal("100")).quantize(Decimal("0.01"))
-                rows.append({"product": p.name, "policy": "Unspecified", "revenue": rev_unset,
+                rows.append({"product": plabel, "policy": "Unspecified", "revenue": rev_unset,
                              "margin_percent": pct, "margin_amount": amt})
                 total_rev += rev_unset
                 total_margin += amt
@@ -766,7 +769,7 @@ def _month_margin_breakdown(year, month):
                 continue
             pct = p.margin_for(rev, "")
             amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
-            rows.append({"product": p.name, "policy": "", "revenue": rev,
+            rows.append({"product": plabel, "policy": "", "revenue": rev,
                          "margin_percent": pct, "margin_amount": amt})
             total_rev += rev
             total_margin += amt
@@ -808,7 +811,7 @@ def _month_renewal_breakdown(year, month):
     )
     products = {p.pk: p for p in Product.objects.filter(
         pk__in=[r["product_ref"] for r in per_product]
-    )}
+    ).select_related("parent")}
     for r in per_product:
         rev = r["total"] or Decimal("0")
         if rev <= 0:
@@ -816,7 +819,8 @@ def _month_renewal_breakdown(year, month):
         p = products.get(r["product_ref"])
         pct = p.renewal_margin_percent if p else Decimal("0.00")
         amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
-        rows.append({"product": p.name if p else "—", "revenue": rev,
+        plabel = (f"{p.parent.name} › {p.name}" if p and p.parent_id else p.name) if p else "—"
+        rows.append({"product": plabel, "revenue": rev,
                      "margin_percent": pct, "margin_amount": amt})
         total_rev += rev
         total_margin += amt

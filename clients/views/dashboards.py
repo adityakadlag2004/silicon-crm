@@ -888,6 +888,23 @@ def product_management_page(request):
                 return Product.DOMAIN_SALE
             return default_domain
 
+        def _resolve_parent(self_pk=None):
+            """Category chosen for a (sub-)product. Rejects self-reference and
+            nesting deeper than one level; returns (parent_or_None, error)."""
+            raw = (request.POST.get("parent_id") or "").strip()
+            if not raw:
+                return None, None
+            parent = Product.objects.filter(pk=raw).first()
+            if not parent:
+                return None, "Selected category does not exist."
+            if self_pk and parent.pk == self_pk:
+                return None, "A product can't be its own category."
+            if parent.parent_id:
+                return None, "Categories can't be nested — pick a top-level product."
+            if self_pk and Product.objects.filter(parent_id=self_pk).exists():
+                return None, "This product already has sub-products, so it can't sit under a category."
+            return parent, None
+
         if action == "add":
             name = (request.POST.get("name") or "").strip()
             domain = _domain_from_renewal_choice(default_domain=Product.DOMAIN_SALE)
@@ -918,9 +935,15 @@ def product_management_page(request):
             if rta_match not in dict(Product.RTA_MATCH_CHOICES):
                 rta_match = Product.RTA_MATCH_NONE
 
+            parent, parent_err = _resolve_parent()
+            if parent_err:
+                messages.error(request, parent_err)
+                return redirect("clients:product_management")
+
             Product.objects.create(
                 name=name,
                 code=code,
+                parent=parent,
                 domain=domain,
                 rta_match=rta_match,
                 display_order=display_order_val,
@@ -929,6 +952,56 @@ def product_management_page(request):
                 is_active=True,
             )
             messages.success(request, f"Product '{name}' added.")
+            return redirect("clients:product_management")
+
+        if action == "bulk_add":
+            names = request.POST.getlist("bulk_name")
+            parents = request.POST.getlist("bulk_parent_id")
+            margins = request.POST.getlist("bulk_margin")
+            # Categories a row may sit under (top-level products only).
+            categories = {str(p.id): p for p in Product.objects.filter(parent__isnull=True)}
+            taken_names = {n.strip().lower() for n in Product.objects.values_list("name", flat=True)}
+            taken_codes = set(Product.objects.values_list("code", flat=True))
+
+            added, errors = 0, []
+            for i, raw_name in enumerate(names):
+                name = (raw_name or "").strip()
+                if not name:
+                    continue  # skip blank rows
+                if name.lower() in taken_names:
+                    errors.append(f"'{name}' already exists — skipped.")
+                    continue
+
+                parent_id = (parents[i] if i < len(parents) else "").strip()
+                parent = None
+                if parent_id:
+                    parent = categories.get(parent_id)
+                    if parent is None:
+                        errors.append(f"'{name}': invalid category — skipped.")
+                        continue
+
+                code = _normalize_product_code(name) or "PROD"
+                base, n = code, 1
+                while code in taken_codes:
+                    n += 1
+                    code = f"{base[:26]}_{n}"
+
+                Product.objects.create(
+                    name=name, code=code, parent=parent,
+                    domain=Product.DOMAIN_SALE,
+                    margin_percent=_parse_margin(margins[i] if i < len(margins) else None),
+                    is_active=True,
+                )
+                taken_names.add(name.lower())
+                taken_codes.add(code)
+                added += 1
+
+            if added:
+                messages.success(request, f"{added} product(s) added.")
+            for err in errors:
+                messages.error(request, err)
+            if not added and not errors:
+                messages.error(request, "Nothing to add — enter at least one product name.")
             return redirect("clients:product_management")
 
         if action == "update":
@@ -965,8 +1038,14 @@ def product_management_page(request):
             if rta_match not in dict(Product.RTA_MATCH_CHOICES):
                 rta_match = product.rta_match
 
+            parent, parent_err = _resolve_parent(self_pk=product.pk)
+            if parent_err:
+                messages.error(request, parent_err)
+                return redirect("clients:product_management")
+
             product.name = name
             product.code = code
+            product.parent = parent
             product.domain = domain
             product.rta_match = rta_match
             product.display_order = display_order_val
@@ -975,7 +1054,7 @@ def product_management_page(request):
                 request.POST.get("renewal_margin_percent"), product.renewal_margin_percent
             )
             product.save(update_fields=[
-                "name", "code", "domain", "rta_match", "display_order",
+                "name", "code", "parent", "domain", "rta_match", "display_order",
                 "margin_percent", "renewal_margin_percent", "updated_at",
             ])
             messages.success(request, f"Product '{name}' updated.")
@@ -1053,13 +1132,17 @@ def product_management_page(request):
     products = (
         Product.objects.all()
         .order_by("display_order", "name")
+        .select_related("parent")
         .prefetch_related("margin_slabs")
     )
+    # Categories a (sub-)product may sit under: top-level products only.
+    categories = [p for p in products if not p.parent_id]
     return render(
         request,
         "settings/product_management.html",
         {
             "products": products,
+            "categories": categories,
         },
     )
 

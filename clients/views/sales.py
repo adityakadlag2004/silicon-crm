@@ -27,19 +27,17 @@ logger = logging.getLogger(__name__)
 
 
 def _sale_product_meta():
-    products = list(Product.objects.filter(domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]))
-    health = next((p for p in products if p.code == "HEALTH_INS"), None)
-    if not health:
-        health = next((p for p in products if (p.name or "").strip().lower() == "health insurance"), None)
-    insurance_names = [
-        p.name
-        for p in products
-        if p.code in {"HEALTH_INS", "LIFE_INS"}
-        or (p.name or "").strip().lower() in {"health insurance", "life insurance"}
-    ]
+    # Includes sub-products: is_health / is_insurance are parent-aware, so a
+    # child of Health/Life reports the same and toggles the same form fields.
+    from ..forms import _product_children_map
+    products = list(
+        Product.objects.filter(domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH])
+        .select_related("parent")
+    )
     return {
-        "health_product_name": health.name if health else "",
-        "insurance_product_names": sorted(set(insurance_names)),
+        "health_product_names": sorted({p.name for p in products if p.is_health}),
+        "insurance_product_names": sorted({p.name for p in products if p.is_insurance}),
+        "product_children": _product_children_map(),
     }
 
 
