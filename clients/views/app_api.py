@@ -114,13 +114,24 @@ def app_dashboard(request):
             .annotate(amount=Sum("amount"), n=Count("id")).order_by("-amount")[:6]
         ]
 
-        # Month-to-date business per product (1st of month → today)
+        # Month-to-date business per product CATEGORY (1st of month → today).
+        # Sub-products fold into their parent so the board shows one row per
+        # category, not dozens of sub-product rows.
         month_start = today.replace(day=1)
+        sub_to_cat = dict(
+            Product.objects.filter(parent__isnull=False).values_list("name", "parent__name")
+        )
+        mtd_buckets = {}
+        for r in Sale.objects.filter(
+            status=Sale.STATUS_APPROVED, date__gte=month_start, date__lte=today
+        ).values("product").annotate(t=Sum("amount"), n=Count("id")):
+            name = sub_to_cat.get(r["product"], r["product"]) or "Other"
+            b = mtd_buckets.setdefault(name, {"name": name, "amount": Decimal("0"), "count": 0})
+            b["amount"] += r["t"] or Decimal("0")
+            b["count"] += r["n"]
         data["product_mtd"] = [
-            {"name": r["product"] or "Other", "amount": _money(r["t"]), "count": r["n"]}
-            for r in Sale.objects.filter(
-                status=Sale.STATUS_APPROVED, date__gte=month_start, date__lte=today
-            ).values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
+            {"name": b["name"], "amount": _money(b["amount"]), "count": b["count"]}
+            for b in sorted(mtd_buckets.values(), key=lambda x: x["amount"], reverse=True)
         ]
 
         # Team call activity today (within the office-hours window)

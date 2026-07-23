@@ -69,6 +69,53 @@ def _ordered_product_names(extra_names=None):
     return names
 
 
+# ── Sub-product roll-up for the dashboards ────────────────────────────────────
+# The dashboards show one row per top-level product CATEGORY. A sub-product's
+# sales and targets fold into its parent so the boards don't pile up dozens of
+# sub-product rows; a sub-product sold on its own still counts, just under its
+# category total.
+
+def _category_name_map():
+    """{product name -> bucket}: a sub-product maps to its parent category name;
+    every other product (and any legacy free-text product) maps to itself."""
+    return {
+        name: parent_name
+        for name, parent_name in
+        Product.objects.filter(parent__isnull=False).values_list("name", "parent__name")
+    }
+
+
+def _rollup_product_names(names, cat_map):
+    """Collapse a product-name list to top-level buckets, order-preserving."""
+    out, seen = [], set()
+    for n in names:
+        c = cat_map.get(n, n)
+        if c and c not in seen:
+            out.append(c)
+            seen.add(c)
+    return out
+
+
+def _sum_by_product(qs, field, cat_map, by_emp=False):
+    """Sum `field` grouped by dashboard bucket (sub-products fold into their
+    category). Returns {bucket: total} or {(emp_id, bucket): total}."""
+    group = ["employee_id", "product"] if by_emp else ["product"]
+    out = {}
+    for r in qs.values(*group).annotate(total=Sum(field)):
+        c = cat_map.get(r["product"], r["product"])
+        key = (r["employee_id"], c) if by_emp else c
+        out[key] = out.get(key, Decimal("0")) + (r["total"] or Decimal("0"))
+    return out
+
+
+def _category_members(cat_map):
+    """{category -> [its sub-product names]} for summing sub-product targets."""
+    members = {}
+    for name, cat in cat_map.items():
+        members.setdefault(cat, []).append(name)
+    return members
+
+
 def _normalize_product_code(raw_code):
     cleaned = (raw_code or "").strip().upper().replace("-", "_").replace(" ", "_")
     if not cleaned:
@@ -156,10 +203,15 @@ def admin_dashboard(request):
     all_sales_qs = Sale.objects.all()
     monthly_sales_qs = Sale.objects.filter(status=Sale.STATUS_APPROVED, created_at__year=year, created_at__month=month)
     approved_sales_all = Sale.objects.filter(status=Sale.STATUS_APPROVED)
-    products = _ordered_product_names(
-        list(all_sales_qs.exclude(product="").values_list("product", flat=True).distinct())
-        + list(Target.objects.exclude(product="").values_list("product", flat=True).distinct())
+    cat_map = _category_name_map()
+    products = _rollup_product_names(
+        _ordered_product_names(
+            list(all_sales_qs.exclude(product="").values_list("product", flat=True).distinct())
+            + list(Target.objects.exclude(product="").values_list("product", flat=True).distinct())
+        ),
+        cat_map,
     )
+    cat_members = _category_members(cat_map)
 
     total_clients = Client.objects.count()
     total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
@@ -175,25 +227,19 @@ def admin_dashboard(request):
     admin_self_sales = Decimal("0")
     admin_self_points = Decimal("0")
     admin_self_pending_points = Decimal("0")
-    admin_self_points_map = {p: Decimal("0") for p in products}
-    admin_self_sales_map = {p: Decimal("0") for p in products}
+    admin_self_points_map = {}
+    admin_self_sales_map = {}
     if admin_emp:
         self_sales_qs = Sale.objects.filter(employee=admin_emp, status=Sale.STATUS_APPROVED, date__year=year, date__month=month)
         admin_self_sales = self_sales_qs.aggregate(total=Sum("amount"))['total'] or Decimal("0")
         admin_self_points = self_sales_qs.aggregate(total=Sum("points"))['total'] or Decimal("0")
         admin_self_pending_points = Sale.objects.filter(employee=admin_emp, status=Sale.STATUS_PENDING, date__year=year, date__month=month).aggregate(total=Sum("points"))['total'] or Decimal("0")
 
-        for entry in self_sales_qs.values("product").annotate(total=Sum("points")):
-            admin_self_points_map[entry["product"]] = entry["total"] or Decimal("0")
-        for entry in self_sales_qs.values("product").annotate(total=Sum("amount")):
-            admin_self_sales_map[entry["product"]] = entry["total"] or Decimal("0")
+        admin_self_points_map = _sum_by_product(self_sales_qs, "points", cat_map)
+        admin_self_sales_map = _sum_by_product(self_sales_qs, "amount", cat_map)
 
-    overall_points_map = {p: Decimal("0") for p in products}
-    overall_sales_map = {p: Decimal("0") for p in products}
-    for entry in monthly_sales_qs.values("product").annotate(total=Sum("points")):
-        overall_points_map[entry["product"]] = entry["total"] or Decimal("0")
-    for entry in monthly_sales_qs.values("product").annotate(total=Sum("amount")):
-        overall_sales_map[entry["product"]] = entry["total"] or Decimal("0")
+    overall_points_map = _sum_by_product(monthly_sales_qs, "points", cat_map)
+    overall_sales_map = _sum_by_product(monthly_sales_qs, "amount", cat_map)
 
     admin_self_points_breakup = _build_breakup(admin_self_points_map)
     admin_overall_points_breakup = _build_breakup(overall_points_map)
@@ -214,16 +260,31 @@ def admin_dashboard(request):
     emp_map = employee_target_map()
     target_employee_ids = list(target_employees().values_list("id", flat=True))
 
+    # A category's target is the sum of its own target and its sub-products'.
+    def _cat_daily_target(eid, cat):
+        return sum(
+            (resolve_daily_target(eid, n, working_days, emp_map=emp_map, baseline_map=baseline_map)
+             for n in [cat] + cat_members.get(cat, [])),
+            Decimal("0"),
+        )
+
+    def _cat_monthly_target(eid, cat):
+        return sum(
+            (resolve_monthly_target(eid, n, emp_map=emp_map, baseline_map=baseline_map)
+             for n in [cat] + cat_members.get(cat, [])),
+            Decimal("0"),
+        )
+
     admin_daily_targets_display = []
     admin_monthly_targets_display = []
     if admin_emp:
-        admin_today_sales = monthly_sales_qs.filter(employee=admin_emp, date=today).values("product").annotate(total=Sum("amount"))
-        admin_today_map = {s["product"]: s["total"] for s in admin_today_sales}
-        admin_month_sales = monthly_sales_qs.filter(employee=admin_emp).values("product").annotate(total=Sum("amount"))
-        admin_month_map = {s["product"]: s["total"] for s in admin_month_sales}
+        admin_today_map = _sum_by_product(
+            monthly_sales_qs.filter(employee=admin_emp, date=today), "amount", cat_map)
+        admin_month_map = _sum_by_product(
+            monthly_sales_qs.filter(employee=admin_emp), "amount", cat_map)
 
         for product in products:
-            target_val = resolve_daily_target(admin_emp.id, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
+            target_val = _cat_daily_target(admin_emp.id, product)
             achieved = admin_today_map.get(product, Decimal("0"))
             progress = (achieved / target_val * 100) if target_val else 0
             admin_daily_targets_display.append({
@@ -234,7 +295,7 @@ def admin_dashboard(request):
             })
 
         for product in products:
-            target_val = resolve_monthly_target(admin_emp.id, product, emp_map=emp_map, baseline_map=baseline_map)
+            target_val = _cat_monthly_target(admin_emp.id, product)
             achieved = admin_month_map.get(product, Decimal("0"))
             progress = (achieved / target_val * 100) if target_val else 0
             admin_monthly_targets_display.append({
@@ -246,34 +307,18 @@ def admin_dashboard(request):
 
     # ── Pre-aggregate once instead of per-product / per-employee loops.
     # This collapses 4 N×M N+1 loops (≥120 queries) into 4 group-by queries.
-    today_by_product = {
-        r["product"]: r["total"] or Decimal("0")
-        for r in approved_sales_all.filter(date=today).values("product").annotate(total=Sum("amount"))
-    }
-    month_by_product = {
-        r["product"]: r["total"] or Decimal("0")
-        for r in monthly_sales_qs.values("product").annotate(total=Sum("amount"))
-    }
-    today_by_emp_product = {
-        (r["employee_id"], r["product"]): r["total"] or Decimal("0")
-        for r in approved_sales_all.filter(date=today)
-                                    .values("employee_id", "product")
-                                    .annotate(total=Sum("amount"))
-    }
-    month_by_emp_product = {
-        (r["employee_id"], r["product"]): r["total"] or Decimal("0")
-        for r in monthly_sales_qs
-                                    .values("employee_id", "product")
-                                    .annotate(total=Sum("amount"))
-    }
+    today_by_product = _sum_by_product(approved_sales_all.filter(date=today), "amount", cat_map)
+    month_by_product = _sum_by_product(monthly_sales_qs, "amount", cat_map)
+    today_by_emp_product = _sum_by_product(
+        approved_sales_all.filter(date=today), "amount", cat_map, by_emp=True)
+    month_by_emp_product = _sum_by_product(monthly_sales_qs, "amount", cat_map, by_emp=True)
 
     # Org-wide targets are the sum of each active employee's resolved target
     # (per-head model), not a single baseline multiplied by headcount.
     overall_daily_progress = []
     for product in products:
         target_value = sum(
-            (resolve_daily_target(eid, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
-             for eid in target_employee_ids),
+            (_cat_daily_target(eid, product) for eid in target_employee_ids),
             Decimal("0"),
         )
         achieved = today_by_product.get(product, Decimal("0"))
@@ -284,8 +329,7 @@ def admin_dashboard(request):
     for product in products:
         achieved = month_by_product.get(product, Decimal("0"))
         target_value = sum(
-            (resolve_monthly_target(eid, product, emp_map=emp_map, baseline_map=baseline_map)
-             for eid in target_employee_ids),
+            (_cat_monthly_target(eid, product) for eid in target_employee_ids),
             Decimal("0"),
         )
         progress = (achieved / target_value * 100) if target_value else 0
@@ -301,7 +345,7 @@ def admin_dashboard(request):
         }
         for product in products:
             achieved = today_by_emp_product.get((emp_obj.id, product), Decimal("0"))
-            target = resolve_daily_target(emp_obj.id, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
+            target = _cat_daily_target(emp_obj.id, product)
             progress = (achieved / target * 100) if target else 0
             emp_entry["products"].append({
                 "product": product,
@@ -319,7 +363,7 @@ def admin_dashboard(request):
         }
         for product in products:
             achieved = month_by_emp_product.get((emp_obj.id, product), Decimal("0"))
-            target = resolve_monthly_target(emp_obj.id, product, emp_map=emp_map, baseline_map=baseline_map)
+            target = _cat_monthly_target(emp_obj.id, product)
             progress = (achieved / target * 100) if target else 0
             emp_entry["products"].append({
                 "product": product,
@@ -513,15 +557,20 @@ def employee_dashboard(request):
     today_date = now_ts.date()
     # Agenda widget items come from dashboard_agenda_json (one common calendar).
 
-    products = _ordered_product_names(
-        list(
-            Sale.objects.filter(employee=emp)
-            .exclude(product="")
-            .values_list("product", flat=True)
-            .distinct()
-        )
-        + list(Target.objects.exclude(product="").values_list("product", flat=True).distinct())
+    cat_map = _category_name_map()
+    products = _rollup_product_names(
+        _ordered_product_names(
+            list(
+                Sale.objects.filter(employee=emp)
+                .exclude(product="")
+                .values_list("product", flat=True)
+                .distinct()
+            )
+            + list(Target.objects.exclude(product="").values_list("product", flat=True).distinct())
+        ),
+        cat_map,
     )
+    cat_members = _category_members(cat_map)
 
     monthly_sales_approved = Sale.objects.filter(
         employee=emp,
@@ -548,10 +597,7 @@ def employee_dashboard(request):
     points_ratio = (total_points / points_scale) * Decimal("100") if points_scale else Decimal("0")
     extra_points = max(total_points - salary_points, Decimal("0"))
 
-    product_points_map = {p: Decimal("0") for p in products}
-    product_points_qs = monthly_sales_approved.values("product").annotate(total=Sum("points"))
-    for entry in product_points_qs:
-        product_points_map[entry["product"]] = entry["total"] or Decimal("0")
+    product_points_map = _sum_by_product(monthly_sales_approved, "points", cat_map)
 
     product_labels = {
         "Lumsum": "Lumpsum",
@@ -565,15 +611,13 @@ def employee_dashboard(request):
         for product in products
     ]
 
-    today_sales = today_sales_qs.values("product").annotate(total=Sum("amount"))
-    today_sales_dict = {s["product"]: s["total"] for s in today_sales}
+    today_sales_dict = _sum_by_product(today_sales_qs, "amount", cat_map)
     todays_tasks = CalendarEvent.objects.filter(
         employee=request.user.employee,
         scheduled_time__date=today,
     ).order_by("scheduled_time")
 
-    month_sales = monthly_sales_approved.values("product").annotate(total=Sum("amount"))
-    month_sales_dict = {s["product"]: s["total"] for s in month_sales}
+    month_sales_dict = _sum_by_product(monthly_sales_approved, "amount", cat_map)
     sip_sales = month_sales_dict.get("SIP", Decimal("0"))
     lumsum_sales = month_sales_dict.get("Lumsum", Decimal("0"))
     life_sales = month_sales_dict.get("Life Insurance", Decimal("0"))
@@ -595,9 +639,24 @@ def employee_dashboard(request):
     baseline_map = baseline_monthly_map()
     emp_map = employee_target_map()
 
+    # A category's target sums its own target and its sub-products'.
+    def _cat_daily_target(eid, cat):
+        return sum(
+            (resolve_daily_target(eid, n, working_days, emp_map=emp_map, baseline_map=baseline_map)
+             for n in [cat] + cat_members.get(cat, [])),
+            Decimal("0"),
+        )
+
+    def _cat_monthly_target(eid, cat):
+        return sum(
+            (resolve_monthly_target(eid, n, emp_map=emp_map, baseline_map=baseline_map)
+             for n in [cat] + cat_members.get(cat, [])),
+            Decimal("0"),
+        )
+
     daily_targets_display = []
     for product in products:
-        target_value = resolve_daily_target(emp.id, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
+        target_value = _cat_daily_target(emp.id, product)
         achieved = today_sales_dict.get(product, Decimal("0"))
         progress = (achieved / target_value * 100) if target_value else 0
         daily_targets_display.append({
@@ -609,7 +668,7 @@ def employee_dashboard(request):
 
     monthly_targets_display = []
     for product in products:
-        target_value = resolve_monthly_target(emp.id, product, emp_map=emp_map, baseline_map=baseline_map)
+        target_value = _cat_monthly_target(emp.id, product)
         achieved = month_sales_dict.get(product, Decimal("0"))
         progress = (achieved / target_value * 100) if target_value else 0
         monthly_targets_display.append({
@@ -641,21 +700,21 @@ def employee_dashboard(request):
         target_employee_ids = list(target_employees().values_list("id", flat=True))
 
         for product in products:
+            members = [product] + cat_members.get(product, [])  # category + its sub-products
             # Per-head model: org target = sum of each active employee's target.
             target_value = sum(
-                (resolve_daily_target(eid, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
-                 for eid in target_employee_ids),
+                (_cat_daily_target(eid, product) for eid in target_employee_ids),
                 Decimal("0"),
             )
-            achieved = approved_sales_all.filter(product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
+            achieved = approved_sales_all.filter(product__in=members, date=today).aggregate(total=Sum("amount"))['total'] or 0
             progress = (achieved / target_value * 100) if target_value else 0
             overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
         for product in products:
-            achieved = monthly_sales_qs.filter(product=product).aggregate(total=Sum("amount"))['total'] or 0
+            members = [product] + cat_members.get(product, [])
+            achieved = monthly_sales_qs.filter(product__in=members).aggregate(total=Sum("amount"))['total'] or 0
             target_value = sum(
-                (resolve_monthly_target(eid, product, emp_map=emp_map, baseline_map=baseline_map)
-                 for eid in target_employee_ids),
+                (_cat_monthly_target(eid, product) for eid in target_employee_ids),
                 Decimal("0"),
             )
             progress = (achieved / target_value * 100) if target_value else 0
@@ -668,8 +727,9 @@ def employee_dashboard(request):
                 "products": [],
             }
             for product in products:
-                achieved = approved_sales_all.filter(employee=e, product=product, date=today).aggregate(total=Sum("amount"))['total'] or 0
-                target = resolve_daily_target(e.id, product, working_days, emp_map=emp_map, baseline_map=baseline_map)
+                members = [product] + cat_members.get(product, [])
+                achieved = approved_sales_all.filter(employee=e, product__in=members, date=today).aggregate(total=Sum("amount"))['total'] or 0
+                target = _cat_daily_target(e.id, product)
                 progress = (achieved / target * 100) if target else 0
                 emp_entry_daily["products"].append({
                     "product": product,
@@ -685,13 +745,14 @@ def employee_dashboard(request):
                 "products": [],
             }
             for product in products:
+                members = [product] + cat_members.get(product, [])
                 achieved = approved_sales_all.filter(
                     employee=e,
-                    product=product,
+                    product__in=members,
                     date__year=today.year,
                     date__month=today.month,
                 ).aggregate(total=Sum("amount"))['total'] or 0
-                target = resolve_monthly_target(e.id, product, emp_map=emp_map, baseline_map=baseline_map)
+                target = _cat_monthly_target(e.id, product)
                 progress = (achieved / target * 100) if target else 0
                 emp_entry_monthly["products"].append({
                     "product": product,
@@ -701,12 +762,8 @@ def employee_dashboard(request):
                 })
             monthly_employee_product.append(emp_entry_monthly)
 
-        overall_points_map = {p: Decimal("0") for p in products}
-        overall_sales_map = {p: Decimal("0") for p in products}
-        for entry in monthly_sales_qs.values("product").annotate(total=Sum("points")):
-            overall_points_map[entry["product"]] = entry["total"] or Decimal("0")
-        for entry in monthly_sales_qs.values("product").annotate(total=Sum("amount")):
-            overall_sales_map[entry["product"]] = entry["total"] or Decimal("0")
+        overall_points_map = _sum_by_product(monthly_sales_qs, "points", cat_map)
+        overall_sales_map = _sum_by_product(monthly_sales_qs, "amount", cat_map)
 
         overall_product_point_breakup = [
             {
