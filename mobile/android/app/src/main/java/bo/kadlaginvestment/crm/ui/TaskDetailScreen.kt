@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
@@ -37,6 +38,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -127,8 +129,20 @@ fun TaskDetailScreen(
         }.start()
     }
 
-    if (error != null) { ErrorBox(error!!) { error = null; reloadKey++ }; return }
-    val t = task ?: run { LoadingBox(); return }
+    // This screen renders outside the Scaffold, so it must supply its own themed
+    // Surface. Without one, LocalContentColor defaults to black and every Text
+    // with no explicit colour (title, description, comments) is invisible in
+    // dark mode. Each state below sits on that surface.
+    if (error != null) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            ErrorBox(error!!) { error = null; reloadKey++ }
+        }
+        return
+    }
+    val t = task ?: run {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { LoadingBox() }
+        return
+    }
     val canEdit = t.optBoolean("can_edit")
     // Deleting is the assigner's call alone — assignees only move status/comment.
     val canDelete = t.optBoolean("can_delete")
@@ -171,7 +185,12 @@ fun TaskDetailScreen(
         )
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    // systemBarsPadding keeps the top bar below the status bar and — the
+    // reported bug — the bottom action buttons above the device navigation bar
+    // (targetSdk 36 draws edge-to-edge; the Scaffold that insets the other task
+    // screens is bypassed on this detail route).
+    Column(Modifier.fillMaxSize().systemBarsPadding()) {
         // Top bar
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -447,6 +466,7 @@ fun TaskDetailScreen(
                 }
             }
         }
+    }
     }
 }
 
