@@ -21,7 +21,7 @@ from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Produ
 from ..forms import AdminSaleForm, EditSaleForm, SaleForm
 from ..services import sales as sales_service
 from ..templatetags.custom_filters import inr
-from .helpers import get_manager_access, parse_date_param, success_with_drive_link
+from .helpers import get_manager_access, parse_date_param, success_with_drive_link, name_words_q
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +177,7 @@ def all_sales(request):
 
     if q:
         sales_qs = sales_qs.filter(
-            Q(client__name__icontains=q)
+            name_words_q("client__name", q)
             | Q(client__email__icontains=q)
             | Q(client__phone__icontains=q)
             | Q(employee__user__username__icontains=q)

@@ -30,7 +30,7 @@ from ..forms import (
     LeadFamilyMemberFormSet,
     LeadProductProgressFormSet,
 )
-from .helpers import _lead_queryset_for_request, _parse_decimal
+from .helpers import _lead_queryset_for_request, _parse_decimal, name_words_q
 
 
 @login_required
@@ -47,7 +47,7 @@ def lead_list_by_stage(request, stage):
     base_qs = _lead_queryset_for_request(request).filter(is_discarded=False)
     search_term = request.GET.get("q", "").strip()
     if search_term:
-        base_qs = base_qs.filter(customer_name__icontains=search_term)
+        base_qs = base_qs.filter(name_words_q("customer_name", search_term))
 
     leads = base_qs.filter(stage=stage).order_by("-updated_at")
     for lead in leads:
@@ -280,7 +280,7 @@ def lead_management(request):
 
     search_term = request.GET.get("q", "").strip()
     if search_term:
-        base_qs = base_qs.filter(customer_name__icontains=search_term)
+        base_qs = base_qs.filter(name_words_q("customer_name", search_term))
 
     assigned_to_filter = request.GET.get("assigned_to", "")
     if assigned_to_filter and can_see_stats:

@@ -18,7 +18,7 @@ from ..models import Client, Employee, Family, MessageTemplate, Product, Renewal
 from ..forms import ClientForm, ClientReassignForm
 from ..services.google_drive import DriveNotConfigured, get_or_create_client_folder
 from ..templatetags.custom_filters import inr
-from .helpers import parse_date_param
+from .helpers import parse_date_param, name_words_q
 
 
 PER_PAGE = getattr(settings, "PER_PAGE", 50)
@@ -216,7 +216,7 @@ def all_clients(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         clients_qs = clients_qs.filter(
-            Q(name__icontains=q)
+            name_words_q("name", q)
             | Q(email__icontains=q)
             | Q(phone__icontains=q)
             | Q(pan__icontains=q)
@@ -289,7 +289,7 @@ def my_clients(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         clients_qs = clients_qs.filter(
-            Q(name__icontains=q)
+            name_words_q("name", q)
             | Q(email__icontains=q)
             | Q(phone__icontains=q)
             | Q(pan__icontains=q)
@@ -517,7 +517,7 @@ def client_drive_folder(request, client_id):
 def search_clients(request):
     query = request.GET.get("q", "")
     clients = Client.objects.filter(
-        Q(name__icontains=query) | Q(email__icontains=query) | Q(phone__icontains=query)
+        name_words_q("name", query) | Q(email__icontains=query) | Q(phone__icontains=query)
     )[:10]
     results = [
         {"id": c.id, "text": f"{c.name} ({c.email or ''} {c.phone or ''})"}
@@ -676,7 +676,7 @@ def bulk_reassign_view(request):
             clients_qs = Client.objects.filter(mapped_to=source_emp).order_by("id")
             if q:
                 clients_qs = clients_qs.filter(
-                    Q(name__icontains=q) | Q(email__icontains=q) | Q(phone__icontains=q) | Q(pan__icontains=q)
+                    name_words_q("name", q) | Q(email__icontains=q) | Q(phone__icontains=q) | Q(pan__icontains=q)
                 )
             context.update({"clients_preview": clients_qs, "source_emp": source_emp, "mode": "mapped"})
             return render(request, "clients/bulk_reassign.html", context)
@@ -685,7 +685,7 @@ def bulk_reassign_view(request):
             clients_qs = Client.objects.filter(mapped_to__isnull=True).order_by("id")
             if q:
                 clients_qs = clients_qs.filter(
-                    Q(name__icontains=q) | Q(email__icontains=q) | Q(phone__icontains=q) | Q(pan__icontains=q)
+                    name_words_q("name", q) | Q(email__icontains=q) | Q(phone__icontains=q) | Q(pan__icontains=q)
                 )
             context.update({"clients_preview": clients_qs, "source_emp": None, "mode": "unmapped"})
             return render(request, "clients/bulk_reassign.html", context)

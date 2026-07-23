@@ -15,7 +15,7 @@ from .. import permissions
 from ..forms import EditRenewalForm, RenewalForm
 from ..templatetags.custom_filters import inr
 from ..models import Client, Renewal, Product
-from .helpers import parse_date_param
+from .helpers import parse_date_param, name_words_q
 from .helpers import get_manager_access, success_with_drive_link as _success_with_drive_link
 
 
@@ -188,7 +188,7 @@ def all_renewals(request):
 
 	if q:
 		renewals_qs = renewals_qs.filter(
-			Q(client__name__icontains=q)
+			name_words_q("client__name", q)
 			| Q(client__email__icontains=q)
 			| Q(client__phone__icontains=q)
 			| Q(product_name__icontains=q)

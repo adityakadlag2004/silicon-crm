@@ -12,7 +12,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.timezone import now
-from django.db.models import Sum
+from django.db.models import Sum, Q
 
 from ..models import (
     Lead,
@@ -23,6 +23,21 @@ from ..models import (
 # canonical definition lives in clients/permissions.py; re-exported here
 # because many view modules import it from helpers
 from ..permissions import is_admin  # noqa: F401
+
+
+def name_words_q(field, query):
+    """Match a name field that contains EVERY word in the query, in any order.
+
+    People search by first + last name ("John Smith") but records often carry a
+    middle name ("John Michael Smith"), so a plain `name__icontains="John Smith"`
+    misses them. Splitting into words and AND-ing each as an icontains matches
+    regardless of middle names or word order. One word behaves like a plain
+    icontains; an empty query matches nothing extra (empty Q).
+    """
+    q = Q()
+    for word in (query or "").split():
+        q &= Q(**{f"{field}__icontains": word})
+    return q
 
 
 def get_manager_access():

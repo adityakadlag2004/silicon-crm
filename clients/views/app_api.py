@@ -26,7 +26,7 @@ from ..models import (
     Sale,
 )
 from ..services import sales as sales_service
-from .helpers import get_manager_access
+from .helpers import get_manager_access, name_words_q
 from .reports import business_overview_data
 
 
@@ -363,7 +363,7 @@ def app_clients(request):
         qs = qs.filter(mapped_to=emp)
     if q:
         qs = qs.filter(
-            Q(name__icontains=q) | Q(phone__icontains=q)
+            name_words_q("name", q) | Q(phone__icontains=q)
             | Q(email__icontains=q) | Q(pan__icontains=q)
         )
 
@@ -599,7 +599,7 @@ def app_sales(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         qs = qs.filter(
-            Q(client__name__icontains=q) | Q(product__icontains=q)
+            name_words_q("client__name", q) | Q(product__icontains=q)
             | Q(employee__user__username__icontains=q)
         )
     try:
@@ -724,7 +724,7 @@ def app_renewals(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         qs = qs.filter(
-            Q(client__name__icontains=q) | Q(client__phone__icontains=q)
+            name_words_q("client__name", q) | Q(client__phone__icontains=q)
             | Q(product_name__icontains=q) | Q(product_ref__name__icontains=q)
         )
 
@@ -928,7 +928,7 @@ def app_leads(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         qs = qs.filter(
-            Q(customer_name__icontains=q) | Q(phone__icontains=q) | Q(email__icontains=q)
+            name_words_q("customer_name", q) | Q(phone__icontains=q) | Q(email__icontains=q)
         )
 
     try:

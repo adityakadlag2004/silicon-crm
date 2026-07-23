@@ -22,6 +22,7 @@ from django.views.decorators.http import require_POST
 from ..forms import validate_pan
 from .. import permissions
 from ..models import Client
+from .helpers import name_words_q
 from ..services import client_merge, rta_feed
 
 
@@ -42,7 +43,7 @@ def _missing_pan_qs(request, search=""):
     if _role(request) == "employee":
         qs = qs.filter(mapped_to=request.user.employee)
     if search:
-        qs = qs.filter(Q(name__icontains=search)
+        qs = qs.filter(name_words_q("name", search)
                        | Q(phone__icontains=search)
                        | Q(mapped_to__user__username__icontains=search))
     return qs.order_by("mapped_to__user__username", "name")

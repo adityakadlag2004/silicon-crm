@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from ..models import InsuranceClaim, InsurancePolicy, Meeting
+from .helpers import name_words_q
 from ..templatetags.custom_filters import inr
 
 
@@ -27,7 +28,7 @@ def policy_list(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         policies = policies.filter(
-            Q(policy_number__icontains=q) | Q(client__name__icontains=q)
+            Q(policy_number__icontains=q) | name_words_q("client__name", q)
             | Q(insurer__icontains=q) | Q(plan_name__icontains=q)
         )
     status = request.GET.get("status", "")
@@ -111,7 +112,7 @@ def claim_list(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         claims = claims.filter(
-            Q(policy__policy_number__icontains=q) | Q(policy__client__name__icontains=q)
+            Q(policy__policy_number__icontains=q) | name_words_q("policy__client__name", q)
             | Q(claim_type__icontains=q))
     status = request.GET.get("status", "")
     if status == "open":
@@ -185,7 +186,7 @@ def meeting_list(request):
 
     q = (request.GET.get("q") or "").strip()
     if q:
-        meetings = meetings.filter(Q(client__name__icontains=q) | Q(outcome__icontains=q))
+        meetings = meetings.filter(name_words_q("client__name", q) | Q(outcome__icontains=q))
     status = request.GET.get("status", "")
     now = timezone.now()
     if status == "overdue":

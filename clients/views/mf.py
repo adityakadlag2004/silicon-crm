@@ -27,6 +27,7 @@ from ..models import (
 from ..templatetags.custom_filters import inr
 from ..permissions import admin_required as _admin_required
 from ..services import rta_feed
+from .helpers import name_words_q
 
 
 @_admin_required
@@ -150,8 +151,8 @@ def mf_folios(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         qs = qs.filter(
-            Q(folio_number__icontains=q) | Q(investor_name__icontains=q)
-            | Q(pan__icontains=q) | Q(amc_name__icontains=q) | Q(client__name__icontains=q)
+            Q(folio_number__icontains=q) | name_words_q("investor_name", q)
+            | Q(pan__icontains=q) | Q(amc_name__icontains=q) | name_words_q("client__name", q)
         )
     linked = request.GET.get("linked")
     if linked == "yes":
@@ -265,7 +266,7 @@ def mf_folio_link(request, folio_id):
     q = (request.GET.get("q") or "").strip()
     candidates = Client.objects.all()
     if q:
-        candidates = candidates.filter(Q(name__icontains=q) | Q(pan__icontains=q) | Q(phone__icontains=q))
+        candidates = candidates.filter(name_words_q("name", q) | Q(pan__icontains=q) | Q(phone__icontains=q))
     elif folio.investor_name:
         first_word = folio.investor_name.split()[0]
         candidates = candidates.filter(name__icontains=first_word)
@@ -323,9 +324,9 @@ def mf_transactions(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         qs = qs.filter(
-            Q(folio__folio_number__icontains=q) | Q(folio__investor_name__icontains=q)
+            Q(folio__folio_number__icontains=q) | name_words_q("folio__investor_name", q)
             | Q(scheme_name__icontains=q) | Q(txn_type__icontains=q)
-            | Q(folio__client__name__icontains=q)
+            | name_words_q("folio__client__name", q)
         )
     arn_id = request.GET.get("arn")
     if arn_id and arn_id.isdigit():
@@ -615,8 +616,8 @@ def mf_sips(request):
     q = (request.GET.get("q") or "").strip()
     if q:
         qs = qs.filter(
-            Q(folio_number__icontains=q) | Q(investor_name__icontains=q)
-            | Q(scheme_name__icontains=q) | Q(client__name__icontains=q)
+            Q(folio_number__icontains=q) | name_words_q("investor_name", q)
+            | Q(scheme_name__icontains=q) | name_words_q("client__name", q)
             | Q(pan__icontains=q)
         )
 
