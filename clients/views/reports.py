@@ -9,7 +9,15 @@ from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
-from django.db.models import Sum, Q, Count
+from django.db.models import Sum, Q, Count, F, ExpressionWrapper, DecimalField
+
+# A multiyear health premium counts, for this month's margin, only as its
+# first-year slice (amount / policy_years). policy_years is 1 for ordinary sales,
+# so the slice equals the amount for them.
+_ANNUAL_SLICE = ExpressionWrapper(
+    F("amount") / F("policy_years"),
+    output_field=DecimalField(max_digits=16, decimal_places=4),
+)
 from django.utils.timezone import now
 
 from .. import permissions
@@ -765,7 +773,10 @@ def _month_margin_breakdown(year, month):
             seen_codes = []
             for code, label in buckets:
                 seen_codes.append(code)
-                rev = base.filter(policy_type=code).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+                # Multiyear health: only the first-year slice is this month's
+                # business (the rest renews in later years).
+                rev = base.filter(policy_type=code).aggregate(t=Sum(_ANNUAL_SLICE))["t"] or Decimal("0")
+                rev = rev.quantize(Decimal("0.01"))
                 if rev <= 0:
                     continue
                 pct = p.margin_for(rev, code)
@@ -774,7 +785,8 @@ def _month_margin_breakdown(year, month):
                              "margin_percent": pct, "margin_amount": amt})
                 total_rev += rev
                 total_margin += amt
-            rev_unset = base.exclude(policy_type__in=seen_codes).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            rev_unset = base.exclude(policy_type__in=seen_codes).aggregate(t=Sum(_ANNUAL_SLICE))["t"] or Decimal("0")
+            rev_unset = rev_unset.quantize(Decimal("0.01"))
             if rev_unset > 0:
                 pct = p.margin_for(rev_unset, "")
                 amt = (rev_unset * pct / Decimal("100")).quantize(Decimal("0.01"))
@@ -852,6 +864,44 @@ def _month_renewal_breakdown(year, month):
         rows.append({"product": "Other / Unmapped (Renewal)", "revenue": unmapped_rev,
                      "margin_percent": Decimal("0.00"), "margin_amount": Decimal("0.00")})
         total_rev += unmapped_rev
+
+    # ── Multiyear health: years 2..N of a multiyear policy are recognized as
+    # renewal business on each anniversary (the first year was Fresh at sale).
+    # Derived from the sale, so nothing to create/maintain.
+    health = Product.objects.filter(code="HEALTH_INS").first()
+    if health:
+        def _add_years(d, n):
+            try:
+                return d.replace(year=d.year + n)
+            except ValueError:  # 29 Feb → 28 Feb
+                return d.replace(year=d.year + n, day=28)
+
+        my_slice = Decimal("0")
+        for sale in Sale.objects.filter(
+            policy_years__gt=1, status=Sale.STATUS_APPROVED, product_ref=health
+        ).only("amount", "policy_years", "policy_date", "date"):
+            base_date = sale.policy_date or sale.date
+            for k in range(1, sale.policy_years):  # anniversaries → years 2..N
+                anniv = _add_years(base_date, k)
+                if anniv.year == year and anniv.month == month:
+                    my_slice += sale.annual_premium
+        if my_slice > 0:
+            pct = health.renewal_margin_percent or Decimal("0.00")
+            amt = (my_slice * pct / Decimal("100")).quantize(Decimal("0.01"))
+            label = f"{health.parent.name} › {health.name}" if health.parent_id else health.name
+            existing = next((r for r in rows if r["product"] == label), None)
+            if existing:
+                existing["revenue"] += my_slice
+                existing["margin_amount"] += amt
+                existing["margin_percent"] = (
+                    (existing["margin_amount"] / existing["revenue"] * Decimal("100")).quantize(Decimal("0.01"))
+                    if existing["revenue"] else Decimal("0.00")
+                )
+            else:
+                rows.append({"product": label, "revenue": my_slice,
+                             "margin_percent": pct, "margin_amount": amt})
+            total_rev += my_slice
+            total_margin += amt
 
     blended = (total_margin / total_rev * Decimal("100")).quantize(Decimal("0.01")) if total_rev else Decimal("0.00")
     rows.sort(key=lambda x: x["margin_amount"], reverse=True)

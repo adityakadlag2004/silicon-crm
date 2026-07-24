@@ -174,6 +174,9 @@ CRONJOBS = [
     # touches unread RTA mail so quiet hours cost nothing.
     # No-op until RTA_FEED_IMAP_* env vars are set — see .env.example.
     ('15 * * * *', 'django.core.management.call_command', ['import_rta_feeds']),
+    # EMI-collection reminders for multiyear health policies on EMI: push +
+    # auto call-task to the client's mapped employee. 8 AM on the 3rd–5th.
+    ('0 8 3-5 * *', 'django.core.management.call_command', ['emi_reminders']),
 ]
 
 

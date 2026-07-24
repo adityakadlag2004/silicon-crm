@@ -219,16 +219,42 @@ class SalePolicyTypeMixin:
             else:
                 cleaned_data["policy_number"] = ""
 
+        # Multiyear + EMI apply to Health Insurance only. For everything else,
+        # force single-year / no-EMI so the fields can't leak onto other sales.
+        if "policy_years" in self.fields:
+            if _is_health_product_name(product):
+                try:
+                    years = int(cleaned_data.get("policy_years") or 1)
+                except (TypeError, ValueError):
+                    years = 1
+                cleaned_data["policy_years"] = max(1, years)
+                try:
+                    emi = int(cleaned_data.get("emi_months") or 0)
+                except (TypeError, ValueError):
+                    emi = 0
+                if emi not in {0, 5, 8, 11}:
+                    emi = 0
+                # EMI only makes sense on a multiyear policy.
+                cleaned_data["emi_months"] = emi if cleaned_data["policy_years"] > 1 else 0
+            else:
+                cleaned_data["policy_years"] = 1
+                cleaned_data["emi_months"] = 0
+
         return cleaned_data
+
+_POLICY_YEARS_CHOICES = [(1, "Single year"), (2, "2 years"), (3, "3 years")]
+
 
 class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
     product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
     subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
     ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
+    policy_years = forms.ChoiceField(choices=_POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
+    emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months")
 
     class Meta:
         model = Sale
-        fields = ["client", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number"]
+        fields = ["client", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "policy_years", "emi_months"]
         widgets = {
             "client": ModelSelect2Widget(
                 model=Client,
@@ -251,10 +277,12 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
     subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
     ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
+    policy_years = forms.ChoiceField(choices=_POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
+    emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months")
 
     class Meta:
         model = Sale
-        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number"]
+        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "policy_years", "emi_months"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),
@@ -276,10 +304,12 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
     subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
     ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
+    policy_years = forms.ChoiceField(choices=_POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
+    emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months")
 
     class Meta:
         model = Sale
-        fields = ["product", "ppt", "amount", "policy_type", "date", "policy_date", "policy_number"]
+        fields = ["product", "ppt", "amount", "policy_type", "date", "policy_date", "policy_number", "policy_years", "emi_months"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),

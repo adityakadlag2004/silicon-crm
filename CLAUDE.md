@@ -67,6 +67,24 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   client's Drive folder to upload the policy (created on first click) — a
   link, never a forced redirect, so daily bulk entry isn't interrupted.
 
+## Multiyear health policies + EMI
+
+- A Health sale can be **multiyear** (`Sale.policy_years` 2/3): the entered
+  `amount` is the full multi-year premium. Only the **first-year slice**
+  (`amount / policy_years`, via `Sale.annual_premium`) is Fresh business now —
+  the margin report counts that slice, not the full amount. Years 2..N are
+  recognized as **renewals on each anniversary** at the health renewal rate
+  (12.75%), derived live in `_month_renewal_breakdown` (no records to maintain).
+  Multiyear is **Health-only** (forced off for other products in the sale form).
+- Multiyear policies are often on **EMI** (`Sale.emi_months` 5/8/11), due the
+  **5th**, starting the month AFTER the sale. The `emi_reminders` cron (in
+  CRONJOBS, 8 AM on the 3rd–5th) pushes the client's **mapped employee**
+  (`Client.mapped_to`, falling back to the seller) and auto-assigns one
+  high-priority "call client for EMI" **task** per policy per month (deduped via
+  `Task.assign_group = "emi:<sale>:<YYYY-MM>"`), due the 5th. A missed EMI can
+  cancel the policy, so the reminder is the point.
+- **Not yet on mobile:** the app add-sale has no multiyear/EMI fields — web only.
+
 ## Claim workflow
 
 - Claims are raised and worked **in-app** now (not just admin): "Raise Claim"

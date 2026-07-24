@@ -87,6 +87,21 @@ class Sale(models.Model):
         help_text="FYC % locked in at sale time for PPT-priced plans.",
     )
 
+    # Multiyear health policies: the client pays a single premium covering
+    # `policy_years` years (amount is the full multi-year premium). Only the
+    # first-year slice (amount / policy_years) is Fresh business now; the
+    # remaining years become renewals on each anniversary. policy_years == 1 is
+    # an ordinary single-year sale.
+    policy_years = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="Years the (multiyear) policy covers. 1 = ordinary single-year sale.",
+    )
+    # Multiyear policies are often paid in monthly EMIs, due the 5th, starting
+    # the month AFTER the sale, for this many months (5/8/11; 0 = not on EMI).
+    # Drives the monthly EMI-collection reminder + auto-assigned call task.
+    EMI_MONTH_CHOICES = [(0, "Not on EMI"), (5, "5 months"), (8, "8 months"), (11, "11 months")]
+    emi_months = models.PositiveSmallIntegerField(default=0, choices=EMI_MONTH_CHOICES)
+
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     incentive_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
     # Records which campaign (if any) awarded the points on this sale; null = regular mechanism.
@@ -106,6 +121,22 @@ class Sale(models.Model):
         if self.product_ref_id:
             return self.product_ref.is_health
         return (self.product or "").strip().lower() == "health insurance"
+
+    @property
+    def is_multiyear(self):
+        return (self.policy_years or 1) > 1
+
+    @property
+    def is_emi(self):
+        return (self.emi_months or 0) > 0
+
+    @property
+    def annual_premium(self):
+        """The per-year premium slice. For a multiyear policy the entered amount
+        is the full multi-year premium; only this slice is Fresh business now and
+        each later year renews at this slice."""
+        years = self.policy_years or 1
+        return (self.amount / years) if (self.amount and years) else (self.amount or Decimal("0"))
 
     @property
     def is_insurance(self):

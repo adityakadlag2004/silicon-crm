@@ -70,6 +70,16 @@
       {% if form.policy_number.errors %}<div class="text-danger small mt-1">{{ form.policy_number.errors|striptags }}</div>{% endif %}
       <small class="form-text text-muted"><i class="bi bi-hash"></i> The insurer's policy number — links this sale to its policy on the tracker.</small>
     </div>
+    <div class="mb-3" id="multiyear-group" style="display:none;">
+      <label for="id_policy_years" class="form-label fw-semibold">Policy term</label>
+      {{ form.policy_years }}
+      <small class="form-text text-muted">Multiyear: entered amount is the full multi-year premium; premium ÷ years is this year's Fresh business.</small>
+    </div>
+    <div class="mb-3" id="emi-group" style="display:none;">
+      <label for="id_emi_months" class="form-label fw-semibold">Sold on EMI?</label>
+      {{ form.emi_months }}
+      <small class="form-text text-muted">Monthly EMI due the 5th; books call reminders for the client's employee.</small>
+    </div>
     <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save Changes</button>
     <a href="{% url 'clients:all_sales' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Cancel</a>
   </form>
@@ -146,10 +156,27 @@ document.addEventListener("DOMContentLoaded", function () {
       policyNumGroup.style.display = isInsurance ? "block" : "none";
       if (policyNumInput) policyNumInput.required = isInsurance;
     }
+
+    // Multiyear + EMI: Health only; EMI shows only for a multiyear (>=2y) term.
+    const multiyearGroup = document.getElementById("multiyear-group");
+    const emiGroup = document.getElementById("emi-group");
+    const yearsSel = document.getElementById("id_policy_years");
+    const emiSel = document.getElementById("id_emi_months");
+    if (multiyearGroup) {
+      multiyearGroup.style.display = isHealthInsurance ? "" : "none";
+      if (!isHealthInsurance && yearsSel) yearsSel.value = "1";
+      const multi = isHealthInsurance && yearsSel && parseInt(yearsSel.value, 10) >= 2;
+      if (emiGroup) {
+        emiGroup.style.display = multi ? "" : "none";
+        if (!multi && emiSel) emiSel.value = "0";
+      }
+    }
   }
 
   if (productSelect) {
     productSelect.addEventListener("change", updatePolicyTypeVisibility);
+    var _yrs = document.getElementById("id_policy_years");
+    if (_yrs) _yrs.addEventListener("change", updatePolicyTypeVisibility);
     updatePolicyTypeVisibility();
   }
 });
