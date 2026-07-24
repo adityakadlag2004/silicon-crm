@@ -12,10 +12,10 @@ policies and all renewals are a flat 15%.
     2,00,000 – 3,00,000       30.0%
     > 3,00,000                35.0%
 
-Port = 15% (the product's default margin, used when no Fresh slab applies),
-renewals = 15% (renewal_margin_percent). Each band uses [>=lower, <upper) per the
-grid image, so the boundary belongs to the higher band — e.g. exactly 25,000 =
-20% and exactly 3,00,000 = 35% (">=3L").
+Port = 15% (the product's default margin, used when no Fresh slab applies) and
+renewals = 12.75% (renewal_margin_percent). Each band uses [>=lower, <upper) per
+the grid image, so the boundary belongs to the higher band — e.g. exactly 25,000
+= 20% and exactly 3,00,000 = 35% (">=3L").
 
 Manual tool (not in CRONJOBS). Idempotent: re-running replaces the Fresh slabs.
 """
@@ -49,9 +49,10 @@ class Command(BaseCommand):
             raise CommandError("No Health Insurance product found (code HEALTH_INS).")
 
         with transaction.atomic():
-            # Port + fallback margin and renewal margin are a flat 15%.
+            # Port (and the fallback) is a flat 15%; renewals are 12.75% per the
+            # grid ("Renewal Commission flat 12.75%").
             product.margin_percent = Decimal("15.00")
-            product.renewal_margin_percent = Decimal("15.00")
+            product.renewal_margin_percent = Decimal("12.75")
             product.save(update_fields=["margin_percent", "renewal_margin_percent", "updated_at"])
 
             # Replace only the Fresh slabs (leave any Port/other rows untouched).

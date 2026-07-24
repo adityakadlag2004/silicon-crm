@@ -35,8 +35,8 @@ class HealthSlabTests(TestCase):
         for amount in ("1000", "500000"):
             self.assertEqual(self.h.margin_for(amount, "port"), Decimal("15.00"))
 
-    def test_renewal_is_flat_15(self):
-        self.assertEqual(self.h.renewal_margin_percent, Decimal("15.00"))
+    def test_renewal_is_flat_12_75(self):
+        self.assertEqual(self.h.renewal_margin_percent, Decimal("12.75"))
 
     def test_idempotent(self):
         call_command("seed_health_slabs")
