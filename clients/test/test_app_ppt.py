@@ -67,6 +67,35 @@ class AppPptTests(TestCase):
         self.assertEqual(sale.ppt, "10")
         self.assertEqual(sale.margin_percent_snapshot, Decimal("12.00"))  # Advisor default
 
+    def test_create_accepts_multiyear_emi_for_health(self):
+        health, _ = Product.objects.get_or_create(code="HEALTH_INS", defaults={"name": "Health Insurance"})
+        health.is_active = True
+        health.save()
+        resp = self._http(self.admin_user).post(
+            reverse("clients:app_sale_create"),
+            data=json.dumps({"client_id": self.customer.id, "product_id": health.id,
+                             "amount": "300000", "policy_type": "fresh",
+                             "policy_years": 3, "emi_months": 5}),
+            content_type="application/json",
+        )
+        self.assertTrue(resp.json()["ok"], resp.json())
+        sale = Sale.objects.get(id=resp.json()["id"])
+        self.assertEqual(sale.policy_years, 3)
+        self.assertEqual(sale.emi_months, 5)
+
+    def test_create_ignores_multiyear_for_non_health(self):
+        resp = self._http(self.admin_user).post(
+            reverse("clients:app_sale_create"),
+            data=json.dumps({"client_id": self.customer.id, "product_id": self.plan.id,
+                             "ppt": "10", "amount": "100000",
+                             "policy_years": 3, "emi_months": 5}),
+            content_type="application/json",
+        )
+        self.assertTrue(resp.json()["ok"], resp.json())
+        sale = Sale.objects.get(id=resp.json()["id"])
+        self.assertEqual(sale.policy_years, 1)
+        self.assertEqual(sale.emi_months, 0)
+
     def _find_subproduct(self, data, name):
         for p in data["products"]:
             for s in p.get("subproducts", []):

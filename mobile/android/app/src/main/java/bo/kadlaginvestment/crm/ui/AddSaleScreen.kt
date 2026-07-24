@@ -66,6 +66,10 @@ fun AddSaleScreen(
     var amount by remember { mutableStateOf("") }
     var coverAmount by remember { mutableStateOf("") }
     var policyType by remember { mutableStateOf("") }
+    var policyYears by remember { mutableStateOf(1) }         // Health multiyear term
+    var yearsMenuOpen by remember { mutableStateOf(false) }
+    var emiMonths by remember { mutableStateOf(0) }           // 0/5/8/11
+    var emiMenuOpen by remember { mutableStateOf(false) }
 
     var selectedEmployee by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var employeeMenuOpen by remember { mutableStateOf(false) }
@@ -181,6 +185,8 @@ fun AddSaleScreen(
                             selectedProduct = p
                             selectedSubproduct = null  // reset dependent choices
                             selectedPpt = null
+                            policyYears = 1
+                            emiMonths = 0
                             productMenuOpen = false
                         },
                     )
@@ -291,6 +297,52 @@ fun AddSaleScreen(
                 RadioButton(selected = policyType == "port", onClick = { policyType = "port" })
                 Text("Port (no points)", Modifier.clickable { policyType = "port" })
             }
+
+            // Multiyear term: the entered amount is the full multi-year premium.
+            Box {
+                OutlinedTextField(
+                    value = if (policyYears <= 1) "Single year" else "$policyYears years",
+                    onValueChange = {}, readOnly = true, enabled = false,
+                    label = { Text("Policy term") },
+                    modifier = Modifier.fillMaxWidth().clickable { yearsMenuOpen = true },
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                )
+                DropdownMenu(expanded = yearsMenuOpen, onDismissRequest = { yearsMenuOpen = false }) {
+                    listOf(1 to "Single year", 2 to "2 years", 3 to "3 years").forEach { (v, lbl) ->
+                        DropdownMenuItem(text = { Text(lbl) }, onClick = {
+                            policyYears = v
+                            if (v <= 1) emiMonths = 0
+                            yearsMenuOpen = false
+                        })
+                    }
+                }
+            }
+
+            // EMI only for a multiyear (>=2y) term.
+            if (policyYears >= 2) {
+                Box {
+                    OutlinedTextField(
+                        value = if (emiMonths == 0) "Not on EMI" else "$emiMonths months",
+                        onValueChange = {}, readOnly = true, enabled = false,
+                        label = { Text("Sold on EMI?") },
+                        modifier = Modifier.fillMaxWidth().clickable { emiMenuOpen = true },
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                            disabledBorderColor = MaterialTheme.colorScheme.outline,
+                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
+                    )
+                    DropdownMenu(expanded = emiMenuOpen, onDismissRequest = { emiMenuOpen = false }) {
+                        listOf(0 to "Not on EMI", 5 to "5 months", 8 to "8 months", 11 to "11 months").forEach { (v, lbl) ->
+                            DropdownMenuItem(text = { Text(lbl) }, onClick = { emiMonths = v; emiMenuOpen = false })
+                        }
+                    }
+                }
+            }
         }
 
         if (isAdmin) {
@@ -348,6 +400,8 @@ fun AddSaleScreen(
                         .put("amount", amount)
                         .put("cover_amount", coverAmount)
                         .put("policy_type", policyType)
+                        .put("policy_years", policyYears)
+                        .put("emi_months", emiMonths)
                     if (selectedEmployee != null) body.put("employee_id", selectedEmployee!!.first)
                     when (val r = ApiClient.post("/clients/api/app/sales/create/", body)) {
                         is ApiClient.Result.Ok -> {
@@ -356,6 +410,7 @@ fun AddSaleScreen(
                             selectedClient = null; clientQuery = ""
                             selectedProduct = null; selectedSubproduct = null; selectedPpt = null
                             amount = ""; coverAmount = ""; policyType = ""
+                            policyYears = 1; emiMonths = 0
                             selectedEmployee = null
                         }
                         is ApiClient.Result.NotLoggedIn -> onSessionExpired()

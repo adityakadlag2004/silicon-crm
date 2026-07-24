@@ -339,6 +339,20 @@ def app_sale_create(request):
     if policy_type not in ("", Sale.POLICY_TYPE_FRESH, Sale.POLICY_TYPE_PORT):
         return JsonResponse({"ok": False, "error": "Invalid policy type."}, status=400)
 
+    # Multiyear + EMI apply to Health only (EMI needs a multiyear term).
+    try:
+        policy_years = int(body.get("policy_years") or 1)
+        emi_months = int(body.get("emi_months") or 0)
+    except (TypeError, ValueError):
+        policy_years, emi_months = 1, 0
+    if product.is_health:
+        policy_years = policy_years if policy_years in (1, 2, 3) else 1
+        emi_months = emi_months if emi_months in (0, 5, 8, 11) else 0
+        if policy_years <= 1:
+            emi_months = 0
+    else:
+        policy_years, emi_months = 1, 0
+
     sale_emp = emp
     if is_admin and body.get("employee_id"):
         sale_emp = Employee.objects.filter(pk=body.get("employee_id"), active=True).first() or emp
@@ -348,6 +362,7 @@ def app_sale_create(request):
     sale = Sale(
         client=client, employee=sale_emp, product=product.name, product_ref=product,
         amount=amount, cover_amount=cover_amount, policy_type=policy_type, ppt=ppt,
+        policy_years=policy_years, emi_months=emi_months,
     )
     sales_service.finalize_new_sale(sale, request.user, auto_approve=is_admin)
     return JsonResponse({"ok": True, "id": sale.id, "status": sale.status})
