@@ -69,5 +69,5 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"Health Insurance: {len(FRESH_SLABS)} Fresh slabs set; "
-            f"Port + renewals = 15%."
+            f"Port = {product.margin_percent}%, renewals = {product.renewal_margin_percent}%."
         ))
