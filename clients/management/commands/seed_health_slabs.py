@@ -13,9 +13,9 @@ policies and all renewals are a flat 15%.
     > 3,00,000                35.0%
 
 Port = 15% (the product's default margin, used when no Fresh slab applies),
-renewals = 15% (renewal_margin_percent). Each band's boundary belongs to the
-higher band (e.g. exactly 25,000 = 20%), and exactly 3,00,000 is still 30% —
-only strictly above it is 35% — matching the stated "greater than 3 lakh".
+renewals = 15% (renewal_margin_percent). Each band uses [>=lower, <upper) per the
+grid image, so the boundary belongs to the higher band — e.g. exactly 25,000 =
+20% and exactly 3,00,000 = 35% (">=3L").
 
 Manual tool (not in CRONJOBS). Idempotent: re-running replaces the Fresh slabs.
 """
@@ -34,8 +34,8 @@ FRESH_SLABS = [
     ("25000", "49999.99", "20.00"),
     ("50000", "99999.99", "22.50"),
     ("100000", "199999.99", "27.50"),
-    ("200000", "300000", "30.00"),
-    ("300000.01", None, "35.00"),
+    ("200000", "299999.99", "30.00"),
+    ("300000", None, "35.00"),
 ]
 
 
