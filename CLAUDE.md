@@ -84,6 +84,16 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `Task.assign_group = "emi:<sale>:<YYYY-MM>"`), due the 5th. A missed EMI can
   cancel the policy, so the reminder is the point.
 - **Not yet on mobile:** the app add-sale has no multiyear/EMI fields — web only.
+- **Renewal reminders** (`renewal_reminders` cron, daily 8:45 AM): single-year
+  insurance policies renew manually, so at **30/15/5 days** before the next
+  renewal the system pushes the client's **mapped employee** (fallback seller)
+  and auto-assigns a "call to renew" **task** due on the renewal date (deduped by
+  `assign_group = "renewal:<sale>:<date>"`). The task shows on the home calendar;
+  push + the `insurance_renewal` feed marker cover the rest. `Sale.coverage_end()`
+  / `Sale.next_renewal_date()` account for a **multiyear** term already paid — a
+  multiyear policy stays silent until its term ends (policy_date + years). The
+  `insurance_renewal` calendar feed now keys on the **mapped** employee and skips
+  the paid multiyear years too.
 
 ## Claim workflow
 

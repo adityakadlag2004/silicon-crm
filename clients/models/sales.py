@@ -9,6 +9,14 @@ from django.db.models import Sum
 from django.utils import timezone
 
 
+def _add_years(d, n):
+    """d shifted by n years; 29 Feb falls back to 28 Feb in common years."""
+    try:
+        return d.replace(year=d.year + n)
+    except ValueError:
+        return d.replace(year=d.year + n, day=28)
+
+
 class Sale(models.Model):
     STATUS_PENDING = "pending"
     STATUS_APPROVED = "approved"
@@ -177,6 +185,27 @@ class Sale(models.Model):
             if anniversary >= ref:
                 return anniversary
         return None
+
+    def coverage_end(self):
+        """Date the policy is paid through — the first renewal falls due here.
+        For a multiyear policy that's policy_date + policy_years years (the
+        client has already paid the intervening years); single-year policies
+        renew a year after commencement. None for non-insurance."""
+        basis = self.renewal_basis
+        if not (self.is_insurance and basis):
+            return None
+        return _add_years(basis, self.policy_years or 1)
+
+    def next_renewal_date(self, on_or_after=None):
+        """Next renewal due date on/after `on_or_after` (default today),
+        skipping the years a multiyear policy has already paid for."""
+        end = self.coverage_end()
+        if not end:
+            return None
+        ref = on_or_after or timezone.localdate()
+        while end < ref:
+            end = _add_years(end, 1)
+        return end
 
     def _effective_product_label(self):
         if self.product_ref_id:

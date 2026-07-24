@@ -188,10 +188,15 @@ def _insurance_renewals(employee, start, end):
     (approval) date, which legacy rows without a policy_date still fall back
     to. Only approved sales generate a renewal reminder.
     """
+    # The employee who OWNS the client relationship handles the renewal call, so
+    # the reminder lands on the mapped employee's calendar (falling back to the
+    # seller when the client isn't mapped).
     qs = Sale.objects.filter(
-        employee=employee,
         status=Sale.STATUS_APPROVED,
     ).select_related("client", "product_ref").filter(
+        Q(client__mapped_to=employee)
+        | (Q(employee=employee) & Q(client__mapped_to__isnull=True))
+    ).filter(
         Q(product_ref__code__in=["HEALTH_INS", "LIFE_INS"])
         | Q(product__iexact="Health Insurance")
         | Q(product__iexact="Life Insurance")
@@ -201,13 +206,16 @@ def _insurance_renewals(employee, start, end):
         basis = sale.renewal_basis
         if not basis:
             continue
+        # A multiyear policy is paid through its term — no renewal until it ends.
+        coverage_end = sale.coverage_end() or basis
         for yr in range(start.year, end.year + 1):
             try:
                 anniv = date(yr, basis.month, basis.day)
             except ValueError:                 # 29 Feb → 28 Feb in common years
                 anniv = date(yr, basis.month, 28)
-            # Only future/annual renewals, never the commencement year itself.
-            if anniv <= basis:
+            # Only renewals due at/after the paid term ends (skips the years a
+            # multiyear policy already covers, and the commencement year).
+            if anniv < coverage_end:
                 continue
             anniv_dt = timezone.make_aware(datetime.combine(anniv, time(10, 0)))
             if not (start <= anniv_dt <= end):
