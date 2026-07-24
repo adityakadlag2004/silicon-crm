@@ -162,7 +162,10 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - (none currently — `monthly_snapshot` + `MonthlyIncentive` deleted 2026-07-16;
   the admin incentive report always computes live from `Sale` now)
 - Manual tools (intentionally not in CRONJOBS): `prod_readiness_check`,
-  `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`.
+  `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`.
+  `seed_health_slabs` sets the Health Insurance Fresh margin slabs (volume-band,
+  15%→35%) plus flat 15% Port/renewal; idempotent, re-run if the structure
+  changes.
   `seed_life_rates` seeds/refreshes life-insurance plans + their per-PPT
   Advisor/MDRT commission rates from `docs/insurance/life_rates.json` (parsed
   from the insurer's Agency FYC-RYC chart). Run once after deploy, and again
