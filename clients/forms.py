@@ -3,7 +3,6 @@ import re
 from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
-from django_select2.forms import ModelSelect2Widget
 from django.forms import inlineformset_factory
 from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings, Renewal, Product, PlanPptRate
 
@@ -243,34 +242,6 @@ class SalePolicyTypeMixin:
         return cleaned_data
 
 _POLICY_YEARS_CHOICES = [(1, "Single year"), (2, "2 years"), (3, "3 years")]
-
-
-class SaleForm(SalePolicyTypeMixin, forms.ModelForm):
-    product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
-    subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
-    ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
-    policy_years = forms.ChoiceField(choices=_POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
-    emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months")
-
-    class Meta:
-        model = Sale
-        fields = ["client", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "policy_years", "emi_months"]
-        widgets = {
-            "client": ModelSelect2Widget(
-                model=Client,
-                search_fields=["name__icontains", "phone__icontains", "email__icontains"],
-                attrs={"data-placeholder": "Search Client"}
-            ),
-            "date": forms.DateInput(attrs={"type": "date"}),
-            "policy_date": forms.DateInput(attrs={"type": "date"}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        employee = kwargs.pop("employee", None)
-        super().__init__(*args, **kwargs)
-        _init_product_fields(self)
-        self.fields["cover_amount"].required = False
-        self._configure_policy_field()
 
 
 class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):

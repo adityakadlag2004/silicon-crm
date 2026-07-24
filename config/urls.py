@@ -53,7 +53,6 @@ def assetlinks(request):
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("select2/", include("django_select2.urls")),
 
        # ✅ only include clients once, with namespace
     path("clients/", include(("clients.urls", "clients"), namespace="clients")),

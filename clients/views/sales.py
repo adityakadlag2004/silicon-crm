@@ -18,7 +18,7 @@ from django.views.decorators.http import require_POST
 
 from .. import permissions
 from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Product
-from ..forms import AdminSaleForm, EditSaleForm, SaleForm
+from ..forms import AdminSaleForm, EditSaleForm
 from ..services import sales as sales_service
 from ..templatetags.custom_filters import inr
 from .helpers import get_manager_access, parse_date_param, success_with_drive_link, name_words_q

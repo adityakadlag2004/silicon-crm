@@ -67,7 +67,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'clients.apps.ClientsConfig',
-    'django_select2',
     'import_export', 
     'django_crontab',
     

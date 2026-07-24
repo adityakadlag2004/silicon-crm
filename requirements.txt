@@ -4,7 +4,6 @@ diff-match-patch==20241021
 django-appconf==1.2.0
 django-crontab==0.7.1
 django-import-export==4.3.14
-django-select2==8.4.3
 google-api-python-client==2.194.0
 google-auth==2.49.2
 phonenumbers==9.0.19
