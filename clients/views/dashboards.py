@@ -499,9 +499,14 @@ def admin_dashboard(request):
     leaderboard.sort(key=lambda r: r["attainment"] if r["target"] else Decimal("-1"), reverse=True)
 
     # 6-month premium trend (reuses the business-overview series).
-    trend = [{"label": t["sublabel"] or t["label"], "amount": float(t["amount"])}
+    trend = [{"label": t["label"], "year": t["sublabel"], "amount": float(t["amount"])}
              for t in business_overview_data(approved_sales_all, period="month",
                                               columns=6, today=today)["trend"]]
+    trend_amounts = [t["amount"] for t in trend]
+    trend_total = sum(trend_amounts)
+    trend_avg = trend_total / len(trend) if trend else 0.0
+    trend_best = max(trend, key=lambda t: t["amount"]) if trend else None
+    trend_mom = _pct_delta(trend_amounts[-1], trend_amounts[-2]) if len(trend_amounts) >= 2 else None
 
     overview = {
         "mtd_premium": total_sales,
@@ -526,6 +531,10 @@ def admin_dashboard(request):
         "leaderboard": leaderboard,
         "trend": trend,
         "trend_max": max((t["amount"] for t in trend), default=0.0),
+        "trend_total": trend_total,
+        "trend_avg": trend_avg,
+        "trend_best": trend_best,
+        "trend_mom": trend_mom,
     }
 
     notifications = []
@@ -1405,7 +1414,9 @@ def target_management(request):
         return HttpResponseForbidden("Admins only.")
 
     employees = list(target_employees())
-    active_products = list(Product.objects.filter(is_active=True).order_by("display_order", "name"))
+    # Targets are set on main products only; sub-product sales roll up into the
+    # parent category's target (below), so sub-products get no column here.
+    active_products = list(Product.objects.filter(is_active=True, parent__isnull=True).order_by("display_order", "name"))
 
     if request.method == "POST":
         emp_by_id = {e.id: e for e in employees}
@@ -1460,7 +1471,14 @@ def target_management(request):
         .values("employee_id", "product")
         .annotate(total=Sum("amount"))
     )
-    achieved_map = {(r["employee_id"], r["product"]): (r["total"] or Decimal("0")) for r in month_sales}
+    # Roll a sub-product sale into its parent category so it counts toward the
+    # main product's target (which is the only level we set targets at).
+    cat_map = _category_name_map()
+    achieved_map = {}
+    for r in month_sales:
+        pname = cat_map.get(r["product"], r["product"])
+        key = (r["employee_id"], pname)
+        achieved_map[key] = achieved_map.get(key, Decimal("0")) + (r["total"] or Decimal("0"))
 
     product_names = [p.name for p in active_products]
     col_target_totals = {p.name: Decimal("0") for p in active_products}

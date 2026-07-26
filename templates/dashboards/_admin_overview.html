@@ -16,8 +16,8 @@ Styling uses the shared --ki-* design tokens so light/dark both work.
   border-left:4px solid var(--k,var(--ki-primary));border-radius:var(--ki-radius);
   padding:.75rem .85rem;text-decoration:none;display:block;transition:var(--ki-transition)}
 .dash2 .kpi:hover{box-shadow:var(--ki-shadow);transform:translateY(-1px)}
-.dash2 .kpi .lab{font-size:.72rem;color:var(--ki-text-muted);font-weight:600;line-height:1.25;min-height:2.1em}
-.dash2 .kpi .val{font-size:1.5rem;font-weight:800;line-height:1.1;margin-top:.15rem;color:var(--ki-text-primary)}
+.dash2 .kpi .lab{display:flex;align-items:flex-start;font-size:.72rem;color:var(--ki-text-muted);font-weight:600;line-height:1.25;min-height:2.4em}
+.dash2 .kpi .val{display:block;font-size:1.5rem;font-weight:800;line-height:1.1;margin-top:.15rem;color:var(--ki-text-primary)}
 .dash2 .kpi .foot{display:flex;align-items:center;gap:.35rem;margin-top:.3rem;font-size:.72rem;color:var(--ki-text-muted)}
 .dash2 .delta{font-weight:700;padding:.05rem .3rem;border-radius:5px;font-size:.7rem}
 .dash2 .delta.up{color:var(--good);background:var(--ki-success-light)}
@@ -76,9 +76,12 @@ Styling uses the shared --ki-* design tokens so light/dark both work.
 .dash2 .legend span{display:flex;align-items:center;gap:.45rem;color:var(--ki-text-secondary)}
 .dash2 .legend i{width:11px;height:11px;border-radius:3px;flex:none}
 .dash2 .legend b{color:var(--ki-text-primary);font-variant-numeric:tabular-nums;font-weight:700;margin-left:auto}
-/* trend sparkline */
-.dash2 .spk-cap{display:flex;justify-content:space-between;font-size:.72rem;color:var(--ki-text-muted);font-weight:600}
-.dash2 .spk-cap b{color:var(--ki-text-primary);font-size:1rem;font-weight:800}
+/* trend bar chart + stats */
+.dash2 .trend-stats{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.7rem}
+.dash2 .ts{background:var(--ki-primary-pale);border-radius:var(--ki-radius-sm);padding:.45rem .6rem}
+.dash2 .ts .k{display:block;font-size:.66rem;color:var(--ki-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.dash2 .ts .v{display:block;font-size:.98rem;font-weight:800;color:var(--ki-text-primary);margin-top:.12rem}
+.dash2 .ts .v.up{color:var(--good)}.dash2 .ts .v.down{color:var(--bad)}
 .dash2 .more-hint{color:var(--ki-text-muted);font-size:.8rem;margin:.4rem 0 .2rem}
 .dash2-more>summary{cursor:pointer;font-weight:700;color:var(--ki-text-secondary);padding:.6rem 0;
   list-style:none;display:flex;align-items:center;gap:.5rem;margin-top:.6rem;border-top:1px solid var(--ki-card-border)}
@@ -150,10 +153,14 @@ Styling uses the shared --ki-* design tokens so light/dark both work.
   <div class="eyebrow">Team &amp; trend</div>
   <div class="grid g-2b">
     <div class="panel">
-      <div class="p-head"><h3>Firm trend — 6 months</h3><div class="psub">Approved premium booked</div></div>
-      <div class="spk-cap"><span>Latest</span><b class="num">₹{{ o.mtd_premium|compact_inr }}</b></div>
-      <svg id="dash2-spark" width="100%" height="70" viewBox="0 0 320 70" preserveAspectRatio="none" style="margin-top:.4rem"></svg>
-      <div class="rr-meta" id="dash2-spark-labels" style="margin-top:.3rem"></div>
+      <div class="p-head"><h3>Firm trend — 6 months</h3><div class="psub">Approved premium booked, by month</div></div>
+      <svg id="dash2-bars" width="100%" height="158" viewBox="0 0 340 158" role="img" aria-label="Monthly approved-premium bar chart"></svg>
+      <div class="trend-stats">
+        <div class="ts"><span class="k">6-month total</span><span class="v num">₹{{ o.trend_total|compact_inr }}</span></div>
+        <div class="ts"><span class="k">Avg / month</span><span class="v num">₹{{ o.trend_avg|compact_inr }}</span></div>
+        <div class="ts"><span class="k">Best month</span><span class="v num">{% if o.trend_best and o.trend_best.amount %}{{ o.trend_best.label }} ₹{{ o.trend_best.amount|compact_inr }}{% else %}—{% endif %}</span></div>
+        <div class="ts"><span class="k">Month on month</span><span class="v num {% if o.trend_mom >= 0 %}up{% else %}down{% endif %}">{% if o.trend_mom != None %}{% if o.trend_mom >= 0 %}▲{% else %}▼{% endif %} {{ o.trend_mom }}%{% else %}—{% endif %}</span></div>
+      </div>
     </div>
     <div class="panel">
       <div class="p-head"><h3>Team leaderboard</h3><div class="psub">By target attainment · under-target flagged</div></div>
@@ -215,26 +222,30 @@ Styling uses the shared --ki-* design tokens so light/dark both work.
     t2.textContent='PREMIUM';svg.appendChild(t2);
   }
 
-  // ── sparkline ──
+  // ── monthly bar chart (month labels + per-bar values) ──
   var data=JSON.parse(document.getElementById('dash2-trend').textContent||'[]');
-  var spk=document.getElementById('dash2-spark');
-  if(spk&&data.length>1){
-    var W=320,H=70,pad=8,vals=data.map(function(d){return +d.amount||0;});
-    var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals),rng=(mx-mn)||1;
-    var X=function(i){return pad+i*(W-2*pad)/(data.length-1);};
-    var Y=function(v){return H-pad-((v-mn)/rng)*(H-2*pad);};
-    spk.appendChild(el('line',{x1:0,y1:H-pad,x2:W,y2:H-pad,stroke:cv('--ki-card-border'),'stroke-width':1}));
-    var col=cv('--ki-primary')||'#E5B740';
-    var d='M '+X(0)+' '+Y(vals[0]);vals.forEach(function(v,i){if(i)d+=' L '+X(i)+' '+Y(v);});
-    var defs=el('defs',{}),lg=el('linearGradient',{id:'dash2grad',x1:0,y1:0,x2:0,y2:1});
-    lg.appendChild(el('stop',{offset:'0%','stop-color':col,'stop-opacity':.28}));
-    lg.appendChild(el('stop',{offset:'100%','stop-color':col,'stop-opacity':0}));
-    defs.appendChild(lg);spk.appendChild(defs);
-    spk.appendChild(el('path',{d:d+' L '+X(data.length-1)+' '+(H-pad)+' L '+X(0)+' '+(H-pad)+' Z',fill:'url(#dash2grad)'}));
-    spk.appendChild(el('path',{d:d,fill:'none',stroke:col,'stroke-width':2,'stroke-linejoin':'round'}));
-    spk.appendChild(el('circle',{cx:X(data.length-1),cy:Y(vals[vals.length-1]),r:3.5,fill:col,stroke:cv('--ki-card-bg'),'stroke-width':1.5}));
-    var lab=document.getElementById('dash2-spark-labels');
-    lab.innerHTML='<span>'+(data[0].label||'')+'</span><span>'+(data[data.length-1].label||'')+'</span>';
+  var bars=document.getElementById('dash2-bars');
+  if(bars&&data.length){
+    var W=340,H=158,padX=8,padTop=20,padBot=22;
+    var vals=data.map(function(d){return +d.amount||0;});
+    var mx=Math.max.apply(null,vals)||1;
+    var n=data.length,slot=(W-2*padX)/n,bw=Math.min(slot*0.56,42);
+    bars.appendChild(el('line',{x1:padX,y1:H-padBot,x2:W-padX,y2:H-padBot,stroke:cv('--ki-card-border'),'stroke-width':1}));
+    var cur=cv('--ki-primary'),other=cv('--ki-primary-lighter');
+    data.forEach(function(d,i){
+      var x=padX+i*slot+(slot-bw)/2;
+      var h=Math.max((+d.amount)/mx*(H-padTop-padBot),1),y=H-padBot-h;
+      var last=i===data.length-1;
+      var rect=el('rect',{x:x,y:y,width:bw,height:h,rx:3,fill:last?cur:other});
+      var t=el('title',{});t.textContent=d.label+' '+(d.year||'')+' · ₹'+compact(d.amount);
+      rect.appendChild(t);bars.appendChild(rect);
+      var vl=el('text',{x:x+bw/2,y:y-6,'text-anchor':'middle','font-size':'10','font-weight':'700',
+        fill:last?cv('--ki-text-primary'):cv('--ki-text-secondary')});
+      vl.textContent='₹'+compact(d.amount);bars.appendChild(vl);
+      var ml=el('text',{x:x+bw/2,y:H-7,'text-anchor':'middle','font-size':'10.5',
+        fill:cv('--ki-text-muted'),'font-weight':last?'700':'400'});
+      ml.textContent=d.label;bars.appendChild(ml);
+    });
   }
 })();
 </script>
