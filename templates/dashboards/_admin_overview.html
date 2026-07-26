@@ -1,0 +1,241 @@
+{% load custom_filters %}
+{% comment %}
+Redesigned admin overview: money, momentum, and what needs doing today.
+All values come from the `overview` dict built in dashboards.admin_dashboard.
+Styling uses the shared --ki-* design tokens so light/dark both work.
+{% endcomment %}
+<style>
+.dash2{--good:var(--ki-success);--warn:var(--ki-warning);--bad:var(--ki-danger);--info:var(--ki-info)}
+.dash2 .eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ki-text-muted);margin:1.4rem 0 .7rem;display:flex;align-items:center;gap:.5rem}
+.dash2 .eyebrow::after{content:"";flex:1;height:1px;background:var(--ki-card-border)}
+.dash2 .num{font-variant-numeric:tabular-nums}
+/* kpi row */
+.dash2 .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:.7rem}
+.dash2 .kpi{background:var(--ki-card-bg);border:1px solid var(--ki-card-border);
+  border-left:4px solid var(--k,var(--ki-primary));border-radius:var(--ki-radius);
+  padding:.75rem .85rem;text-decoration:none;display:block;transition:var(--ki-transition)}
+.dash2 .kpi:hover{box-shadow:var(--ki-shadow);transform:translateY(-1px)}
+.dash2 .kpi .lab{font-size:.72rem;color:var(--ki-text-muted);font-weight:600;line-height:1.25;min-height:2.1em}
+.dash2 .kpi .val{font-size:1.5rem;font-weight:800;line-height:1.1;margin-top:.15rem;color:var(--ki-text-primary)}
+.dash2 .kpi .foot{display:flex;align-items:center;gap:.35rem;margin-top:.3rem;font-size:.72rem;color:var(--ki-text-muted)}
+.dash2 .delta{font-weight:700;padding:.05rem .3rem;border-radius:5px;font-size:.7rem}
+.dash2 .delta.up{color:var(--good);background:var(--ki-success-light)}
+.dash2 .delta.down{color:var(--bad);background:var(--ki-danger-light)}
+/* attention strip */
+.dash2 .attn{display:grid;grid-template-columns:repeat(5,1fr);gap:.7rem}
+.dash2 .chip{display:flex;flex-direction:column;gap:.15rem;padding:.7rem .8rem;border-radius:var(--ki-radius);
+  border:1px solid var(--ki-card-border);background:var(--ki-card-bg);text-decoration:none;position:relative;overflow:hidden}
+.dash2 .chip::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--s)}
+.dash2 .chip:hover{box-shadow:var(--ki-shadow)}
+.dash2 .chip .n{font-size:1.5rem;font-weight:800;color:var(--s);line-height:1}
+.dash2 .chip .t{font-size:.78rem;color:var(--ki-text-secondary);font-weight:600}
+.dash2 .chip .go{font-size:.7rem;color:var(--ki-text-muted);margin-top:.15rem}
+.dash2 .s-warn{--s:var(--warn)}.dash2 .s-bad{--s:var(--bad)}.dash2 .s-info{--s:var(--info)}
+/* panels grid */
+.dash2 .grid{display:grid;gap:.9rem}.dash2 .g-2{grid-template-columns:1.15fr .85fr}
+.dash2 .g-2b{grid-template-columns:.85fr 1.15fr}
+.dash2 .panel{background:var(--ki-card-bg);border:1px solid var(--ki-card-border);
+  border-radius:var(--ki-radius-lg);padding:1.05rem 1.15rem}
+.dash2 .panel h3{font-size:1rem;font-weight:700;margin:0;color:var(--ki-text-primary)}
+.dash2 .panel .psub{color:var(--ki-text-muted);font-size:.78rem;margin-top:.15rem}
+.dash2 .p-head{margin-bottom:.9rem}
+/* run rate */
+.dash2 .rr-top{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+.dash2 .rr-big{font-size:1.9rem;font-weight:800;line-height:1;color:var(--ki-text-primary)}
+.dash2 .rr-of{color:var(--ki-text-muted);font-size:.85rem}
+.dash2 .bar{position:relative;height:14px;border-radius:999px;background:var(--ki-primary-pale);margin:1.4rem 0 .5rem}
+.dash2 .bar .fill{position:absolute;inset:0 auto 0 0;border-radius:999px;
+  background:linear-gradient(90deg,var(--ki-primary-light),var(--ki-primary));max-width:100%}
+.dash2 .bar .pace{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--ki-text-primary);border-radius:2px}
+.dash2 .bar .pace::after{content:"pace";position:absolute;top:-1.15rem;left:50%;transform:translateX(-50%);
+  font-size:.6rem;color:var(--ki-text-secondary);white-space:nowrap;font-weight:700}
+.dash2 .rr-meta{display:flex;justify-content:space-between;font-size:.76rem;color:var(--ki-text-muted)}
+.dash2 .proj{margin-top:.9rem;padding:.6rem .75rem;border-radius:var(--ki-radius-sm);
+  font-size:.82rem;font-weight:600;display:flex;align-items:center;gap:.45rem;
+  background:var(--ki-success-light);color:var(--good)}
+.dash2 .proj.behind{background:var(--ki-danger-light);color:var(--bad)}
+/* leaderboard */
+.dash2 table.lb{width:100%;border-collapse:collapse;font-size:.85rem}
+.dash2 .lb th{text-align:left;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--ki-text-muted);font-weight:700;padding:.4rem .5rem;border-bottom:1px solid var(--ki-card-border)}
+.dash2 .lb td{padding:.5rem .5rem;border-bottom:1px solid var(--ki-card-border);vertical-align:middle;color:var(--ki-text-primary)}
+.dash2 .lb tr:last-child td{border-bottom:none}
+.dash2 .lb .rank{width:1.6rem;height:1.6rem;border-radius:7px;background:var(--ki-primary-pale);
+  color:var(--ki-primary);display:grid;place-items:center;font-weight:800;font-size:.78rem}
+.dash2 .lb .who{font-weight:600}
+.dash2 .att{display:flex;align-items:center;gap:.5rem;min-width:120px}
+.dash2 .att .mini{flex:1;height:7px;border-radius:999px;background:var(--ki-primary-pale);overflow:hidden}
+.dash2 .att .mini i{display:block;height:100%;border-radius:999px;background:var(--ki-primary)}
+.dash2 .att.low .mini i{background:var(--bad)}
+.dash2 .att .pct{font-weight:700;width:3.6rem;text-align:right;flex:none}.dash2 .att.low .pct{color:var(--bad)}
+.dash2 .flag{font-size:.62rem;font-weight:700;color:var(--bad);background:var(--ki-danger-light);
+  padding:.1rem .35rem;border-radius:5px;margin-left:.4rem}
+/* donut + legend */
+.dash2 .legend{display:flex;flex-direction:column;gap:.4rem;font-size:.8rem}
+.dash2 .legend span{display:flex;align-items:center;gap:.45rem;color:var(--ki-text-secondary)}
+.dash2 .legend i{width:11px;height:11px;border-radius:3px;flex:none}
+.dash2 .legend b{color:var(--ki-text-primary);font-variant-numeric:tabular-nums;font-weight:700;margin-left:auto}
+/* trend sparkline */
+.dash2 .spk-cap{display:flex;justify-content:space-between;font-size:.72rem;color:var(--ki-text-muted);font-weight:600}
+.dash2 .spk-cap b{color:var(--ki-text-primary);font-size:1rem;font-weight:800}
+.dash2 .more-hint{color:var(--ki-text-muted);font-size:.8rem;margin:.4rem 0 .2rem}
+.dash2-more>summary{cursor:pointer;font-weight:700;color:var(--ki-text-secondary);padding:.6rem 0;
+  list-style:none;display:flex;align-items:center;gap:.5rem;margin-top:.6rem;border-top:1px solid var(--ki-card-border)}
+.dash2-more>summary::before{content:"▸";color:var(--ki-primary)}
+.dash2-more[open]>summary::before{content:"▾"}
+@media(max-width:900px){.dash2 .kpis{grid-template-columns:repeat(3,1fr)}.dash2 .attn{grid-template-columns:repeat(2,1fr)}
+  .dash2 .g-2,.dash2 .g-2b{grid-template-columns:1fr}}
+@media(max-width:560px){.dash2 .kpis{grid-template-columns:repeat(2,1fr)}}
+@media(prefers-reduced-motion:reduce){.dash2 *{transition:none!important}}
+</style>
+
+{% with o=overview %}
+<div class="dash2">
+  <div class="eyebrow">This month at a glance · {{ month_start|date:"F Y" }}</div>
+  <div class="kpis">
+    <a class="kpi" href="{% url 'clients:all_sales' %}?status=approved&start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}" style="--k:var(--ki-primary)">
+      <span class="lab">Approved Premium (MTD)</span><span class="val num">₹{{ o.mtd_premium|compact_inr }}</span>
+      <span class="foot">{% if o.mtd_premium_delta != None %}<span class="delta {% if o.mtd_premium_delta >= 0 %}up{% else %}down{% endif %}">{% if o.mtd_premium_delta >= 0 %}▲{% else %}▼{% endif %} {{ o.mtd_premium_delta }}%</span> vs last month{% else %}—{% endif %}</span></a>
+    <a class="kpi" href="{% url 'clients:business_analytics' %}" style="--k:var(--ki-success)">
+      <span class="lab">Est. Margin ({{ o.blended_margin_pct|floatformat:1 }}%)</span><span class="val num">₹{{ o.mtd_margin|compact_inr }}</span>
+      <span class="foot">{% if o.mtd_margin_delta != None %}<span class="delta {% if o.mtd_margin_delta >= 0 %}up{% else %}down{% endif %}">{% if o.mtd_margin_delta >= 0 %}▲{% else %}▼{% endif %} {{ o.mtd_margin_delta }}%</span> vs last month{% else %}—{% endif %}</span></a>
+    <a class="kpi" href="{% url 'clients:all_clients' %}" style="--k:#2563D6">
+      <span class="lab">New Clients Added</span><span class="val num">{{ o.new_clients }}</span>
+      <span class="foot"><span class="delta {% if o.new_clients_delta >= 0 %}up{% else %}down{% endif %}">{% if o.new_clients_delta >= 0 %}▲{% else %}▼{% endif %} {{ o.new_clients_delta }}</span> vs last month</span></a>
+    <a class="kpi" href="{% url 'clients:all_sales' %}?status=pending" style="--k:var(--ki-warning)">
+      <span class="lab">Sales Awaiting Approval</span><span class="val num">{{ o.pending_count }}</span>
+      <span class="foot">{% if o.pending_count %}oldest {{ o.pending_oldest_days }} day{{ o.pending_oldest_days|pluralize }} →{% else %}all clear ✓{% endif %}</span></a>
+    <a class="kpi" href="{% url 'clients:all_renewals' %}" style="--k:var(--ki-info)">
+      <span class="lab">Renewals due · 30 days</span><span class="val num">{{ o.renew_30 }}</span>
+      <span class="foot">₹{{ o.renew_30_premium|compact_inr }} premium →</span></a>
+    <a class="kpi" href="{% url 'clients:claim_list' %}" style="--k:#C2417E">
+      <span class="lab">Open Claims</span><span class="val num">{{ o.open_claims }}</span>
+      <span class="foot">{% if o.claims_action %}{{ o.claims_action }} need action →{% else %}none awaiting →{% endif %}</span></a>
+  </div>
+
+  <div class="eyebrow">Needs attention</div>
+  <div class="attn">
+    <a class="chip s-warn" href="{% url 'clients:all_sales' %}?status=pending"><span class="n num">{{ o.pending_count }}</span><span class="t">Sales to approve</span><span class="go">Review queue →</span></a>
+    <a class="chip s-bad" href="{% url 'clients:client_kyc_issues' %}"><span class="n num">{{ o.kyc_missing }}</span><span class="t">Clients missing PAN / KYC</span><span class="go">Fix KYC →</span></a>
+    <a class="chip s-info" href="{% url 'clients:task_all' %}"><span class="n num">{{ o.emis_due }}</span><span class="t">EMIs due this month</span><span class="go">Call list →</span></a>
+    <a class="chip s-warn" href="{% url 'clients:all_renewals' %}"><span class="n num">{{ o.renew_5 }}</span><span class="t">Renewals in ≤5 days</span><span class="go">Renewals →</span></a>
+    <a class="chip s-info" href="{% url 'clients:claim_list' %}"><span class="n num">{{ o.claims_action }}</span><span class="t">Claims awaiting action</span><span class="go">Claims →</span></a>
+  </div>
+
+  <div class="eyebrow">Momentum</div>
+  <div class="grid g-2">
+    <div class="panel">
+      <div class="p-head"><h3>Firm target — run rate</h3><div class="psub">Working day {{ o.elapsed_wd }} of {{ o.working_days }}</div></div>
+      <div class="rr-top"><span class="rr-big num">₹{{ o.firm_achieved|compact_inr }}</span>
+        {% if o.firm_target %}<span class="rr-of">of ₹{{ o.firm_target|compact_inr }} target · {% if o.firm_pct > 999 %}999+{% else %}{{ o.firm_pct|floatformat:0 }}{% endif %}%</span>{% else %}<span class="rr-of">no monthly target set</span>{% endif %}</div>
+      <div class="bar"><div class="fill" style="width:{% if o.firm_pct > 100 %}100{% else %}{{ o.firm_pct|floatformat:0 }}{% endif %}%"></div>
+        <div class="pace" style="left:{{ o.pace_pct|floatformat:1 }}%"></div></div>
+      <div class="rr-meta"><span>0</span><span>{% if o.firm_target %}Target ₹{{ o.firm_target|compact_inr }}{% endif %}</span></div>
+      <div class="proj {% if not o.firm_on_track %}behind{% endif %}">
+        {% if o.firm_on_track %}✓ On pace for ₹{{ o.firm_projection|compact_inr }} — at or ahead of target{% else %}⚠ On pace for ₹{{ o.firm_projection|compact_inr }} — behind target{% endif %}</div>
+    </div>
+    <div class="panel">
+      <div class="p-head"><h3>Product mix</h3><div class="psub">Approved premium by category (main products only)</div></div>
+      <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+        <svg id="dash2-donut" width="150" height="150" viewBox="0 0 150 150" role="img" aria-label="Product mix donut"></svg>
+        <div class="legend" style="flex:1;min-width:150px">
+          {% for m in o.product_mix %}<span><i style="background:{{ m.color }}"></i>{{ m.name }} <b>₹{{ m.amount|compact_inr }}</b></span>
+          {% empty %}<span class="psub">No approved sales this month yet.</span>{% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="eyebrow">Team &amp; trend</div>
+  <div class="grid g-2b">
+    <div class="panel">
+      <div class="p-head"><h3>Firm trend — 6 months</h3><div class="psub">Approved premium booked</div></div>
+      <div class="spk-cap"><span>Latest</span><b class="num">₹{{ o.mtd_premium|compact_inr }}</b></div>
+      <svg id="dash2-spark" width="100%" height="70" viewBox="0 0 320 70" preserveAspectRatio="none" style="margin-top:.4rem"></svg>
+      <div class="rr-meta" id="dash2-spark-labels" style="margin-top:.3rem"></div>
+    </div>
+    <div class="panel">
+      <div class="p-head"><h3>Team leaderboard</h3><div class="psub">By target attainment · under-target flagged</div></div>
+      <div style="overflow-x:auto"><table class="lb"><thead><tr>
+        <th></th><th>Employee</th><th>Premium</th><th>Target</th><th>Attainment</th></tr></thead>
+        <tbody>
+        {% for r in o.leaderboard %}
+          <tr><td><span class="rank">{{ forloop.counter }}</span></td>
+            <td class="who">{{ r.name }}{% if r.low %}<span class="flag">under</span>{% endif %}</td>
+            <td class="num">₹{{ r.premium|compact_inr }}</td>
+            <td class="num" style="color:var(--ki-text-muted)">{% if r.target %}₹{{ r.target|compact_inr }}{% else %}—{% endif %}</td>
+            <td><div class="att {% if r.low %}low{% endif %}"><div class="mini"><i style="width:{% if r.attainment > 100 %}100{% else %}{{ r.attainment|floatformat:0 }}{% endif %}%"></i></div>
+              <span class="pct num">{% if r.target %}{% if r.attainment > 999 %}999+{% else %}{{ r.attainment|floatformat:0 }}{% endif %}%{% else %}—{% endif %}</span></div></td></tr>
+        {% empty %}
+          <tr><td colspan="5" class="psub">No sales booked this month yet.</td></tr>
+        {% endfor %}
+        </tbody></table></div>
+    </div>
+  </div>
+  <div class="more-hint">Detailed per-employee product grids and target tables are in the “Full breakdown” section below.</div>
+</div>
+
+{{ o.product_mix|json_script:"dash2-mix" }}
+{{ o.trend|json_script:"dash2-trend" }}
+<script>
+(function(){
+  var NS="http://www.w3.org/2000/svg";
+  function el(t,a){var e=document.createElementNS(NS,t);for(var k in a)e.setAttribute(k,a[k]);return e;}
+  function cv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+  function compact(v){v=+v||0;function t(x){return (x.toFixed(2)).replace(/\.?0+$/,'');}
+    if(v>=1e7)return t(v/1e7)+'Cr';if(v>=1e5)return t(v/1e5)+'L';if(v>=1e3)return t(v/1e3)+'K';return t(v);}
+
+  // ── donut ──
+  var mix=JSON.parse(document.getElementById('dash2-mix').textContent||'[]');
+  var svg=document.getElementById('dash2-donut');
+  var total=mix.reduce(function(s,p){return s+(+p.amount||0);},0);
+  if(svg&&total>0){
+    var cx=75,cy=75,r=52,w=20,a=-Math.PI/2,gap=mix.length>1?0.03:0;
+    mix.forEach(function(p){
+      var frac=(+p.amount)/total;if(frac<=0)return;
+      // A single ~100% slice is a full circle — an arc from start==end won't
+      // draw, so use a plain <circle> in that case.
+      if(frac>=0.999){
+        var c=el('circle',{cx:cx,cy:cy,r:r,fill:'none',stroke:p.color,'stroke-width':w});
+        var t0=el('title',{});t0.textContent=p.name+' · ₹'+compact(p.amount)+' · 100%';
+        c.appendChild(t0);svg.appendChild(c);a+=frac*2*Math.PI;return;
+      }
+      var a2=a+frac*2*Math.PI,s=a+gap/2,e=a2-gap/2;
+      var x1=cx+r*Math.cos(s),y1=cy+r*Math.sin(s),x2=cx+r*Math.cos(e),y2=cy+r*Math.sin(e);
+      var large=(e-s)>Math.PI?1:0;
+      var path=el('path',{d:'M '+x1+' '+y1+' A '+r+' '+r+' 0 '+large+' 1 '+x2+' '+y2,
+        fill:'none',stroke:p.color,'stroke-width':w,'stroke-linecap':gap?'round':'butt'});
+      var title=el('title',{});title.textContent=p.name+' · ₹'+compact(p.amount)+' · '+Math.round(frac*100)+'%';
+      path.appendChild(title);svg.appendChild(path);a=a2;
+    });
+    var t1=el('text',{x:75,y:71,'text-anchor':'middle','font-size':'19','font-weight':'800',fill:cv('--ki-text-primary')});
+    t1.textContent='₹'+compact(total);svg.appendChild(t1);
+    var t2=el('text',{x:75,y:87,'text-anchor':'middle','font-size':'8.5',fill:cv('--ki-text-muted'),'letter-spacing':'.5'});
+    t2.textContent='PREMIUM';svg.appendChild(t2);
+  }
+
+  // ── sparkline ──
+  var data=JSON.parse(document.getElementById('dash2-trend').textContent||'[]');
+  var spk=document.getElementById('dash2-spark');
+  if(spk&&data.length>1){
+    var W=320,H=70,pad=8,vals=data.map(function(d){return +d.amount||0;});
+    var mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals),rng=(mx-mn)||1;
+    var X=function(i){return pad+i*(W-2*pad)/(data.length-1);};
+    var Y=function(v){return H-pad-((v-mn)/rng)*(H-2*pad);};
+    spk.appendChild(el('line',{x1:0,y1:H-pad,x2:W,y2:H-pad,stroke:cv('--ki-card-border'),'stroke-width':1}));
+    var col=cv('--ki-primary')||'#E5B740';
+    var d='M '+X(0)+' '+Y(vals[0]);vals.forEach(function(v,i){if(i)d+=' L '+X(i)+' '+Y(v);});
+    var defs=el('defs',{}),lg=el('linearGradient',{id:'dash2grad',x1:0,y1:0,x2:0,y2:1});
+    lg.appendChild(el('stop',{offset:'0%','stop-color':col,'stop-opacity':.28}));
+    lg.appendChild(el('stop',{offset:'100%','stop-color':col,'stop-opacity':0}));
+    defs.appendChild(lg);spk.appendChild(defs);
+    spk.appendChild(el('path',{d:d+' L '+X(data.length-1)+' '+(H-pad)+' L '+X(0)+' '+(H-pad)+' Z',fill:'url(#dash2grad)'}));
+    spk.appendChild(el('path',{d:d,fill:'none',stroke:col,'stroke-width':2,'stroke-linejoin':'round'}));
+    spk.appendChild(el('circle',{cx:X(data.length-1),cy:Y(vals[vals.length-1]),r:3.5,fill:col,stroke:cv('--ki-card-bg'),'stroke-width':1.5}));
+    var lab=document.getElementById('dash2-spark-labels');
+    lab.innerHTML='<span>'+(data[0].label||'')+'</span><span>'+(data[data.length-1].label||'')+'</span>';
+  }
+})();
+</script>
+{% endwith %}

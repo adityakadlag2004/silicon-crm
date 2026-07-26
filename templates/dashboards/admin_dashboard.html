@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 
 {% block title %}Admin Dashboard{% endblock %}
 {% block page_title %}Admin Dashboard{% endblock %}
@@ -7,6 +8,16 @@
 
 {% include "dashboards/_kyc_banner.html" %}
 {% include "dashboards/_profile_prompt.html" %}
+
+{% include "dashboards/_admin_overview.html" %}
+
+<!-- Follow-up Calendar (full width) -->
+<div class="ki-card mb-3">
+  {% include "dashboards/_followup_calendar.html" %}
+</div>
+
+<details class="dash2-more">
+  <summary>Full breakdown — my performance, per-employee grids &amp; targets</summary>
 
 <!-- My Performance Cards -->
 <div class="ki-grid-2 mb-3">
@@ -85,11 +96,6 @@
     </div>
     {% endif %}
   </div>
-</div>
-
-<!-- Follow-up Calendar (full width) -->
-<div class="ki-card mb-3">
-  {% include "dashboards/_followup_calendar.html" %}
 </div>
 
 <!-- My Progress vs Targets -->
@@ -235,6 +241,8 @@
   </a>
 </div>
 
+
+</details>
 
 <!-- Points Counter & Progress Animation -->
 <script>

@@ -67,6 +67,21 @@ def indian_number(value, decimal_places=2):
 
 
 @register.filter
+def compact_inr(value):
+    """Compact Indian money for KPI tiles: 124000 -> '1.24L', 24000 -> '24K',
+    35000000 -> '3.5Cr'. Trailing zeros trimmed."""
+    v = float(value or 0)
+    trim = lambda x: f"{x:.2f}".rstrip("0").rstrip(".")
+    if v >= 1_00_00_000:
+        return trim(v / 1_00_00_000) + "Cr"
+    if v >= 1_00_000:
+        return trim(v / 1_00_000) + "L"
+    if v >= 1_000:
+        return trim(v / 1_000) + "K"
+    return trim(v)
+
+
+@register.filter
 def inr(value):
     """Indian digit grouping: 2063297 -> '20,63,297' (last 3 digits, then
     pairs). Rounds decimals, keeps the minus sign, blanks stay 0."""

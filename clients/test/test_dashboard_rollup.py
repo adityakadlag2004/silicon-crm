@@ -55,3 +55,21 @@ class DashboardRollupTests(TestCase):
         self.assertEqual(rows["Life Insurance"]["amount"], Decimal("160000"))
         self.assertNotIn("Roll Plan A", rows)
         self.assertNotContains(resp, "Roll Plan B")
+
+    def test_admin_overview_headline_numbers(self):
+        resp = self._ctx("admin_dashboard")
+        o = resp.context["overview"]
+        # Premium + product mix read at category level, sub-products folded in.
+        self.assertEqual(o["mtd_premium"], Decimal("160000"))
+        mix = {m["name"]: m["amount"] for m in o["product_mix"]}
+        self.assertEqual(mix.get("Life Insurance"), 160000.0)
+        self.assertNotIn("Roll Plan A", mix)
+        # Nothing pending / no claims in this fixture.
+        self.assertEqual(o["pending_count"], 0)
+        self.assertEqual(o["open_claims"], 0)
+        # The seller shows on the leaderboard with the full category premium.
+        names = {r["name"]: r["premium"] for r in o["leaderboard"]}
+        self.assertEqual(names.get("dash_admin"), Decimal("160000"))
+        # New overview sections are actually rendered.
+        self.assertContains(resp, "Needs attention")
+        self.assertContains(resp, "Team leaderboard")

@@ -154,6 +154,63 @@ def _is_admin_user(user):
     return permissions.is_admin(user)
 
 
+# Category → chart colour for the product-mix donut. Validated colourblind-safe
+# palette (see the dashboard redesign proposal); unknown categories fall to grey.
+_PRODUCT_COLORS = {
+    "Life Insurance": "#2563D6", "SIP": "#C68A1E", "Health Insurance": "#7C3AED",
+    "Lumsum": "#0E8A6E", "PMS": "#C2417E", "Motor Insurance": "#E8790F",
+}
+
+
+def _pct_delta(cur, prev):
+    """Percent change cur vs prev, rounded int, or None when prev is 0."""
+    if not prev:
+        return None
+    return int(round((cur - prev) / prev * 100))
+
+
+def _elapsed_working_days(year, month, today):
+    """Weekdays (Mon–Fri) from the 1st through `today` inclusive."""
+    last = today.day if (today.year == year and today.month == month) else monthrange(year, month)[1]
+    return sum(1 for d in range(1, last + 1) if date(year, month, d).weekday() < 5) or 1
+
+
+def _renewal_attention(today):
+    """(due within 30d count, that premium, due within 5d count) for approved
+    Health/Life policies. Mirrors the renewal_reminders cron's next-renewal
+    logic — the single-year book renews manually, so these are the follow-ups.
+    ponytail: iterates the approved insurance book; annotate in SQL if it slows."""
+    qs = (
+        Sale.objects.filter(status=Sale.STATUS_APPROVED)
+        .filter(
+            Q(product_ref__code__in=["HEALTH_INS", "LIFE_INS"])
+            | Q(product__iexact="Health Insurance")
+            | Q(product__iexact="Life Insurance")
+        )
+        .select_related("product_ref")
+    )
+    c30, c5, prem30 = 0, 0, Decimal("0")
+    for sale in qs:
+        nxt = sale.next_renewal_date(today)
+        if not nxt:
+            continue
+        days = (nxt - today).days
+        if 0 <= days <= 30:
+            c30 += 1
+            prem30 += sale.annual_premium or Decimal("0")
+            if days <= 5:
+                c5 += 1
+    return c30, prem30, c5
+
+
+def _emis_due_this_month(today):
+    """Count of multiyear-EMI health policies whose EMI schedule covers this
+    month (the emi_reminders cron would call these clients)."""
+    from ..management.commands.emi_reminders import emi_window_contains
+    sales = Sale.objects.filter(emi_months__gt=0, status=Sale.STATUS_APPROVED)
+    return sum(1 for s in sales if s.date and emi_window_contains(s, today.year, today.month))
+
+
 def _profile_gap(request):
     """Data for the dashboard's "complete your profile" nudge, or None.
 
@@ -385,6 +442,92 @@ def admin_dashboard(request):
         "pms": pms_sales,
     }
 
+    # ── Redesigned overview: money, momentum, and what needs doing today.
+    # All from data already computed above or existing report/cron helpers.
+    from .reports import _month_margin_breakdown, business_overview_data
+    from ..models import InsuranceClaim
+
+    prev_last = month_start - timedelta(days=1)
+    py, pm = prev_last.year, prev_last.month
+    prev_premium = (Sale.objects.filter(status=Sale.STATUS_APPROVED, created_at__year=py, created_at__month=pm)
+                    .aggregate(t=Sum("amount"))["t"] or Decimal("0"))
+    new_clients = monthly_summary["total_clients"]
+    prev_clients = Client.objects.filter(created_at__year=py, created_at__month=pm).count()
+
+    _, margin_totals = _month_margin_breakdown(year, month)
+    _, prev_margin_totals = _month_margin_breakdown(py, pm)
+    mtd_margin = margin_totals["margin_amount"]
+
+    pending_qs = Sale.objects.filter(status=Sale.STATUS_PENDING)
+    pending_count = pending_qs.count()
+    oldest_pending = pending_qs.order_by("date").values_list("date", flat=True).first()
+    pending_oldest_days = (today - oldest_pending).days if oldest_pending else 0
+
+    renew_30, renew_30_premium, renew_5 = _renewal_attention(today)
+    emis_due = _emis_due_this_month(today)
+    open_claims = InsuranceClaim.objects.filter(status__in=InsuranceClaim.OPEN_STATUSES).count()
+    claims_action = InsuranceClaim.objects.filter(status=InsuranceClaim.STATUS_INTIMATED).count()
+    kyc_missing = _kyc_missing_count(request.user)
+
+    # Firm run-rate: this-month achieved vs the summed per-head targets, with a
+    # working-day projection so "are we going to make it?" reads at a glance.
+    firm_target = sum((p["target"] for p in overall_monthly_progress), Decimal("0"))
+    firm_pct = (total_sales / firm_target * 100) if firm_target else Decimal("0")
+    elapsed_wd = _elapsed_working_days(year, month, today)
+    firm_projection = (total_sales / elapsed_wd * working_days) if elapsed_wd else total_sales
+    pace_pct = min(elapsed_wd / working_days * 100, 100) if working_days else 0
+
+    # Product mix (main categories only) for the donut.
+    product_mix = [
+        {"name": product_labels.get(name, name), "amount": float(amt),
+         "color": _PRODUCT_COLORS.get(name, "#9B8B6A")}
+        for name, amt in sorted(overall_sales_map.items(), key=lambda kv: kv[1], reverse=True)
+        if amt and amt > 0
+    ]
+
+    # Leaderboard: fold the per-employee product grid into one row each, ranked
+    # by target attainment; drop employees with neither sales nor a target.
+    leaderboard = []
+    for row in monthly_employee_product:
+        prem = sum((p["achieved"] for p in row["products"]), Decimal("0"))
+        tgt = sum((p["target"] for p in row["products"]), Decimal("0"))
+        if not prem and not tgt:
+            continue
+        att = (prem / tgt * 100) if tgt else Decimal("0")
+        leaderboard.append({"name": row["employee"], "premium": prem, "target": tgt,
+                            "attainment": att, "low": bool(tgt) and att < 80})
+    leaderboard.sort(key=lambda r: r["attainment"] if r["target"] else Decimal("-1"), reverse=True)
+
+    # 6-month premium trend (reuses the business-overview series).
+    trend = [{"label": t["sublabel"] or t["label"], "amount": float(t["amount"])}
+             for t in business_overview_data(approved_sales_all, period="month",
+                                              columns=6, today=today)["trend"]]
+
+    overview = {
+        "mtd_premium": total_sales,
+        "mtd_premium_delta": _pct_delta(total_sales, prev_premium),
+        "mtd_margin": mtd_margin,
+        "mtd_margin_delta": _pct_delta(mtd_margin, prev_margin_totals["margin_amount"]),
+        "blended_margin_pct": margin_totals["blended_percent"],
+        "new_clients": new_clients,
+        "new_clients_delta": (new_clients - prev_clients),
+        "pending_count": pending_count,
+        "pending_oldest_days": pending_oldest_days,
+        "renew_30": renew_30, "renew_30_premium": renew_30_premium, "renew_5": renew_5,
+        "emis_due": emis_due,
+        "open_claims": open_claims, "claims_action": claims_action,
+        "kyc_missing": kyc_missing,
+        "firm_target": firm_target, "firm_achieved": total_sales,
+        "firm_pct": firm_pct, "firm_projection": firm_projection,
+        "firm_on_track": firm_projection >= firm_target if firm_target else True,
+        "working_days": working_days, "elapsed_wd": elapsed_wd, "pace_pct": pace_pct,
+        "product_mix": product_mix,
+        "mix_total": sum((m["amount"] for m in product_mix), 0.0),
+        "leaderboard": leaderboard,
+        "trend": trend,
+        "trend_max": max((t["amount"] for t in trend), default=0.0),
+    }
+
     notifications = []
     unread_notifications = 0
     if request.user.is_authenticated:
@@ -427,6 +570,7 @@ def admin_dashboard(request):
         "month_start": month_start,
         "month_end": month_end,
         "kyc_missing_count": _kyc_missing_count(request.user),
+        "overview": overview,
     }
 
     context["profile_gap"] = _profile_gap(request)
