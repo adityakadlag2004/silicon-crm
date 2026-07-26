@@ -103,7 +103,7 @@ Styling uses the shared --ki-* design tokens so light/dark both work.
     <a class="kpi" href="{% url 'clients:business_analytics' %}" style="--k:var(--ki-success)">
       <span class="lab">Est. Margin ({{ o.blended_margin_pct|floatformat:1 }}%)</span><span class="val num">₹{{ o.mtd_margin|compact_inr }}</span>
       <span class="foot">{% if o.mtd_margin_delta != None %}<span class="delta {% if o.mtd_margin_delta >= 0 %}up{% else %}down{% endif %}">{% if o.mtd_margin_delta >= 0 %}▲{% else %}▼{% endif %} {{ o.mtd_margin_delta }}%</span> vs last month{% else %}—{% endif %}</span></a>
-    <a class="kpi" href="{% url 'clients:all_clients' %}" style="--k:#2563D6">
+    <a class="kpi" href="{% url 'clients:all_clients' %}?created_start={{ month_start|date:'Y-m-d' }}&created_end={{ month_end|date:'Y-m-d' }}&sort=-created_at" style="--k:#2563D6">
       <span class="lab">New Clients Added</span><span class="val num">{{ o.new_clients }}</span>
       <span class="foot"><span class="delta {% if o.new_clients_delta >= 0 %}up{% else %}down{% endif %}">{% if o.new_clients_delta >= 0 %}▲{% else %}▼{% endif %} {{ o.new_clients_delta }}</span> vs last month</span></a>
     <a class="kpi" href="{% url 'clients:all_sales' %}?status=pending" style="--k:var(--ki-warning)">

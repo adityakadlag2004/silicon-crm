@@ -235,6 +235,14 @@ def all_clients(request):
         except (ValueError, TypeError):
             pass
 
+    # ── Onboarded-date range (drives the dashboard's "New Clients" drill-down) ──
+    created_start = parse_date_param(request.GET.get("created_start"))
+    created_end = parse_date_param(request.GET.get("created_end"))
+    if created_start:
+        clients_qs = clients_qs.filter(created_at__date__gte=created_start)
+    if created_end:
+        clients_qs = clients_qs.filter(created_at__date__lte=created_end)
+
     total_count = clients_qs.count()
 
     paginator = Paginator(clients_qs, PER_PAGE)
@@ -272,6 +280,8 @@ def all_clients(request):
         "mapped_to_id": mapped_to_id or "",
         "employees": employees,
         "product_filters": product_filters,
+        "created_start": created_start,
+        "created_end": created_end,
     }
     return render(request, "clients/all_clients.html", context)
 

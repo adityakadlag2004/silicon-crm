@@ -190,8 +190,14 @@
 <!-- Header -->
 <div class="clients-header">
   <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-    <h2 class="ki-page-title" style="margin:0;">All Clients</h2>
+    <h2 class="ki-page-title" style="margin:0;">{% if created_start or created_end %}New Clients{% else %}All Clients{% endif %}</h2>
     <span class="clients-count"><i class="bi bi-people-fill"></i> {{ total_count }} client{{ total_count|pluralize }}</span>
+    {% if created_start or created_end %}
+    <span class="clients-count" style="background:var(--ki-info-light);color:var(--ki-info);">
+      <i class="bi bi-calendar-event"></i> Onboarded {{ created_start|date:"d M" }}{% if created_end %} – {{ created_end|date:"d M Y" }}{% endif %}
+      <a href="{% url 'clients:all_clients' %}" style="margin-left:.45rem;color:inherit;text-decoration:none;font-weight:700;" title="Clear filter" aria-label="Clear onboarded-date filter">✕</a>
+    </span>
+    {% endif %}
   </div>
   <div class="clients-actions">
     <a href="{% url 'clients:add_client' %}" class="ki-btn ki-btn-primary ki-btn-sm">
