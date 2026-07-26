@@ -593,26 +593,32 @@ class AppClientCreateTests(TestCase):
                       data=_json.dumps(payload), content_type="application/json")
 
     def test_employee_client_maps_to_self(self):
-        resp = self._post(self.emp_user, {"name": "New Client", "phone": "9811112222"})
+        resp = self._post(self.emp_user, {"name": "New Client", "phone": "9811112222", "pan": "ABCDE1234F"})
         self.assertEqual(resp.status_code, 200, resp.content)
         c = Client.objects.get(name="New Client")
         self.assertEqual(c.mapped_to, self.emp)
         self.assertEqual(c.status, "Mapped")
+        self.assertEqual(c.pan, "ABCDE1234F")
 
     def test_requires_name_and_phone(self):
         self.assertEqual(self._post(self.emp_user, {"name": "X"}).status_code, 400)
         self.assertEqual(self._post(self.emp_user, {"phone": "981"}).status_code, 400)
 
+    def test_requires_pan(self):
+        # PAN links the client to their MF folios — mandatory on create.
+        self.assertEqual(self._post(self.emp_user, {"name": "NoPan", "phone": "9811119999"}).status_code, 400)
+        self.assertEqual(self._post(self.emp_user, {"name": "BadPan", "phone": "9811119999", "pan": "XYZ"}).status_code, 400)
+
     def test_duplicate_phone_rejected(self):
         Client.objects.create(name="Existing", phone="9822223333")
-        resp = self._post(self.emp_user, {"name": "Dup", "phone": "+91 98222 23333"})
+        resp = self._post(self.emp_user, {"name": "Dup", "phone": "+91 98222 23333", "pan": "ABCDE1234F"})
         self.assertEqual(resp.status_code, 400)
 
     def test_admin_can_leave_unmapped_or_assign(self):
-        resp = self._post(self.admin_user, {"name": "Unmapped C", "phone": "9833334444", "mapped_to_id": ""})
+        resp = self._post(self.admin_user, {"name": "Unmapped C", "phone": "9833334444", "mapped_to_id": "", "pan": "ABCDE1234F"})
         self.assertEqual(resp.status_code, 200)
         self.assertIsNone(Client.objects.get(name="Unmapped C").mapped_to)
-        resp = self._post(self.admin_user, {"name": "Assigned C", "phone": "9844445555", "mapped_to_id": self.emp.id})
+        resp = self._post(self.admin_user, {"name": "Assigned C", "phone": "9844445555", "mapped_to_id": self.emp.id, "pan": "ABCDE1234G"})
         self.assertEqual(Client.objects.get(name="Assigned C").mapped_to, self.emp)
 
 

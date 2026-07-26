@@ -1706,6 +1706,13 @@ def app_client_create(request):
     if not phone:
         return JsonResponse({"ok": False, "error": "Phone number is required."}, status=400)
 
+    from ..forms import validate_pan
+    from django.core.exceptions import ValidationError as _VErr
+    try:
+        pan = validate_pan(body.get("pan"), required=True)
+    except _VErr as e:
+        return JsonResponse({"ok": False, "error": e.messages[0]}, status=400)
+
     digits = "".join(ch for ch in phone if ch.isdigit())
     if Client.objects.filter(phone__endswith=digits[-10:]).exists() and len(digits) >= 10:
         return JsonResponse({"ok": False, "error": "A client with this phone number already exists."}, status=400)
@@ -1730,7 +1737,7 @@ def app_client_create(request):
         name=name[:255],
         phone=phone[:15],
         email=str(body.get("email") or "").strip()[:254] or None,
-        pan=str(body.get("pan") or "").strip().upper()[:20] or None,
+        pan=pan,
         address=str(body.get("address") or "").strip() or None,
         date_of_birth=dob,
         mapped_to=mapped_to,

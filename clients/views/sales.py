@@ -188,7 +188,10 @@ def all_sales(request):
         )
 
     if product:
-        sales_qs = sales_qs.filter(product=product)
+        # Filter dropdowns only offer main products; a sale is stored under its
+        # sub-product name, so match the chosen main product AND its children.
+        child_names = list(Product.objects.filter(parent__name=product).values_list("name", flat=True))
+        sales_qs = sales_qs.filter(product__in=[product] + child_names)
     if client:
         try:
             cid = int(client)
@@ -247,7 +250,7 @@ def all_sales(request):
         "qstring": qstring,
         "q": q,
         "status": status,
-        "product_options": Product.objects.filter(domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
+        "product_options": Product.objects.filter(parent__isnull=True, domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
     }
     return render(request, "sales/all_sales.html", context)
 

@@ -195,7 +195,11 @@ def all_renewals(request):
 			| Q(notes__icontains=q)
 		)
 	if product_ref:
-		renewals_qs = renewals_qs.filter(product_ref_id=product_ref)
+		# Dropdown offers main products only; match the chosen main product and
+		# any renewal booked under one of its sub-products.
+		renewals_qs = renewals_qs.filter(
+			Q(product_ref_id=product_ref) | Q(product_ref__parent_id=product_ref)
+		)
 	if frequency in dict(Renewal.FREQUENCY_CHOICES):
 		renewals_qs = renewals_qs.filter(frequency=frequency)
 	if employee:
@@ -288,7 +292,7 @@ def all_renewals(request):
 		"filtered_total_premium": filtered_total_premium,
 		"filter_payment_start": payment_start,
 		"filter_payment_end": payment_end,
-		"product_options": Product.objects.filter(domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
+		"product_options": Product.objects.filter(parent__isnull=True, domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
 	}
 	return render(request, "renewals/all_renewals.html", context)
 
