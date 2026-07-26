@@ -11,8 +11,8 @@
 
 <p class="text-muted mb-3">
   Set each employee's <strong>personal monthly target</strong> for every product. Targets are individual
-  (not a shared pool split across the team). The <em>Team Total</em> row sums everyone's monthly targets per
-  product, alongside how much has been achieved this month. Leave a cell blank to fall back to the product baseline.
+  (not a shared pool split across the team). The <em>Team Total</em> row — and the firm target on the
+  dashboard — is the sum of every employee's target for that product. Leave a cell blank for no target.
 </p>
 
 {% if not products %}
@@ -45,7 +45,7 @@
                   min="0"
                   name="tv-{{ row.employee.id }}-{{ cell.product_id }}"
                   value="{{ cell.input_value }}"
-                  placeholder="{% if cell.baseline %}base {{ cell.baseline|floatformat:0 }}{% else %}0{% endif %}"
+                  placeholder="0"
                   class="ki-input"
                   style="width:100%;padding:4px 6px;font-size:.85rem;"
                 >
@@ -54,7 +54,6 @@
                 </div>
                 <div class="text-muted" style="font-size:.72rem;">
                   <i class="bi bi-check2-circle"></i> {{ cell.achieved|floatformat:0 }}
-                  {% if cell.is_baseline and cell.baseline %}<span title="Using product baseline">&middot; base</span>{% endif %}
                 </div>
               </td>
             {% endfor %}

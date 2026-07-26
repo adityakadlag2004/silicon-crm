@@ -72,11 +72,12 @@ def employee_target_map(employees=None):
     }
 
 
-def resolve_monthly_target(employee_id, product, *, emp_map, baseline_map):
-    """Monthly target for an employee+product, falling back to the baseline."""
-    if (employee_id, product) in emp_map:
-        return emp_map[(employee_id, product)]
-    return baseline_map.get(product, Decimal("0"))
+def resolve_monthly_target(employee_id, product, *, emp_map, baseline_map=None):
+    """Monthly target for an employee+product: the employee's own per-product
+    target, or 0. Targets are per-employee only — there is no product-wide
+    baseline (a blank cell means "no target"). `baseline_map` is accepted and
+    ignored for backwards compatibility with existing callers."""
+    return emp_map.get((employee_id, product), Decimal("0"))
 
 
 def resolve_daily_target(employee_id, product, working_days, *, emp_map, baseline_map):
@@ -97,9 +98,7 @@ def close_month(year, month, *, log=None):
     Returns the number of history rows written.
     """
     log = log or (lambda msg: None)
-    baseline_map = baseline_monthly_map()
     emp_map = employee_target_map()
-    baseline_products = set(baseline_map)
 
     written = 0
     for emp in Employee.objects.filter(active=True).select_related("user"):
@@ -110,19 +109,15 @@ def close_month(year, month, *, log=None):
         )
         sales_by_product = {s["product"]: s for s in month_sales}
 
-        # Union of baseline products and any product this employee has an
-        # explicit target for, so per-employee overrides are always recorded.
-        products = baseline_products | {
-            prod for (eid, prod) in emp_map if eid == emp.id
-        }
+        # Record every product this employee has a target for OR sold in — so
+        # both their per-employee targets and their actual sales are captured.
+        products = {prod for (eid, prod) in emp_map if eid == emp.id} | set(sales_by_product)
 
         for product in products:
             row = sales_by_product.get(product)
             achieved_amount = row["total_amount"] if row else 0
             achieved_points = row["total_points"] if row else 0
-            target_value = resolve_monthly_target(
-                emp.id, product, emp_map=emp_map, baseline_map=baseline_map
-            )
+            target_value = resolve_monthly_target(emp.id, product, emp_map=emp_map)
             MonthlyTargetHistory.objects.update_or_create(
                 employee=emp,
                 product=product,

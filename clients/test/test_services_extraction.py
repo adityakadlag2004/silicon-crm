@@ -107,11 +107,14 @@ class CloseMonthTests(TestCase):
         self.assertEqual(row.target_value, Decimal("80000"))  # override, not baseline
         self.assertEqual(row.achieved_value, Decimal("60000"))
 
-    def test_close_month_baseline_for_others(self):
+    def test_close_month_no_baseline_no_target(self):
+        # Targets are per-employee only: an employee with no personal target and
+        # no sales for a product is not recorded (no product-wide baseline).
         targets_service.close_month(2026, 6)
-        row = MonthlyTargetHistory.objects.get(employee=self.other, product="SIP", year=2026, month=6)
-        self.assertEqual(row.target_value, Decimal("50000"))
-        self.assertEqual(row.achieved_value, Decimal("0"))
+        self.assertFalse(
+            MonthlyTargetHistory.objects.filter(
+                employee=self.other, product="SIP", year=2026, month=6).exists()
+        )
 
     def test_close_month_records_points(self):
         targets_service.close_month(2026, 6)

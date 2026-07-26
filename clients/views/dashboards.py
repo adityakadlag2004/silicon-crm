@@ -1571,7 +1571,6 @@ def target_management(request):
     today = timezone.now().date()
     year, month = today.year, today.month
 
-    baseline_map = baseline_monthly_map()
     emp_map = employee_target_map(employees)
 
     month_sales = (
@@ -1600,7 +1599,8 @@ def target_management(request):
         for product in active_products:
             pname = product.name
             explicit = emp_map.get((emp.id, pname))  # None if not set
-            effective = explicit if explicit is not None else baseline_map.get(pname, Decimal("0"))
+            # Targets are per-employee only; a blank cell means no target (0).
+            effective = explicit if explicit is not None else Decimal("0")
             achieved = achieved_map.get((emp.id, pname), Decimal("0"))
             progress = (achieved / effective * 100) if effective else 0
 
@@ -1608,8 +1608,8 @@ def target_management(request):
                 "product_id": product.id,
                 "product": pname,
                 "input_value": explicit if explicit is not None else "",
-                "is_baseline": explicit is None,
-                "baseline": baseline_map.get(pname, Decimal("0")),
+                "is_baseline": False,
+                "baseline": Decimal("0"),
                 "effective": effective,
                 "achieved": achieved,
                 "progress": progress,
