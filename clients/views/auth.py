@@ -25,9 +25,11 @@ def _dashboard_redirect(user):
     """Role-based landing page, or None if the user has no role mapping."""
     emp = getattr(user, "employee", None)
     role = emp.role.lower() if emp and emp.role else None
-    if role == "admin":
+    if role in ("admin", "manager"):
+        # Managers land on the team-oversight dashboard (firm-wide = their team,
+        # since there's no sub-team split); it renders as "Team Dashboard" for them.
         return redirect("clients:admin_dashboard")
-    if role in ("manager", "employee"):
+    if role == "employee":
         return redirect("clients:employee_dashboard")
     if user.is_superuser or user.is_staff:
         # Superusers/staff created via createsuperuser have no Employee

@@ -1,5 +1,6 @@
 
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}Employee Dashboard{% endblock %}
 {% block page_title %}My Dashboard{% endblock %}
 {% block content %}
@@ -7,31 +8,7 @@
 {% include "dashboards/_kyc_banner.html" %}
 {% include "dashboards/_profile_prompt.html" %}
 
-<!-- Top Metrics -->
-<div class="ki-grid-2 mb-3">
-  <div class="ki-card text-center">
-    <h5 class="ki-card-label">Total Sales (This Month)</h5>
-    <div class="ki-card-value" style="color:var(--ki-green);">₹{{ total_sales }}</div>
-  </div>
-  <div class="ki-card text-center">
-    <h5 class="ki-card-label">Total Points (This Month)</h5>
-    <div class="ki-card-value" id="points-counter" data-points="{{ total_points }}">0</div>
-    <div class="text-muted" style="font-size:0.92rem;">Pending points awaiting approval: {{ pending_points }}</div>
-    {% if salary_points %}
-    <div class="ki-salary-meter mt-3" data-salary-meter data-salary="{{ salary_points }}" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" data-points-ratio="{{ points_ratio|floatformat:0 }}">
-      <div class="d-flex justify-content-between" style="font-size:0.88rem;color:var(--ki-text-secondary);">
-        <span>Salary point: {{ salary_points|floatformat:0 }}</span>
-        <span>Extra: {{ extra_points|floatformat:0 }}</span>
-      </div>
-      <div class="ki-salary-track mt-2">
-        <div class="ki-salary-fill" data-progress="{{ points_ratio|floatformat:0 }}" style="width:{{ points_ratio|floatformat:0 }}%;"></div>
-        <div class="ki-salary-line" data-salary-ratio="{{ salary_ratio|floatformat:0 }}" style="left:{{ salary_ratio|floatformat:0 }}%;"></div>
-      </div>
-      <div class="text-muted" style="font-size:0.82rem;margin-top:0.35rem;">Beyond salary = incentive points</div>
-    </div>
-    {% endif %}
-  </div>
-</div>
+{% include "dashboards/_employee_overview.html" %}
 
 <!-- 🎯 Active Campaign Challenges (gamified) -->
 {% if campaign_challenges %}
@@ -156,6 +133,9 @@
 <div class="ki-card mb-3" style="text-align:left;">
   {% include "dashboards/_followup_calendar.html" %}
 </div>
+
+<details class="edash-more">
+  <summary>Full breakdown — points, per-product grids &amp; targets</summary>
 
 <!-- Product Breakup -->
 <h3 class="ki-section-title">Product Breakup</h3>
@@ -365,6 +345,8 @@
     <p class="text-muted mb-0">No tasks for today.</p>
   {% endif %}
 </div>
+
+</details>
 
 <script>
   document.addEventListener("DOMContentLoaded", function () {

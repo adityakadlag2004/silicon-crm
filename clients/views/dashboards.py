@@ -175,10 +175,10 @@ def _elapsed_working_days(year, month, today):
     return sum(1 for d in range(1, last + 1) if date(year, month, d).weekday() < 5) or 1
 
 
-def _renewal_attention(today):
-    """(due within 30d count, that premium, due within 5d count) for approved
-    Health/Life policies. Mirrors the renewal_reminders cron's next-renewal
-    logic — the single-year book renews manually, so these are the follow-ups.
+def _renewal_attention(today, employee=None):
+    """Renewal follow-up counts for approved Health/Life policies, mirroring the
+    renewal_reminders cron. Returns {"c30","prem30","c5","c7"}. Scope to one
+    employee (as seller or the client's mapped owner) when given.
     ponytail: iterates the approved insurance book; annotate in SQL if it slows."""
     qs = (
         Sale.objects.filter(status=Sale.STATUS_APPROVED)
@@ -189,7 +189,9 @@ def _renewal_attention(today):
         )
         .select_related("product_ref")
     )
-    c30, c5, prem30 = 0, 0, Decimal("0")
+    if employee is not None:
+        qs = qs.filter(Q(employee=employee) | Q(client__mapped_to=employee))
+    c30, c5, c7, prem30 = 0, 0, 0, Decimal("0")
     for sale in qs:
         nxt = sale.next_renewal_date(today)
         if not nxt:
@@ -198,17 +200,67 @@ def _renewal_attention(today):
         if 0 <= days <= 30:
             c30 += 1
             prem30 += sale.annual_premium or Decimal("0")
+            if days <= 7:
+                c7 += 1
             if days <= 5:
                 c5 += 1
-    return c30, prem30, c5
+    return {"c30": c30, "prem30": prem30, "c5": c5, "c7": c7}
 
 
-def _emis_due_this_month(today):
+def _emis_due_this_month(today, employee=None):
     """Count of multiyear-EMI health policies whose EMI schedule covers this
-    month (the emi_reminders cron would call these clients)."""
+    month (the emi_reminders cron would call these clients). Scope to one
+    employee (seller or the client's mapped owner) when given."""
     from ..management.commands.emi_reminders import emi_window_contains
     sales = Sale.objects.filter(emi_months__gt=0, status=Sale.STATUS_APPROVED)
+    if employee is not None:
+        sales = sales.filter(Q(employee=employee) | Q(client__mapped_to=employee))
     return sum(1 for s in sales if s.date and emi_window_contains(s, today.year, today.month))
+
+
+_PRODUCT_DISPLAY = {"Lumsum": "Lumpsum"}
+
+
+def _stacked_category_trend(base_qs, today, months=6):
+    """6-month trend for `base_qs` (approved sales), each month split by product
+    CATEGORY (sub-products fold into their parent). Returns
+    {prods:[{name,color}], data:[{label, seg:[amount per prod]}], total, best}.
+    ponytail: one group-by query per month; fine for 6, revisit if months grows."""
+    cat_map = _category_name_map()
+    y, m, seq = today.year, today.month, []
+    for _ in range(months):
+        seq.append((y, m))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    seq.reverse()
+
+    per_month, cats = [], {}
+    for (yy, mm) in seq:
+        agg = {}
+        for r in base_qs.filter(date__year=yy, date__month=mm).values("product").annotate(t=Sum("amount")):
+            c = cat_map.get(r["product"], r["product"])
+            agg[c] = agg.get(c, Decimal("0")) + (r["t"] or Decimal("0"))
+            cats[c] = True
+        per_month.append((date(yy, mm, 1).strftime("%b"), agg))
+
+    order = list(Product.objects.filter(name__in=list(cats)).order_by("display_order", "name").values_list("name", flat=True))
+    for c in cats:
+        if c not in order:
+            order.append(c)
+    prods = [{"name": _PRODUCT_DISPLAY.get(c, c), "color": _PRODUCT_COLORS.get(c, "#9B8B6A")} for c in order]
+    data = [{"label": lbl, "seg": [float(agg.get(c, Decimal("0"))) for c in order]} for (lbl, agg) in per_month]
+
+    totals = [sum(row["seg"]) for row in data]
+    grand = sum(totals)
+    best_i = max(range(len(totals)), key=lambda i: totals[i]) if totals else None
+    return {
+        "prods": prods, "data": data,
+        "total": grand, "avg": (grand / len(data)) if data else 0.0,
+        "best_label": data[best_i]["label"] if best_i is not None else "",
+        "best_amount": totals[best_i] if best_i is not None else 0.0,
+        "mom": _pct_delta(totals[-1], totals[-2]) if len(totals) >= 2 else None,
+    }
 
 
 def _profile_gap(request):
@@ -463,7 +515,8 @@ def admin_dashboard(request):
     oldest_pending = pending_qs.order_by("date").values_list("date", flat=True).first()
     pending_oldest_days = (today - oldest_pending).days if oldest_pending else 0
 
-    renew_30, renew_30_premium, renew_5 = _renewal_attention(today)
+    _ra = _renewal_attention(today)
+    renew_30, renew_30_premium, renew_5 = _ra["c30"], _ra["prem30"], _ra["c5"]
     emis_due = _emis_due_this_month(today)
     open_claims = InsuranceClaim.objects.filter(status__in=InsuranceClaim.OPEN_STATUSES).count()
     claims_action = InsuranceClaim.objects.filter(status=InsuranceClaim.STATUS_INTIMATED).count()
@@ -580,6 +633,8 @@ def admin_dashboard(request):
         "month_end": month_end,
         "kyc_missing_count": _kyc_missing_count(request.user),
         "overview": overview,
+        # Managers see this same team-oversight page, relabelled "Team Dashboard".
+        "is_pure_admin": permissions.is_admin(request.user),
     }
 
     context["profile_gap"] = _profile_gap(request)
@@ -765,11 +820,6 @@ def employee_dashboard(request):
     ]
 
     today_sales_dict = _sum_by_product(today_sales_qs, "amount", cat_map)
-    todays_tasks = CalendarEvent.objects.filter(
-        employee=request.user.employee,
-        scheduled_time__date=today,
-    ).order_by("scheduled_time")
-
     month_sales_dict = _sum_by_product(monthly_sales_approved, "amount", cat_map)
     sip_sales = month_sales_dict.get("SIP", Decimal("0"))
     lumsum_sales = month_sales_dict.get("Lumsum", Decimal("0"))
@@ -1003,8 +1053,66 @@ def employee_dashboard(request):
                 })
             campaign_challenges.append(challenge)
 
+    # ── Redesigned personal overview: my day, am-I-on-track by product, trend ──
+    from ..models import Task
+
+    prev_last = month_start - timedelta(days=1)
+    prev_sales = (Sale.objects.filter(employee=emp, status=Sale.STATUS_APPROVED,
+                                       date__year=prev_last.year, date__month=prev_last.month)
+                  .aggregate(t=Sum("amount"))["t"] or Decimal("0"))
+    my_target_total = sum((t["target_value"] for t in monthly_targets_display), Decimal("0"))
+    my_attainment = (total_sales / my_target_total * 100) if my_target_total else Decimal("0")
+
+    elapsed_wd = _elapsed_working_days(today.year, today.month, today)
+    pace_pct = min(elapsed_wd / working_days * 100, 100) if working_days else 0
+
+    # Per-product target status (pace-aware) so the rep sees where they lag.
+    track_rows = []
+    for t in monthly_targets_display:
+        tgt, ach = t["target_value"], t["achieved"]
+        if not tgt:
+            continue
+        att = ach / tgt * 100
+        status = "ahead" if att >= 100 else ("ontrack" if att >= pace_pct else "behind")
+        track_rows.append({
+            "product": _PRODUCT_DISPLAY.get(t["product"], t["product"]),
+            "achieved": ach, "target": tgt, "att": att,
+            "gap": max(tgt - ach, Decimal("0")), "status": status,
+            "color": _PRODUCT_COLORS.get(t["product"], "#9B8B6A"),
+        })
+    track_rows.sort(key=lambda r: (r["status"] != "behind", r["att"]))
+    behind = [r for r in track_rows if r["status"] == "behind"]
+
+    my_mix = [
+        {"name": _PRODUCT_DISPLAY.get(k, k), "amount": float(v),
+         "color": _PRODUCT_COLORS.get(k, "#9B8B6A")}
+        for k, v in sorted(month_sales_dict.items(), key=lambda kv: kv[1], reverse=True)
+        if v and v > 0
+    ]
+
+    my_trend = _stacked_category_trend(
+        Sale.objects.filter(employee=emp, status=Sale.STATUS_APPROVED), today)
+
+    _ra = _renewal_attention(today, employee=emp)
+    emp_overview = {
+        "my_sales": total_sales, "my_sales_delta": _pct_delta(total_sales, prev_sales),
+        "attainment": my_attainment, "target_total": my_target_total,
+        "points": total_points, "extra_points": extra_points,
+        "pending_count": monthly_sales_pending.count(),
+        "tasks_due": Task.objects.filter(assigned_to=emp, due_date=today,
+                                         status__in=Task.OPEN_STATUSES, is_deleted=False).count(),
+        "events_today": todays_events.count(),
+        "renewals_7": _ra["c7"], "renewals_7_premium": _ra["prem30"],
+        "emis_due": _emis_due_this_month(today, employee=emp),
+        "elapsed_wd": elapsed_wd, "working_days": working_days, "pace_pct": pace_pct,
+        "track_rows": track_rows, "behind": behind,
+        "my_mix": my_mix, "my_mix_total": sum((m["amount"] for m in my_mix), 0.0),
+        "trend": my_trend,
+    }
+
     context = {
         "total_sales": total_sales,
+        "emp_overview": emp_overview,
         "total_points": total_points,
         "salary_points": salary_points,
         "salary_ratio": salary_ratio,

@@ -1,0 +1,198 @@
+{% load custom_filters %}
+{% comment %}
+Redesigned personal overview for an employee. Data comes from the `emp_overview`
+dict built in dashboards.employee_dashboard. Styled with shared --ki-* tokens.
+{% endcomment %}
+<style>
+.edash{--good:var(--ki-success);--warn:var(--ki-warning);--bad:var(--ki-danger);--info:var(--ki-info)}
+.edash .num{font-variant-numeric:tabular-nums}
+.edash .eyebrow{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ki-text-muted);margin:1.4rem 0 .7rem;display:flex;align-items:center;gap:.5rem}
+.edash .eyebrow::after{content:"";flex:1;height:1px;background:var(--ki-card-border)}
+.edash .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:.7rem}
+.edash .kpi{background:var(--ki-card-bg);border:1px solid var(--ki-card-border);border-left:4px solid var(--k,var(--ki-primary));border-radius:var(--ki-radius);padding:.75rem .85rem;text-decoration:none;display:block;transition:var(--ki-transition)}
+.edash .kpi:hover{box-shadow:var(--ki-shadow);transform:translateY(-1px)}
+.edash .kpi .lab{display:flex;font-size:.72rem;color:var(--ki-text-muted);font-weight:600;line-height:1.25;min-height:2.4em}
+.edash .kpi .val{display:block;font-size:1.5rem;font-weight:800;line-height:1.1;margin-top:.15rem;color:var(--ki-text-primary)}
+.edash .kpi .foot{display:flex;align-items:center;gap:.35rem;margin-top:.3rem;font-size:.72rem;color:var(--ki-text-muted)}
+.edash .delta{font-weight:700;padding:.05rem .3rem;border-radius:5px;font-size:.7rem}
+.edash .delta.up{color:var(--good);background:var(--ki-success-light)}.edash .delta.down{color:var(--bad);background:var(--ki-danger-light)}
+.edash .grid{display:grid;gap:.9rem}.edash .g-2b{grid-template-columns:.9fr 1.1fr}
+.edash .panel{background:var(--ki-card-bg);border:1px solid var(--ki-card-border);border-radius:var(--ki-radius-lg);padding:1.05rem 1.15rem}
+.edash .panel h3{font-size:1rem;font-weight:700;margin:0;color:var(--ki-text-primary)}
+.edash .panel .psub{color:var(--ki-text-muted);font-size:.78rem;margin-top:.15rem}
+.edash .p-head{margin-bottom:.9rem}
+/* my day */
+.edash .day-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem}
+.edash .day-list li{display:flex;align-items:center;gap:.65rem;padding:.55rem .7rem;border-radius:var(--ki-radius-sm);background:var(--ki-body-bg);border:1px solid var(--ki-card-border);text-decoration:none;color:inherit}
+.edash .day-list li:hover{box-shadow:var(--ki-shadow)}
+.edash .day-list .ico{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:.95rem;flex:none;background:var(--ki-primary-pale);color:var(--ki-primary)}
+.edash .day-list .ico.b{background:var(--ki-danger-light);color:var(--bad)}.edash .day-list .ico.i{background:var(--ki-info-light);color:var(--info)}.edash .day-list .ico.g{background:var(--ki-success-light);color:var(--good)}
+.edash .day-list .body{flex:1}.edash .day-list .body b{font-weight:700;color:var(--ki-text-primary)}
+.edash .day-list .body small{display:block;color:var(--ki-text-muted);font-size:.74rem}
+.edash .day-list .cnt{font-weight:800;font-size:1.2rem;color:var(--ki-text-primary)}.edash .day-list .arr{color:var(--ki-text-light);font-size:1.1rem}
+/* on-track tracker */
+.edash .track-lab{display:flex;justify-content:space-between;font-size:.8rem;font-weight:700;margin-bottom:.35rem;color:var(--ki-text-primary)}
+.edash .track-bar{position:relative;height:9px;border-radius:999px;background:var(--ki-primary-pale)}
+.edash .track-bar i{display:block;height:100%;border-radius:999px;max-width:100%}
+.edash .track-bar i.ahead{background:var(--good)}.edash .track-bar i.ontrack{background:var(--ki-primary)}.edash .track-bar i.behind{background:var(--bad)}
+.edash .track-bar .pace{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ki-text-primary);border-radius:2px}
+.edash .track-list{display:flex;flex-direction:column;gap:.75rem;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--ki-card-border)}
+.edash .track-top{display:flex;justify-content:space-between;align-items:center;font-size:.86rem;font-weight:600;margin-bottom:.3rem;color:var(--ki-text-primary)}
+.edash .track-top .cdot{width:9px;height:9px;border-radius:3px;display:inline-block;margin-right:.45rem}
+.edash .track-top b{font-variant-numeric:tabular-nums}
+.edash .track-sub{display:flex;justify-content:space-between;font-size:.72rem;color:var(--ki-text-muted);margin-top:.28rem}
+.edash .st{font-size:.64rem;font-weight:700;padding:.08rem .38rem;border-radius:5px;margin-left:.4rem}
+.edash .st.ahead{color:var(--good);background:var(--ki-success-light)}.edash .st.ontrack{color:var(--ki-primary);background:var(--ki-primary-pale)}.edash .st.behind{color:var(--bad);background:var(--ki-danger-light)}
+.edash .proj{margin-top:.8rem;padding:.55rem .7rem;border-radius:var(--ki-radius-sm);font-size:.8rem;font-weight:600;display:flex;gap:.4rem;background:var(--ki-success-light);color:var(--good)}
+.edash .proj.behind{background:var(--ki-danger-light);color:var(--bad)}.edash .proj b{font-weight:800}
+/* legend + donut + trend */
+.edash .legend{display:flex;flex-direction:column;gap:.4rem;font-size:.8rem;flex:1;min-width:130px}
+.edash .legend span{display:flex;align-items:center;gap:.45rem;color:var(--ki-text-secondary)}
+.edash .legend i{width:11px;height:11px;border-radius:3px;flex:none}
+.edash .legend b{color:var(--ki-text-primary);font-variant-numeric:tabular-nums;font-weight:700;margin-left:auto}
+.edash .trend-legend{display:flex;flex-wrap:wrap;gap:.35rem .8rem;margin-bottom:.5rem;font-size:.72rem}
+.edash .trend-legend span{display:flex;align-items:center;gap:.35rem;color:var(--ki-text-secondary)}
+.edash .trend-legend i{width:10px;height:10px;border-radius:3px;flex:none}
+.edash .trend-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;margin-top:.7rem}
+.edash .ts{background:var(--ki-primary-pale);border-radius:var(--ki-radius-sm);padding:.45rem .6rem}
+.edash .ts .k{display:block;font-size:.66rem;color:var(--ki-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.edash .ts .v{display:block;font-size:.98rem;font-weight:800;color:var(--ki-text-primary);margin-top:.1rem}
+.edash .ts .v.up{color:var(--good)}.edash .ts .v.down{color:var(--bad)}
+@media(max-width:900px){.edash .kpis{grid-template-columns:repeat(2,1fr)}.edash .g-2b{grid-template-columns:1fr}}
+.edash-more{margin-top:1.4rem}
+.edash-more>summary{cursor:pointer;font-weight:700;color:var(--ki-text-secondary);padding:.6rem 0;list-style:none;display:flex;align-items:center;gap:.5rem;border-top:1px solid var(--ki-card-border)}
+.edash-more>summary::before{content:"▸";color:var(--ki-primary)}
+.edash-more[open]>summary::before{content:"▾"}
+</style>
+
+{% with o=emp_overview %}
+<div class="edash">
+  <div class="eyebrow">My month · {{ month_start|date:"F Y" }}</div>
+  <div class="kpis">
+    <a class="kpi" href="{% url 'clients:all_sales' %}?start_date={{ month_start|date:'Y-m-d' }}&end_date={{ month_end|date:'Y-m-d' }}&status=approved" style="--k:var(--ki-primary)">
+      <span class="lab">My Sales (MTD)</span><span class="val num">₹{{ o.my_sales|compact_inr }}</span>
+      <span class="foot">{% if o.my_sales_delta != None %}<span class="delta {% if o.my_sales_delta >= 0 %}up{% else %}down{% endif %}">{% if o.my_sales_delta >= 0 %}▲{% else %}▼{% endif %} {{ o.my_sales_delta }}%</span> vs last month{% else %}—{% endif %}</span></a>
+    <a class="kpi" style="--k:var(--good)"><span class="lab">Target Attainment</span>
+      <span class="val num">{% if o.target_total %}{% if o.attainment > 999 %}999+{% else %}{{ o.attainment|floatformat:0 }}{% endif %}%{% else %}—{% endif %}</span>
+      <span class="foot">{% if o.behind %}{{ o.behind|length }} product{{ o.behind|length|pluralize }} behind{% elif o.target_total %}on track everywhere ✓{% else %}no target set{% endif %}</span></a>
+    <a class="kpi" style="--k:var(--info)"><span class="lab">Incentive Points</span><span class="val num">{{ o.points|floatformat:0 }}</span>
+      <span class="foot">{{ o.extra_points|floatformat:0 }} above salary line</span></a>
+    <a class="kpi" href="{% url 'clients:all_sales' %}?status=pending" style="--k:var(--warn)"><span class="lab">My Pending Approvals</span><span class="val num">{{ o.pending_count }}</span>
+      <span class="foot">{% if o.pending_count %}awaiting admin →{% else %}all clear ✓{% endif %}</span></a>
+  </div>
+
+  <div class="eyebrow">My day · {{ today_date|date:"l j M" }}</div>
+  <div class="grid g-2b">
+    <div class="panel">
+      <div class="p-head"><h3>My day</h3><div class="psub">Do these before you chase new business</div></div>
+      <ul class="day-list">
+        <li><span class="ico g">✓</span><div class="body"><b>Tasks due today</b><small>assigned to me</small></div><span class="cnt num">{{ o.tasks_due }}</span><span class="arr">→</span></li>
+        <li><span class="ico b">☎</span><div class="body"><b>Today's meetings &amp; calls</b><small>on my calendar</small></div><span class="cnt num">{{ o.events_today }}</span><span class="arr">→</span></li>
+        <li><span class="ico i">↻</span><div class="body"><b>My renewals ≤7 days</b><small>{% if o.renewals_7 %}₹{{ o.renewals_7_premium|compact_inr }} premium up for renewal{% else %}nothing due{% endif %}</small></div><span class="cnt num">{{ o.renewals_7 }}</span><span class="arr">→</span></li>
+        <li><span class="ico i">₹</span><div class="body"><b>My EMIs · this month</b><small>call clients before the 5th</small></div><span class="cnt num">{{ o.emis_due }}</span><span class="arr">→</span></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="p-head"><h3>Am I on track? — by product</h3>
+        <div class="psub">Working day {{ o.elapsed_wd }} of {{ o.working_days }} · the <b style="color:var(--ki-text-secondary)">pace</b> mark is where you should be today{% if o.behind %} · <b style="color:var(--bad)">{{ o.behind|length }} product{{ o.behind|length|pluralize }} behind</b>{% endif %}</div></div>
+      <div class="track-overall">
+        <div class="track-lab"><span>Overall (all products)</span><span class="num">₹{{ o.my_sales|compact_inr }} / ₹{{ o.target_total|compact_inr }}{% if o.target_total %} · {{ o.attainment|floatformat:0 }}%{% endif %}</span></div>
+        <div class="track-bar"><i class="{% if o.attainment >= 100 %}ahead{% elif o.attainment >= o.pace_pct %}ontrack{% else %}behind{% endif %}" style="width:{% if o.attainment > 100 %}100{% else %}{{ o.attainment|floatformat:0 }}{% endif %}%"></i><span class="pace" style="left:{{ o.pace_pct|floatformat:1 }}%"></span></div>
+      </div>
+      <div class="track-list">
+        {% for r in o.track_rows %}
+        <div class="track-row">
+          <div class="track-top"><span><i class="cdot" style="background:{{ r.color }}"></i>{{ r.product }}</span>
+            <span><b class="num" {% if r.status == 'behind' %}style="color:var(--bad)"{% endif %}>{% if r.att > 999 %}999+{% else %}{{ r.att|floatformat:0 }}{% endif %}%</b><em class="st {{ r.status }}">{% if r.status == 'ahead' %}Ahead{% elif r.status == 'ontrack' %}On track{% else %}Behind{% endif %}</em></span></div>
+          <div class="track-bar"><i class="{{ r.status }}" style="width:{% if r.att > 100 %}100{% else %}{{ r.att|floatformat:0 }}{% endif %}%"></i><span class="pace" style="left:{{ o.pace_pct|floatformat:1 }}%"></span></div>
+          <div class="track-sub"><span class="num">₹{{ r.achieved|compact_inr }} / ₹{{ r.target|compact_inr }}</span>
+            <span {% if r.status == 'behind' %}style="color:var(--bad);font-weight:600"{% endif %}>{% if r.gap > 0 %}₹{{ r.gap|compact_inr }} to go{% else %}target met ✓{% endif %}</span></div>
+        </div>
+        {% empty %}
+        <div class="psub">No product targets set yet — ask your admin to set them under Targets.</div>
+        {% endfor %}
+      </div>
+      {% if o.behind %}
+      <div class="proj behind">⚠ Push needed on {% for r in o.behind %}<b>{{ r.product }} (₹{{ r.gap|compact_inr }})</b>{% if not forloop.last %}, {% endif %}{% endfor %} to hit every target</div>
+      {% elif o.track_rows %}
+      <div class="proj">✓ On or ahead of pace on every product — keep it up</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="eyebrow">My mix &amp; trend</div>
+  <div class="grid g-2b">
+    <div class="panel">
+      <div class="p-head"><h3>My product mix</h3><div class="psub">My approved sales this month</div></div>
+      <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+        <svg id="edash-donut" width="140" height="140" viewBox="0 0 140 140" role="img" aria-label="My product mix"></svg>
+        <div class="legend" id="edash-legend">
+          {% for m in o.my_mix %}<span><i style="background:{{ m.color }}"></i>{{ m.name }} <b>₹{{ m.amount|compact_inr }}</b></span>
+          {% empty %}<span class="psub">No approved sales this month yet.</span>{% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="p-head"><h3>My sales — 6 months</h3><div class="psub">Approved sales booked, by month &amp; product</div></div>
+      <div class="trend-legend" id="edash-trend-legend"></div>
+      <svg id="edash-bars" width="100%" height="160" viewBox="0 0 640 160" role="img" aria-label="My monthly sales, stacked by product"></svg>
+      <div class="trend-stats">
+        <div class="ts"><span class="k">6-mo total</span><span class="v num">₹{{ o.trend.total|compact_inr }}</span></div>
+        <div class="ts"><span class="k">Avg / month</span><span class="v num">₹{{ o.trend.avg|compact_inr }}</span></div>
+        <div class="ts"><span class="k">Best month</span><span class="v num">{% if o.trend.best_amount %}{{ o.trend.best_label }} ₹{{ o.trend.best_amount|compact_inr }}{% else %}—{% endif %}</span></div>
+        <div class="ts"><span class="k">Month on month</span><span class="v num {% if o.trend.mom >= 0 %}up{% else %}down{% endif %}">{% if o.trend.mom != None %}{% if o.trend.mom >= 0 %}▲{% else %}▼{% endif %} {{ o.trend.mom }}%{% else %}—{% endif %}</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{ o.my_mix|json_script:"edash-mix" }}
+{{ o.trend.prods|json_script:"edash-trend-prods" }}
+{{ o.trend.data|json_script:"edash-trend-data" }}
+<script>
+(function(){
+  var NS="http://www.w3.org/2000/svg";
+  function el(t,a){var e=document.createElementNS(NS,t);for(var k in a)e.setAttribute(k,a[k]);return e;}
+  function cv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+  function J(id){try{return JSON.parse(document.getElementById(id).textContent||'null');}catch(e){return null;}}
+  function compact(v){v=+v||0;function t(x){return x.toFixed(2).replace(/\.?0+$/,'');}
+    if(v>=1e7)return t(v/1e7)+'Cr';if(v>=1e5)return t(v/1e5)+'L';if(v>=1e3)return t(v/1e3)+'K';return t(v);}
+
+  var mix=J('edash-mix')||[],svg=document.getElementById('edash-donut');
+  var total=mix.reduce(function(s,p){return s+(+p.amount||0);},0);
+  if(svg&&total>0){
+    var cx=70,cy=70,r=48,w=19,a=-Math.PI/2,gap=mix.length>1?0.04:0;
+    mix.forEach(function(p){var frac=(+p.amount)/total;if(frac<=0)return;
+      if(frac>=0.999){var c=el('circle',{cx:cx,cy:cy,r:r,fill:'none',stroke:p.color,'stroke-width':w});svg.appendChild(c);a+=frac*2*Math.PI;return;}
+      var a2=a+frac*2*Math.PI,s=a+gap/2,e=a2-gap/2;
+      var x1=cx+r*Math.cos(s),y1=cy+r*Math.sin(s),x2=cx+r*Math.cos(e),y2=cy+r*Math.sin(e),large=(e-s)>Math.PI?1:0;
+      var path=el('path',{d:'M '+x1+' '+y1+' A '+r+' '+r+' 0 '+large+' 1 '+x2+' '+y2,fill:'none',stroke:p.color,'stroke-width':w,'stroke-linecap':'round'});
+      var ti=el('title',{});ti.textContent=p.name+' · ₹'+compact(p.amount)+' · '+Math.round(frac*100)+'%';path.appendChild(ti);svg.appendChild(path);a=a2;});
+    var t1=el('text',{x:70,y:67,'text-anchor':'middle','font-size':'17','font-weight':'800',fill:cv('--ki-text-primary')});t1.textContent='₹'+compact(total);svg.appendChild(t1);
+    var t2=el('text',{x:70,y:82,'text-anchor':'middle','font-size':'8',fill:cv('--ki-text-muted'),'letter-spacing':'.5'});t2.textContent='SALES';svg.appendChild(t2);
+  }
+
+  var prods=J('edash-trend-prods')||[],data=J('edash-trend-data')||[],b=document.getElementById('edash-bars');
+  var lg=document.getElementById('edash-trend-legend');
+  if(lg){lg.innerHTML='';prods.forEach(function(p){var s=document.createElement('span');s.innerHTML='<i style="background:'+p.color+'"></i>'+p.name;lg.appendChild(s);});}
+  if(b&&data.length){
+    var vb=b.getAttribute('viewBox').split(' '),W=+vb[2],H=+vb[3],padX=8,padTop=20,padBot=22,GAP=1.6,plotH=H-padTop-padBot;
+    var totals=data.map(function(d){return d.seg.reduce(function(s,x){return s+x;},0);});
+    var mx=Math.max.apply(null,totals)||1,n=data.length,slot=(W-2*padX)/n,bw=Math.min(slot*0.5,54);
+    b.appendChild(el('line',{x1:padX,y1:H-padBot,x2:W-padX,y2:H-padBot,stroke:cv('--ki-card-border'),'stroke-width':1}));
+    data.forEach(function(d,i){
+      var x=padX+i*slot+(slot-bw)/2,total=totals[i],last=i===n-1,yBase=H-padBot,acc=0;
+      d.seg.forEach(function(v,si){if(v<=0)return;
+        var segH=v/mx*plotH,y=yBase-acc-segH,drawH=Math.max(segH-GAP,1);
+        var rect=el('rect',{x:x,y:y,width:bw,height:drawH,rx:2,fill:(prods[si]||{}).color||cv('--ki-primary')});
+        var ti=el('title',{});ti.textContent=((prods[si]||{}).name||'')+' — '+d.label+' · ₹'+compact(v);rect.appendChild(ti);
+        b.appendChild(rect);acc+=segH;});
+      var vl=el('text',{x:x+bw/2,y:yBase-acc-6,'text-anchor':'middle','font-size':'10','font-weight':'700',fill:last?cv('--ki-text-primary'):cv('--ki-text-secondary')});
+      vl.textContent='₹'+compact(total);b.appendChild(vl);
+      var ml=el('text',{x:x+bw/2,y:H-7,'text-anchor':'middle','font-size':'10.5',fill:cv('--ki-text-muted'),'font-weight':last?'700':'400'});
+      ml.textContent=d.label;b.appendChild(ml);
+    });
+  }
+})();
+</script>
+{% endwith %}
