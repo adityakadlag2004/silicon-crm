@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -200,6 +201,18 @@ class ShellActivity : ComponentActivity() {
      * FCM push token. Best-effort, off the main thread. */
     private fun bootstrapNative() {
         Thread {
+            // 0) Replay anything written while offline (follow-ups scheduled
+            // from the post-call popup, task/follow-up actions) BEFORE we fetch
+            // lists, so the screens show the true state.
+            val sent = bo.kadlaginvestment.crm.net.Outbox.drain(applicationContext)
+            if (sent > 0) {
+                runOnUiThread {
+                    bo.kadlaginvestment.crm.ui.AppMessage.show(
+                        "Synced $sent offline change${if (sent == 1) "" else "s"}"
+                    )
+                }
+            }
+
             // 1) Call-tracking config → SharedPreferences (read by CallTrackerReceiver)
             syncCallConfigBlocking()
 
@@ -249,7 +262,8 @@ class ShellActivity : ComponentActivity() {
 
         setContent {
             KadlagTheme {
-                var selected by remember { mutableIntStateOf(0) }
+                // rememberSaveable: rotating the phone used to dump you back on Home.
+                var selected by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
                 var permDialogDismissed by remember { mutableStateOf(false) }
                 var simDialogDismissed by remember { mutableStateOf(false) }
                 var pickedSub by remember { mutableIntStateOf(-1) }
@@ -420,13 +434,16 @@ class ShellActivity : ComponentActivity() {
                 }
                 // Native routes layered above the tabs: "sales", "sales_pending",
                 // "renewals", "notifications".
-                var overlay by remember { mutableStateOf<String?>(null) }
+                var overlay by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
 
                 // Session rejected by the server: drop the dead cookie before
                 // leaving, or LoginActivity sees it, bounces back here, this
                 // screen fails again… (the v4.11.0 reload loop).
                 val goLogin: () -> Unit = {
                     ApiClient.clearSession()
+                    bo.kadlaginvestment.crm.ui.Session.clear()
+                    // The next user must not see the last one's cached numbers.
+                    bo.kadlaginvestment.crm.net.Cache.clear(applicationContext)
                     startActivity(LoginActivity.expiredIntent(this))
                     finish()
                 }
@@ -465,6 +482,7 @@ class ShellActivity : ComponentActivity() {
                 )
 
                 Scaffold(
+                    snackbarHost = { bo.kadlaginvestment.crm.ui.AppMessageHost() },
                     bottomBar = {
                         NavigationBar {
                             tabs.forEachIndexed { i, tab ->
@@ -484,7 +502,18 @@ class ShellActivity : ComponentActivity() {
                         }
                     }
                 ) { padding ->
-                    val m = Modifier.padding(padding)
+                    // contentWidth() caps and centres the column on a tablet or
+                    // unfolded foldable, where a phone-width strip of cards in
+                    // the middle of a 1000dp screen looked broken. No-op on a
+                    // phone.
+                    val m = Modifier
+                        .padding(padding)
+                        .fillMaxWidth()
+                        .then(
+                            if (bo.kadlaginvestment.crm.ui.isWideScreen())
+                                Modifier.widthIn(max = 720.dp)
+                            else Modifier
+                        )
                     when {
                         overlay == "sales" || overlay == "sales_pending" -> SalesScreen(
                             modifier = m,

@@ -33,6 +33,11 @@ public class CallTrackerReceiver extends BroadcastReceiver {
     // broadcast (boot, radio events) can't pop up an old historical call.
     private static final long RECENT_CALL_WINDOW_MS = 10 * 60 * 1000;
 
+    // How long to wait for the OS to write the call-log row before giving up.
+    // goAsync() gives a receiver ~10s of wall clock, so stay well inside it.
+    private static final long ROW_WAIT_MAX_MS = 8000;
+    private static final long ROW_POLL_MS = 400;
+
     @Override
     public void onReceive(Context context, Intent intent) {
         if (!TelephonyManager.ACTION_PHONE_STATE_CHANGED.equals(intent.getAction())) return;
@@ -48,15 +53,41 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         final PendingResult pending = goAsync();
         new Thread(() -> {
             try {
-                // Give the OS a moment to write the call-log row.
-                Thread.sleep(2500);
-                handleCallEnded(context.getApplicationContext());
+                // Wait for the OS to write the call-log row — but POLL for it
+                // rather than sleeping a fixed 2.5s. On slower/OEM-heavy
+                // devices the row lands later than that; the old code then read
+                // the PREVIOUS call, failed its own "already handled" check and
+                // returned, so that call never got a popup and never would.
+                Context app = context.getApplicationContext();
+                long deadline = System.currentTimeMillis() + ROW_WAIT_MAX_MS;
+                long lastHandled = app.getSharedPreferences("call_tracking", Context.MODE_PRIVATE)
+                        .getLong("last_handled_call_date", 0);
+                while (System.currentTimeMillis() < deadline) {
+                    Thread.sleep(ROW_POLL_MS);
+                    if (newestCallDate(app) > lastHandled) break;
+                }
+                handleCallEnded(app);
             } catch (Exception e) {
                 Log.w(TAG, "handleCallEnded failed: " + e);
             } finally {
                 pending.finish();
             }
         }).start();
+    }
+
+    /** Timestamp of the newest call-log row, or 0 when unreadable. */
+    private static long newestCallDate(Context ctx) {
+        if (ctx.checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+            return 0;
+        }
+        try (Cursor c = ctx.getContentResolver().query(
+                CallLog.Calls.CONTENT_URI, new String[]{CallLog.Calls.DATE},
+                null, null, CallLog.Calls.DATE + " DESC")) {
+            if (c != null && c.moveToFirst()) return c.getLong(0);
+        } catch (Exception e) {
+            Log.w(TAG, "call log peek failed: " + e);
+        }
+        return 0;
     }
 
     private void handleCallEnded(Context ctx) {
@@ -108,14 +139,18 @@ public class CallTrackerReceiver extends BroadcastReceiver {
         boolean incoming = type == CallLog.Calls.INCOMING_TYPE
                 || type == CallLog.Calls.MISSED_TYPE
                 || type == CallLog.Calls.REJECTED_TYPE;
-        boolean connected = (type == CallLog.Calls.INCOMING_TYPE)
-                || (type == CallLog.Calls.OUTGOING_TYPE && durationSec > 0);
+        // Zero-duration means nobody talked, whichever way the call went.
+        boolean connected = (type == CallLog.Calls.INCOMING_TYPE
+                || type == CallLog.Calls.OUTGOING_TYPE) && durationSec > 0;
 
         // 1) Sync to the CRM — catch-up style: uploads this call AND any
         // backlog from earlier network gaps (CallSyncManager filters to the
         // office SIM itself). Offline? The marker doesn't advance and the next
         // trigger retries.
         CallSyncManager.syncRecentCalls(ctx);
+        // End of a call is the moment the phone most reliably has signal — a
+        // good time to flush follow-ups written while it didn't.
+        bo.kadlaginvestment.crm.net.Outbox.drain(ctx);
 
         // Only prompt a follow-up for calls positively on another SIM
         // (fail-open: unresolvable accounts still get the popup).
@@ -215,7 +250,7 @@ public class CallTrackerReceiver extends BroadcastReceiver {
             builder = new Notification.Builder(ctx).setPriority(Notification.PRIORITY_HIGH);
         }
         Notification n = builder
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_stat_ki)
                 .setContentTitle("Follow up on this call?")
                 .setContentText(number + " — tap to schedule a follow-up")
                 .setAutoCancel(true)

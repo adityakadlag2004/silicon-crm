@@ -384,6 +384,10 @@ class Sale(models.Model):
 
         if not self._is_health_product():
             self.policy_type = ""
+        # The policy number is a matching key (sale ↔ tracker policy ↔ renewals),
+        # so normalise it here rather than in each of the four forms/APIs that
+        # can set it — "ins123" and "INS123 " must not become two policies.
+        self.policy_number = (self.policy_number or "").strip().upper()
         self.compute_points()  # always compute before saving
         super().save(*args, **kwargs)
 

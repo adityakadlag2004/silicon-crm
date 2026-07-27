@@ -68,18 +68,7 @@ fun CallAnalyticsScreen(
     if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
 
     Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-            )
-            Text("Call Analytics", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("Call Analytics", onBack = onBack)
 
         // Tabs
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -36,11 +36,22 @@ import java.util.Locale;
  */
 public class FollowupActivity extends Activity {
 
-    private static final int GOLD = Color.parseColor("#E5B740");
-    private static final int GOLD_BG = Color.parseColor("#FDF6E3");
-    private static final int INK = Color.parseColor("#1F2937");
-    private static final int MUTED = Color.parseColor("#6B7280");
     private static final int CHIPS_PER_ROW = 3;
+
+    // This popup fires after every call, including at night. It used to
+    // hardcode a white card with dark ink, so in dark mode it detonated at full
+    // brightness in the user's face. Colours now follow the device theme —
+    // matching KadlagTheme's two palettes.
+    private boolean dark;
+
+    private int gold()      { return Color.parseColor("#E5B740"); }
+    private int goldBg()    { return Color.parseColor(dark ? "#3A2F12" : "#FDF6E3"); }
+    private int surface()   { return Color.parseColor(dark ? "#1E2126" : "#FFFFFF"); }
+    private int ink()       { return Color.parseColor(dark ? "#E7E5E4" : "#1F2937"); }
+    private int muted()     { return Color.parseColor(dark ? "#9CA3AF" : "#6B7280"); }
+    private int fieldBg()   { return Color.parseColor(dark ? "#2A2E34" : "#F9FAFB"); }
+    private int outline()   { return Color.parseColor(dark ? "#3F444B" : "#E5E7EB"); }
+    private int neutralBg() { return Color.parseColor(dark ? "#2A2E34" : "#F3F4F6"); }
 
     /** Fallback when no server config is cached (fresh install, first run). */
     private static final String[][] FALLBACK = {
@@ -56,6 +67,10 @@ public class FollowupActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        dark = (getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+
         final String phone = getIntent().getStringExtra("phone");
         long duration = getIntent().getLongExtra("duration", 0);
         boolean connected = getIntent().getBooleanExtra("connected", false);
@@ -70,7 +85,7 @@ public class FollowupActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(pad, pad, pad, dp(10));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.WHITE);
+        bg.setColor(surface());
         bg.setCornerRadius(dp(18));
         root.setBackground(bg);
 
@@ -78,7 +93,7 @@ public class FollowupActivity extends Activity {
         title.setText("Remind me to call back…");
         title.setTextSize(18);
         title.setTypeface(null, Typeface.BOLD);
-        title.setTextColor(INK);
+        title.setTextColor(ink());
         root.addView(title);
 
         String status = connected
@@ -87,7 +102,7 @@ public class FollowupActivity extends Activity {
         TextView subtitle = new TextView(this);
         subtitle.setText((incoming ? "📞 From " : "📞 To ") + phone + "  ·  " + status);
         subtitle.setTextSize(13);
-        subtitle.setTextColor(MUTED);
+        subtitle.setTextColor(muted());
         subtitle.setPadding(0, dp(4), 0, dp(10));
         root.addView(subtitle);
 
@@ -95,15 +110,15 @@ public class FollowupActivity extends Activity {
         noteInput = new EditText(this);
         noteInput.setHint("Note (optional) — e.g. discuss SIP top-up");
         noteInput.setTextSize(13);
-        noteInput.setTextColor(INK);
-        noteInput.setHintTextColor(MUTED);
+        noteInput.setTextColor(ink());
+        noteInput.setHintTextColor(muted());
         noteInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         noteInput.setSingleLine(true);
         noteInput.setPadding(dp(12), dp(9), dp(12), dp(9));
         GradientDrawable noteBg = new GradientDrawable();
-        noteBg.setColor(Color.parseColor("#F9FAFB"));
+        noteBg.setColor(fieldBg());
         noteBg.setCornerRadius(dp(10));
-        noteBg.setStroke(dp(1), Color.parseColor("#E5E7EB"));
+        noteBg.setStroke(dp(1), outline());
         noteInput.setBackground(noteBg);
         LinearLayout.LayoutParams noteLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -126,7 +141,7 @@ public class FollowupActivity extends Activity {
         }
 
         // Exact date & time picker.
-        TextView custom = pill("📅  Pick date & time…", GOLD_BG, INK);
+        TextView custom = pill("📅  Pick date & time…", goldBg(), ink());
         custom.setOnClickListener(v -> pickCustom(phone));
         LinearLayout.LayoutParams customLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -134,14 +149,18 @@ public class FollowupActivity extends Activity {
         customLp.bottomMargin = dp(8);
         root.addView(custom, customLp);
 
-        TextView ignore = pill("✕  Ignore — no follow-up", Color.parseColor("#F3F4F6"), MUTED);
+        TextView ignore = pill("✕  Ignore — no follow-up", neutralBg(), muted());
         ignore.setOnClickListener(v -> finish());
         LinearLayout.LayoutParams ignoreLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ignoreLp.bottomMargin = dp(6);
         root.addView(ignore, ignoreLp);
 
-        setContentView(root, new ViewGroup.LayoutParams(dp(340), ViewGroup.LayoutParams.WRAP_CONTENT));
+        // A hardcoded 340dp is wider than a 320dp phone, which clipped the
+        // chips off the right edge. Cap at the screen minus a margin.
+        int maxWidth = getResources().getDisplayMetrics().widthPixels - dp(24);
+        setContentView(root, new ViewGroup.LayoutParams(
+                Math.min(dp(340), maxWidth), ViewGroup.LayoutParams.WRAP_CONTENT));
         if (getWindow() != null) {
             getWindow().setGravity(Gravity.CENTER);
             getWindow().setBackgroundDrawableResource(android.R.color.transparent);
@@ -200,6 +219,15 @@ public class FollowupActivity extends Activity {
         }
         new Thread(() -> {
             final String body = BackendClient.postJsonForBody("/clients/api/calls/followup/", json);
+            // No signal? Park it instead of losing it. This popup is the app's
+            // most-used write and it fires wherever the employee happens to be
+            // standing — "Could not save, retry from the app" meant the
+            // follow-up simply never existed.
+            final boolean queued = body == null;
+            if (queued) {
+                bo.kadlaginvestment.crm.net.Outbox.enqueue(
+                        getApplicationContext(), "/clients/api/calls/followup/", json);
+            }
             // Arm the on-device alarm right away so the reminder rings at the
             // scheduled time even if the phone is offline or FCM is delayed.
             if (body != null) {
@@ -228,8 +256,9 @@ public class FollowupActivity extends Activity {
             }
             runOnUiThread(() -> {
                 Toast.makeText(this,
-                        body != null ? "✓ Reminder set — " + label
-                                : "Could not save — check internet and retry from the app",
+                        queued
+                                ? "✓ Saved — " + label + " (will sync when you're online)"
+                                : "✓ Reminder set — " + label,
                         Toast.LENGTH_LONG).show();
                 finish();
             });
@@ -241,22 +270,22 @@ public class FollowupActivity extends Activity {
         chip.setText(label);
         chip.setTextSize(13);
         chip.setTypeface(null, Typeface.BOLD);
-        chip.setTextColor(INK);
+        chip.setTextColor(ink());
         chip.setGravity(Gravity.CENTER);
         chip.setPadding(0, dp(11), 0, dp(11));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(GOLD_BG);
+        bg.setColor(goldBg());
         bg.setCornerRadius(dp(10));
-        bg.setStroke(dp(1), Color.parseColor("#EAD9A6"));
+        bg.setStroke(dp(1), Color.parseColor(dark ? "#5A4A1C" : "#EAD9A6"));
         chip.setBackground(bg);
 
         chip.setOnClickListener(v -> {
             v.setEnabled(false);
             GradientDrawable active = new GradientDrawable();
-            active.setColor(GOLD);
+            active.setColor(gold());
             active.setCornerRadius(dp(10));
             chip.setBackground(active);
-            chip.setTextColor(Color.WHITE);
+            chip.setTextColor(Color.parseColor(dark ? "#201A08" : "#FFFFFF"));
             send("{\"phone\":\"" + BackendClient.jsonEscape(phone)
                     + "\",\"choice\":\"" + choice + "\"" + notePart() + "}", label);
         });

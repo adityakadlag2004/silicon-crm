@@ -39,9 +39,12 @@ from ..models import (
     TaskSubscriber,
 )
 from ..services.tasks import (
+    GROUP_SHARED_FIELDS,
+    apply_to_group,
     assignee_label,
     collapse_groups,
     create_notification,
+    delete_task,
     group_ack_roster,
     log_activity,
     notify_mentions,
@@ -641,6 +644,7 @@ def task_set_priority(request, pk):
     old = task.get_priority_display()
     task.priority = new
     task.save(update_fields=["priority", "updated_at"])
+    apply_to_group(task, request.user, {"priority": new})
     log_activity(task, request.user, TaskActivity.PRIORITY_CHANGED,
                  f"{old} → {task.get_priority_display()}.")
     notify_task(task, request.user, "Task priority changed",
@@ -662,6 +666,7 @@ def task_set_due(request, pk):
     if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
         task.status = Task.STATUS_PENDING
     task.save(update_fields=["due_date", "due_time", "status", "updated_at"])
+    apply_to_group(task, request.user, {"due_date": task.due_date, "due_time": task.due_time})
     log_activity(task, request.user, TaskActivity.DUE_CHANGED,
                  f"Due {task.due_date or '—'} {task.due_time or ''}".strip())
     notify_task(task, request.user, "Task due date changed",
@@ -682,6 +687,7 @@ def task_set_category(request, pk):
         if cat_id and cat_id.isdigit() else None
     )
     task.save(update_fields=["category", "updated_at"])
+    apply_to_group(task, request.user, {"category": task.category})
     log_activity(task, request.user, TaskActivity.CATEGORY_CHANGED,
                  f"Category → {task.category.name if task.category else '—'}.")
     return _back(request, task)
@@ -850,12 +856,13 @@ def task_delete(request, pk):
     task = _visible_task_or_404(request, pk)
     if not _can_delete(request, task):
         return HttpResponseForbidden("You cannot delete this task.")
-    task.is_deleted = True
-    task.deleted_at = timezone.now()
-    task.deleted_by = request.user
-    task.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
-    log_activity(task, request.user, TaskActivity.DELETED, "Moved to recycle bin.")
-    messages.success(request, f"Task #{task.pk} moved to Deleted Tasks.")
+    # Deletes the whole assignment group — one visible row, one delete.
+    n = delete_task(task, request.user)
+    messages.success(
+        request,
+        f"Task #{task.pk} moved to Deleted Tasks."
+        + (f" ({n} assignees)" if n > 1 else ""),
+    )
     return redirect("clients:task_dashboard")
 
 

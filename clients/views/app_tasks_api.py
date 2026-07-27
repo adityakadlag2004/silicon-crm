@@ -32,14 +32,19 @@ from ..models import (
     TaskTemplate,
 )
 from ..services.tasks import (
+    GROUP_SHARED_FIELDS,
+    apply_to_group,
     assignee_label,
     build_recurrence,
     collapse_groups,
     create_notification,
+    delete_task,
     group_ack_roster,
+    group_siblings,
     log_activity,
     notify_mentions,
     notify_task,
+    sync_group_assignees,
 )
 from .helpers import parse_date_param
 from .. import permissions
@@ -222,7 +227,17 @@ def app_tasks(request):
         completed=Count("id", filter=Q(status=Task.STATUS_COMPLETED)),
         overdue=Count("id", filter=Q(status=Task.STATUS_OVERDUE) | (Q(status=Task.STATUS_PENDING) & past_due)),
     )
-    rows = list(qs[:200])
+    # Paged like every other list in the app. This used to be a hard qs[:200]
+    # with no signal, so a busy team silently lost the tail of its own list.
+    try:
+        page = max(1, int(request.GET.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    per = 50
+    start_ix = (page - 1) * per
+    rows = list(qs[start_ix:start_ix + per + 1])   # +1 to detect has_more
+    has_more = len(rows) > per
+    rows = rows[:per]
     # Delegated is the assigner's view: one row per task they handed out,
     # labelled "Mansi +4" — not one identical row per recipient.
     if tab == "delegated":
@@ -230,6 +245,8 @@ def app_tasks(request):
     return JsonResponse({
         "counts": counts,
         "tasks": [_task_row(t) for t in rows],
+        "has_more": has_more,
+        "page": page,
     })
 
 
@@ -425,6 +442,14 @@ def app_task_detail(request, pk):
         # ids so the edit sheet can pre-select the right options
         "category_id": task.category_id,
         "assignee_id": task.assigned_to_id,
+        # Every assignee in the group, so editing a "Mansi +2 others" task
+        # reopens with all three ticked instead of silently dropping two.
+        "assignee_ids": [
+            {"id": t.assigned_to_id,
+             "name": (t.assigned_to.user.get_full_name() or t.assigned_to.user.username)
+             if t.assigned_to else "Unassigned"}
+            for t in group_siblings(task) if t.assigned_to_id
+        ],
         "checklist": [{"id": i.id, "title": i.title, "done": i.is_done}
                       for i in task.checklist_items.all()],
         "comments": [{"author": c.author.username if c.author else "—",
@@ -654,7 +679,12 @@ def app_task_action(request, pk):
         if "client_id" in body:
             cid = body.get("client_id")
             task.client = Client.objects.filter(pk=cid).first() if cid else None
-        if "assigned_to" in body:
+        # Assignees: a list reconciles the whole group (adding/removing sibling
+        # rows); the legacy single id still works for a solo task.
+        group_assignees = body.get("assignees")
+        if isinstance(group_assignees, list):
+            pass  # applied after save(), so new siblings copy the fresh fields
+        elif "assigned_to" in body:
             aid = body.get("assigned_to")
             new_assignee = Employee.objects.filter(pk=aid, active=True).first() if aid else None
             if new_assignee != task.assigned_to:
@@ -690,17 +720,20 @@ def app_task_action(request, pk):
             for i, ct in enumerate(body["checklist"]):
                 if (ct or "").strip():
                     TaskChecklistItem.objects.create(task=task, title=ct.strip()[:255], order=i)
+        # A multi-assignee task is N sibling rows — the shared fields must move
+        # on all of them, or the other people keep the old title/deadline.
+        apply_to_group(task, request.user, {f: getattr(task, f) for f in GROUP_SHARED_FIELDS})
+        if isinstance(group_assignees, list):
+            ids = [int(x) for x in group_assignees if str(x).isdigit()]
+            if ids:
+                sync_group_assignees(task, ids, request.user)
         log_activity(task, request.user, TaskActivity.DESCRIPTION_UPDATED, "Task details updated.")
         notify_task(task, request.user, "Task updated",
                     f"“{task.title}” was updated.", event="status_changed")
     elif action == "delete":
         if not _can_delete(request, task):
             return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
-        task.is_deleted = True
-        task.deleted_at = timezone.now()
-        task.deleted_by = request.user
-        task.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
-        log_activity(task, request.user, TaskActivity.DELETED, "Moved to recycle bin.")
+        delete_task(task, request.user)
     else:
         return JsonResponse({"ok": False, "error": "unknown action"}, status=400)
 

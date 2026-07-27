@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -137,20 +138,7 @@ fun SalesScreen(
     }
 
     Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (onBack != null) {
-                Text(
-                    "← Back",
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-                )
-            }
-            Text("Sales", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("Sales", onBack = onBack)
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("All", status == "") { status = ""; page = 1 }
@@ -169,7 +157,12 @@ fun SalesScreen(
             ) {
                 if (rows.isEmpty()) {
                     item {
-                        Text("No sales found.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
+                        EmptyState(
+                            "🧾", "No sales here",
+                            if (status.isBlank()) "Nothing booked yet."
+                            else "No sales with status “$status”.",
+                            modifier = Modifier.heightIn(min = 200.dp),
+                        )
                     }
                 }
                 items(rows) { s ->

@@ -51,20 +51,13 @@ fun TodayScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var data by remember { mutableStateOf<JSONObject?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var reloadKey by remember { mutableIntStateOf(0) }
+    val loader = rememberLoader("/clients/api/app/today/", onSessionExpired = onSessionExpired)
+    val reloadKey = loader.reload
 
-    LaunchedEffect(reloadKey) {
-        when (val r = ApiClient.get("/clients/api/app/today/")) {
-            is ApiClient.Result.Ok -> data = r.json
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> error = r.message
-        }
+    if (loader.data == null && loader.error != null) {
+        ErrorBox(loader.error!!, modifier) { loader.reload() }; return
     }
-
-    if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
-    val d = data ?: run { LoadingBox(modifier); return }
+    val d = loader.data ?: run { LoadingBox(modifier); return }
 
     val tasks = d.optJSONArray("tasks")
     val followups = d.optJSONArray("followups")
@@ -73,21 +66,17 @@ fun TodayScreen(
         if (phone.isNotBlank()) context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
     }
 
+    RefreshableBox(refreshing = loader.refreshing, onRefresh = loader.reload, modifier = modifier) {
     LazyColumn(
-        modifier.fillMaxSize().padding(horizontal = rdp(16)),
+        Modifier.fillMaxSize().padding(horizontal = rdp(16)),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
     ) {
         item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("← Back", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable(onClick = onBack))
-                Spacer(Modifier.padding(6.dp))
-                Text("📅 Today", fontSize = rsp(22), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Text("↻", fontSize = rsp(20), color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.clickable { data = null; reloadKey++ }.padding(8.dp))
-            }
+            ScreenHeader("Today", onBack = onBack)
         }
+
+        item { ErrorStrip(loader.error) }
 
         // ── Tasks due today / overdue ──
         item { SectionTitle("Tasks (${tasks?.length() ?: 0})") }
@@ -138,11 +127,19 @@ fun TodayScreen(
                             OutlinedButton(onClick = { dial(f.optString("phone")) }) { Text("📞 Call", fontSize = rsp(12)) }
                             OutlinedButton(onClick = {
                                 scope.launch {
-                                    ApiClient.post(
+                                    when (val r = ApiClient.post(
                                         "/clients/api/app/followups/${f.optInt("id")}/action/",
                                         JSONObject().put("action", "done"),
-                                    )
-                                    data = null; reloadKey++
+                                        offlineQueue = context,
+                                    )) {
+                                        is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                                        is ApiClient.Result.Error ->
+                                            AppMessage.show("Couldn't save: ${r.message}")
+                                        is ApiClient.Result.Ok -> {
+                                            AppMessage.showResult(r.json, "Marked done")
+                                            reloadKey()
+                                        }
+                                    }
                                 }
                             }) { Text("✓ Done", fontSize = rsp(12)) }
                         }
@@ -176,6 +173,7 @@ fun TodayScreen(
         }
 
         item { Spacer(Modifier.height(12.dp)) }
+    }
     }
 }
 

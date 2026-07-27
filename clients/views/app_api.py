@@ -45,6 +45,26 @@ def _money(value):
 
 @login_required
 @require_GET
+def app_me(request):
+    """Who is signed in — three cheap fields.
+
+    Menu, Tasks and Reports each used to call the full `app_dashboard` (ten
+    aggregate queries for an admin) just to read `role`. This is what they
+    actually wanted.
+    """
+    emp = _emp(request)
+    return JsonResponse({
+        "role": "admin" if _is_admin(request) else (emp.role if emp else "unknown"),
+        "name": request.user.get_full_name() or request.user.username,
+        "employee_id": emp.id if emp else None,
+        "unread_notifications": Notification.objects.filter(
+            recipient=request.user, is_read=False
+        ).count(),
+    })
+
+
+@login_required
+@require_GET
 def app_dashboard(request):
     """Everything the native dashboard screen needs, in one call."""
     emp = _emp(request)
@@ -83,20 +103,10 @@ def app_dashboard(request):
             ).count()
             if emp else 0
         ),
-        "recent_sales": [
-            {
-                "id": s.id,
-                "client": s.client.name if s.client_id else "",
-                "employee": s.employee.user.username if s.employee_id else "",
-                "product": s.product or "",
-                "amount": _money(s.amount),
-                "status": s.status,
-                "date": s.date.isoformat() if s.date else "",
-            }
-            for s in sales_scope.select_related("client", "employee__user")
-            .order_by("-created_at")[:8]
-        ],
     }
+    # `recent_sales` used to be built here and thrown away: no app screen ever
+    # rendered it. That was a join + 8 rows on every dashboard load, four times
+    # per app open. Removed — Menu → All Sales shows the same thing, paged.
 
     if is_admin:
         data["pending_approvals"] = Sale.objects.filter(status=Sale.STATUS_PENDING).count()
@@ -338,6 +348,27 @@ def app_sale_create(request):
     policy_type = body.get("policy_type") or ""
     if policy_type not in ("", Sale.POLICY_TYPE_FRESH, Sale.POLICY_TYPE_PORT):
         return JsonResponse({"ok": False, "error": "Invalid policy type."}, status=400)
+    if product.is_health and not policy_type:
+        return JsonResponse({"ok": False, "error": "Select Port or Fresh for Health Insurance."}, status=400)
+
+    # Policy date + number: mandatory for Health/Life, meaningless otherwise.
+    # Same rule as the web sale forms — the sale date is the approval day, and
+    # renewals must be measured from the policy's own commencement date.
+    policy_date, policy_number = None, ""
+    if product.is_insurance:
+        try:
+            policy_date = date.fromisoformat(str(body.get("policy_date") or ""))
+        except ValueError:
+            return JsonResponse(
+                {"ok": False, "error": "Enter the policy date from the policy document (YYYY-MM-DD)."},
+                status=400,
+            )
+        policy_number = str(body.get("policy_number") or "").strip()[:60]
+        if not policy_number:
+            return JsonResponse(
+                {"ok": False, "error": "Enter the policy number from the policy document."},
+                status=400,
+            )
 
     # Multiyear + EMI apply to Health only (EMI needs a multiyear term).
     try:
@@ -362,6 +393,7 @@ def app_sale_create(request):
     sale = Sale(
         client=client, employee=sale_emp, product=product.name, product_ref=product,
         amount=amount, cover_amount=cover_amount, policy_type=policy_type, ppt=ppt,
+        policy_date=policy_date, policy_number=policy_number,
         policy_years=policy_years, emi_months=emi_months,
     )
     sales_service.finalize_new_sale(sale, request.user, auto_approve=is_admin)
@@ -851,7 +883,24 @@ def app_renewal_create(request):
         notes=str(body.get("notes") or "").strip() or None,
         created_by=request.user,
     )
-    return JsonResponse({"ok": True, "id": renewal.id})
+
+    # Link to the Insurance Tracker exactly as the web form does: the existing
+    # policy the user ticked, or a new one from the number they typed. Without
+    # this, every renewal entered on a phone was an orphan row and the old book
+    # never got captured. Best-effort — a tracker hiccup must not lose the
+    # renewal that was just saved.
+    policy_id = None
+    try:
+        from ..services import insurance_sync
+        policy = insurance_sync.link_renewal_to_policy(
+            renewal,
+            selected_policy_id=(str(body.get("policy_id") or "").strip() or None),
+            new_policy_number=str(body.get("policy_number") or "").strip(),
+        )
+        policy_id = policy.id if policy else None
+    except Exception:
+        pass
+    return JsonResponse({"ok": True, "id": renewal.id, "policy_id": policy_id})
 
 
 # ── Screen 8: Notifications ──────────────────────────────────────────────────
@@ -879,8 +928,24 @@ def app_notifications(request):
 @login_required
 @require_POST
 def app_notifications_read(request):
-    Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
-    return JsonResponse({"ok": True})
+    """Mark all as read, or just one when `id` is supplied.
+
+    Opening a notification is the clearest possible signal that it has been
+    read — the app used to leave it bold forever unless the user found "Mark
+    all read", so the unread count only ever grew.
+    """
+    qs = Notification.objects.filter(recipient=request.user, is_read=False)
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        body = {}
+    if body.get("id"):
+        qs = qs.filter(pk=body["id"])
+    qs.update(is_read=True)
+    return JsonResponse({
+        "ok": True,
+        "unread": Notification.objects.filter(recipient=request.user, is_read=False).count(),
+    })
 
 
 # ── Screen 9: Leads pipeline ─────────────────────────────────────────────────
@@ -1254,6 +1319,38 @@ def app_device_status(request):
             "notifications_granted": bool(body.get("notifications_granted")),
             "app_version": str(body.get("app_version") or "")[:20],
             "diagnostics": diagnostics,
+        },
+    )
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def app_crash(request):
+    """A crash from an employee's phone, posted on the next launch.
+
+    Self-hosted APK, no Play Console: without this, a crash in the field
+    produced exactly one signal — "the app closed". Stored as an AuditLog row
+    so it lands in a place admins already read, with no new model.
+    """
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"ok": False}, status=400)
+
+    from ..models import AuditLog
+    message = str(body.get("message") or "")[:500]
+    AuditLog.objects.create(
+        action="app.crash",
+        actor=request.user,
+        target_model="MobileApp",
+        summary=f"App crash on {str(body.get('device') or 'unknown device')[:40]}: {message}"[:255],
+        details={
+            "message": message,
+            "stack": str(body.get("stack") or "")[:6000],
+            "app_version": str(body.get("app_version") or "")[:20],
+            "device": str(body.get("device") or "")[:80],
+            "android": body.get("android"),
         },
     )
     return JsonResponse({"ok": True})

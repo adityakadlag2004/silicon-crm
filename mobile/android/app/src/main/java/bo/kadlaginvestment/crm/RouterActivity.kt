@@ -14,6 +14,10 @@ import bo.kadlaginvestment.crm.net.ApiClient
 class RouterActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Earliest point in the app: catch crashes from here on, and post any
+        // crash from the previous run.
+        CrashReporter.install(this)
+        Thread { CrashReporter.flush(applicationContext) }.start()
         val target = if (ApiClient.hasSession()) ShellActivity::class.java else LoginActivity::class.java
         val next = Intent(this, target)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

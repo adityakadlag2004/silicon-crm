@@ -24,7 +24,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,6 +45,9 @@ import bo.kadlaginvestment.crm.net.ApiClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+
+/** Sentinel for the "New policy" radio option in the add-renewal form. */
+private const val NEW_POLICY = -1
 
 /** Native Renewals: month summary, searchable list, add-renewal form. */
 @Composable
@@ -91,23 +94,8 @@ fun RenewalsScreen(
     }
 
     Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (onBack != null) {
-                    Text(
-                        "← Back",
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-                    )
-                }
-                Text("Renewals", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-            }
-            Button(onClick = { adding = true }) { Text("＋ Add") }
+        ScreenHeader("Renewals", onBack = onBack) {
+Button(onClick = { adding = true }) { Text("＋ Add") }
         }
 
         summary?.let { s ->
@@ -135,7 +123,16 @@ fun RenewalsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
             ) {
                 if (rows.isEmpty()) {
-                    item { Text("No renewals found.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
+                    item {
+                        EmptyState(
+                            "🔁", "No renewals",
+                            if (q.isBlank()) "Nothing due. Add one as policies come up for renewal."
+                            else "Nothing matches “$q”.",
+                            modifier = Modifier.heightIn(min = 200.dp),
+                            actionLabel = if (q.isBlank()) "＋ Add renewal" else null,
+                            onAction = if (q.isBlank()) ({ adding = true }) else null,
+                        )
+                    }
                 }
                 items(rows) { r ->
                     Card(
@@ -209,6 +206,13 @@ private fun AddRenewalForm(
     var premium by remember { mutableStateOf("") }
     var renewalDate by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+    // Insurance Tracker link: the client's existing Health/Life policies, and
+    // which one this renewal belongs to. "New policy" (-1) reveals a number
+    // field — that's how the old book, sold before the tracker existed, gets
+    // captured the first time it renews.
+    var policies by remember { mutableStateOf(listOf<JSONObject>()) }
+    var policyId by remember { mutableStateOf<Int?>(null) }
+    var newPolicyNumber by remember { mutableStateOf("") }
     var selectedEmployee by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var employeeMenuOpen by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
@@ -239,6 +243,23 @@ private fun AddRenewalForm(
         }
     }
 
+    // Client picked → load their tracker policies (same endpoint the web
+    // add-renewal page uses).
+    LaunchedEffect(selectedClient?.first) {
+        val id = selectedClient?.first
+        policyId = null
+        newPolicyNumber = ""
+        if (id == null) { policies = emptyList(); return@LaunchedEffect }
+        when (val r = ApiClient.get("/clients/api/client/$id/policies/")) {
+            is ApiClient.Result.Ok -> {
+                val arr = r.json.optJSONArray("policies")
+                policies = (0 until (arr?.length() ?: 0)).map { arr!!.getJSONObject(it) }
+            }
+            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+            is ApiClient.Result.Error -> policies = emptyList()
+        }
+    }
+
     val m = meta ?: run { LoadingBox(modifier); return }
     val isAdmin = m.optBoolean("is_admin")
 
@@ -246,15 +267,7 @@ private fun AddRenewalForm(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onDone).padding(end = 12.dp),
-            )
-            Text("Add Renewal", fontSize = rsp(20), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("Add Renewal", onBack = onDone)
 
         if (selectedClient == null) {
             OutlinedTextField(
@@ -317,21 +330,79 @@ private fun AddRenewalForm(
 
         OutlinedTextField(
             value = premium,
-            onValueChange = { premium = it.filter { ch -> ch.isDigit() || ch == '.' } },
+            onValueChange = { premium = moneyInput(it) },
             label = { Text("Premium amount (₹)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
 
-        OutlinedTextField(
-            value = renewalDate,
-            onValueChange = { renewalDate = it },
-            label = { Text("Next renewal date (YYYY-MM-DD)") },
-            placeholder = { Text("2026-08-15") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
+        DateField("Next renewal date *", renewalDate) { renewalDate = it }
+
+        // ── Which policy is this a renewal of? ──
+        if (selectedClient != null) {
+            Text(
+                "Which policy is this?",
+                fontSize = rsp(13), fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (policies.isEmpty()) {
+                Text(
+                    "No policy on the tracker for this client yet — add the number below and one will be created.",
+                    fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            policies.forEach { p ->
+                val id = p.optInt("id")
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { policyId = id; newPolicyNumber = "" },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (policyId == id) MaterialTheme.colorScheme.primaryContainer
+                        else MaterialTheme.colorScheme.surface
+                    ),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = policyId == id, onClick = { policyId = id; newPolicyNumber = "" })
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "${p.optString("type")} · ${p.optString("number")}",
+                                fontSize = rsp(13), fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                listOf(p.optString("insurer"), p.optString("plan"))
+                                    .filter { it.isNotEmpty() && it != "—" }.joinToString(" · "),
+                                fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { policyId = NEW_POLICY },
+                colors = CardDefaults.cardColors(
+                    containerColor = if (policyId == NEW_POLICY) MaterialTheme.colorScheme.primaryContainer
+                    else MaterialTheme.colorScheme.surface
+                ),
+            ) {
+                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = policyId == NEW_POLICY, onClick = { policyId = NEW_POLICY })
+                    Text("New policy — not on the tracker yet", fontSize = rsp(13))
+                }
+            }
+            if (policyId == NEW_POLICY) {
+                OutlinedTextField(
+                    value = newPolicyNumber,
+                    onValueChange = { newPolicyNumber = it.uppercase().trim() },
+                    label = { Text("Policy number") },
+                    supportingText = { Text("From the policy document", fontSize = rsp(11)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+            }
+        }
 
         OutlinedTextField(
             value = notes,
@@ -371,6 +442,8 @@ private fun AddRenewalForm(
                         .put("renewal_date", renewalDate.trim())
                         .put("frequency", frequency?.first ?: "")
                         .put("notes", notes)
+                    if (policyId != null && policyId != NEW_POLICY) body.put("policy_id", policyId)
+                    if (policyId == NEW_POLICY) body.put("policy_number", newPolicyNumber)
                     if (selectedEmployee != null) body.put("employee_id", selectedEmployee!!.first)
                     when (val r = ApiClient.post("/clients/api/app/renewals/create/", body)) {
                         is ApiClient.Result.Ok -> {
@@ -378,6 +451,7 @@ private fun AddRenewalForm(
                             selectedClient = null; clientQuery = ""; selectedProduct = null
                             frequency = null; premium = ""; renewalDate = ""; notes = ""
                             selectedEmployee = null
+                            policies = emptyList(); policyId = null; newPolicyNumber = ""
                         }
                         is ApiClient.Result.NotLoggedIn -> onSessionExpired()
                         is ApiClient.Result.Error -> message = false to r.message
@@ -394,27 +468,3 @@ private fun AddRenewalForm(
     }
 }
 
-@Composable
-private fun PickerField(
-    label: String,
-    value: String,
-    onOpen: () -> Unit,
-    menu: @Composable () -> Unit,
-) {
-    Box {
-        OutlinedTextField(
-            value = value,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(label) },
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen),
-            enabled = false,
-            colors = OutlinedTextFieldDefaults.colors(
-                disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                disabledBorderColor = MaterialTheme.colorScheme.outline,
-                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
-        )
-        menu()
-    }
-}

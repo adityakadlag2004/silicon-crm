@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
@@ -107,7 +108,18 @@ fun AssignTaskSheet(
         // Prefill edit selections that need the JSON.
         LaunchedEffect(editTask) {
             if (editTask != null) {
-                editTask.optInt("assignee_id", 0).takeIf { it > 0 }?.let {
+                // A multi-assignee task is several sibling rows; prefill every
+                // one of them or saving would quietly reassign to just the first.
+                val roster = editTask.optJSONArray("assignee_ids")
+                if ((roster?.length() ?: 0) > 0) {
+                    for (i in 0 until roster!!.length()) {
+                        val a = roster.getJSONObject(i)
+                        val id = a.optInt("id", 0)
+                        if (id > 0 && assignees.none { it.id == id }) {
+                            assignees.add(Opt(id, a.optString("name")))
+                        }
+                    }
+                } else editTask.optInt("assignee_id", 0).takeIf { it > 0 }?.let {
                     assignees.add(Opt(it, editTask.optString("assignee")))
                 }
                 editTask.optInt("client_id", 0).takeIf { it > 0 }?.let {
@@ -157,14 +169,15 @@ fun AssignTaskSheet(
         val users = meta?.optJSONArray("users")
 
         fun pickDate() {
-            val cal = Calendar.getInstance()
-            DatePickerDialog(context, { _, y, mo, d ->
-                dueDate = String.format("%04d-%02d-%02d", y, mo + 1, d)
-                // chain a 12-hour time picker
-                TimePickerDialog(context, { _, h, mi ->
-                    dueTime = String.format("%02d:%02d", h, mi)
-                }, cal.get(Calendar.HOUR_OF_DAY), 0, false).show()
-            }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+            // Shared picker: seeded from the current value, ISO output built
+            // with Locale.US (a locale-default String.format can emit non-ASCII
+            // digits the API rejects) and 12/24h taken from the device setting.
+            val current = dueDate.takeIf { it.isNotBlank() }
+                ?.let { it + "T" + dueTime.ifBlank { "10:00" } } ?: ""
+            pickDateTime(context, startIso = current) { iso ->
+                dueDate = iso.take(10)
+                dueTime = iso.substring(11)
+            }
         }
 
         fun submit() {
@@ -181,7 +194,9 @@ fun AssignTaskSheet(
 
                 val r = if (isEdit) {
                     body.put("action", "edit")
-                    body.put("assigned_to", assignees.firstOrNull()?.id ?: JSONObject.NULL)
+                    // Send the whole set: the server reconciles the group,
+                    // adding and removing sibling rows to match.
+                    body.put("assignees", JSONArray(assignees.map { it.id }))
                     ApiClient.post("/clients/api/app/tasks/${editTask!!.optInt("id")}/action/", body)
                 } else {
                     body.put("assignees", JSONArray(assignees.map { it.id }))
@@ -308,7 +323,9 @@ fun AssignTaskSheet(
                         OutlinedTextField(cq, { cq = it }, Modifier.weight(1f),
                             placeholder = { Text("Search client…") }, singleLine = true)
                         if (client != null) TextButton(onClick = { client = null; openMenu = "" }) { Text("Clear") }
-                        TextButton(onClick = { openMenu = "" }) { Text("✕") }
+                        androidx.compose.material3.IconButton(onClick = { openMenu = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Close client search")
+                        }
                     }
                     results.take(6).forEach { c ->
                         Text(
@@ -346,7 +363,9 @@ fun AssignTaskSheet(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(item, { checklist[i] = it }, Modifier.weight(1f),
                         placeholder = { Text("Checklist item") }, singleLine = true)
-                    TextButton(onClick = { checklist.removeAt(i) }) { Text("✕") }
+                    androidx.compose.material3.IconButton(onClick = { checklist.removeAt(i) }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Remove checklist item")
+                    }
                 }
             }
             TextButton(onClick = { checklist.add("") }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
@@ -377,7 +396,9 @@ fun AssignTaskSheet(
                             }
                         }
                     }) { Icon(Icons.Filled.Check, "Save template") }
-                    TextButton(onClick = { openMenu = "" }) { Text("✕") }
+                    androidx.compose.material3.IconButton(onClick = { openMenu = "" }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Cancel")
+                    }
                 }
             }
 
@@ -456,7 +477,9 @@ private fun NewCategoryRow(onCancel: () -> Unit, onCreate: (String) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         OutlinedTextField(name, { name = it }, Modifier.weight(1f), placeholder = { Text("New category") }, singleLine = true)
         Button(onClick = { if (name.isNotBlank()) onCreate(name.trim()) }) { Icon(Icons.Filled.Check, "Create") }
-        TextButton(onClick = onCancel) { Text("✕") }
+        androidx.compose.material3.IconButton(onClick = onCancel) {
+            Icon(Icons.Filled.Close, contentDescription = "Cancel")
+        }
     }
 }
 

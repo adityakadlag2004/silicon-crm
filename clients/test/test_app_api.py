@@ -47,8 +47,9 @@ class AppDashboardTests(TestCase):
         self.assertEqual(data["role"], "employee")
         self.assertEqual(data["today"]["sales_count"], 1)
         self.assertEqual(data["today"]["amount"], 5000.0)
-        # Recent list is scoped to own sales
-        self.assertTrue(all(s["employee"] == "api_emp" for s in data["recent_sales"]))
+        # The dashboard must not ship a payload no screen renders — the
+        # unused `recent_sales` list was cut; Menu → All Sales covers it.
+        self.assertNotIn("recent_sales", data)
         self.assertNotIn("pending_approvals", data)
 
     def test_admin_sees_firm_wide_and_approvals(self):
@@ -56,7 +57,7 @@ class AppDashboardTests(TestCase):
         self.assertEqual(data["role"], "admin")
         self.assertEqual(data["today"]["amount"], 5000.0)  # approved only
         self.assertEqual(data["pending_approvals"], 1)
-        self.assertEqual(len(data["recent_sales"]), 2)  # firm-wide list
+        self.assertNotIn("recent_sales", data)
         # New admin home widgets
         self.assertIn("leaderboard_today", data)
         self.assertIn("product_mtd", data)
@@ -883,3 +884,132 @@ class AppEmployeeGamificationTests(TestCase):
         c = TestClient(); c.force_login(admin)
         data = c.get(reverse("clients:app_dashboard")).json()
         self.assertNotIn("earnings", data)
+
+
+class AppMeAndNotificationTests(TestCase):
+    """The cheap identity endpoint (four screens used to pull the whole
+    dashboard for one `role` string) and per-notification read."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from clients.models import Notification
+        cls.user = User.objects.create_user("me_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.user, role="employee", salary=0, active=True)
+        cls.n1 = Notification.objects.create(recipient=cls.user, title="One", body="a")
+        cls.n2 = Notification.objects.create(recipient=cls.user, title="Two", body="b")
+
+    def _http(self):
+        c = TestClient()
+        c.force_login(self.user)
+        return c
+
+    def test_me_returns_role_and_unread_count(self):
+        data = self._http().get(reverse("clients:app_me")).json()
+        self.assertEqual(data["role"], "employee")
+        self.assertEqual(data["unread_notifications"], 2)
+        self.assertEqual(data["employee_id"], self.emp.id)
+
+    def test_me_requires_login(self):
+        self.assertEqual(TestClient().get(reverse("clients:app_me")).status_code, 302)
+
+    def test_reading_one_notification_leaves_the_others(self):
+        import json as _json
+        from clients.models import Notification
+        resp = self._http().post(
+            reverse("clients:app_notifications_read"),
+            data=_json.dumps({"id": self.n1.id}), content_type="application/json",
+        )
+        self.assertEqual(resp.json()["unread"], 1)
+        self.assertTrue(Notification.objects.get(pk=self.n1.id).is_read)
+        self.assertFalse(Notification.objects.get(pk=self.n2.id).is_read)
+
+    def test_reading_with_no_id_still_marks_all(self):
+        import json as _json
+        resp = self._http().post(
+            reverse("clients:app_notifications_read"),
+            data=_json.dumps({}), content_type="application/json",
+        )
+        self.assertEqual(resp.json()["unread"], 0)
+
+
+class AppTaskPaginationTests(TestCase):
+    """The task list used to be a silent qs[:200] truncation."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from clients.models import Task
+        cls.user = User.objects.create_user("pg_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.user, role="employee", salary=0, active=True)
+        for i in range(55):
+            Task.objects.create(title=f"T{i}", created_by=cls.user, assigned_to=cls.emp)
+
+    def _get(self, **params):
+        c = TestClient()
+        c.force_login(self.user)
+        return c.get(reverse("clients:app_tasks"), {"tab": "my", **params}).json()
+
+    def test_first_page_is_capped_and_flags_more(self):
+        data = self._get()
+        self.assertEqual(len(data["tasks"]), 50)
+        self.assertTrue(data["has_more"])
+
+    def test_second_page_returns_the_tail(self):
+        data = self._get(page=2)
+        self.assertEqual(len(data["tasks"]), 5)
+        self.assertFalse(data["has_more"])
+
+    def test_pages_do_not_overlap(self):
+        first = {t["id"] for t in self._get()["tasks"]}
+        second = {t["id"] for t in self._get(page=2)["tasks"]}
+        self.assertEqual(first & second, set())
+
+
+class AppCrashReportTests(TestCase):
+    """Self-hosted APK, no Play Console — a field crash used to produce no
+    signal at all beyond 'the app closed'."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("crash_emp", password="x")
+        Employee.objects.create(user=cls.user, role="employee", salary=0, active=True)
+
+    def _post(self, payload):
+        import json as _json
+        c = TestClient()
+        c.force_login(self.user)
+        return c.post(reverse("clients:app_crash"), data=_json.dumps(payload),
+                      content_type="application/json")
+
+    def test_crash_is_recorded_in_the_audit_log(self):
+        from clients.models import AuditLog
+        resp = self._post({
+            "message": "java.lang.NullPointerException: boom",
+            "stack": "at bo.kadlaginvestment.crm.Thing.run(Thing.kt:42)",
+            "app_version": "4.23.0", "device": "Xiaomi Redmi Note 12", "android": 34,
+        })
+        self.assertEqual(resp.status_code, 200)
+        row = AuditLog.objects.filter(action="app.crash").latest("id")
+        self.assertEqual(row.actor, self.user)
+        self.assertIn("NullPointerException", row.details["message"])
+        self.assertIn("Thing.kt:42", row.details["stack"])
+        self.assertEqual(row.details["app_version"], "4.23.0")
+        self.assertIn("Redmi", row.summary)
+
+    def test_oversized_stack_is_truncated_not_rejected(self):
+        from clients.models import AuditLog
+        resp = self._post({"message": "x", "stack": "y" * 20000})
+        self.assertEqual(resp.status_code, 200)
+        self.assertLessEqual(len(AuditLog.objects.latest("id").details["stack"]), 6000)
+
+    def test_garbage_body_is_rejected(self):
+        c = TestClient()
+        c.force_login(self.user)
+        resp = c.post(reverse("clients:app_crash"), data="not json",
+                      content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_requires_login(self):
+        import json as _json
+        resp = TestClient().post(reverse("clients:app_crash"), data=_json.dumps({}),
+                                 content_type="application/json")
+        self.assertEqual(resp.status_code, 302)

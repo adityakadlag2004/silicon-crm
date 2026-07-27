@@ -533,9 +533,15 @@ class WorkDayAndPopupSettingsTests(TestCase):
     def _admin(self):
         c = TestClient(); c.force_login(self.admin); return c
 
-    def _next_weekday(self, base, target_py_weekday):
-        # target_py_weekday: Mon=0..Sun=6
-        d = base
+    def _weekday_this_month(self, base, target_py_weekday):
+        """A `target_py_weekday` (Mon=0..Sun=6) inside `base`'s own month.
+
+        Walking *forward* from today put both days in next month whenever the
+        run happened late in a month, and the analytics "month" range is the
+        current calendar month — so the test passed or failed depending on the
+        date it ran. Search from the 1st instead, which is always in-month.
+        """
+        d = base.replace(day=1)
         while d.weekday() != target_py_weekday:
             d += timedelta(days=1)
         return d
@@ -545,8 +551,8 @@ class WorkDayAndPopupSettingsTests(TestCase):
         cfg.work_days = "0,1,2,3,4,5"  # Mon–Sat, exclude Sunday
         cfg.save()
         base = timezone.localtime().replace(hour=12, minute=0, second=0, microsecond=0)
-        saturday = self._next_weekday(base, 5)   # Sat
-        sunday = self._next_weekday(base, 6)      # Sun
+        saturday = self._weekday_this_month(base, 5)   # Sat
+        sunday = self._weekday_this_month(base, 6)     # Sun
         CallLogEntry.objects.create(employee=self.emp, phone="1", direction="outgoing",
                                     connected=True, duration_seconds=60, started_at=saturday)
         CallLogEntry.objects.create(employee=self.emp, phone="2", direction="outgoing",

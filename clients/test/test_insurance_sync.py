@@ -325,3 +325,72 @@ class PolicyTypeMismatchTests(TestCase):
         insurance_sync.link_renewal_to_policy(r, selected_policy_id=life_pol.id)
         r.refresh_from_db()
         self.assertEqual(r.policy_id, life_pol.id)
+
+
+class AppRenewalPolicyLinkTests(TestCase):
+    """Renewals entered on the phone must reach the tracker the same way the
+    web form does. They used to be orphan rows: `link_renewal_to_policy` was
+    only ever called from renewal_views.py."""
+
+    @classmethod
+    def setUpTestData(cls):
+        _products()
+        u = User.objects.create_user("app_ren_admin", password="pw")
+        cls.admin = Employee.objects.create(user=u, role="admin", salary=0, active=True)
+        cls.client_rec = Client.objects.create(id=6200, name="Anjali Deshmukh")
+        cls.health = Product.objects.get(code="HEALTH_INS")
+
+    def _post(self, **body):
+        import json
+        from django.test import Client as TC
+        from django.urls import reverse
+        tc = TC()
+        tc.force_login(self.admin.user)
+        payload = {
+            "client_id": self.client_rec.id, "product_id": self.health.id,
+            "premium_amount": "8000", "renewal_date": "2026-02-10",
+            "frequency": "yearly",
+        }
+        payload.update(body)
+        return tc.post(
+            reverse("clients:app_renewal_create"),
+            data=json.dumps(payload), content_type="application/json",
+        )
+
+    def test_app_renewal_links_to_the_ticked_policy(self):
+        policy = InsurancePolicy.objects.create(
+            client=self.client_rec, policy_number="EXIST42", insurer="Star Health",
+            insurance_type=InsurancePolicy.TYPE_HEALTH)
+        resp = self._post(policy_id=policy.id)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertEqual(resp.json()["policy_id"], policy.id)
+        self.assertEqual(Renewal.objects.get(pk=resp.json()["id"]).policy_id, policy.id)
+        self.assertEqual(InsurancePolicy.objects.filter(client=self.client_rec).count(), 1)
+
+    def test_app_renewal_with_a_new_number_backfills_the_old_book(self):
+        resp = self._post(policy_number="OLDBOOK77")
+        self.assertEqual(resp.status_code, 200, resp.content)
+        renewal = Renewal.objects.get(pk=resp.json()["id"])
+        self.assertIsNotNone(renewal.policy_id)
+        self.assertEqual(renewal.policy.policy_number, "OLDBOOK77")
+        self.assertEqual(renewal.policy.insurance_type, InsurancePolicy.TYPE_HEALTH)
+
+    def test_app_renewal_without_any_policy_choice_still_creates_one(self):
+        # Matches the web fallback: an insurance renewal always ends up on the
+        # tracker, with a placeholder number to be corrected later.
+        resp = self._post()
+        renewal = Renewal.objects.get(pk=resp.json()["id"])
+        self.assertIsNotNone(renewal.policy_id)
+
+    def test_app_renewal_policies_endpoint_lists_client_policies(self):
+        from django.test import Client as TC
+        from django.urls import reverse
+        InsurancePolicy.objects.create(
+            client=self.client_rec, policy_number="LIST1",
+            insurance_type=InsurancePolicy.TYPE_HEALTH)
+        tc = TC()
+        tc.force_login(self.admin.user)
+        data = tc.get(
+            reverse("clients:client_policies_json", args=[self.client_rec.id])
+        ).json()
+        self.assertTrue(any(p["number"] == "LIST1" for p in data["policies"]))

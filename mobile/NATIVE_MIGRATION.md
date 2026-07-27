@@ -52,6 +52,8 @@ in the WebView.
 | — | Business Links (My Apps tab) | opens web `/clients/links/` for now; native screens later | |
 | — | Financial planner | stays WebView (calc engine is fine there) | |
 
+| 17 | Reliability + a11y pass (audit fixes): policy date/number on Add Sale, renewal→policy linking, group task edit/delete, rolling session cookie, offline outbox for follow-up/task writes, response cache + pull-to-refresh, WebView uploads/downloads, monochrome notification icon + per-kind channels, `/api/app/me/`, crash reporting, R8 | `/api/app/me/`, `/api/app/crash/`, `policy_id` on renewals, paged `/api/app/tasks/` | **v4.23** |
+
 ## Rules
 
 - Every screen ships behind the same versionCode bump + direct APK flow.

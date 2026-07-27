@@ -45,12 +45,7 @@ fun SimSettingsScreen(
     var saved by remember { mutableStateOf(false) }
 
     Column(modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("← Back", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack))
-            Spacer(Modifier.padding(6.dp))
-            Text("Office SIM", fontSize = rsp(20), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("Office SIM", onBack = onBack)
         Spacer(Modifier.height(8.dp))
         Text(
             "Only calls made or received on the office SIM are tracked and prompt a follow-up. Your personal SIM is ignored.",

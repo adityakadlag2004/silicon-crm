@@ -37,6 +37,7 @@ import bo.kadlaginvestment.crm.net.ApiClient
 import bo.kadlaginvestment.crm.ui.BrandGoldDark
 import bo.kadlaginvestment.crm.ui.KadlagTheme
 import bo.kadlaginvestment.crm.ui.StatusRed
+import bo.kadlaginvestment.crm.ui.contentWidth
 import bo.kadlaginvestment.crm.ui.rsp
 import kotlinx.coroutines.launch
 
@@ -119,7 +120,8 @@ private fun LoginForm(sessionExpired: Boolean = false, onLoggedIn: () -> Unit) {
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 28.dp),
+            .padding(horizontal = 28.dp)
+            .contentWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -137,11 +139,25 @@ private fun LoginForm(sessionExpired: Boolean = false, onLoggedIn: () -> Unit) {
         )
         Spacer(Modifier.heightIn(min = 36.dp))
 
+        val focus = androidx.compose.ui.platform.LocalFocusManager.current
+        var showPassword by remember { mutableStateOf(false) }
+
         OutlinedTextField(
             value = username,
             onValueChange = { username = it },
             label = { Text("Username") },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                autoCorrectEnabled = false,
+                imeAction = ImeAction.Next,
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onNext = { focus.moveFocus(androidx.compose.ui.focus.FocusDirection.Down) },
+            ),
+            // ponytail: no autofill hint — the Compose `ContentType` semantics
+            // API needs UI 1.8+, and a BOM bump mid-audit changes behaviour
+            // across 25 screens I can't visually verify. Revisit with that
+            // upgrade.
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
@@ -150,8 +166,18 @@ private fun LoginForm(sessionExpired: Boolean = false, onLoggedIn: () -> Unit) {
             onValueChange = { password = it },
             label = { Text("Password") },
             singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation =
+                if (showPassword) androidx.compose.ui.text.input.VisualTransformation.None
+                else PasswordVisualTransformation(),
+            trailingIcon = {
+                androidx.compose.material3.TextButton(onClick = { showPassword = !showPassword }) {
+                    Text(if (showPassword) "HIDE" else "SHOW", fontSize = rsp(12))
+                }
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+            // Done on the keyboard signs in — you shouldn't have to dismiss it
+            // to reach the button.
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { submit() }),
             modifier = Modifier.fillMaxWidth(),
         )
 

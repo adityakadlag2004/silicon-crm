@@ -104,7 +104,7 @@ class KadlagMessagingService : FirebaseMessagingService() {
         val pending = PendingIntent.getActivity(this, link.hashCode(), tapIntent, flags)
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(applicationInfo.icon)
+            .setSmallIcon(R.drawable.ic_stat_ki)
             .setContentTitle(title)
             .setContentText(bodyText)
             .setStyle(NotificationCompat.BigTextStyle().bigText(bodyText))

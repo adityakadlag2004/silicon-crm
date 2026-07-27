@@ -1,9 +1,8 @@
 package bo.kadlaginvestment.crm.ui
 
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -39,55 +38,29 @@ private const val TEXT_MAX = 1.15f
 private const val SPACE_MIN = 0.85f
 private const val SPACE_MAX = 1.30f
 
-/** Width buckets, following the Material window size classes. */
-enum class ScreenSize { Compact, Medium, Expanded }
-
-val LocalScreen = compositionLocalOf { ScreenInfo() }
-
-data class ScreenInfo(
-    val widthDp: Int = 392,
-    val heightDp: Int = 800,
-    val size: ScreenSize = ScreenSize.Compact,
-) {
-    /** True on the narrow phones where two-column rows stop fitting. */
-    val isNarrow: Boolean get() = widthDp < 360
-
-    /** Tablets and unfolded foldables — worth using the extra width. */
-    val isWide: Boolean get() = size != ScreenSize.Compact
-
-    /** Sensible column count for a grid of cards at this width. */
-    val gridColumns: Int
-        get() = when {
-            widthDp >= 900 -> 4
-            widthDp >= 600 -> 3
-            widthDp >= 380 -> 2
-            else -> 1
-        }
-
-    /** Page padding: tighter on small screens, roomier on tablets. */
-    val pagePadding: PaddingValues
-        get() = when (size) {
-            ScreenSize.Compact -> PaddingValues(horizontal = if (isNarrow) 12.dp else 16.dp)
-            ScreenSize.Medium -> PaddingValues(horizontal = 24.dp)
-            ScreenSize.Expanded -> PaddingValues(horizontal = 32.dp)
-        }
-}
-
+/**
+ * True on tablets and unfolded foldables, where a single phone-width column
+ * in the middle of a huge screen looks broken. Used by [contentWidth].
+ */
 @Composable
 @ReadOnlyComposable
-fun rememberScreenInfo(): ScreenInfo {
-    val config = LocalConfiguration.current
-    val w = config.screenWidthDp
-    return ScreenInfo(
-        widthDp = w,
-        heightDp = config.screenHeightDp,
-        size = when {
-            w >= 840 -> ScreenSize.Expanded
-            w >= 600 -> ScreenSize.Medium
-            else -> ScreenSize.Compact
-        },
-    )
-}
+fun isWideScreen(): Boolean = LocalConfiguration.current.screenWidthDp >= 600
+
+/**
+ * Caps content width on a big screen so lines stay readable, and centres it.
+ * On a phone this is a no-op.
+ *
+ * (A `ScreenInfo`/`LocalScreen`/`gridColumns`/`pagePadding` API was written
+ * for this and never called from a single screen. Deleted; this is the part
+ * that earns its place.)
+ */
+@Composable
+fun androidx.compose.ui.Modifier.contentWidth(): androidx.compose.ui.Modifier =
+    if (isWideScreen()) {
+        this.widthIn(max = 720.dp)
+    } else {
+        this
+    }
 
 private fun scaleFor(widthDp: Int, min: Float, max: Float): Float =
     (widthDp / BASELINE_WIDTH_DP).coerceIn(min, max)

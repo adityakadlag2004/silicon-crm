@@ -112,23 +112,8 @@ fun ClientsScreen(
     if (onBack != null) BackHandler(onBack = onBack)
 
     Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (onBack != null) {
-                    Text(
-                        "← Back",
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-                    )
-                }
-                Text("Clients", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        ScreenHeader("Clients", onBack = onBack) {
+Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("My", scopeMy) { scopeMy = true; page = 1 }
                 Chip("All", !scopeMy) { scopeMy = false; page = 1 }
                 Button(onClick = { creating = true }) { Text("＋ Add") }
@@ -153,9 +138,17 @@ fun ClientsScreen(
             ) {
                 if (rows.isEmpty()) {
                     item {
-                        Text(
-                            if (scopeMy) "No clients mapped to you yet." else "No clients found.",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13),
+                        EmptyState(
+                            "👥",
+                            if (q.isNotBlank()) "No matches" else "No clients yet",
+                            when {
+                                q.isNotBlank() -> "Nothing matches “$q”. Try a phone number or PAN."
+                                scopeMy -> "No clients are mapped to you yet. Switch to All to see the firm's book."
+                                else -> "Add your first client to get started."
+                            },
+                            modifier = Modifier.heightIn(min = 220.dp),
+                            actionLabel = if (q.isBlank()) "＋ Add client" else null,
+                            onAction = if (q.isBlank()) ({ creating = true }) else null,
                         )
                     }
                 }
@@ -223,15 +216,7 @@ private fun ClientDetail(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-            )
-            Text(d.optString("name"), fontSize = rsp(20), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader(d.optString("name"), onBack = onBack)
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val phone = d.optString("phone")
@@ -340,15 +325,7 @@ private fun AddClientForm(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable { onDone(null) }.padding(end = 12.dp),
-            )
-            Text("Add Client", fontSize = rsp(20), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("Add Client", onBack = { onDone(null) })
 
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(
@@ -368,12 +345,9 @@ private fun AddClientForm(
         )
         OutlinedTextField(value = pan, onValueChange = { pan = it.uppercase() }, label = { Text("PAN") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(
-            value = dob, onValueChange = { dob = it },
-            label = { Text("Date of birth (YYYY-MM-DD, optional)") },
-            placeholder = { Text("1985-06-15") },
-            modifier = Modifier.fillMaxWidth(), singleLine = true,
-        )
+        // A birthday can't be in the future, and typing "YYYY-MM-DD" on a phone
+        // keyboard was a guaranteed source of 400s.
+        DateField("Date of birth (optional)", dob, maxToday = true) { dob = it }
 
         if (isAdmin) {
             androidx.compose.foundation.layout.Box {

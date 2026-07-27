@@ -77,7 +77,11 @@ public final class CallSyncManager {
                     boolean connected;
                     switch (type) {
                         case CallLog.Calls.INCOMING_TYPE:
-                            incoming = true; connected = true; break;
+                            // An incoming row with zero duration rang but was
+                            // never picked up (or the network dropped it).
+                            // Counting it as "connected" inflated every
+                            // employee's connect rate.
+                            incoming = true; connected = duration > 0; break;
                         case CallLog.Calls.MISSED_TYPE:
                         case CallLog.Calls.REJECTED_TYPE:
                             incoming = true; connected = false; break;

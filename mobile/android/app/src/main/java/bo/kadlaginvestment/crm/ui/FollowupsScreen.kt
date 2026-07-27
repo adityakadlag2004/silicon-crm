@@ -1,7 +1,5 @@
 package bo.kadlaginvestment.crm.ui
 
-import android.app.DatePickerDialog
-import android.app.TimePickerDialog
 import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract
@@ -59,19 +57,6 @@ private fun displayName(context: android.content.Context, f: JSONObject): String
     return ContactResolver.nameFor(context, phone) ?: phone
 }
 
-/** Native date → time pickers, chained. Hands back an ISO local timestamp
- * ("2026-07-21T15:30") — what the backend's custom_at expects. */
-private fun pickDateTime(context: android.content.Context, onPicked: (String) -> Unit) {
-    val cal = Calendar.getInstance()
-    DatePickerDialog(context, { _, y, mo, d ->
-        TimePickerDialog(context, { _, h, mi ->
-            onPicked(String.format(Locale.US, "%04d-%02d-%02dT%02d:%02d", y, mo + 1, d, h, mi))
-        }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), false).show()
-    }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).apply {
-        datePicker.minDate = System.currentTimeMillis() - 1000
-    }.show()
-}
-
 /** "2026-07-21T15:30" → "21/07 15:30" for the dialog's confirmation line. */
 private fun prettyIso(iso: String): String =
     if (iso.length >= 16) "${iso.substring(8, 10)}/${iso.substring(5, 7)} ${iso.substring(11, 16)}" else iso
@@ -86,24 +71,18 @@ fun FollowupsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var data by remember { mutableStateOf<JSONObject?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var reloadKey by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(reloadKey) {
-        when (val r = ApiClient.get("/clients/api/app/followups/")) {
-            is ApiClient.Result.Ok -> {
-                data = r.json
-                // Keep on-device alarms matched to the server list (arms new
-                // follow-ups, drops ones completed on another device/web).
-                r.json.optJSONArray("pending")?.let {
-                    bo.kadlaginvestment.crm.FollowupAlarmScheduler.syncFromPending(context, it)
-                }
+    val loader = rememberLoader(
+        "/clients/api/app/followups/",
+        onSessionExpired = onSessionExpired,
+        onLoaded = { json ->
+            // Keep on-device alarms matched to the server list (arms new
+            // follow-ups, drops ones completed on another device/web).
+            json.optJSONArray("pending")?.let {
+                bo.kadlaginvestment.crm.FollowupAlarmScheduler.syncFromPending(context, it)
             }
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> error = r.message
-        }
-    }
+        },
+    )
+    fun reloadKey() = loader.reload()
 
     var showAdd by remember { mutableStateOf(false) }
 
@@ -111,9 +90,25 @@ fun FollowupsScreen(
         scope.launch {
             val body = JSONObject().put("action", action)
             at?.let { body.put("at", it) }
-            when (ApiClient.post("/clients/api/app/followups/$id/action/", body)) {
+            // Queued offline: acting on a follow-up is idempotent, so replaying
+            // it is safe — and losing it silently (the old `else ->` branch,
+            // which treated every failure as success) is not.
+            when (val r = ApiClient.post(
+                "/clients/api/app/followups/$id/action/", body, offlineQueue = context,
+            )) {
                 is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-                else -> { data = null; reloadKey++ }
+                is ApiClient.Result.Error -> AppMessage.show("Couldn't save: ${r.message}")
+                is ApiClient.Result.Ok -> {
+                    AppMessage.showResult(
+                        r.json,
+                        when (action) {
+                            "done" -> "Marked done"
+                            "dismiss" -> "Dismissed"
+                            else -> "Rescheduled"
+                        },
+                    )
+                    reloadKey()
+                }
             }
         }
     }
@@ -126,23 +121,32 @@ fun FollowupsScreen(
                 scope.launch {
                     val body = JSONObject()
                         .put("phone", phone).put("note", note).put("custom_at", iso)
-                    when (ApiClient.post("/clients/api/calls/followup/", body)) {
+                    when (val r = ApiClient.post(
+                        "/clients/api/calls/followup/", body, offlineQueue = context,
+                    )) {
                         is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-                        else -> { data = null; reloadKey++ }
+                        is ApiClient.Result.Error -> AppMessage.show("Couldn't save: ${r.message}")
+                        is ApiClient.Result.Ok -> {
+                            AppMessage.showResult(r.json, "Follow-up scheduled")
+                            reloadKey()
+                        }
                     }
                 }
             },
         )
     }
 
-    if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
-    val d = data ?: run { LoadingBox(modifier); return }
+    if (loader.data == null && loader.error != null) {
+        ErrorBox(loader.error!!, modifier) { loader.reload() }; return
+    }
+    val d = loader.data ?: run { LoadingBox(modifier); return }
 
     val stats = d.optJSONObject("stats")
     val pending = d.optJSONArray("pending")
     val pendingRows = (0 until (pending?.length() ?: 0)).map { pending!!.getJSONObject(it) }
 
     Box(modifier.fillMaxSize()) {
+    RefreshableBox(refreshing = loader.refreshing, onRefresh = loader.reload) {
     LazyColumn(
         Modifier.fillMaxSize().padding(horizontal = rdp(16)),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -155,14 +159,6 @@ fun FollowupsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("My Calls Today", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-                Text(
-                    "↻",
-                    fontSize = rsp(20),
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier
-                        .clickable { data = null; reloadKey++ }
-                        .padding(8.dp),
-                )
             }
         }
 
@@ -185,6 +181,8 @@ fun FollowupsScreen(
                 }
             }
         }
+
+        item { ErrorStrip(loader.error) }
 
         item {
             Text(
@@ -240,15 +238,18 @@ fun FollowupsScreen(
                         }) { Text("📞 Call") }
                         OutlinedButton(onClick = { act(f.getInt("id"), "done") }) { Text("Done") }
                         OutlinedButton(onClick = {
-                            pickDateTime(context) { iso -> act(f.getInt("id"), "reschedule", iso) }
+                            pickDateTime(context, minNow = true) { iso -> act(f.getInt("id"), "reschedule", iso) }
                         }) { Text("🕑 Reschedule") }
-                        OutlinedButton(onClick = { act(f.getInt("id"), "dismiss") }) { Text("✕") }
+                        OutlinedButton(onClick = { act(f.getInt("id"), "dismiss") }) {
+                            Text("Dismiss", fontSize = rsp(13))
+                        }
                     }
                 }
             }
         }
 
         item { Spacer(Modifier.height(12.dp)) }
+    }
     }
 
         ExtendedFloatingActionButton(
@@ -324,7 +325,7 @@ private fun AddFollowupDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedButton(
-                    onClick = { pickDateTime(context) { iso = it } },
+                    onClick = { pickDateTime(context, minNow = true) { iso = it } },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(if (iso.isEmpty()) "Pick date & time" else "🕑 ${prettyIso(iso)}") }
             }

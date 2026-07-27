@@ -59,7 +59,8 @@ class AppPptTests(TestCase):
         resp = self._http(self.admin_user).post(
             reverse("clients:app_sale_create"),
             data=json.dumps({"client_id": self.customer.id, "product_id": self.plan.id,
-                             "ppt": "10", "amount": "100000"}),
+                             "ppt": "10", "amount": "100000",
+                             "policy_date": "2026-01-05", "policy_number": "APLAN1"}),
             content_type="application/json",
         )
         self.assertTrue(resp.json()["ok"])
@@ -75,6 +76,7 @@ class AppPptTests(TestCase):
             reverse("clients:app_sale_create"),
             data=json.dumps({"client_id": self.customer.id, "product_id": health.id,
                              "amount": "300000", "policy_type": "fresh",
+                             "policy_date": "2026-01-05", "policy_number": "HLTH1",
                              "policy_years": 3, "emi_months": 5}),
             content_type="application/json",
         )
@@ -88,6 +90,7 @@ class AppPptTests(TestCase):
             reverse("clients:app_sale_create"),
             data=json.dumps({"client_id": self.customer.id, "product_id": self.plan.id,
                              "ppt": "10", "amount": "100000",
+                             "policy_date": "2026-01-05", "policy_number": "APLAN2",
                              "policy_years": 3, "emi_months": 5}),
             content_type="application/json",
         )

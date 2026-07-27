@@ -108,18 +108,10 @@ fun ReportsScreen(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-            )
-            Text(
-                if (d.optBoolean("firm_wide")) "Business Overview" else "My Performance",
-                fontSize = rsp(22), fontWeight = FontWeight.Bold,
-            )
-        }
+        ScreenHeader(
+            if (d.optBoolean("firm_wide")) "Business Overview" else "My Performance",
+            onBack = onBack,
+        )
 
         // ── Period + column controls ──
         Row(

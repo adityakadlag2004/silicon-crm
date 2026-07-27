@@ -122,15 +122,7 @@ private fun TeamList(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "← Back",
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-                )
-                Text("Team", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-            }
+            ScreenHeader("Team", onBack = onBack)
             Button(onClick = onCreate) { Text("＋ Add") }
         }
 
@@ -312,14 +304,7 @@ private fun TeamDetail(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-            )
-            Text(d.optString("username"), fontSize = rsp(20), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        ScreenHeader(d.optString("username"), onBack = onBack) {
             RolePill(d.optString("role"))
         }
 
@@ -437,15 +422,7 @@ private fun TeamCreateForm(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onDone).padding(end = 12.dp),
-            )
-            Text("Add Team Member", fontSize = rsp(20), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("Add Team Member", onBack = onDone)
 
         OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Username *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(

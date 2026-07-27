@@ -55,18 +55,7 @@ fun IncentivesScreen(
     var tab by remember { mutableStateOf(0) } // 0 = rules, 1 = campaigns
 
     Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-            )
-            Text("Incentives", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("Incentives", onBack = onBack)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Chip("Rules", tab == 0) { tab = 0 }
             Chip("Campaigns", tab == 1) { tab = 1 }
@@ -532,8 +521,8 @@ private fun CampaignDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("Description") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = start, onValueChange = { start = it }, label = { Text("Start (YYYY-MM-DD)") }, placeholder = { Text("2026-08-01") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = end, onValueChange = { end = it }, label = { Text("End (YYYY-MM-DD)") }, placeholder = { Text("2026-08-31") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                DateField("Start date", start) { start = it }
+                DateField("End date", end) { end = it }
             }
         },
         confirmButton = {

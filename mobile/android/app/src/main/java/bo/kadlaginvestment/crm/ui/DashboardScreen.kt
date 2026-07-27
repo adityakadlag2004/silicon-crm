@@ -35,14 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.net.ApiClient
 import org.json.JSONObject
-import java.text.NumberFormat
-import java.util.Locale
-
-private val inr: NumberFormat = NumberFormat.getCurrencyInstance(Locale("en", "IN")).apply {
-    maximumFractionDigits = 0
-}
-
-private fun money(v: Double): String = inr.format(v)
 
 /** Native home screen — data from /clients/api/app/dashboard/. */
 @Composable
@@ -51,32 +43,31 @@ fun DashboardScreen(
     onSessionExpired: () -> Unit,
     onOpenWeb: (String) -> Unit,
 ) {
-    var data by remember { mutableStateOf<JSONObject?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var reloadKey by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(reloadKey) {
-        error = null
-        when (val r = ApiClient.get("/clients/api/app/dashboard/")) {
-            is ApiClient.Result.Ok -> data = r.json
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> error = r.message
-        }
-    }
+    // Cache-first: the last dashboard paints instantly (even with no signal)
+    // and is replaced when the live one lands. `Session.apply` shares the
+    // role/name/unread this payload already carries.
+    val loader = rememberLoader(
+        "/clients/api/app/dashboard/",
+        onSessionExpired = onSessionExpired,
+        onLoaded = { Session.apply(it) },
+    )
 
     when {
-        error != null -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Could not load dashboard", fontWeight = FontWeight.SemiBold)
-                Text(error ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = { reloadKey++ }) { Text("Retry") }
+        loader.data == null && loader.error != null ->
+            Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Could not load dashboard", fontWeight = FontWeight.SemiBold)
+                    Text(loader.error ?: "", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
+                    Spacer(Modifier.height(12.dp))
+                    Button(onClick = loader.reload) { Text("Retry") }
+                }
             }
-        }
-        data == null -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        loader.data == null -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
-        else -> Dashboard(data!!, modifier, onOpenWeb, onRefresh = { data = null; reloadKey++ })
+        else -> RefreshableBox(refreshing = loader.refreshing, onRefresh = loader.reload, modifier = modifier) {
+            Dashboard(loader.data!!, Modifier, onOpenWeb, loader.refreshing, loader.error)
+        }
     }
 }
 
@@ -85,20 +76,28 @@ private fun Dashboard(
     d: JSONObject,
     modifier: Modifier,
     onOpenWeb: (String) -> Unit,
-    onRefresh: () -> Unit,
+    refreshing: Boolean,
+    error: String?,
 ) {
     val isAdmin = d.optString("role") == "admin"
     val today = d.optJSONObject("today") ?: JSONObject()
     val month = d.optJSONObject("month") ?: JSONObject()
-    val recent = d.optJSONArray("recent_sales")
 
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(horizontal = rdp(16)),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
+            // Pull down to refresh; the strip only appears when a refresh
+            // failed and you're looking at the cached copy.
+            Column {
+                RefreshingBar(refreshing)
+                ErrorStrip(error)
+            }
+        }
+        item {
             Row(
-                Modifier.fillMaxWidth().padding(top = 16.dp),
+                Modifier.fillMaxWidth().padding(top = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -110,13 +109,6 @@ private fun Dashboard(
                         fontSize = rsp(13),
                     )
                 }
-                Text(
-                    "↻ Refresh",
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontSize = rsp(14),
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { onRefresh() }.padding(8.dp),
-                )
             }
         }
 
@@ -141,13 +133,13 @@ private fun Dashboard(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatCard(
                     title = "Today",
-                    value = money(today.optDouble("amount", 0.0)),
+                    value = rupees(today.optDouble("amount", 0.0)),
                     sub = "${today.optInt("sales_count")} sale(s)",
                     modifier = Modifier.weight(1f),
                 )
                 StatCard(
                     title = "This month",
-                    value = money(month.optDouble("amount", 0.0)),
+                    value = rupees(month.optDouble("amount", 0.0)),
                     sub = "${month.optInt("sales_count")} sale(s)",
                     modifier = Modifier.weight(1f),
                 )
@@ -224,7 +216,7 @@ private fun Dashboard(
                                 Text(e.optString("name"), fontSize = rsp(14), fontWeight = FontWeight.Medium)
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                Text(money(e.optDouble("amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = rsp(14))
+                                Text(rupees(e.optDouble("amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = rsp(14))
                                 Text("${e.optInt("count")} sale(s)", fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -243,7 +235,7 @@ private fun Dashboard(
                     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(p.optString("name"), fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
-                            Text("${money(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = rsp(13), fontWeight = FontWeight.Bold)
+                            Text("${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = rsp(13), fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.height(3.dp))
                         ProgressBar(if (maxAmt > 0) (p.optDouble("amount", 0.0) / maxAmt).toFloat() else 0f)
@@ -282,7 +274,7 @@ private fun Dashboard(
                     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(p.optString("name"), fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
-                            Text("${money(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = rsp(13), fontWeight = FontWeight.Bold)
+                            Text("${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = rsp(13), fontWeight = FontWeight.Bold)
                         }
                         Spacer(Modifier.height(3.dp))
                         ProgressBar(if (maxAmt > 0) (p.optDouble("amount", 0.0) / maxAmt).toFloat() else 0f)
@@ -325,10 +317,10 @@ private fun EarningsCard(e: JSONObject) {
             )
 
             if (!hasSalary) {
-                Text("You've earned ${money(earned)} in incentive points this month.", fontSize = rsp(14))
+                Text("You've earned ${rupees(earned)} in incentive points this month.", fontSize = rsp(14))
             } else {
                 Text(
-                    "${money(earned)} earned  ·  ${money(salary)} salary",
+                    "${rupees(earned)} earned  ·  ${rupees(salary)} salary",
                     fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 // Progress bar
@@ -348,12 +340,12 @@ private fun EarningsCard(e: JSONObject) {
                 )
                 if (justified) {
                     Text(
-                        "You're ${money(e.optDouble("surplus", 0.0))} above your salary — that's your bonus zone. Keep selling! 🚀",
+                        "You're ${rupees(e.optDouble("surplus", 0.0))} above your salary — that's your bonus zone. Keep selling! 🚀",
                         fontSize = rsp(13), fontWeight = FontWeight.Medium, color = StatusGreen,
                     )
                 } else {
                     Text(
-                        "Just ${money(e.optDouble("remaining", 0.0))} more to justify your salary this month.",
+                        "Just ${rupees(e.optDouble("remaining", 0.0))} more to justify your salary this month.",
                         fontSize = rsp(13), fontWeight = FontWeight.Medium,
                     )
                 }
@@ -378,7 +370,7 @@ private fun CampaignCard(c: JSONObject) {
             for (i in 0 until (products?.length() ?: 0)) {
                 val p = products!!.getJSONObject(i)
                 val benefit = if (p.optString("benefit_type") == "unit") {
-                    "${"%.1f".format(p.optDouble("points_per_unit", 0.0))} pts per ${money(p.optDouble("unit_amount", 0.0))}"
+                    "${"%.1f".format(p.optDouble("points_per_unit", 0.0))} pts per ${rupees(p.optDouble("unit_amount", 0.0))}"
                 } else {
                     "target payout — hit the slab for a bonus"
                 }
@@ -450,48 +442,5 @@ private fun StatCard(
             Text(value, fontSize = rsp(20), fontWeight = FontWeight.Bold, color = accent)
             Text(sub, fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-    }
-}
-
-@Composable
-private fun SaleRow(s: JSONObject, showEmployee: Boolean) {
-    Card(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(s.optString("client"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
-                Text(
-                    s.optString("product") + if (showEmployee) " · ${s.optString("employee")}" else "",
-                    fontSize = rsp(12),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(money(s.optDouble("amount", 0.0)), fontWeight = FontWeight.Bold, fontSize = rsp(14))
-                StatusChip(s.optString("status"))
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatusChip(status: String) {
-    val (bg, label) = when (status) {
-        "approved" -> StatusGreen to "Approved"
-        "rejected" -> StatusRed to "Rejected"
-        else -> StatusAmber to "Pending"
-    }
-    Box(
-        Modifier
-            .background(bg.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-    ) {
-        Text(label, fontSize = rsp(10), color = bg, fontWeight = FontWeight.SemiBold)
     }
 }

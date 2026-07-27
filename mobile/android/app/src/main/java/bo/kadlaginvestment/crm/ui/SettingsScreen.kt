@@ -145,24 +145,15 @@ fun SettingsScreen(
                 fmt12(value),
                 fontSize = rsp(14), fontWeight = FontWeight.SemiBold,
                 color = BrandGoldDark,
-                modifier = Modifier.clickable {
-                    val parts = value.split(":")
-                    TimePickerDialog(context, { _, h, m ->
-                        onPick("%02d:%02d".format(h, m))
-                    }, parts.getOrNull(0)?.toIntOrNull() ?: 9,
-                        parts.getOrNull(1)?.toIntOrNull() ?: 0, false).show()
+                modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                    pickTime(context, value, onPick)
                 },
             )
         }
     }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("← Back", fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack))
-            Spacer(Modifier.width(10.dp))
-            Text("App Settings", fontSize = rsp(20), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("App Settings", onBack = onBack)
         Spacer(Modifier.height(4.dp))
         savedMsg?.let {
             Text(it, fontSize = rsp(12),

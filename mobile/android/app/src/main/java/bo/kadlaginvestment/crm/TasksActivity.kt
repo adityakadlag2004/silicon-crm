@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -70,37 +71,34 @@ class TasksActivity : ComponentActivity() {
         Thread { TaskAlarmScheduler.syncBlocking(applicationContext) }.start()
         setContent {
             KadlagTheme {
-                var tab by remember { mutableIntStateOf(0) }       // 0 Dash 1 My 2 Delegated 3 Subscribed 4 More
-                var subRoute by remember { mutableStateOf<String?>(null) } // all/subscribed/activities from More
-                var detailId by remember {
+                var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }       // 0 Dash 1 My 2 Delegated 3 Subscribed 4 More
+                var subRoute by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) } // all/subscribed/activities from More
+                var detailId by androidx.compose.runtime.saveable.rememberSaveable {
                     mutableStateOf<Int?>(intent?.getIntExtra("task_id", 0)?.takeIf { it > 0 })
                 }
                 var sheetOpen by remember { mutableStateOf(false) }
                 var sheetEdit by remember { mutableStateOf<org.json.JSONObject?>(null) }
                 var reloadSignal by remember { mutableIntStateOf(0) }
-                var role by remember { mutableStateOf("") }
-
-                LaunchedEffect(Unit) {
-                    when (val r = ApiClient.get("/clients/api/app/dashboard/")) {
-                        is ApiClient.Result.Ok -> role = r.json.optString("role")
-                        else -> {}
-                    }
-                }
+                LaunchedEffect(Unit) { bo.kadlaginvestment.crm.ui.Session.load() }
 
                 val goLogin: () -> Unit = {
                     ApiClient.clearSession()
+                    bo.kadlaginvestment.crm.ui.Session.clear()
+                    bo.kadlaginvestment.crm.net.Cache.clear(applicationContext)
                     startActivity(LoginActivity.expiredIntent(this))
                     finish()
                 }
                 val openWeb: (String) -> Unit = { path -> WebActivity.open(this, path) }
 
-                val isAdminOrManager = role == "admin" || role == "manager"
+                val isAdminOrManager = bo.kadlaginvestment.crm.ui.Session.isManagerPlus
                 val onList = subRoute == "all" ||
                     (subRoute == null && tab in listOf(0, 1, 2, 3))
 
                 val openSheet: (org.json.JSONObject?) -> Unit = { edit -> sheetEdit = edit; sheetOpen = true }
 
                 Box(Modifier.fillMaxSize()) {
+                // Task detail renders outside the Scaffold, so the snackbar
+                // host lives here to cover both routes.
                 if (detailId != null) {
                     TaskDetailScreen(
                         taskId = detailId!!,
@@ -122,14 +120,14 @@ class TasksActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
-                                Text(
-                                    "↻",
-                                    fontSize = rsp(20),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier
-                                        .padding(end = 16.dp)
-                                        .clickable { reloadSignal++ },
-                                )
+                                // A real IconButton: 48dp target, ripple, and a
+                                // label TalkBack can read (the "↻" glyph had none).
+                                androidx.compose.material3.IconButton(onClick = { reloadSignal++ }) {
+                                    Icon(
+                                        Icons.Filled.Refresh,
+                                        contentDescription = "Refresh tasks",
+                                    )
+                                }
                             },
                             colors = TopAppBarDefaults.topAppBarColors(
                                 containerColor = MaterialTheme.colorScheme.surface,
@@ -196,6 +194,9 @@ class TasksActivity : ComponentActivity() {
                         onSessionExpired = goLogin,
                     )
                 }
+                bo.kadlaginvestment.crm.ui.AppMessageHost(
+                    Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp)
+                )
                 } // Box
             }
         }

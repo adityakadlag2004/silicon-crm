@@ -42,6 +42,26 @@ object ApiClient {
         cm.flush()
     }
 
+    /**
+     * Store every Set-Cookie the server returned.
+     *
+     * Django runs with SESSION_SAVE_EVERY_REQUEST, so *every* response carries
+     * a refreshed session cookie — that rolling renewal is what keeps web users
+     * signed in indefinitely. Only [login] used to save cookies, so the app's
+     * cookie kept the expiry it was born with and died exactly 30 days after
+     * sign-in no matter how heavily the app was used.
+     */
+    private fun storeCookies(conn: HttpURLConnection) {
+        val cm = CookieManager.getInstance()
+        var got = false
+        conn.headerFields.forEach { (name, values) ->
+            if (name != null && name.equals("Set-Cookie", ignoreCase = true)) {
+                values.forEach { cm.setCookie(BackendClient.BASE_URL, it); got = true }
+            }
+        }
+        if (got) cm.flush()
+    }
+
     /** Native login: posts credentials, then writes the returned session +
      * CSRF cookies into CookieManager so the whole app (native ApiClient and
      * any WebActivity) shares one authenticated session. */
@@ -62,14 +82,7 @@ object ApiClient {
 
             val code = conn.responseCode
             if (code == 200) {
-                // Store every Set-Cookie the server returned (sessionid, csrftoken).
-                val cm = CookieManager.getInstance()
-                conn.headerFields.forEach { (name, values) ->
-                    if (name != null && name.equals("Set-Cookie", ignoreCase = true)) {
-                        values.forEach { cm.setCookie(BackendClient.BASE_URL, it) }
-                    }
-                }
-                cm.flush()
+                storeCookies(conn)   // sessionid + csrftoken
                 Result.Ok(JSONObject(conn.inputStream.bufferedReader().readText()))
             } else {
                 val msg = try {
@@ -103,7 +116,10 @@ object ApiClient {
             conn.setRequestProperty("Accept", "application/json")
 
             when (val code = conn.responseCode) {
-                200 -> Result.Ok(JSONObject(conn.inputStream.bufferedReader().readText()))
+                200 -> {
+                    storeCookies(conn)   // rolling session renewal
+                    Result.Ok(JSONObject(conn.inputStream.bufferedReader().readText()))
+                }
                 301, 302, 401, 403 -> Result.NotLoggedIn
                 else -> Result.Error("Server error ($code)")
             }
@@ -114,7 +130,22 @@ object ApiClient {
         }
     }
 
-    suspend fun post(path: String, body: JSONObject): Result = withContext(Dispatchers.IO) {
+    /**
+     * POST JSON.
+     *
+     * `offlineQueue` parks the request in [Outbox] when the network is down,
+     * instead of losing it. Only pass it for endpoints that are safe to replay
+     * (follow-up and task actions) — never for creating a sale or a client,
+     * where a replay could double-book real business.
+     *
+     * A queued write returns Ok with `"queued": true` so callers can say
+     * "saved, will sync" rather than claiming it reached the server.
+     */
+    suspend fun post(
+        path: String,
+        body: JSONObject,
+        offlineQueue: android.content.Context? = null,
+    ): Result = withContext(Dispatchers.IO) {
         val cookies = CookieManager.getInstance().getCookie(BackendClient.BASE_URL)
         if (cookies == null || !cookies.contains("sessionid=")) {
             return@withContext Result.NotLoggedIn
@@ -138,20 +169,37 @@ object ApiClient {
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
 
             when (val code = conn.responseCode) {
-                200 -> Result.Ok(JSONObject(conn.inputStream.bufferedReader().readText()))
+                200 -> {
+                    storeCookies(conn)   // rolling session renewal
+                    Result.Ok(JSONObject(conn.inputStream.bufferedReader().readText()))
+                }
                 301, 302, 401 -> Result.NotLoggedIn
                 else -> {
                     val msg = try {
                         JSONObject(conn.errorStream?.bufferedReader()?.readText() ?: "")
                             .optString("error", "Server error ($code)")
                     } catch (_: Exception) {
-                        "Server error ($code)"
+                        ""
                     }
-                    Result.Error(msg)
+                    // A 403 with no JSON error is Django's CSRF/permission wall,
+                    // not something the user can act on — treat it as a dead
+                    // session (GET already did) so the app re-authenticates
+                    // instead of showing "Server error (403)" forever. A 403
+                    // that DID carry an error message is a real permission
+                    // refusal ("Only the assignee can acknowledge") — show it.
+                    if (code == 403 && msg.isEmpty()) Result.NotLoggedIn
+                    else Result.Error(msg.ifEmpty { "Server error ($code)" })
                 }
             }
         } catch (e: Exception) {
-            Result.Error(e.message ?: "Network error")
+            // Network-level failure (no signal, DNS, timeout) — the server never
+            // saw this. Park it if the caller opted in.
+            if (offlineQueue != null) {
+                Outbox.enqueue(offlineQueue, path, body.toString())
+                Result.Ok(JSONObject().put("ok", true).put("queued", true))
+            } else {
+                Result.Error(e.message ?: "Network error")
+            }
         } finally {
             conn?.disconnect()
         }

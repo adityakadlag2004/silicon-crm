@@ -49,15 +49,8 @@ fun ReportsHub(
 ) {
     BackHandler(onBack = onBack)
     var sub by remember { mutableStateOf<String?>(null) }
-    var role by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        when (val r = ApiClient.get("/clients/api/app/dashboard/")) {
-            is ApiClient.Result.Ok -> role = r.json.optString("role")
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> role = "employee"
-        }
-    }
+    LaunchedEffect(Unit) { if (!Session.load()) onSessionExpired() }
 
     when (sub) {
         "overview" -> { BackHandler { sub = null }; ReportsScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired) ; return }
@@ -65,21 +58,10 @@ fun ReportsHub(
         "past" -> { BackHandler { sub = null }; PastPerformanceScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired); return }
     }
 
-    val isManagerPlus = role == "admin" || role == "manager"
+    val isManagerPlus = Session.isManagerPlus
 
     Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-            )
-            Text("Reports", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("Reports", onBack = onBack)
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
             item { ReportCard("📊", "Business Overview", "Business trend by product, mix & leaderboard") { sub = "overview" } }
@@ -309,13 +291,7 @@ private fun ReportHeader(title: String, onBack: () -> Unit) {
         Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            "← Back",
-            color = MaterialTheme.colorScheme.secondary,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-        )
-        Text(title, fontSize = rsp(21), fontWeight = FontWeight.Bold)
+        ScreenHeader(title, onBack = onBack)
     }
 }
 

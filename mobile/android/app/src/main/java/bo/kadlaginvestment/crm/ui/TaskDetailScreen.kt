@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
@@ -60,6 +61,9 @@ import bo.kadlaginvestment.crm.net.ApiClient
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
+/** Server caps uploads too; this just avoids wasting the user's data first. */
+private const val MAX_ATTACHMENT_BYTES = 25L * 1024 * 1024
+
 @Composable
 fun TaskDetailScreen(
     taskId: Int,
@@ -93,10 +97,19 @@ fun TaskDetailScreen(
 
     fun act(body: JSONObject, then: () -> Unit = { reloadKey++; onChanged() }) {
         scope.launch {
-            when (val r = ApiClient.post("/clients/api/app/tasks/$taskId/action/", body)) {
-                is ApiClient.Result.Ok -> then()
+            // Task actions are idempotent, so they can ride the offline outbox.
+            when (val r = ApiClient.post(
+                "/clients/api/app/tasks/$taskId/action/", body, offlineQueue = context,
+            )) {
+                is ApiClient.Result.Ok -> {
+                    if (r.json.optBoolean("queued")) {
+                        AppMessage.show("No internet — saved, will sync automatically")
+                    }
+                    then()
+                }
                 is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-                is ApiClient.Result.Error -> error = r.message
+                // A failed comment must not blow away the task you were reading.
+                is ApiClient.Result.Error -> AppMessage.show("Couldn't save: ${r.message}")
             }
         }
     }
@@ -108,22 +121,40 @@ fun TaskDetailScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         uploading = true
         Thread {
+            var ok = false
+            var why = ""
             try {
                 val cr = context.contentResolver
                 var name = "attachment"
+                var size = -1L
                 cr.query(uri, null, null, null, null)?.use { cur ->
                     val i = cur.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (cur.moveToFirst() && i >= 0) name = cur.getString(i) ?: name
+                    val s = cur.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                    if (cur.moveToFirst()) {
+                        if (i >= 0) name = cur.getString(i) ?: name
+                        if (s >= 0 && !cur.isNull(s)) size = cur.getLong(s)
+                    }
                 }
-                cr.openInputStream(uri)?.use { stream ->
-                    bo.kadlaginvestment.crm.BackendClient.postMultipart(
-                        "/clients/tasks/$taskId/attachment/upload/",
-                        "attachments", name, cr.getType(uri) ?: "", stream,
-                    )
+                // Guard before spending the user's data on a doomed upload.
+                if (size > MAX_ATTACHMENT_BYTES) {
+                    why = "File is too large (max ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB)"
+                } else {
+                    cr.openInputStream(uri)?.use { stream ->
+                        val body = bo.kadlaginvestment.crm.BackendClient.postMultipart(
+                            "/clients/tasks/$taskId/attachment/upload/",
+                            "attachments", name, cr.getType(uri) ?: "", stream,
+                        )
+                        ok = body != null
+                        if (!ok) why = "Upload failed — check your connection"
+                    } ?: run { why = "Could not read that file" }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                why = e.message ?: "Upload failed"
             } finally {
                 uploading = false
+                // A silent catch used to make a failed upload look identical to
+                // a successful one: the list just reloaded with nothing new.
+                AppMessage.show(if (ok) "Attachment uploaded" else why.ifEmpty { "Upload failed" })
                 reloadKey++
             }
         }.start()
@@ -196,8 +227,12 @@ fun TaskDetailScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("← Back", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack))
+            androidx.compose.material3.IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                )
+            }
             Spacer(Modifier.weight(1f))
             // Status pill doubles as the status picker for anyone who can edit.
             Box {
@@ -277,17 +312,18 @@ fun TaskDetailScreen(
             // Due row is always visible and, for editors, tap-to-change —
             // date picker then time picker, saved via action=due.
             fun pickDue() {
-                val cal = java.util.Calendar.getInstance()
-                android.app.DatePickerDialog(context, { _, y, mo, d ->
-                    val date = String.format(java.util.Locale.US, "%04d-%02d-%02d", y, mo + 1, d)
-                    android.app.TimePickerDialog(context, { _, h, mi ->
-                        act(
-                            JSONObject().put("action", "due").put("due_date", date)
-                                .put("due_time", String.format(java.util.Locale.US, "%02d:%02d", h, mi))
-                        )
-                    }, 10, 0, false).show()
-                }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH),
-                    cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                // Seeded with the task's CURRENT due date and time. The time
+                // picker used to open at a hardcoded 10:00, so nudging a date
+                // silently reset every deadline to mid-morning.
+                val current = t.optString("due_date").takeIf { it.isNotBlank() }
+                    ?.let { it + "T" + t.optString("due_time").ifBlank { "10:00" } } ?: ""
+                pickDateTime(context, startIso = current) { iso ->
+                    act(
+                        JSONObject().put("action", "due")
+                            .put("due_date", iso.take(10))
+                            .put("due_time", iso.substring(11))
+                    )
+                }
             }
             Box(Modifier.clickable(enabled = canEdit) { pickDue() }) {
                 val due = t.optString("due_date")

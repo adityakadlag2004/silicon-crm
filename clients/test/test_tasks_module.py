@@ -652,3 +652,133 @@ class TaskMultiAssignTests(TestCase):
                                    assigned_to=self.people[0])
         resp = self._client(self.boss).get(reverse("clients:task_detail", args=[task.pk]))
         self.assertEqual(len(resp.context["ack_roster"]), 1)
+
+
+class TaskGroupEditDeleteTests(TestCase):
+    """A multi-assignee task is N sibling rows but ONE task to its assigner.
+    Editing or deleting the collapsed row used to touch a single row, leaving
+    the other people on the old deadline or with live copies of a task that
+    looked deleted."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.boss = User.objects.create_user(username="g_boss", password="pw")
+        Employee.objects.create(user=cls.boss, role="admin", salary=0, active=True)
+        cls.people = []
+        for name in ("mansi", "rohit", "amit"):
+            u = User.objects.create_user(username=f"g_{name}", password="pw",
+                                         first_name=name.title())
+            cls.people.append(Employee.objects.create(user=u, role="employee",
+                                                      salary=0, active=True))
+
+    def _client(self, user):
+        c = Client()
+        c.force_login(user)
+        return c
+
+    def _assign_to_all(self, title="Group job"):
+        self._client(self.boss).post(reverse("clients:task_create"), {
+            "title": title, "priority": "high",
+            "assigned_to": [str(p.pk) for p in self.people],
+        })
+        return list(Task.objects.filter(title=title).order_by("pk"))
+
+    def _post_json(self, url, payload):
+        import json as _json
+        return self._client(self.boss).post(url, data=_json.dumps(payload),
+                                            content_type="application/json")
+
+    # ── delete ──
+    def test_app_delete_removes_the_whole_group(self):
+        tasks = self._assign_to_all()
+        resp = self._post_json(
+            reverse("clients:app_task_action", args=[tasks[0].pk]), {"action": "delete"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Task.objects.filter(title="Group job", is_deleted=False).count(), 0)
+
+    def test_web_delete_removes_the_whole_group(self):
+        tasks = self._assign_to_all("Web group job")
+        self._client(self.boss).post(reverse("clients:task_delete", args=[tasks[0].pk]))
+        self.assertEqual(
+            Task.objects.filter(title="Web group job", is_deleted=False).count(), 0)
+
+    def test_deleting_a_solo_task_still_deletes_exactly_one(self):
+        self._client(self.boss).post(reverse("clients:task_create"), {
+            "title": "Solo", "priority": "low",
+            "assigned_to": [str(self.people[0].pk)],
+        })
+        solo = Task.objects.get(title="Solo")
+        self._post_json(reverse("clients:app_task_action", args=[solo.pk]), {"action": "delete"})
+        solo.refresh_from_db()
+        self.assertTrue(solo.is_deleted)
+
+    # ── edit ──
+    def test_app_edit_moves_the_due_date_for_everyone(self):
+        tasks = self._assign_to_all("Dated job")
+        self._post_json(reverse("clients:app_task_action", args=[tasks[0].pk]), {
+            "action": "edit", "title": "Dated job", "due_date": "2026-09-01",
+            "due_time": "15:00",
+        })
+        for t in Task.objects.filter(title="Dated job"):
+            self.assertEqual(str(t.due_date), "2026-09-01", f"{t.assigned_to} kept the old date")
+
+    def test_app_edit_retitles_every_sibling(self):
+        tasks = self._assign_to_all("Old title")
+        self._post_json(reverse("clients:app_task_action", args=[tasks[0].pk]), {
+            "action": "edit", "title": "New title",
+        })
+        self.assertEqual(Task.objects.filter(title="New title", is_deleted=False).count(), 3)
+        self.assertEqual(Task.objects.filter(title="Old title", is_deleted=False).count(), 0)
+
+    def test_web_due_change_moves_the_whole_group(self):
+        tasks = self._assign_to_all("Web dated")
+        self._client(self.boss).post(reverse("clients:task_set_due", args=[tasks[0].pk]),
+                                     {"due_date": "2026-10-05", "due_time": "11:00"})
+        for t in Task.objects.filter(title="Web dated"):
+            self.assertEqual(str(t.due_date), "2026-10-05")
+
+    def test_web_priority_change_moves_the_whole_group(self):
+        tasks = self._assign_to_all("Web priority")
+        self._client(self.boss).post(
+            reverse("clients:task_set_priority", args=[tasks[0].pk]), {"priority": "critical"})
+        self.assertEqual(
+            Task.objects.filter(title="Web priority", priority="critical").count(), 3)
+
+    def test_per_person_status_is_never_propagated(self):
+        tasks = self._assign_to_all("Status job")
+        self._post_json(reverse("clients:app_task_action", args=[tasks[0].pk]),
+                        {"action": "status", "status": "completed"})
+        done = Task.objects.filter(title="Status job", status="completed").count()
+        self.assertEqual(done, 1, "one person completing must not complete it for everyone")
+
+    # ── assignee reconciliation ──
+    def test_edit_can_drop_an_assignee(self):
+        tasks = self._assign_to_all("Shrinking job")
+        keep = [self.people[0].pk, self.people[1].pk]
+        self._post_json(reverse("clients:app_task_action", args=[tasks[0].pk]), {
+            "action": "edit", "title": "Shrinking job", "assignees": keep,
+        })
+        live = Task.objects.filter(title="Shrinking job", is_deleted=False)
+        self.assertEqual(live.count(), 2)
+        self.assertEqual({t.assigned_to_id for t in live}, set(keep))
+
+    def test_edit_can_add_an_assignee(self):
+        self._client(self.boss).post(reverse("clients:task_create"), {
+            "title": "Growing job", "priority": "low",
+            "assigned_to": [str(self.people[0].pk)],
+        })
+        solo = Task.objects.get(title="Growing job")
+        self._post_json(reverse("clients:app_task_action", args=[solo.pk]), {
+            "action": "edit", "title": "Growing job",
+            "assignees": [self.people[0].pk, self.people[1].pk],
+        })
+        live = Task.objects.filter(title="Growing job", is_deleted=False)
+        self.assertEqual(live.count(), 2)
+        self.assertEqual(len({t.assign_group for t in live}), 1)
+        self.assertTrue(all(t.assign_group for t in live))
+
+    def test_detail_payload_lists_every_assignee_for_the_edit_sheet(self):
+        tasks = self._assign_to_all("Roster job")
+        data = self._client(self.boss).get(
+            reverse("clients:app_task_detail", args=[tasks[0].pk])).json()
+        self.assertEqual(len(data["assignee_ids"]), 3)

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,25 +50,23 @@ fun NotificationsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var data by remember { mutableStateOf<JSONObject?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var reloadKey by remember { mutableIntStateOf(0) }
+    val loader = rememberLoader(
+        "/clients/api/app/notifications/",
+        onSessionExpired = onSessionExpired,
+        onLoaded = { NotificationBadge.set(it.optInt("unread")) },
+    )
+    fun reloadKey() = loader.reload()
 
-    LaunchedEffect(reloadKey) {
-        when (val r = ApiClient.get("/clients/api/app/notifications/")) {
-            is ApiClient.Result.Ok -> data = r.json
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> error = r.message
-        }
+    if (loader.data == null && loader.error != null) {
+        ErrorBox(loader.error!!, modifier) { loader.reload() }; return
     }
-
-    if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
-    val d = data ?: run { LoadingBox(modifier); return }
+    val d = loader.data ?: run { LoadingBox(modifier); return }
     val arr = d.optJSONArray("results")
     val rows = (0 until (arr?.length() ?: 0)).map { arr!!.getJSONObject(it) }
 
+    RefreshableBox(refreshing = loader.refreshing, onRefresh = loader.reload, modifier = modifier) {
     LazyColumn(
-        modifier.fillMaxSize().padding(horizontal = rdp(16)),
+        Modifier.fillMaxSize().padding(horizontal = rdp(16)),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 16.dp),
     ) {
@@ -77,20 +76,13 @@ fun NotificationsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "← Back",
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-                    )
-                    Text("Notifications", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-                }
+                ScreenHeader("Notifications", onBack = onBack, modifier = Modifier.weight(1f))
                 if (d.optInt("unread") > 0) {
                     TextButton(onClick = {
                         scope.launch {
                             ApiClient.post("/clients/api/app/notifications/read/", JSONObject())
-                            data = null; reloadKey++
+                            NotificationBadge.refresh()
+                            reloadKey()
                         }
                     }) { Text("Mark all read") }
                 }
@@ -98,13 +90,30 @@ fun NotificationsScreen(
         }
 
         if (rows.isEmpty()) {
-            item { Text("No notifications yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
+            item {
+                EmptyState(
+                    "🔔", "All caught up",
+                    "Alerts about sales, tasks and renewals will appear here.",
+                    modifier = Modifier.heightIn(min = 220.dp),
+                )
+            }
         }
 
         items(rows) { n ->
             val unread = !n.optBoolean("is_read")
             Card(
                 modifier = Modifier.fillMaxWidth().clickable {
+                    // Opening it IS reading it — otherwise the badge only ever
+                    // clears via "Mark all read", which most people never find.
+                    if (unread) {
+                        scope.launch {
+                            ApiClient.post(
+                                "/clients/api/app/notifications/read/",
+                                JSONObject().put("id", n.optInt("id")),
+                            )
+                            NotificationBadge.refresh()
+                        }
+                    }
                     // onOpenWeb is the shell's routeLink: handles tel:, native
                     // screens, and web links.
                     n.optString("link").takeIf { it.isNotBlank() }?.let { onOpenWeb(it) }
@@ -135,5 +144,6 @@ fun NotificationsScreen(
         }
 
         item { Spacer(Modifier.height(12.dp)) }
+    }
     }
 }

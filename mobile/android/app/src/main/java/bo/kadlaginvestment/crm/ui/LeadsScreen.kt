@@ -125,23 +125,8 @@ private fun LeadList(
     }
 
     Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (onBack != null) {
-                    Text(
-                        "← Back",
-                        color = MaterialTheme.colorScheme.secondary,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-                    )
-                }
-                Text("Leads", fontSize = rsp(22), fontWeight = FontWeight.Bold)
-            }
-            Button(onClick = onCreate) { Text("＋ Add") }
+        ScreenHeader("Leads", onBack = onBack) {
+Button(onClick = onCreate) { Text("＋ Add") }
         }
 
         val c = counts
@@ -171,7 +156,16 @@ private fun LeadList(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
             ) {
                 if (rows.isEmpty()) {
-                    item { Text("No leads here.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
+                    item {
+                        EmptyState(
+                            "🫧", "No leads here",
+                            if (stage.isBlank()) "Add a lead to start working the pipeline."
+                            else "Nothing at this stage right now.",
+                            modifier = Modifier.heightIn(min = 200.dp),
+                            actionLabel = if (stage.isBlank()) "＋ Add lead" else null,
+                            onAction = if (stage.isBlank()) onCreate else null,
+                        )
+                    }
                 }
                 items(rows) { l ->
                     Card(
@@ -268,14 +262,7 @@ private fun LeadDetail(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp),
-            )
-            Text(d.optString("name"), fontSize = rsp(20), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        ScreenHeader(d.optString("name"), onBack = onBack) {
             LeadStagePill(d.optString("stage"), d.optInt("converted_client_id") > 0)
         }
 
@@ -400,15 +387,7 @@ private fun LeadCreateForm(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "← Back",
-                color = MaterialTheme.colorScheme.secondary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clickable(onClick = onDone).padding(end = 12.dp),
-            )
-            Text("New Lead", fontSize = rsp(20), fontWeight = FontWeight.Bold)
-        }
+        ScreenHeader("New Lead", onBack = onDone)
 
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Customer name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
         OutlinedTextField(
@@ -422,7 +401,7 @@ private fun LeadCreateForm(
             modifier = Modifier.fillMaxWidth(), singleLine = true,
         )
         OutlinedTextField(
-            value = income, onValueChange = { income = it.filter { ch -> ch.isDigit() || ch == '.' } },
+            value = income, onValueChange = { income = moneyInput(it) },
             label = { Text("Annual income (₹, optional)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(), singleLine = true,

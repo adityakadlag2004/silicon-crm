@@ -42,6 +42,10 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 // ── Priority / status colors (mirror the web design tokens) ──
+// @Composable because the status colours are theme-aware: the light-theme
+// 600-weight red/amber/green don't clear 4.5:1 on the dark surface.
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
 fun priorityColor(priority: String): Color = when (priority) {
     "critical" -> StatusRed
     "high" -> StatusAmber
@@ -49,6 +53,8 @@ fun priorityColor(priority: String): Color = when (priority) {
     else -> Color(0xFF9CA3AF) // low
 }
 
+@Composable
+@androidx.compose.runtime.ReadOnlyComposable
 fun statusColor(status: String): Color = when (status) {
     "completed" -> StatusGreen
     "overdue" -> StatusRed

@@ -66,6 +66,10 @@ fun AddSaleScreen(
     var amount by remember { mutableStateOf("") }
     var coverAmount by remember { mutableStateOf("") }
     var policyType by remember { mutableStateOf("") }
+    // Health/Life only: the commencement date + number off the policy document.
+    // Renewal reminders are measured from policy_date, never the sale date.
+    var policyDate by remember { mutableStateOf("") }
+    var policyNumber by remember { mutableStateOf("") }
     var policyYears by remember { mutableStateOf(1) }         // Health multiyear term
     var yearsMenuOpen by remember { mutableStateOf(false) }
     var emiMonths by remember { mutableStateOf(0) }           // 0/5/8/11
@@ -162,20 +166,7 @@ fun AddSaleScreen(
         }
 
         // ── Product picker ──
-        Box {
-            OutlinedTextField(
-                value = selectedProduct?.optString("name") ?: "",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text("Product") },
-                modifier = Modifier.fillMaxWidth().clickable { productMenuOpen = true },
-                enabled = false,
-                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                    disabledBorderColor = MaterialTheme.colorScheme.outline,
-                    disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            )
+        PickerField("Product *", selectedProduct?.optString("name") ?: "", { productMenuOpen = true }) {
             DropdownMenu(expanded = productMenuOpen, onDismissRequest = { productMenuOpen = false }) {
                 for (i in 0 until (products?.length() ?: 0)) {
                     val p = products!!.getJSONObject(i)
@@ -185,6 +176,8 @@ fun AddSaleScreen(
                             selectedProduct = p
                             selectedSubproduct = null  // reset dependent choices
                             selectedPpt = null
+                            policyType = ""
+                            policyDate = ""; policyNumber = ""
                             policyYears = 1
                             emiMonths = 0
                             productMenuOpen = false
@@ -197,20 +190,7 @@ fun AddSaleScreen(
         // ── Sub-product picker (only when the product has sub-products) ──
         val subproducts = selectedProduct?.optJSONArray("subproducts")
         if (subproducts != null && subproducts.length() > 0) {
-            Box {
-                OutlinedTextField(
-                    value = selectedSubproduct?.optString("name") ?: "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Sub-product") },
-                    modifier = Modifier.fillMaxWidth().clickable { subproductMenuOpen = true },
-                    enabled = false,
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
+            PickerField("Sub-product *", selectedSubproduct?.optString("name") ?: "", { subproductMenuOpen = true }) {
                 DropdownMenu(expanded = subproductMenuOpen, onDismissRequest = { subproductMenuOpen = false }) {
                     for (i in 0 until subproducts.length()) {
                         val sp = subproducts.getJSONObject(i)
@@ -227,20 +207,11 @@ fun AddSaleScreen(
         val effectiveProduct = selectedSubproduct ?: selectedProduct
         val pptOptions = effectiveProduct?.optJSONArray("ppt_options")
         if (pptOptions != null && pptOptions.length() > 0) {
-            Box {
-                OutlinedTextField(
-                    value = selectedPpt?.let { "PPT $it" } ?: "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Premium Paying Term (PPT)") },
-                    modifier = Modifier.fillMaxWidth().clickable { pptMenuOpen = true },
-                    enabled = false,
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
+            PickerField(
+                "Premium Paying Term (PPT) *",
+                selectedPpt?.let { "PPT $it" } ?: "",
+                { pptMenuOpen = true },
+            ) {
                 DropdownMenu(expanded = pptMenuOpen, onDismissRequest = { pptMenuOpen = false }) {
                     for (i in 0 until pptOptions.length()) {
                         val v = pptOptions.optString(i)
@@ -270,7 +241,7 @@ fun AddSaleScreen(
 
         OutlinedTextField(
             value = amount,
-            onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+            onValueChange = { amount = moneyInput(it) },
             label = { Text("Business amount (₹)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
@@ -280,9 +251,20 @@ fun AddSaleScreen(
         if (selectedProduct?.optBoolean("is_insurance") == true) {
             OutlinedTextField(
                 value = coverAmount,
-                onValueChange = { coverAmount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                onValueChange = { coverAmount = moneyInput(it) },
                 label = { Text("Cover amount (₹)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            // Both mandatory server-side: the policy date drives every future
+            // renewal reminder, the number links this sale to its tracker policy.
+            DateField("Policy start date *", policyDate) { policyDate = it }
+            OutlinedTextField(
+                value = policyNumber,
+                onValueChange = { policyNumber = it.uppercase().trim() },
+                label = { Text("Policy number *") },
+                supportingText = { Text("Read both off the policy document", fontSize = rsp(11)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )
@@ -299,18 +281,11 @@ fun AddSaleScreen(
             }
 
             // Multiyear term: the entered amount is the full multi-year premium.
-            Box {
-                OutlinedTextField(
-                    value = if (policyYears <= 1) "Single year" else "$policyYears years",
-                    onValueChange = {}, readOnly = true, enabled = false,
-                    label = { Text("Policy term") },
-                    modifier = Modifier.fillMaxWidth().clickable { yearsMenuOpen = true },
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
+            PickerField(
+                "Policy term",
+                if (policyYears <= 1) "Single year" else "$policyYears years",
+                { yearsMenuOpen = true },
+            ) {
                 DropdownMenu(expanded = yearsMenuOpen, onDismissRequest = { yearsMenuOpen = false }) {
                     listOf(1 to "Single year", 2 to "2 years", 3 to "3 years").forEach { (v, lbl) ->
                         DropdownMenuItem(text = { Text(lbl) }, onClick = {
@@ -324,18 +299,11 @@ fun AddSaleScreen(
 
             // EMI only for a multiyear (>=2y) term.
             if (policyYears >= 2) {
-                Box {
-                    OutlinedTextField(
-                        value = if (emiMonths == 0) "Not on EMI" else "$emiMonths months",
-                        onValueChange = {}, readOnly = true, enabled = false,
-                        label = { Text("Sold on EMI?") },
-                        modifier = Modifier.fillMaxWidth().clickable { emiMenuOpen = true },
-                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                            disabledBorderColor = MaterialTheme.colorScheme.outline,
-                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
+                PickerField(
+                    "Sold on EMI?",
+                    if (emiMonths == 0) "Not on EMI" else "$emiMonths months",
+                    { emiMenuOpen = true },
+                ) {
                     DropdownMenu(expanded = emiMenuOpen, onDismissRequest = { emiMenuOpen = false }) {
                         listOf(0 to "Not on EMI", 5 to "5 months", 8 to "8 months", 11 to "11 months").forEach { (v, lbl) ->
                             DropdownMenuItem(text = { Text(lbl) }, onClick = { emiMonths = v; emiMenuOpen = false })
@@ -346,20 +314,7 @@ fun AddSaleScreen(
         }
 
         if (isAdmin) {
-            Box {
-                OutlinedTextField(
-                    value = selectedEmployee?.second ?: "Myself",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Assign to employee") },
-                    modifier = Modifier.fillMaxWidth().clickable { employeeMenuOpen = true },
-                    enabled = false,
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
+            PickerField("Assign to employee", selectedEmployee?.second ?: "Myself", { employeeMenuOpen = true }) {
                 DropdownMenu(expanded = employeeMenuOpen, onDismissRequest = { employeeMenuOpen = false }) {
                     val emps = m.optJSONArray("employees")
                     for (i in 0 until (emps?.length() ?: 0)) {
@@ -400,6 +355,8 @@ fun AddSaleScreen(
                         .put("amount", amount)
                         .put("cover_amount", coverAmount)
                         .put("policy_type", policyType)
+                        .put("policy_date", policyDate)
+                        .put("policy_number", policyNumber)
                         .put("policy_years", policyYears)
                         .put("emi_months", emiMonths)
                     if (selectedEmployee != null) body.put("employee_id", selectedEmployee!!.first)
@@ -410,6 +367,7 @@ fun AddSaleScreen(
                             selectedClient = null; clientQuery = ""
                             selectedProduct = null; selectedSubproduct = null; selectedPpt = null
                             amount = ""; coverAmount = ""; policyType = ""
+                            policyDate = ""; policyNumber = ""
                             policyYears = 1; emiMonths = 0
                             selectedEmployee = null
                         }
@@ -424,7 +382,12 @@ fun AddSaleScreen(
                 // A product with sub-products requires one to be chosen.
                 ((selectedProduct?.optJSONArray("subproducts")?.length() ?: 0) == 0 || selectedSubproduct != null) &&
                 // A PPT-priced plan requires a PPT.
-                ((effectiveProduct?.optJSONArray("ppt_options")?.length() ?: 0) == 0 || selectedPpt != null),
+                ((effectiveProduct?.optJSONArray("ppt_options")?.length() ?: 0) == 0 || selectedPpt != null) &&
+                // Insurance: policy date + number are mandatory (server enforces too).
+                (selectedProduct?.optBoolean("is_insurance") != true ||
+                    (policyDate.isNotBlank() && policyNumber.isNotBlank())) &&
+                // Health: Port or Fresh must be chosen.
+                (selectedProduct?.optBoolean("is_health") != true || policyType.isNotBlank()),
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
         ) {
             Text(if (submitting) "Saving…" else "Save Sale", fontSize = rsp(16))

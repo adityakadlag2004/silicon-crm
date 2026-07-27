@@ -49,6 +49,11 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 
 - Health/Life **sales** require a `policy_number` (and `policy_date`); it's
   the number that links a sale to its tracker policy and to future renewals.
+  **Enforced in three places** — the web forms' `clean()`, the app API
+  (`app_sale_create`), and `Sale.save()`, which upper-cases and strips the
+  number so "ins123 " and "INS123" can't become two policies. The mobile Add
+  Sale screen has both fields; it used to have neither, which silently dated
+  every renewal reminder off the approval date.
 - An approved Health/Life **sale** auto-creates one `InsurancePolicy`
   (idempotent, linked via `InsurancePolicy.source_sale`), start date = the
   sale's `policy_date`. Un-approving/rejecting removes it unless someone has
@@ -59,7 +64,9 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   links the renewal to it (`Renewal.policy`); picking "New policy" reveals a
   policy-number field and creates+links a fresh policy — how the old book,
   sold before the tracker existed, gets captured. `link_renewal_to_policy`
-  owns this. A policy's detail page lists its full renewal history.
+  owns this, and **both** the web view and `app_renewal_create` call it (the
+  app used to skip it, leaving every phone-entered renewal an orphan row).
+  A policy's detail page lists its full renewal history.
 - `Renewal.insurance_kind` / `Renewal.kind_q()` classify by `product_ref`
   first (product_type wasn't persisted on historical rows — the form derives
   it but it isn't a model-form field, so the view now copies it across).
@@ -83,7 +90,8 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   high-priority "call client for EMI" **task** per policy per month (deduped via
   `Task.assign_group = "emi:<sale>:<YYYY-MM>"`), due the 5th. A missed EMI can
   cancel the policy, so the reminder is the point.
-- **Not yet on mobile:** the app add-sale has no multiyear/EMI fields — web only.
+- The app's Add Sale carries the multiyear term + EMI pickers too (Health only,
+  same rules as the web form).
 - **Renewal reminders** (`renewal_reminders` cron, daily 8:45 AM): single-year
   insurance policies renew manually, so at **30/15/5 days** before the next
   renewal the system pushes the client's **mapped employee** (fallback seller)
@@ -158,8 +166,27 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   Compose already applies to `.sp`. Don't fight it: use `heightIn(min =)` so
   labels can grow, never `height()`.
 - Three or more buttons in a row → `ActionRow` (wraps), not `Row` (squeezes).
-- `manage.py test clients.test.test_android_responsive` lints all of this and
-  pins the scale maths.
+- **Shared building blocks — use these, don't re-roll them:**
+  `ui/ScreenHeader.kt` (back arrow + title + actions), `ui/Fields.kt`
+  (`PickerField`, `DateField`, `pickDate/pickDateTime/pickTime`, `moneyInput`),
+  `ui/Refresh.kt` (`RefreshableBox`, `ErrorStrip`), `ui/Load.kt`
+  (`rememberLoader` — cache-first fetch), `ui/Common.kt` (`AppMessage`,
+  `EmptyState`, `StatusPill`, `rupees`), `ui/Session.kt` (role + unread badge).
+- **Never** a bare glyph as a button (`Text("↻", clickable)`): no ripple, no
+  role, ~28dp target, and TalkBack reads the character. Use `IconButton` with
+  a `contentDescription`.
+- Dates are picked, never typed. Times come from `pickTime`, which honours the
+  device's 12/24h setting.
+- Every `ApiClient.post` call site must handle `Result.Error`. Writes that are
+  safe to replay pass `offlineQueue = context` so they survive no signal
+  (`net/Outbox.kt`); creating a sale or client deliberately does not.
+- Screens read data through `rememberLoader` (last-good response from
+  `net/Cache.kt` paints first) and refresh by pull, not by a glyph.
+- Navigation/tab state is `rememberSaveable`, or rotation dumps the user home.
+- Notifications: monochrome `ic_stat_ki` only, on the right channel
+  (`ki_followup_alarms` / `ki_task_alarms` / `ki_daily_digest`).
+- `manage.py test clients.test.test_android_responsive` lints all of this
+  (17 rules) and pins the scale maths.
 
 ## Deploy checklist (web)
 
@@ -174,6 +201,16 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 2. Bump `versionCode` + `versionName` in `mobile/android/app/build.gradle`.
 3. Build + publish via `mobile/release.sh` (self-hosted updater — **no Play Store**, settled decision).
 4. Update the status table in `mobile/NATIVE_MIGRATION.md` if a screen shipped.
+
+Release builds run **R8** (`minifyEnabled` + `shrinkResources`). Anything the
+framework reaches by reflection — activities/receivers/services named only in
+the manifest, Capacitor plugins, the JS bridge — needs a keep rule in
+`app/proguard-rules.pro`, or it compiles fine and crashes on the device. Smoke-
+test the release APK, not just the debug one.
+
+Field crashes post themselves to `/api/app/crash/` on the next launch and land
+in the Audit Log as `app.crash` (`CrashReporter.kt`) — that is the only crash
+signal there is, since the app is self-hosted with no Play Console.
 
 ## Housekeeping standard (5S — run this audit monthly)
 

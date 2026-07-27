@@ -21,8 +21,18 @@ import androidx.core.app.NotificationCompat
  */
 object FollowupAlarmNotifier {
 
-    const val CHANNEL_ID = "ki_followup_alarms"
-    private const val CHANNEL_NAME = "Follow-up alarms"
+    /**
+     * One channel per kind of interruption.
+     *
+     * Everything used to ring on "Follow-up alarms": a task assignment, the
+     * morning digest and a due call all shared it, so silencing one silenced
+     * the others. Android's whole channel model exists to let the user make
+     * that choice per category.
+     */
+    const val CHANNEL_ID = "ki_followup_alarms"      // a call is due NOW
+    const val CHANNEL_TASKS = "ki_task_alarms"       // task assigned / due
+    const val CHANNEL_DIGEST = "ki_daily_digest"     // the morning summary
+
     private const val RING_TIMEOUT_MS = 3 * 60 * 1000L  // stop ringing after 3 min
     private const val NOTIF_ID_BASE = 0x0F00000          // + followup id
     private const val DIGEST_NOTIF_ID = 0x0D16E57
@@ -32,21 +42,43 @@ object FollowupAlarmNotifier {
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (nm.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
-            description = "Ringing reminders for scheduled call follow-ups"
-            setSound(
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
+
+        fun alarmChannel(id: String, name: String, desc: String, alarmStream: Boolean) {
+            if (nm.getNotificationChannel(id) != null) return
+            nm.createNotificationChannel(
+                NotificationChannel(id, name, NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = desc
+                    setSound(
+                        RingtoneManager.getDefaultUri(
+                            if (alarmStream) RingtoneManager.TYPE_ALARM else RingtoneManager.TYPE_NOTIFICATION
+                        ),
+                        AudioAttributes.Builder()
+                            .setUsage(
+                                if (alarmStream) AudioAttributes.USAGE_ALARM
+                                else AudioAttributes.USAGE_NOTIFICATION
+                            )
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build(),
+                    )
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 700, 400, 700, 400, 700)
+                    enableLights(true)
+                }
             )
-            enableVibration(true)
-            vibrationPattern = longArrayOf(0, 700, 400, 700, 400, 700)
-            enableLights(true)
         }
-        nm.createNotificationChannel(channel)
+
+        alarmChannel(
+            CHANNEL_ID, "Call follow-up alarms",
+            "Rings like an alarm clock when a scheduled call is due", true,
+        )
+        alarmChannel(
+            CHANNEL_TASKS, "Task alerts",
+            "A task assigned to you, commented on, or hitting its deadline", true,
+        )
+        alarmChannel(
+            CHANNEL_DIGEST, "Daily digest",
+            "The morning summary of today's follow-ups", false,
+        )
     }
 
     /** Ring the full alarm for one due follow-up. */
@@ -81,7 +113,7 @@ object FollowupAlarmNotifier {
 
         val body = alarm.note.ifEmpty { "Time to call ${alarm.name}" }
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(context.applicationInfo.icon)
+            .setSmallIcon(R.drawable.ic_stat_ki)
             .setContentTitle("📞 Follow-up: ${alarm.name}")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -128,8 +160,8 @@ object FollowupAlarmNotifier {
                 .putExtra("link", link),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(context.applicationInfo.icon)
+        val n = NotificationCompat.Builder(context, CHANNEL_TASKS)
+            .setSmallIcon(R.drawable.ic_stat_ki)
             .setContentTitle("🔔 $title")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -172,8 +204,8 @@ object FollowupAlarmNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val n = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(context.applicationInfo.icon)
+        val n = NotificationCompat.Builder(context, CHANNEL_DIGEST)
+            .setSmallIcon(R.drawable.ic_stat_ki)
             .setContentTitle("📋 ${todays.size} follow-up${if (todays.size == 1) "" else "s"} today")
             .setContentText(lines.first())
             .setStyle(style)

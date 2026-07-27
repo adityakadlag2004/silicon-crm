@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -79,11 +81,14 @@ fun TaskPagerScreen(
             placeholder = { Text("Search tasks…", fontSize = rsp(13)) },
             singleLine = true,
             trailingIcon = {
-                if (query.isNotEmpty()) Text(
-                    "✕",
-                    Modifier.clickable { query = "" }.padding(8.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (query.isNotEmpty()) {
+                    androidx.compose.material3.IconButton(onClick = { query = "" }) {
+                        androidx.compose.material3.Icon(
+                            Icons.Filled.Close,
+                            contentDescription = "Clear search",
+                        )
+                    }
+                }
             },
         )
 
@@ -102,7 +107,15 @@ fun TaskPagerScreen(
         }
 
         HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
-            StatusTaskList(tab, STATUS_TABS[page].first, query, reloadSignal, onOpenTask, onSessionExpired)
+            // Only the settled page fetches. The pager pre-composes its
+            // neighbours, so opening Tasks used to fire two or three list
+            // requests at once (plus the scorecard), and every swipe fired
+            // more.
+            StatusTaskList(
+                tab, STATUS_TABS[page].first, query, reloadSignal,
+                active = pager.settledPage == page,
+                onOpenTask = onOpenTask, onSessionExpired = onSessionExpired,
+            )
         }
     }
 }
@@ -202,24 +215,35 @@ private fun StatusTaskList(
     status: String,
     query: String,
     reloadSignal: Int,
+    active: Boolean,
     onOpenTask: (Int) -> Unit,
     onSessionExpired: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var rows by remember { mutableStateOf(listOf<JSONObject>()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var localReload by remember { mutableIntStateOf(0) }
+    var page by remember { mutableIntStateOf(1) }
+    var hasMore by remember { mutableStateOf(false) }
 
-    LaunchedEffect(tab, status, query, reloadSignal, localReload) {
+    // Any filter change starts the list over.
+    LaunchedEffect(tab, status, query, reloadSignal, localReload) { page = 1 }
+
+    LaunchedEffect(tab, status, query, reloadSignal, localReload, page, active) {
+        if (!active) return@LaunchedEffect
         if (query.isNotBlank()) kotlinx.coroutines.delay(300)  // debounce typing
         loading = true; error = null
         var q = if (status.isBlank()) "?tab=$tab" else "?tab=$tab&status=$status"
+        q += "&page=$page"
         if (query.isNotBlank()) q += "&q=" + java.net.URLEncoder.encode(query.trim(), "UTF-8")
         when (val r = ApiClient.get("/clients/api/app/tasks/$q")) {
             is ApiClient.Result.Ok -> {
                 val arr = r.json.optJSONArray("tasks")
-                rows = (0 until (arr?.length() ?: 0)).map { arr!!.getJSONObject(it) }
+                val fresh = (0 until (arr?.length() ?: 0)).map { arr!!.getJSONObject(it) }
+                rows = if (page == 1) fresh else rows + fresh
+                hasMore = r.json.optBoolean("has_more")
             }
             is ApiClient.Result.NotLoggedIn -> onSessionExpired()
             is ApiClient.Result.Error -> error = r.message
@@ -231,9 +255,17 @@ private fun StatusTaskList(
         scope.launch {
             val ns = if (t.optString("status") == "completed") "pending" else "completed"
             val body = JSONObject().put("action", "status").put("status", ns)
-            when (ApiClient.post("/clients/api/app/tasks/${t.optInt("id")}/action/", body)) {
+            when (val r = ApiClient.post(
+                "/clients/api/app/tasks/${t.optInt("id")}/action/", body, offlineQueue = context,
+            )) {
                 is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-                else -> localReload++
+                is ApiClient.Result.Error -> AppMessage.show("Couldn't save: ${r.message}")
+                is ApiClient.Result.Ok -> {
+                    if (r.json.optBoolean("queued")) {
+                        AppMessage.show("No internet — saved, will sync automatically")
+                    }
+                    localReload++
+                }
             }
         }
     }
@@ -248,13 +280,23 @@ private fun StatusTaskList(
                 Text("Nothing in this list.", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        else -> LazyColumn(
+        else -> RefreshableBox(refreshing = loading, onRefresh = { localReload++ }) {
+        LazyColumn(
             Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
         ) {
             items(rows) { t -> TaskCard(t, onOpen = { onOpenTask(t.optInt("id")) }, onToggleDone = { toggleDone(t) }) }
+            if (hasMore) {
+                item {
+                    androidx.compose.material3.TextButton(
+                        onClick = { page += 1 },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (loading) "Loading…" else "Load more") }
+                }
+            }
             item { Spacer(Modifier.heightIn(min = 72.dp)) }
+        }
         }
     }
 }

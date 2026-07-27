@@ -51,6 +51,112 @@ def group_siblings(task):
             .select_related("assigned_to__user").order_by("pk"))
 
 
+# Fields that describe the WORK, so they are identical across every sibling.
+# Everything else (assigned_to, status, acknowledged_at, completed_at) is that
+# one person's own business and is never propagated.
+GROUP_SHARED_FIELDS = (
+    "title", "description", "category", "priority", "due_date", "due_time",
+    "client", "repeat_rule", "reminded_day_before", "reminded_same_day",
+    "due_alarm_sent_at",
+)
+
+
+def apply_to_group(task, actor, fields):
+    """Write `fields` (a dict of shared attributes) to every sibling.
+
+    A three-person task is three rows. Editing the due date on the row you
+    happen to be looking at used to move it for one person and leave the other
+    two on the old deadline — while the Delegated list showed them collapsed as
+    one row, hiding the split. Anything in [GROUP_SHARED_FIELDS] now moves
+    together.
+
+    Returns the number of sibling rows updated (excluding `task` itself).
+    """
+    shared = {k: v for k, v in fields.items() if k in GROUP_SHARED_FIELDS}
+    if not shared or not task.assign_group:
+        return 0
+    siblings = group_siblings(task).exclude(pk=task.pk)
+    n = 0
+    for sib in siblings:
+        for k, v in shared.items():
+            setattr(sib, k, v)
+        # A sibling sitting at Overdue whose deadline just moved forward is no
+        # longer overdue — same rule the single-task edit path applies.
+        if "due_date" in shared and sib.status == sib.STATUS_OVERDUE and not sib.is_overdue:
+            sib.status = sib.STATUS_PENDING
+        sib.save()
+        n += 1
+    return n
+
+
+def delete_task(task, actor):
+    """Soft-delete a task — and, when it is a group, the whole group.
+
+    The assigner sees one row for "Mansi +2 others"; deleting it must not leave
+    two live copies behind. Returns the number of rows deleted.
+    """
+    rows = list(group_siblings(task)) if task.assign_group else [task]
+    if task.pk not in [t.pk for t in rows]:
+        rows.append(task)
+    for t in rows:
+        t.is_deleted = True
+        t.deleted_at = timezone.now()
+        t.deleted_by = actor
+        t.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
+        log_activity(t, actor, TaskActivity.DELETED, "Moved to recycle bin.")
+    return len(rows)
+
+
+def sync_group_assignees(task, employee_ids, actor):
+    """Reconcile who a task is assigned to, adding/removing sibling rows.
+
+    `employee_ids` is the complete intended set. People removed have their row
+    soft-deleted; people added get a fresh row carrying the same work (and a
+    copy of the checklist), joined to the group. `task` keeps its own status
+    and acknowledgement if its assignee survives.
+    """
+    from ..models import Employee, Task, TaskChecklistItem
+    from uuid import uuid4
+
+    wanted = [e for e in Employee.objects.filter(pk__in=employee_ids, active=True)]
+    if not wanted:
+        return
+    rows = list(group_siblings(task)) if task.assign_group else [task]
+    current = {t.assigned_to_id: t for t in rows}
+    wanted_ids = {e.pk for e in wanted}
+
+    # Several people from here on → the rows need a group id to travel as one.
+    group = task.assign_group or (uuid4().hex if len(wanted) > 1 else "")
+    if group and not task.assign_group:
+        for t in rows:
+            t.assign_group = group
+            t.save(update_fields=["assign_group", "updated_at"])
+
+    for emp_id, row in current.items():
+        if emp_id not in wanted_ids:
+            row.is_deleted = True
+            row.deleted_at = timezone.now()
+            row.deleted_by = actor
+            row.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
+            log_activity(row, actor, TaskActivity.DELETED, "Removed from this task.")
+
+    checklist = list(task.checklist_items.values_list("title", "order"))
+    for emp in wanted:
+        if emp.pk in current:
+            continue
+        new = Task.objects.create(
+            title=task.title, description=task.description, category=task.category,
+            priority=task.priority, created_by=task.created_by, assigned_to=emp,
+            due_date=task.due_date, due_time=task.due_time, client=task.client,
+            assign_group=group,
+        )
+        for title, order in checklist:
+            TaskChecklistItem.objects.create(task=new, title=title, order=order)
+        log_activity(new, actor, TaskActivity.ASSIGNED, f"Assigned to {emp.user.username}.")
+        notify_task(new, actor, "New task assigned",
+                    f"{actor.username} assigned you “{new.title}”.", event="assigned")
+
+
 def group_ack_roster(task):
     """Per-person acknowledgement for the group: who has seen this task.
 

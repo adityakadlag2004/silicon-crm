@@ -182,3 +182,79 @@ class AddSaleEndToEndTests(TestCase):
         })
         self.assertEqual(resp.status_code, 200)   # re-rendered with errors
         self.assertEqual(Sale.objects.count(), before)
+
+
+class AppApiPolicyDateTests(TestCase):
+    """The mobile Add Sale endpoint must enforce exactly what the web form
+    does. It used to accept insurance sales with neither field, which left
+    every renewal reminder measured from the approval date and the tracker
+    policy stamped with a placeholder "SALE-<pk>" number."""
+
+    @classmethod
+    def setUpTestData(cls):
+        _setup_products()
+        au = User.objects.create_user("app_pd_admin", password="pw")
+        cls.admin = Employee.objects.create(user=au, role="admin", salary=0, active=True)
+        cls.client_rec = Client.objects.create(id=5010, name="Neha Kulkarni")
+        cls.health = Product.objects.get(code="HEALTH_INS")
+        cls.sip = Product.objects.get(code="SIP")
+
+    def _post(self, **body):
+        import json
+        from django.test import Client as TC
+        from django.urls import reverse
+        tc = TC()
+        tc.force_login(self.admin.user)
+        payload = {"client_id": self.client_rec.id, "amount": "12000"}
+        payload.update(body)
+        return tc.post(
+            reverse("clients:app_sale_create"),
+            data=json.dumps(payload), content_type="application/json",
+        )
+
+    def test_insurance_sale_without_policy_date_is_rejected(self):
+        before = Sale.objects.count()
+        resp = self._post(product_id=self.health.id, policy_type="fresh", policy_number="PN1")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("policy date", resp.json()["error"].lower())
+        self.assertEqual(Sale.objects.count(), before)
+
+    def test_insurance_sale_without_policy_number_is_rejected(self):
+        before = Sale.objects.count()
+        resp = self._post(product_id=self.health.id, policy_type="fresh", policy_date="2026-01-05")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("policy number", resp.json()["error"].lower())
+        self.assertEqual(Sale.objects.count(), before)
+
+    def test_health_sale_without_policy_type_is_rejected(self):
+        resp = self._post(product_id=self.health.id, policy_date="2026-01-05", policy_number="PN1")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_insurance_sale_saves_both_and_drives_renewal_basis(self):
+        resp = self._post(
+            product_id=self.health.id, policy_type="fresh",
+            policy_date="2026-01-05", policy_number="ins76123499",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        sale = Sale.objects.get(pk=resp.json()["id"])
+        self.assertEqual(sale.policy_date, date(2026, 1, 5))
+        self.assertEqual(sale.policy_number, "INS76123499")
+        self.assertEqual(sale.renewal_basis, date(2026, 1, 5))
+        self.assertNotEqual(sale.renewal_basis, sale.date)
+
+    def test_tracker_policy_uses_the_real_number_not_a_placeholder(self):
+        from clients.models import InsurancePolicy
+        resp = self._post(
+            product_id=self.health.id, policy_type="fresh",
+            policy_date="2026-01-05", policy_number="INS76123499",
+        )
+        policy = InsurancePolicy.objects.get(source_sale_id=resp.json()["id"])
+        self.assertEqual(policy.policy_number, "INS76123499")
+        self.assertEqual(policy.start_date, date(2026, 1, 5))
+
+    def test_non_insurance_sale_needs_neither_field(self):
+        resp = self._post(product_id=self.sip.id)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        sale = Sale.objects.get(pk=resp.json()["id"])
+        self.assertIsNone(sale.policy_date)
+        self.assertEqual(sale.policy_number, "")

@@ -13,6 +13,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +29,39 @@ private val inr: NumberFormat = NumberFormat.getCurrencyInstance(Locale("en", "I
 }
 
 fun rupees(v: Double): String = inr.format(v)
+
+/**
+ * One place to say something to the user.
+ *
+ * Before this, a failed write either replaced the whole screen with an error
+ * page or — worse — said nothing at all. Any code can call [AppMessage.show];
+ * [AppMessageHost] renders it as a Snackbar over whatever screen is up.
+ */
+object AppMessage {
+    var text by androidx.compose.runtime.mutableStateOf<String?>(null)
+        private set
+
+    fun show(message: String) { text = message }
+    fun clear() { text = null }
+
+    /** "Saved on this device, will sync" vs a plain confirmation. */
+    fun showResult(json: org.json.JSONObject?, okText: String) =
+        show(if (json?.optBoolean("queued") == true) "No internet — saved, will sync automatically" else okText)
+}
+
+/** Drop once per Activity, inside the theme, above the content. */
+@Composable
+fun AppMessageHost(modifier: Modifier = Modifier) {
+    val host = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
+    val msg = AppMessage.text
+    androidx.compose.runtime.LaunchedEffect(msg) {
+        if (msg != null) {
+            host.showSnackbar(msg, withDismissAction = true)
+            AppMessage.clear()
+        }
+    }
+    androidx.compose.material3.SnackbarHost(host, modifier)
+}
 
 @Composable
 fun LoadingBox(modifier: Modifier = Modifier) {
@@ -60,6 +95,40 @@ fun StatusPill(status: String) {
             .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
         Text(label, fontSize = rsp(10), color = bg, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/**
+ * Empty state with a reason and, where there is one, a way out.
+ *
+ * Most lists in the app said nothing at all, or one grey sentence. An empty
+ * screen with no explanation reads as a bug.
+ */
+@Composable
+fun EmptyState(
+    icon: String,
+    title: String,
+    detail: String,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(icon, fontSize = rsp(36))
+            androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+            Text(title, fontWeight = FontWeight.Bold, fontSize = rsp(16))
+            Text(
+                detail,
+                fontSize = rsp(13),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+            if (actionLabel != null && onAction != null) {
+                androidx.compose.foundation.layout.Spacer(Modifier.height(14.dp))
+                Button(onClick = onAction) { Text(actionLabel) }
+            }
+        }
     }
 }
 
