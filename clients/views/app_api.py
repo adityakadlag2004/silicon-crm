@@ -356,6 +356,18 @@ def app_sale_create(request):
     # renewals must be measured from the policy's own commencement date.
     policy_date, policy_number = None, ""
     if product.is_insurance:
+        # App builds before v4.23 have no such fields and omit the keys
+        # entirely. Telling those users to "enter the policy date" points at a
+        # box that doesn't exist on their screen — tell them to update instead.
+        if "policy_date" not in body and "policy_number" not in body:
+            return JsonResponse(
+                {"ok": False, "error": (
+                    "Update the app to add insurance sales — this version can't record "
+                    "the policy date and number. Open the app again to get the update, "
+                    "or add the sale on the website."
+                )},
+                status=400,
+            )
         try:
             policy_date = date.fromisoformat(str(body.get("policy_date") or ""))
         except ValueError:

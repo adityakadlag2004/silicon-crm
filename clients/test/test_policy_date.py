@@ -258,3 +258,56 @@ class AppApiPolicyDateTests(TestCase):
         sale = Sale.objects.get(pk=resp.json()["id"])
         self.assertIsNone(sale.policy_date)
         self.assertEqual(sale.policy_number, "")
+
+
+class OldAppCompatibilityTests(TestCase):
+    """Devices on an APK older than v4.23 have no policy date/number fields
+    and omit the keys entirely. Telling them to "enter the policy date" points
+    at a box that isn't on their screen — the error has to say "update"."""
+
+    @classmethod
+    def setUpTestData(cls):
+        _setup_products()
+        u = User.objects.create_user("oldapp_admin", password="pw")
+        cls.admin = Employee.objects.create(user=u, role="admin", salary=0, active=True)
+        cls.client_rec = Client.objects.create(id=5020, name="Vikram Joshi")
+        cls.health = Product.objects.get(code="HEALTH_INS")
+        cls.sip = Product.objects.get(code="SIP")
+
+    def _post(self, payload):
+        import json
+        from django.test import Client as TC
+        from django.urls import reverse
+        tc = TC()
+        tc.force_login(self.admin.user)
+        return tc.post(reverse("clients:app_sale_create"),
+                       data=json.dumps(payload), content_type="application/json")
+
+    def test_old_app_insurance_sale_is_told_to_update(self):
+        # Exactly what pre-4.23 builds send: no policy_date/policy_number keys.
+        resp = self._post({
+            "client_id": self.client_rec.id, "product_id": self.health.id,
+            "ppt": "", "amount": "12000", "cover_amount": "", "policy_type": "fresh",
+            "policy_years": 1, "emi_months": 0,
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("update the app", resp.json()["error"].lower())
+
+    def test_new_app_blank_field_still_gets_the_field_level_message(self):
+        # v4.23+ always sends the keys, blank when the user skipped them.
+        resp = self._post({
+            "client_id": self.client_rec.id, "product_id": self.health.id,
+            "amount": "12000", "policy_type": "fresh",
+            "policy_date": "", "policy_number": "",
+        })
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("policy date", resp.json()["error"].lower())
+        self.assertNotIn("update the app", resp.json()["error"].lower())
+
+    def test_old_app_can_still_book_non_insurance_sales(self):
+        # The whole point: don't break SIP/other business for stale devices.
+        resp = self._post({
+            "client_id": self.client_rec.id, "product_id": self.sip.id,
+            "amount": "5000",
+        })
+        self.assertEqual(resp.status_code, 200, resp.content)
