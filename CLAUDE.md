@@ -202,6 +202,13 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 3. Build + publish via `mobile/release.sh` (self-hosted updater — **no Play Store**, settled decision).
 4. Update the status table in `mobile/NATIVE_MIGRATION.md` if a screen shipped.
 
+Updates are **mandatory**: when `/api/app/version/` reports a newer
+versionCode, `ShellActivity` shows a blocking dialog (no "Later", no
+back/outside dismiss) so the app can't be used until the APK is installed.
+Publishing a release therefore forces the whole fleet onto it — the version
+check is only reached with a working connection, so offline devices aren't
+locked out.
+
 Release builds run **R8** (`minifyEnabled` + `shrinkResources`). Anything the
 framework reaches by reflection — activities/receivers/services named only in
 the manifest, Capacitor plugins, the JS bridge — needs a keep rule in

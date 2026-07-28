@@ -295,6 +295,17 @@ class AndroidArchitectureTests(TestCase):
         self.assertEqual(offenders, [],
                          f"use Session.load() / api/app/me/ instead: {offenders}")
 
+    def test_update_prompt_cannot_be_dismissed(self):
+        """A "Later" button is how half the fleet ended up several versions
+        behind. The update dialog must block the app until it's installed."""
+        shell = (ANDROID / "ShellActivity.kt").read_text()
+        ix = shell.index("UpdateManager.UpdateInfo")
+        block = shell[ix:shell.index("permTick.intValue", ix)]
+        self.assertIn("dismissOnBackPress = false", block)
+        self.assertIn("dismissOnClickOutside = false", block)
+        self.assertNotIn("dismissButton", block)
+        self.assertNotIn("update = null", block)
+
     def test_notification_icons_are_monochrome_assets(self):
         """A full-colour launcher icon renders as a white square in the status
         bar on every Android 5+."""

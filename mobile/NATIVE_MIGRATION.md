@@ -53,6 +53,7 @@ in the WebView.
 | — | Financial planner | stays WebView (calc engine is fine there) | |
 
 | 17 | Reliability + a11y pass (audit fixes): policy date/number on Add Sale, renewal→policy linking, group task edit/delete, rolling session cookie, offline outbox for follow-up/task writes, response cache + pull-to-refresh, WebView uploads/downloads, monochrome notification icon + per-kind channels, `/api/app/me/`, crash reporting, R8 | `/api/app/me/`, `/api/app/crash/`, `policy_id` on renewals, paged `/api/app/tasks/` | **v4.23** |
+| 18 | Mandatory updates: the version dialog no longer has "Later" and can't be dismissed — the app is unusable until the newer APK is installed | `/api/app/version/` (unchanged) | **v4.24** |
 
 ## Rules
 

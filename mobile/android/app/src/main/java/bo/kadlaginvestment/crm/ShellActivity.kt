@@ -269,23 +269,40 @@ class ShellActivity : ComponentActivity() {
                 var pickedSub by remember { mutableIntStateOf(-1) }
 
                 // ── Self-hosted update check ──
+                // Blocking: too many devices sat on old builds calling endpoints
+                // that had moved on. No "Later", no back/outside dismiss — the
+                // dialog owns the screen until the installer takes over.
                 var update by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
+                var downloading by remember { mutableStateOf(false) }
                 LaunchedEffect(Unit) {
                     update = withContext(Dispatchers.IO) { UpdateManager.checkForUpdate(this@ShellActivity) }
                 }
                 update?.let { info ->
                     AlertDialog(
-                        onDismissRequest = { update = null },
-                        title = { Text("Update available — v${info.versionName}") },
-                        text = { Text(info.notes.ifEmpty { "A new version of the app is ready." }) },
-                        confirmButton = {
-                            Button(onClick = {
-                                UpdateManager.downloadAndInstall(this@ShellActivity, info)
-                                update = null
-                            }) { Text("Update now") }
+                        onDismissRequest = {},
+                        properties = DialogProperties(
+                            dismissOnBackPress = false,
+                            dismissOnClickOutside = false,
+                        ),
+                        title = { Text("Update required — v${info.versionName}") },
+                        text = {
+                            Text(
+                                if (downloading) {
+                                    "Downloading… the installer opens when it's ready. " +
+                                        "Tap Retry if nothing happens."
+                                } else {
+                                    info.notes.ifEmpty { "A new version of the app is ready." } +
+                                        "\n\nThe app can't be used until it's updated."
+                                }
+                            )
                         },
-                        dismissButton = {
-                            TextButton(onClick = { update = null }) { Text("Later") }
+                        confirmButton = {
+                            // Stays enabled: a failed/cancelled download would
+                            // otherwise leave the app stuck behind a dead button.
+                            Button(onClick = {
+                                downloading = true
+                                UpdateManager.downloadAndInstall(this@ShellActivity, info)
+                            }) { Text(if (downloading) "Retry" else "Update now") }
                         },
                     )
                 }
