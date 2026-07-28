@@ -25,7 +25,7 @@ from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
     Renewal,
 )
-from .helpers import get_manager_access, _last_n_months
+from .helpers import get_manager_access, _last_n_months, category_name_map, product_totals
 
 
 # ── Business Overview: period-grouped trend with product bifurcation ──────────
@@ -103,12 +103,19 @@ def business_overview_data(base, period="month", columns=6, today=None, with_lea
 
     ranges = _period_ranges(period, columns, today)
 
+    # One column per top-level product. Sub-products don't get their own
+    # column — they point at their parent's index, so every lookup below folds
+    # them into the category total.
     buckets = list(
-        Product.objects.filter(is_active=True)
+        Product.objects.filter(is_active=True, parent__isnull=True)
         .order_by("display_order", "name")
         .values_list("name", flat=True)
     )
     bucket_index = {name: i for i, name in enumerate(buckets)}
+    cat_map = category_name_map()
+    for sub, parent in cat_map.items():
+        if parent in bucket_index:
+            bucket_index[sub] = bucket_index[parent]
 
     trend = []
     other_used = False
@@ -143,10 +150,13 @@ def business_overview_data(base, period="month", columns=6, today=None, with_lea
     # Latest period drives the "by product" mix and the leaderboard.
     cur_start, cur_end, cur_label, cur_sublabel = ranges[-1]
     cur_qs = base.filter(date__gte=cur_start, date__lt=cur_end)
-    products = [
-        {"name": r["product"] or "Other", "amount": r["t"] or Decimal("0"), "count": r["n"]}
-        for r in cur_qs.values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
-    ]
+    mix = {}
+    for r in cur_qs.values("product").annotate(t=Sum("amount"), n=Count("id")):
+        name = cat_map.get(r["product"], r["product"]) or "Other"
+        row = mix.setdefault(name, {"name": name, "amount": Decimal("0"), "count": 0})
+        row["amount"] += r["t"] or Decimal("0")
+        row["count"] += r["n"]
+    products = sorted(mix.values(), key=lambda r: r["amount"], reverse=True)
 
     data = {
         "period": period,
@@ -331,16 +341,20 @@ def employee_past_performance(request):
 def past_month_performance(request, year, month):
     """Product-wise breakdown for an employee in a specific month."""
     emp = request.user.employee
+    cat_map = category_name_map()
 
-    product_sales = (
-        Sale.objects.filter(employee=emp, date__year=year, date__month=month)
-        .values("product")
-        .annotate(total_amount=Sum("amount"), total_points=Sum("points"))
-        .order_by("-total_amount")
+    product_sales = product_totals(
+        Sale.objects.filter(employee=emp, date__year=year, date__month=month), cat_map
     )
 
-    target_history = MonthlyTargetHistory.objects.filter(employee=emp, year=year, month=month)
-    target_map = {t.product: t for t in target_history}
+    # Targets are set per product, so a category's target is the sum of its own
+    # plus its sub-products'.
+    target_map = {}
+    for t in MonthlyTargetHistory.objects.filter(employee=emp, year=year, month=month):
+        cat = cat_map.get(t.product, t.product)
+        row = target_map.setdefault(cat, {"target_value": Decimal("0"), "achieved_value": Decimal("0")})
+        row["target_value"] += t.target_value or Decimal("0")
+        row["achieved_value"] += t.achieved_value or Decimal("0")
 
     products = []
     total_points = 0
@@ -352,8 +366,8 @@ def past_month_performance(request, year, month):
             "product": prod,
             "total_amount": row["total_amount"] or 0,
             "total_points": int(row["total_points"] or 0),
-            "target_value": target_map.get(prod).target_value if prod in target_map else None,
-            "achieved_value": target_map.get(prod).achieved_value if prod in target_map else None,
+            "target_value": target_map.get(prod, {}).get("target_value"),
+            "achieved_value": target_map.get(prod, {}).get("achieved_value"),
         }
         total_amount += prod_row["total_amount"]
         total_points += prod_row["total_points"]
@@ -512,24 +526,21 @@ def admin_past_month_performance(request, year, month):
     if not permissions.can(request.user, "employee_performance"):
         return HttpResponseForbidden("Access denied.")
 
-    product_sales = (
-        Sale.objects.filter(date__year=year, date__month=month)
-        .values("product")
-        .annotate(total_amount=Sum("amount"), total_points=Sum("points"))
-        .order_by("-total_amount")
+    cat_map = category_name_map()
+    product_sales = product_totals(
+        Sale.objects.filter(date__year=year, date__month=month), cat_map
     )
 
-    target_history = MonthlyTargetHistory.objects.filter(year=year, month=month)
+    # Targets are set per product, so a category's target is the sum of its own
+    # plus its sub-products'.
     target_map = {}
-    if target_history.exists():
-        summed_targets = target_history.values("product").annotate(
-            target_value_sum=Sum("target_value"), achieved_value_sum=Sum("achieved_value")
-        )
-        for t in summed_targets:
-            target_map[t["product"]] = {
-                "target_value": float(t["target_value_sum"] or 0),
-                "achieved_value": float(t["achieved_value_sum"] or 0),
-            }
+    for t in MonthlyTargetHistory.objects.filter(year=year, month=month).values("product").annotate(
+        target_value_sum=Sum("target_value"), achieved_value_sum=Sum("achieved_value")
+    ):
+        cat = cat_map.get(t["product"], t["product"])
+        row = target_map.setdefault(cat, {"target_value": 0.0, "achieved_value": 0.0})
+        row["target_value"] += float(t["target_value_sum"] or 0)
+        row["achieved_value"] += float(t["achieved_value_sum"] or 0)
 
     products = []
     for row in product_sales:
@@ -591,19 +602,28 @@ def admin_past_month_performance(request, year, month):
         .order_by("product", "-total_points")
     )
 
+    # An employee selling two sub-products of the same category must appear once
+    # in that category, with their contributions added — not as two rows.
     product_employee_map = {}
     for r in per_product_employee_qs:
-        prod = r["product"]
+        prod = cat_map.get(r["product"], r["product"])
         first = (r.get("employee__user__first_name") or "").strip()
         last = (r.get("employee__user__last_name") or "").strip()
         full_name = (first + " " + last).strip() if (first or last) else (r.get("employee__user__username") or "Unknown")
-        product_employee_map.setdefault(prod, []).append({
+        by_emp = product_employee_map.setdefault(prod, {})
+        row = by_emp.setdefault(r.get("employee__id"), {
             "employee_id": r.get("employee__id"),
             "username": r.get("employee__user__username") or "",
             "full_name": full_name,
-            "total_points": int(r.get("total_points") or 0),
-            "total_amount": float(r.get("total_amount") or 0),
+            "total_points": 0,
+            "total_amount": 0.0,
         })
+        row["total_points"] += int(r.get("total_points") or 0)
+        row["total_amount"] += float(r.get("total_amount") or 0)
+    product_employee_map = {
+        prod: sorted(by_emp.values(), key=lambda e: e["total_points"], reverse=True)
+        for prod, by_emp in product_employee_map.items()
+    }
 
     product_employee_stats = []
     for p in products:

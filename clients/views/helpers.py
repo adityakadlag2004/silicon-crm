@@ -19,6 +19,7 @@ from ..models import (
     LeadFollowUp,
     Employee,
     ManagerAccessConfig,
+    Product,
 )
 # canonical definition lives in clients/permissions.py; re-exported here
 # because many view modules import it from helpers
@@ -42,6 +43,34 @@ def name_words_q(field, query):
 
 def get_manager_access():
     return ManagerAccessConfig.current()
+
+
+# ── Sub-product roll-up ───────────────────────────────────────────────────────
+# Reports show one column/row per top-level product CATEGORY. A sub-product
+# ("Term Plan") folds into its parent ("Life Insurance") so the boards don't
+# pile up dozens of sub-product columns.
+
+def category_name_map():
+    """{sub-product name -> parent category name}. Products with no parent are
+    absent, so callers use `cat_map.get(name, name)`."""
+    return dict(
+        Product.objects.filter(parent__isnull=False).values_list("name", "parent__name")
+    )
+
+
+def product_totals(qs, cat_map):
+    """Sum a Sale queryset by product category, highest amount first.
+
+    Returns [{"product", "total_amount", "total_points"}] with sub-product rows
+    merged into their parent's row.
+    """
+    out = {}
+    for r in qs.values("product").annotate(total_amount=Sum("amount"), total_points=Sum("points")):
+        cat = cat_map.get(r["product"], r["product"])
+        row = out.setdefault(cat, {"product": cat, "total_amount": Decimal("0"), "total_points": Decimal("0")})
+        row["total_amount"] += r["total_amount"] or Decimal("0")
+        row["total_points"] += r["total_points"] or Decimal("0")
+    return sorted(out.values(), key=lambda r: r["total_amount"], reverse=True)
 
 
 def _lead_queryset_for_request(request):

@@ -73,3 +73,51 @@ class DashboardRollupTests(TestCase):
         # New overview sections are actually rendered.
         self.assertContains(resp, "Needs attention")
         self.assertContains(resp, "Team leaderboard")
+
+    # ── Reports roll up the same way as the dashboards ────────────────────────
+
+    def test_business_overview_has_no_subproduct_columns(self):
+        resp = self._ctx("business_overview")
+        buckets = resp.context["data"]["buckets"]
+        self.assertIn("Life Insurance", buckets)
+        self.assertNotIn("Roll Plan A", buckets)
+        self.assertNotIn("Roll Plan B", buckets)
+        # Both sub-product sales land in the parent's column of the newest period.
+        idx = buckets.index("Life Insurance")
+        self.assertEqual(resp.context["data"]["trend"][-1]["by_product"][idx], Decimal("160000"))
+        # ...and not swept into a catch-all. ("Other" is itself a seeded
+        # product, so the invariant is one column per name, never a duplicate.)
+        self.assertEqual(len(buckets), len(set(buckets)))
+        mix = {p["name"]: p["amount"] for p in resp.context["data"]["products"]}
+        self.assertEqual(mix.get("Life Insurance"), Decimal("160000"))
+        self.assertNotIn("Roll Plan A", mix)
+        # Leaderboard splits by the same category columns.
+        self.assertEqual(resp.context["data"]["leaderboard"][0]["by_product"][idx], Decimal("160000"))
+        self.assertNotContains(resp, "Roll Plan A")
+
+    def _month_page(self, url_name):
+        today = timezone.localdate()
+        http = TestClient()
+        http.force_login(self.admin_user)
+        resp = http.get(reverse(f"clients:{url_name}", args=[today.year, today.month]))
+        self.assertEqual(resp.status_code, 200)
+        return resp
+
+    def test_past_month_performance_rolls_subproducts(self):
+        resp = self._month_page("past_month_performance")
+        rows = {r["product"]: r for r in resp.context["products"]}
+        self.assertEqual(rows["Life Insurance"]["total_amount"], Decimal("160000"))
+        self.assertNotIn("Roll Plan A", rows)
+        self.assertNotContains(resp, "Roll Plan B")
+
+    def test_admin_past_month_performance_rolls_subproducts(self):
+        resp = self._month_page("admin_past_month_performance")
+        rows = {r["product"]: r for r in resp.context["products"]}
+        self.assertEqual(rows["Life Insurance"]["total_amount"], 160000.0)
+        self.assertNotIn("Roll Plan A", rows)
+        # The seller appears once per category, not once per sub-product.
+        stats = {s["product"]: s for s in resp.context["product_employee_stats"]}
+        sellers = stats["Life Insurance"]["employees"]
+        self.assertEqual(len(sellers), 1)
+        self.assertEqual(sellers[0]["total_amount"], 160000.0)
+        self.assertNotContains(resp, "Roll Plan A")

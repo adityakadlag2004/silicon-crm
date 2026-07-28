@@ -41,7 +41,7 @@ from ..forms import (
     EmployeeDeactivateForm,
     FirmSettingsForm,
 )
-from .helpers import get_manager_access
+from .helpers import get_manager_access, category_name_map
 
 
 def _kyc_missing_count(user):
@@ -75,14 +75,8 @@ def _ordered_product_names(extra_names=None):
 # sub-product rows; a sub-product sold on its own still counts, just under its
 # category total.
 
-def _category_name_map():
-    """{product name -> bucket}: a sub-product maps to its parent category name;
-    every other product (and any legacy free-text product) maps to itself."""
-    return {
-        name: parent_name
-        for name, parent_name in
-        Product.objects.filter(parent__isnull=False).values_list("name", "parent__name")
-    }
+# canonical definition lives in helpers so the reports share it
+_category_name_map = category_name_map
 
 
 def _rollup_product_names(names, cat_map):
