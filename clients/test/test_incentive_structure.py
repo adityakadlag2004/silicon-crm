@@ -735,3 +735,77 @@ class BonusPayoutNettingTests(_Base):
         self.assertEqual(rungs[Decimal("9000000")], Decimal("140000"))
         # And it keeps climbing rather than flattening onto the base.
         self.assertIsNotNone(inc.next_rung(self.rule, Decimal("5000000")))
+
+
+class AppIncentiveApiTests(_Base):
+    """The mobile payload has to say what a slab payout MEANS."""
+
+    def setUp(self):
+        self.user.is_superuser = True
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+
+    def _rules(self):
+        import json
+
+        r = self.client.get(reverse("clients:app_incentives"))
+        self.assertEqual(r.status_code, 200)
+        return {x["product"]: x for x in json.loads(r.content)["rules"]}
+
+    def test_health_is_flagged_as_percent_bands(self):
+        rules = self._rules()
+        h = rules["Health Insurance"]
+        self.assertEqual(h["slab_unit"], "percent")
+        self.assertEqual(h["slab_period"], "month")
+        self.assertEqual(h["port_percent"], 0.67)
+
+    def test_life_is_flagged_as_a_points_ladder_over_the_year(self):
+        life = self._rules()["Life Insurance"]
+        self.assertEqual(life["slab_unit"], "points")
+        self.assertEqual(life["slab_period"], "fy")
+        self.assertIsNone(life["port_percent"])
+
+    def test_a_rupee_amount_cannot_be_saved_as_a_rate_band(self):
+        import json
+
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        slab = rule.slabs.get(threshold=Decimal("25000"))
+        r = self.client.post(
+            reverse("clients:update_incentive_slab", args=[slab.id]),
+            data=json.dumps({"payout": "500"}), content_type="application/json")
+        self.assertEqual(r.status_code, 400)
+        slab.refresh_from_db()
+        self.assertEqual(slab.payout, Decimal("2.00"))   # untouched
+
+    def test_the_same_guard_applies_when_adding(self):
+        import json
+
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        r = self.client.post(
+            reverse("clients:add_incentive_slab", args=[rule.id]),
+            data=json.dumps({"threshold": "400000", "payout": "8000"}),
+            content_type="application/json")
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(rule.slabs.filter(threshold=Decimal("400000")).exists())
+
+    def test_a_real_percentage_still_saves(self):
+        import json
+
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        r = self.client.post(
+            reverse("clients:add_incentive_slab", args=[rule.id]),
+            data=json.dumps({"threshold": "500000", "payout": "4.00"}),
+            content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(rule.slabs.filter(threshold=Decimal("500000")).exists())
+
+    def test_the_ladder_is_not_capped_at_100(self):
+        import json
+
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        r = self.client.post(
+            reverse("clients:add_incentive_slab", args=[rule.id]),
+            data=json.dumps({"threshold": "12000000", "payout": "180000"}),
+            content_type="application/json")
+        self.assertEqual(r.status_code, 200)

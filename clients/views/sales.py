@@ -857,6 +857,25 @@ def delete_incentive_rule(request, rule_id):
     return JsonResponse({"success": True, "message": f"Rule for '{product_name}' deleted."})
 
 
+def _reject_bad_slab_payout(rule, payout):
+    """A rate-mode slab payout is a percent, not rupees.
+
+    The mobile screen used to label every payout "pts", so an admin editing a
+    health band from a phone could type 500 meaning rupees and write a 500%
+    rate straight into payroll. Guarded here rather than in each client, so the
+    web page, the app and any old build still in the field all hit it.
+    """
+    from ..models import IncentiveRule
+
+    if rule.slab_mode == IncentiveRule.MODE_RATE and payout > Decimal("100"):
+        return JsonResponse(
+            {"error": f"{rule.product} pays a percentage per band, so the value must "
+                      f"be 100 or less — {payout} looks like a rupee amount."},
+            status=400,
+        )
+    return None
+
+
 @login_required
 @require_POST
 def add_incentive_slab(request, rule_id):
@@ -871,8 +890,11 @@ def add_incentive_slab(request, rule_id):
         payout = Decimal(str(data.get("payout", 0)))
         label = data.get("label", "").strip()
 
-        if threshold <= 0 or payout <= 0:
+        if threshold < 0 or payout <= 0:
             return JsonResponse({"error": "Threshold and payout must be positive."}, status=400)
+        bad = _reject_bad_slab_payout(rule, payout)
+        if bad:
+            return bad
 
         if IncentiveSlab.objects.filter(rule=rule, threshold=threshold).exists():
             return JsonResponse({"error": f"Slab at ₹{threshold} already exists."}, status=400)
@@ -908,6 +930,9 @@ def update_incentive_slab(request, slab_id):
             slab.threshold = Decimal(str(data["threshold"]))
         if "payout" in data:
             slab.payout = Decimal(str(data["payout"]))
+            bad = _reject_bad_slab_payout(slab.rule, slab.payout)
+            if bad:
+                return bad
         if "label" in data:
             slab.label = data["label"].strip()
         slab.save()

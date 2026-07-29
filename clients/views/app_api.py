@@ -1880,11 +1880,18 @@ def app_incentives(request):
         if r.product_ref_id:
             used_product_ids.add(r.product_ref_id)
         used_names.add((r.product or "").strip().lower())
+        # slab_mode decides what a slab payout MEANS — rupees earned-to-date, or
+        # a percent for the band. The app renders "pts" off slab_unit; without
+        # it a 2.00% health band reads as "2 pts".
         rules.append({
             "id": r.id,
             "product": r.product_ref.name if r.product_ref_id else r.product,
             "unit_amount": _money(r.unit_amount),
             "points_per_unit": _money(r.points_per_unit),
+            "slab_mode": r.slab_mode,
+            "slab_unit": "percent" if r.slab_mode == IncentiveRule.MODE_RATE else "points",
+            "slab_period": r.slab_period,
+            "port_percent": _money(r.port_percent) if r.port_percent is not None else None,
             "active": r.active,
             "slabs": [
                 {"id": s.id, "threshold": _money(s.threshold), "payout": _money(s.payout), "label": s.label}

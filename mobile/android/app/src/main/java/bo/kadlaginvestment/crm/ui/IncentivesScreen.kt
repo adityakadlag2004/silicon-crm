@@ -131,6 +131,7 @@ private fun RulesTab(onSessionExpired: () -> Unit) {
     slabFor?.let { rule ->
         SlabDialog(
             title = "New slab — ${rule.optString("product")}",
+            payoutIsPercent = rule.optString("slab_unit") == "percent",
             onDismiss = { slabFor = null },
             onSave = { threshold, payout, label ->
                 val id = rule.getInt("id")
@@ -173,13 +174,31 @@ private fun RulesTab(onSessionExpired: () -> Unit) {
                             },
                         )
                     }
+                    val isPercent = rule.optString("slab_unit") == "percent"
+                    val perFy = rule.optString("slab_period") == "fy"
                     Text(
-                        "%.3f pts per %s".format(
-                            rule.optDouble("points_per_unit", 0.0),
-                            rupees(rule.optDouble("unit_amount", 0.0)),
-                        ),
+                        if (isPercent)
+                            "Rate bands on the seller's own ${if (perFy) "yearly" else "monthly"} volume"
+                        else
+                            "%.3f pts per %s".format(
+                                rule.optDouble("points_per_unit", 0.0),
+                                rupees(rule.optDouble("unit_amount", 0.0)),
+                            ),
                         fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (isPercent && !rule.isNull("port_percent")) {
+                        Text(
+                            "Port: %.2f%% flat, outside the bands".format(rule.optDouble("port_percent", 0.0)),
+                            fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (!isPercent && (rule.optJSONArray("slabs")?.length() ?: 0) > 0) {
+                        Text(
+                            "Plus a ${if (perFy) "Apr–Mar" else "monthly"} bonus ladder — each rung is the " +
+                                "total earned by then, so only the difference is released.",
+                            fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     val slabs = rule.optJSONArray("slabs") ?: JSONArray()
                     for (i in 0 until slabs.length()) {
                         val s = slabs.getJSONObject(i)
@@ -189,7 +208,12 @@ private fun RulesTab(onSessionExpired: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "Slab: ${rupees(s.optDouble("threshold", 0.0))} → ${"%.0f".format(s.optDouble("payout", 0.0))} pts" +
+                                (if (isPercent)
+                                    "${rupees(s.optDouble("threshold", 0.0))} and up → %.2f%%".format(
+                                        s.optDouble("payout", 0.0))
+                                else
+                                    "Reach ${rupees(s.optDouble("threshold", 0.0))} → ${
+                                        "%.0f".format(s.optDouble("payout", 0.0))} pts") +
                                     (s.optString("label").takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: ""),
                                 fontSize = rsp(12),
                             )
@@ -476,6 +500,9 @@ private fun RuleDialog(
 @Composable
 private fun SlabDialog(
     title: String,
+    // A rate-mode rule's payout is a PERCENT for the band, not rupees. Labelling
+    // it "points" is how someone types 500 meaning rupees and writes a 500% rate.
+    payoutIsPercent: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (threshold: String, payout: String, label: String) -> Unit,
 ) {
@@ -490,7 +517,15 @@ private fun SlabDialog(
                 OutlinedTextField(value = threshold, onValueChange = { threshold = it.filter { ch -> ch.isDigit() || ch == '.' } },
                     label = { Text("Threshold (₹ cumulative)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(value = payout, onValueChange = { payout = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                    label = { Text("Payout (points)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    label = { Text(if (payoutIsPercent) "Rate for this band (%)" else "Payout (points)") },
+                    supportingText = {
+                        Text(
+                            if (payoutIsPercent) "A percentage, e.g. 2.25 — the whole period is paid at it."
+                            else "Rupees earned in total once the threshold is reached.",
+                            fontSize = rsp(11),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(value = label, onValueChange = { label = it },
                     label = { Text("Label (optional)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             }
