@@ -335,7 +335,9 @@ def explain(rule, is_health=False):
             out["rungs"].append({
                 "from": s.threshold,
                 "bonus": s.payout,
-                "total_at": points_on(rule, s.threshold) + s.payout,
+                # points_on() already includes the rung's bonus at this volume —
+                # adding s.payout again double-counts the prize.
+                "total_at": points_on(rule, s.threshold),
             })
         out["notes"].append(
             "The bonus figure is the total you have earned by that step, not an extra "

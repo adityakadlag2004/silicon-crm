@@ -344,3 +344,48 @@ class MultiyearAccrualTests(_Base):
         s.save()
         self.assertEqual(inc.accrual_schedule(s), [])
         self.assertEqual(inc.issue_due_accruals(s, on_date=date(2028, 1, 1)), [])
+
+
+class ExplainerNumbersTests(_Base):
+    """The employee page's worked examples must be arithmetic anyone can check."""
+
+    def test_life_totals_are_base_plus_the_prize_once(self):
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        e = inc.explain(rule)
+        got = [(r["from"], r["bonus"], r["total_at"]) for r in e["rungs"]]
+        # base is 1.75%: 3L -> 5,250 + 3,000 = 8,250, and so on up.
+        self.assertEqual(got, [
+            (Decimal("300000"), Decimal("3000"), Decimal("8250")),
+            (Decimal("900000"), Decimal("7500"), Decimal("23250")),
+            (Decimal("1800000"), Decimal("20000"), Decimal("51500")),
+            (Decimal("3000000"), Decimal("40000"), Decimal("92500")),
+            (Decimal("4500000"), Decimal("65000"), Decimal("143750")),
+        ])
+
+    def test_the_total_matches_what_selling_exactly_that_much_really_pays(self):
+        # Sell precisely the rung amount and compare against the page's figure.
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        e = inc.explain(rule)
+        today = timezone.localdate()
+        sale = self.sell(self.life, 300000, today)
+        rung = next(r for r in e["rungs"] if r["from"] == Decimal("300000"))
+        self.assertEqual(sale.points, rung["total_at"])
+
+    def test_health_month_totals_are_the_band_applied_once(self):
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        e = inc.explain(rule, is_health=True)
+        got = [(r["from"], r["per_10k"], r["month_total"]) for r in e["rungs"]]
+        self.assertEqual(got, [
+            (Decimal("0"), Decimal("150"), None),
+            (Decimal("25000"), Decimal("200"), Decimal("500")),
+            (Decimal("50000"), Decimal("225"), Decimal("1125")),
+            (Decimal("100000"), Decimal("275"), Decimal("2750")),
+            (Decimal("200000"), Decimal("300"), Decimal("6000")),
+            (Decimal("300000"), Decimal("350"), Decimal("10500")),
+        ])
+
+    def test_no_explainer_text_leaks_a_percentage(self):
+        for rule in IncentiveRule.objects.filter(active=True):
+            e = inc.explain(rule, is_health=bool(rule.product_ref and rule.product_ref.is_health))
+            blob = " ".join([e["headline"], *e["notes"]])
+            self.assertNotIn("%", blob, msg=f"{e['name']} leaks a rate")
