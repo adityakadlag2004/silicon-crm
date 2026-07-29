@@ -54,6 +54,7 @@ in the WebView.
 
 | 17 | Reliability + a11y pass (audit fixes): policy date/number on Add Sale, renewal→policy linking, group task edit/delete, rolling session cookie, offline outbox for follow-up/task writes, response cache + pull-to-refresh, WebView uploads/downloads, monochrome notification icon + per-kind channels, `/api/app/me/`, crash reporting, R8 | `/api/app/me/`, `/api/app/crash/`, `policy_id` on renewals, paged `/api/app/tasks/` | **v4.23** |
 | 18 | Mandatory updates: the version dialog no longer has "Later" and can't be dismissed — the app is unusable until the newer APK is installed | `/api/app/version/` (unchanged) | **v4.24** |
+| 19 | Incentives screen reads slab semantics: health rate bands render as percentages (were shown as "2 pts" for a 2.00% band) and the edit field is labelled "Rate for this band (%)"; Port's flat rate named; the rupee-into-a-percent guard is server-side so old builds are covered too | `/api/app/incentives/` (`slab_mode`, `slab_unit`, `slab_period`, `port_percent`) | **v4.25** |
 
 ## Rules
 
