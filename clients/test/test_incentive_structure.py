@@ -951,3 +951,65 @@ class AutomaticLegacyDeductionTests(_Base):
         first.refresh_from_db()
         second.refresh_from_db()
         self.assertEqual(first.bonus_points + second.bonus_points, Decimal("0.000"))
+
+
+class CalculatorRosterTests(_Base):
+    """The yearly bonus section lists everyone — for people allowed to see it."""
+
+    def setUp(self):
+        self.url = reverse("clients:incentive_calculator")
+        self.today = timezone.localdate()
+        self.other_user = User.objects.create_user("colleague", password="x")
+        self.other = Employee.objects.create(user=self.other_user, role="employee")
+        self.sell(self.life, 310000, self.today)
+        Sale.objects.create(client=self.client_rec, employee=self.other,
+                            product=self.life.name, product_ref=self.life,
+                            amount=Decimal("900000"), date=self.today,
+                            status=Sale.STATUS_APPROVED)
+
+    def _status(self, user):
+        self.client.force_login(user)
+        r = self.client.get(self.url)
+        return r.context["ladder_status"][0]
+
+    def test_an_admin_sees_every_employee(self):
+        boss = User.objects.create_user("boss3", password="x")
+        Employee.objects.create(user=boss, role="admin")
+        roster = self._status(boss)["roster"]
+        self.assertEqual({r["employee"] for r in roster}, {self.emp, self.other})
+
+    def test_the_roster_carries_sold_given_and_pending(self):
+        boss = User.objects.create_user("boss4", password="x")
+        Employee.objects.create(user=boss, role="admin")
+        roster = {r["employee"]: r for r in self._status(boss)["roster"]}
+        mine = roster[self.emp]
+        self.assertEqual(mine["volume"], Decimal("310000"))
+        self.assertEqual(mine["level"], Decimal("3000"))
+        self.assertEqual(mine["released"], Decimal("3000.000"))
+        self.assertEqual(mine["pending"], Decimal("0"))
+
+    def test_pending_is_what_the_ladder_still_owes(self):
+        # A sale booked before the structure changed released nothing, so the
+        # level is reached but the money has not gone out.
+        stale = Employee.objects.create(
+            user=User.objects.create_user("stale", password="x"), role="employee")
+        s = Sale.objects.create(client=self.client_rec, employee=stale,
+                                product=self.life.name, product_ref=self.life,
+                                amount=Decimal("310000"), date=self.today,
+                                status=Sale.STATUS_APPROVED)
+        Sale.objects.filter(pk=s.pk).update(points=0, bonus_points=0)
+        boss = User.objects.create_user("boss5", password="x")
+        Employee.objects.create(user=boss, role="admin")
+        row = next(r for r in self._status(boss)["roster"] if r["employee"] == stale)
+        self.assertEqual(row["pending"], Decimal("3000"))
+
+    def test_the_roster_is_sorted_by_volume(self):
+        boss = User.objects.create_user("boss6", password="x")
+        Employee.objects.create(user=boss, role="admin")
+        roster = self._status(boss)["roster"]
+        self.assertEqual(roster[0]["employee"], self.other)   # 9L beats 3.1L
+
+    def test_a_plain_employee_gets_no_roster(self):
+        st = self._status(self.user)
+        self.assertEqual(st["roster"], [])
+        self.assertEqual(st["volume"], Decimal("310000"))   # own standing still shown

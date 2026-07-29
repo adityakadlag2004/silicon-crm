@@ -244,6 +244,59 @@
       Reaching ₹{{ st.next.slab.threshold|inr }} releases {{ st.next.worth|inr }} more.
     {% else %}Top level reached.{% endif %}
   </p>
+
+  {% if st.roster %}
+    <hr class="my-4">
+    <h4 class="mb-1" style="font-size:.98rem;font-weight:700;">Everyone's position this year</h4>
+    <p class="text-muted mb-3" style="font-size:.86rem;">
+      Life sold so far, what has already been handed over, and anything the
+      ladder still owes.
+    </p>
+    <div class="ki-table-wrap">
+      <table class="ki-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th class="text-end">Life sold this year</th>
+            <th class="text-end">Prize level reached</th>
+            <th class="text-end">Bonus already given</th>
+            <th class="text-end">Pending bonus</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in st.roster %}
+          <tr {% if r.employee.id == target.id %}style="background:#fffbeb;"{% endif %}>
+            <td>
+              <a href="?employee={{ r.employee.id }}">
+                {{ r.employee.user.get_full_name|default:r.employee.user.username }}
+              </a>
+            </td>
+            <td class="text-end">₹{{ r.volume|inr }}</td>
+            <td class="text-end">{% if r.level %}{{ r.level|inr }}{% else %}<span class="text-muted">none yet</span>{% endif %}</td>
+            <td class="text-end">{{ r.released|inr }}</td>
+            <td class="text-end">
+              {% if r.pending %}<strong style="color:#15803D;">{{ r.pending|inr }}</strong>
+              {% else %}<span class="text-muted">nil</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th>Total</th>
+            <th class="text-end">₹{{ st.roster_totals.volume|inr }}</th>
+            <th></th>
+            <th class="text-end">{{ st.roster_totals.released|inr }}</th>
+            <th class="text-end">{{ st.roster_totals.pending|inr }}</th>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="form-text mb-0 mt-2">
+      "Bonus already given" includes the fixed monthly payout, which the ladder
+      subtracts on its own. "Pending" is what the year still owes on top.
+    </p>
+  {% endif %}
 </div>
 {% endfor %}
 

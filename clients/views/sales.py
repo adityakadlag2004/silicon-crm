@@ -651,6 +651,26 @@ def incentive_calculator(request):
         st = incentives_service.life_bonus_status(
             rule, target, incentives_service.fy_start_year(today))
         st["rungs"] = incentives_service.ladder(rule)
+        # Whoever can already see other people's figures gets the whole roster
+        # here, so the year reads at a glance instead of one employee at a time.
+        # period_totals rather than life_bonus_status: this needs four numbers,
+        # not a twelve-month strip per person.
+        st["roster"] = []
+        if can_pick:
+            for e in employees:
+                vol, released, _pts = incentives_service.period_totals(rule, e, today)
+                if not vol:
+                    continue
+                level = incentives_service.bonus_released_for(rule, vol)
+                st["roster"].append({
+                    "employee": e, "volume": vol, "released": released,
+                    "level": level, "pending": max(level - released, Decimal("0")),
+                })
+            st["roster"].sort(key=lambda r: r["volume"], reverse=True)
+            st["roster_totals"] = {
+                k: sum((r[k] for r in st["roster"]), Decimal("0"))
+                for k in ("volume", "released", "pending")
+            }
         ladder_status.append(st)
 
     explainers = [e for e in (
