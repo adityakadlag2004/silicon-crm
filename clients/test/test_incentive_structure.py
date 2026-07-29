@@ -481,3 +481,87 @@ class ExplainerCopyTests(_Base):
         # of what each sale earned when it was made.
         self.assertEqual(second["month_total"],
                          second["earlier_now"] + second["this_sale"])
+
+
+class PayoutReportTests(_Base):
+    """The month's incentive bill and the FY ladder position."""
+
+    def setUp(self):
+        self.user.is_superuser = True
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.url = reverse("clients:incentive_payout")
+        self.today = timezone.localdate()
+
+    def test_splits_base_from_bonus_and_totals_the_bill(self):
+        self.sell(self.life, 250000, self.today)
+        self.sell(self.life, 60000, self.today)   # crosses 3L -> releases 3,000
+        r = self.client.get(self.url, {"month": self.today.month, "year": self.today.year})
+        row = next(x for x in r.context["rows"] if x["employee"] == self.emp)
+        self.assertEqual(row["bonus"], Decimal("3000.000"))
+        self.assertEqual(row["base"], Decimal("5425.000"))   # 1.75% of 3,10,000
+        self.assertEqual(row["total"], Decimal("8425.000"))
+        self.assertEqual(r.context["totals"]["total"], Decimal("8425.000"))
+
+    def test_names_the_day_the_bonus_was_released(self):
+        self.sell(self.life, 250000, self.today)
+        crossing = self.sell(self.life, 60000, self.today)
+        r = self.client.get(self.url, {"month": self.today.month, "year": self.today.year})
+        self.assertIn(crossing, list(r.context["releases"]))
+        # A sale that released nothing must not be listed as a release.
+        self.assertTrue(all(s.bonus_points > 0 for s in r.context["releases"]))
+
+    def test_shows_what_is_still_unclaimed_on_the_ladder(self):
+        self.sell(self.life, 310000, self.today)
+        r = self.client.get(self.url, {"month": self.today.month, "year": self.today.year})
+        led = next(x for x in r.context["rows"] if x["employee"] == self.emp)["ladder"]
+        self.assertEqual(led["level"], Decimal("3000"))
+        self.assertEqual(led["released"], Decimal("3000.000"))
+        self.assertEqual(led["next"]["slab"].threshold, Decimal("900000"))
+        self.assertEqual(led["next"]["worth"], Decimal("4500"))
+
+    def test_multiyear_credits_land_in_the_month_they_fall_due(self):
+        s = self.sell(self.health, 90000, self.today, policy_type="fresh",
+                      policy_years=3, policy_date=self.today)
+        due = inc.accrual_schedule(s)[0][1]
+        inc.issue_due_accruals(s, on_date=due)
+        r = self.client.get(self.url, {"month": due.month, "year": due.year})
+        row = next(x for x in r.context["rows"] if x["employee"] == self.emp)
+        self.assertEqual(row["accrued"], Decimal("600.000"))
+
+    def test_employees_cannot_open_it(self):
+        plain = User.objects.create_user("plain", password="x")
+        Employee.objects.create(user=plain, role="employee")
+        self.client.force_login(plain)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 302)
+
+
+class MonthlyReportProductTests(_Base):
+    """The monthly business report lists categories, never sub-products."""
+
+    def setUp(self):
+        self.user.is_superuser = True
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.plan = Product.objects.create(
+            code="TERM_PLAN", name="Term Plan", parent=self.life)
+        self.today = timezone.localdate()
+
+    def test_sub_products_are_not_columns(self):
+        r = self.client.get(reverse("clients:monthly_business_report"),
+                            {"month": self.today.month, "year": self.today.year})
+        self.assertIn("Life Insurance", r.context["products"])
+        self.assertNotIn("Term Plan", r.context["products"])
+
+    def test_a_sub_product_sale_rolls_up_into_its_category(self):
+        self.sell(self.plan, 100000, self.today)
+        r = self.client.get(reverse("clients:monthly_business_report"),
+                            {"month": self.today.month, "year": self.today.year})
+        self.assertNotIn("Term Plan", r.context["products"])
+        idx = r.context["products"].index("Life Insurance")
+        row = next(x for x in r.context["rows"] if x["employee"] == self.emp)
+        self.assertEqual(row["product_vals"][idx], Decimal("100000"))
+        self.assertEqual(r.context["grand_vals"][idx], Decimal("100000"))

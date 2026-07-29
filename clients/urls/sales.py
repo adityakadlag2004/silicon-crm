@@ -12,6 +12,7 @@ urlpatterns = [
     path("sales/recalc/", sales.recalc_points, name="recalc_points"),
     path("sales/all/", sales.all_sales, name="all_sales"),
     path("incentives/calculator/", sales.incentive_calculator, name="incentive_calculator"),
+    path("incentives/payout/", sales.incentive_payout, name="incentive_payout"),
     path("incentives/", sales.incentive_structure, name="incentive_structure"),
     path("incentives/manage/", sales.manage_incentive_rules, name="manage_incentive_rules"),
     path("incentives/rule/add/", sales.add_incentive_rule, name="add_incentive_rule"),

@@ -669,9 +669,12 @@ def monthly_business_report(request):
 
     approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
 
-    # Show all active products, and include disabled products only if they have sales in the selected month.
+    # Top-level products only. The life plan catalogue alone is ~40 sub-products,
+    # and a column per plan makes this sheet unreadable — a sub-product's sales
+    # roll up into its category (Term Plan -> Life Insurance).
+    cat_map = category_name_map()
     products = list(
-        Product.objects.filter(is_active=True)
+        Product.objects.filter(is_active=True, parent__isnull=True)
         .order_by("display_order", "name")
         .values_list("name", flat=True)
     )
@@ -687,17 +690,21 @@ def monthly_business_report(request):
         .distinct()
     )
 
+    # A retired category with sales this month still needs its column; a
+    # sub-product never does, because cat_map folds it into its parent.
     for product_name in sorted(used_products | used_ref_products):
-        if product_name and product_name not in products:
-            products.append(product_name)
+        category = cat_map.get(product_name, product_name)
+        if category and category not in products:
+            products.append(category)
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
 
     # Pre-aggregate amounts grouped by (employee, product) and points by employee.
     # Replaces an N×M loop of per-cell `.aggregate(Sum)` calls with two queries.
-    amount_by_emp_product = {
-        (r["employee_id"], r["product"]): r["total"] or Decimal("0")
-        for r in approved.values("employee_id", "product").annotate(total=Sum("amount"))
-    }
+    amount_by_emp_product = {}
+    for r in approved.values("employee_id", "product").annotate(total=Sum("amount")):
+        key = (r["employee_id"], cat_map.get(r["product"], r["product"]))
+        amount_by_emp_product[key] = (amount_by_emp_product.get(key, Decimal("0"))
+                                      + (r["total"] or Decimal("0")))
     points_by_emp = {
         r["employee_id"]: r["total"] or Decimal("0")
         for r in approved.values("employee_id").annotate(total=Sum("points"))

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Incentive Payout{% endblock %}
+{% block page_title %}Incentive Payout{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <h2 class="ki-section-title mb-0"><i class="bi bi-cash-stack"></i> {{ month_label }} {{ sel_year }}</h2>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <label class="visually-hidden" for="pm">Month</label>
+    <select class="form-select" name="month" id="pm">
+      {% for i, n in months %}<option value="{{ i }}" {% if i == sel_month %}selected{% endif %}>{{ n }}</option>{% endfor %}
+    </select>
+    <label class="visually-hidden" for="py">Year</label>
+    <select class="form-select" name="year" id="py">
+      {% for y in years %}<option value="{{ y }}" {% if y == sel_year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+    <button class="ki-btn ki-btn-primary" type="submit">Show</button>
+  </form>
+</div>
+
+<p class="text-muted mb-4" style="font-size:.92rem;max-width:74ch;">
+  What each employee earned in this month, and what is still unclaimed on the
+  yearly life ladder. Points are rupees, so the last column is the payout.
+</p>
+
+{# ---------------- The month's bill ---------------- #}
+<div class="ki-table-wrap mb-4">
+  <table class="ki-table">
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th class="text-end">Base points</th>
+        <th class="text-end">Ladder bonus released</th>
+        <th class="text-end">Multiyear credited</th>
+        <th class="text-end">Pay this month</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ r.employee.user.get_full_name|default:r.employee.user.username }}</td>
+        <td class="text-end">{{ r.base|inr }}</td>
+        <td class="text-end">{% if r.bonus %}<strong>{{ r.bonus|inr }}</strong>{% else %}—{% endif %}</td>
+        <td class="text-end">{% if r.accrued %}{{ r.accrued|inr }}{% else %}—{% endif %}</td>
+        <td class="text-end"><strong>₹{{ r.total|inr }}</strong></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="5" class="text-muted">Nothing earned in this month.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot>
+      <tr>
+        <th>Total</th>
+        <th class="text-end">{{ totals.base|inr }}</th>
+        <th class="text-end">{{ totals.bonus|inr }}</th>
+        <th class="text-end">{{ totals.accrued|inr }}</th>
+        <th class="text-end">₹{{ totals.total|inr }}</th>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+
+{# ---------------- When each bonus was released ---------------- #}
+<h2 class="ki-section-title mb-2"><i class="bi bi-calendar-check"></i> Bonus released this month</h2>
+<p class="text-muted mb-3" style="font-size:.9rem;">
+  The exact day each ladder level was reached, and the sale that crossed it.
+</p>
+<div class="ki-table-wrap mb-4">
+  <table class="ki-table">
+    <thead>
+      <tr>
+        <th>Date</th><th>Employee</th><th>Product</th><th>Client</th>
+        <th class="text-end">Sale</th><th class="text-end">Bonus released</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in releases %}
+      <tr>
+        <td>{{ s.date|date:"d M Y" }}</td>
+        <td>{{ s.employee.user.get_full_name|default:s.employee.user.username }}</td>
+        <td>{{ s.product }}</td>
+        <td>{{ s.client }}</td>
+        <td class="text-end">₹{{ s.amount|inr }}</td>
+        <td class="text-end"><strong>{{ s.bonus_points|inr }}</strong></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="text-muted">No ladder level was crossed this month.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ---------------- Where everyone stands on the yearly ladder ---------------- #}
+{% if life_rule %}
+<h2 class="ki-section-title mb-2"><i class="bi bi-graph-up-arrow"></i> Life ladder — FY {{ fy_label }} to date</h2>
+<p class="text-muted mb-3" style="font-size:.9rem;">
+  Position as at the end of {{ month_label }}. "Still to come" is what reaching
+  the next level would release — it is not owed yet.
+</p>
+<div class="ki-table-wrap">
+  <table class="ki-table">
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th class="text-end">Life sold this FY</th>
+        <th class="text-end">Prize level reached</th>
+        <th class="text-end">Bonus paid so far</th>
+        <th>Next level</th>
+        <th class="text-end">Still to come</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      {% if r.ladder.volume %}
+      <tr>
+        <td>{{ r.employee.user.get_full_name|default:r.employee.user.username }}</td>
+        <td class="text-end">₹{{ r.ladder.volume|inr }}</td>
+        <td class="text-end">{% if r.ladder.level %}{{ r.ladder.level|inr }}{% else %}none yet{% endif %}</td>
+        <td class="text-end">{{ r.ladder.released|inr }}</td>
+        <td>
+          {% if r.ladder.next %}
+            ₹{{ r.ladder.next.gap|inr }} more reaches ₹{{ r.ladder.next.slab.threshold|inr }}
+          {% else %}
+            <span class="text-muted">Top level reached</span>
+          {% endif %}
+        </td>
+        <td class="text-end">{% if r.ladder.next %}{{ r.ladder.next.worth|inr }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="form-text mt-2">
+  "Bonus paid so far" is what has actually been released this financial year, so it
+  always matches the prize level reached. Both reset on 1 April.
+</p>
+{% endif %}
+
+{% endblock %}

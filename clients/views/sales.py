@@ -1,5 +1,6 @@
 """Sales views: add, list, approve, edit, delete, incentives, recalculate."""
 import logging
+from calendar import month_name, monthrange
 from datetime import date
 from decimal import Decimal
 import json
@@ -369,6 +370,89 @@ def manage_incentive_rules(request):
             "product_options": product_options,
         },
     )
+
+
+@login_required
+def incentive_payout(request):
+    """The month's incentive bill, and where each employee stands on the ladder.
+
+    Answers the four things you cannot get from a sales list: what to pay out
+    this month, how much of that was ladder bonus, which day each bonus was
+    released, and how much prize is still unclaimed this financial year.
+    """
+    if not permissions.is_admin_or_manager(request.user):
+        messages.error(request, "You do not have permission to view incentive payouts.")
+        return redirect("clients:admin_dashboard")
+
+    today = timezone.localdate()
+    try:
+        month = int(request.GET.get("month", today.month))
+        year = int(request.GET.get("year", today.year))
+    except (TypeError, ValueError):
+        month, year = today.month, today.year
+    if not 1 <= month <= 12:
+        month = today.month
+    start = date(year, month, 1)
+    end = date(year, month, monthrange(year, month)[1])
+
+    approved = Sale.objects.filter(status=Sale.STATUS_APPROVED, date__gte=start, date__lte=end)
+    by_emp = {
+        r["employee_id"]: r
+        for r in approved.values("employee_id").annotate(
+            pts=Sum("points"), bonus=Sum("bonus_points"))
+    }
+
+    life_rule = (IncentiveRule.objects.filter(
+        active=True, slab_mode=IncentiveRule.MODE_BONUS, slabs__isnull=False)
+        .prefetch_related("slabs").distinct().first())
+
+    rows = []
+    totals = {"base": Decimal("0"), "bonus": Decimal("0"),
+              "accrued": Decimal("0"), "total": Decimal("0")}
+    for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username"):
+        agg = by_emp.get(e.id, {})
+        pts = agg.get("pts") or Decimal("0")
+        bonus = agg.get("bonus") or Decimal("0")
+        accrued = incentives_service.accrued_points(e, start, end)
+        base = pts - bonus
+        total = pts + accrued
+
+        ladder = None
+        if life_rule is not None:
+            vol, released, _p = incentives_service.period_totals(life_rule, e, end)
+            nxt = incentives_service.next_rung(life_rule, vol)
+            ladder = {"volume": vol, "released": released, "next": nxt,
+                      "level": incentives_service.bonus_released_for(life_rule, vol)}
+
+        if not (total or (ladder and ladder["volume"])):
+            continue
+        totals["base"] += base
+        totals["bonus"] += bonus
+        totals["accrued"] += accrued
+        totals["total"] += total
+        rows.append({"employee": e, "base": base, "bonus": bonus,
+                     "accrued": accrued, "total": total, "ladder": ladder})
+
+    # Every bonus release in the month, with the sale that triggered it.
+    releases = (approved.filter(bonus_points__gt=0)
+                .select_related("employee__user", "client")
+                .order_by("date", "id"))
+
+    return render(request, "incentives/payout.html", {
+        "crumbs": [{"label": "Admin", "url": reverse("clients:admin_dashboard")},
+                   {"label": "Incentive Payout"}],
+        "kpis": [
+            {"label": "Payable this month", "value": f"₹{inr(totals['total'])}", "color": "#4338CA"},
+            {"label": "Of which ladder bonus", "value": f"₹{inr(totals['bonus'])}", "color": "#B45309"},
+            {"label": "Multiyear credited", "value": f"₹{inr(totals['accrued'])}", "color": "#15803D"},
+        ],
+        "rows": rows, "totals": totals, "releases": releases,
+        "life_rule": life_rule,
+        "months": [(i, month_name[i]) for i in range(1, 13)],
+        "years": list(range(today.year - 3, today.year + 1)),
+        "sel_month": month, "sel_year": year, "month_label": month_name[month],
+        "fy_label": f"{incentives_service.fy_start_year(end)}–{incentives_service.fy_start_year(end) + 1}",
+    })
 
 
 ASSUMPTION_ROWS = 6
