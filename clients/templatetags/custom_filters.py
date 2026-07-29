@@ -196,3 +196,14 @@ def claim_stage_reached(current_status, stage):
         return _CLAIM_STAGE_ORDER.index(current_status) >= _CLAIM_STAGE_ORDER.index(stage)
     except ValueError:
         return False
+
+
+@register.filter
+def month_short(value):
+    """Month number -> 'Apr'. Blank for anything that isn't 1-12."""
+    from calendar import month_abbr
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return ""
+    return month_abbr[n] if 1 <= n <= 12 else ""

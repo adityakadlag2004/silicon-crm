@@ -373,6 +373,62 @@ def manage_incentive_rules(request):
 
 
 @login_required
+def life_bonus_tracker(request):
+    """Every employee's position on the life ladder for one financial year.
+
+    Also carries what the legacy monthly slab would have paid month by month,
+    so a fixed payout still being made by hand can be reconciled against the
+    year's entitlement.
+    """
+    if not permissions.is_admin_or_manager(request.user):
+        messages.error(request, "You do not have permission to view life bonus status.")
+        return redirect("clients:admin_dashboard")
+
+    today = timezone.localdate()
+    try:
+        fy = int(request.GET.get("fy", incentives_service.fy_start_year(today)))
+    except (TypeError, ValueError):
+        fy = incentives_service.fy_start_year(today)
+
+    rule = (IncentiveRule.objects.filter(
+        active=True, slab_mode=IncentiveRule.MODE_BONUS, slabs__isnull=False)
+        .prefetch_related("slabs").distinct().first())
+    if rule is None:
+        messages.error(request, "No ladder-based incentive rule is configured.")
+        return redirect("clients:incentive_structure")
+
+    rows = []
+    totals = {"volume": Decimal("0"), "base": Decimal("0"), "level": Decimal("0"),
+              "released": Decimal("0"), "legacy": Decimal("0"), "net": Decimal("0")}
+    for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username"):
+        st = incentives_service.life_bonus_status(rule, e, fy)
+        if not st["volume"]:
+            continue
+        for k, src in (("volume", "volume"), ("base", "base"), ("level", "level"),
+                       ("released", "released"), ("legacy", "legacy")):
+            totals[k] += st[src]
+        totals["net"] += st["net_vs_legacy"]
+        rows.append(st)
+
+    expanded = request.GET.get("employee")
+    detail = next((r for r in rows if str(r["employee"].id) == expanded), None)
+
+    return render(request, "incentives/life_bonus.html", {
+        "crumbs": [{"label": "Admin", "url": reverse("clients:admin_dashboard")},
+                   {"label": "Life Bonus Status"}],
+        "kpis": [
+            {"label": "Life sold this FY", "value": f"₹{inr(totals['volume'])}", "color": "#4338CA"},
+            {"label": "Ladder released", "value": f"₹{inr(totals['released'])}", "color": "#B45309"},
+            {"label": "Base paid", "value": f"₹{inr(totals['base'])}", "color": "#15803D"},
+        ],
+        "rule": rule, "rows": rows, "totals": totals, "detail": detail,
+        "fy": fy, "fy_label": f"{fy}–{fy + 1}",
+        "fy_options": list(range(incentives_service.fy_start_year(today), incentives_service.fy_start_year(today) - 4, -1)),
+        "ladder": incentives_service.ladder(rule),
+    })
+
+
+@login_required
 def incentive_payout(request):
     """The month's incentive bill, and where each employee stands on the ladder.
 

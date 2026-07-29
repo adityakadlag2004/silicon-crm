@@ -565,3 +565,79 @@ class MonthlyReportProductTests(_Base):
         row = next(x for x in r.context["rows"] if x["employee"] == self.emp)
         self.assertEqual(row["product_vals"][idx], Decimal("100000"))
         self.assertEqual(r.context["grand_vals"][idx], Decimal("100000"))
+
+
+class LifeBonusTrackerTests(_Base):
+    """FY ladder status per employee, with the legacy monthly figure alongside."""
+
+    def setUp(self):
+        self.user.is_superuser = True
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.url = reverse("clients:life_bonus_tracker")
+        self.rule = IncentiveRule.objects.get(product_ref=self.life)
+
+    def test_legacy_monthly_grid(self):
+        cases = [("0", "0"), ("299999", "0"), ("300000", "8000"),
+                 ("599999", "8000"), ("600000", "16000"), ("900000", "24000"),
+                 ("1200000", "32000"), ("1500000", "40000"), ("9000000", "40000")]
+        for vol, pay in cases:
+            self.assertEqual(inc.legacy_monthly_payout(Decimal(vol)), Decimal(pay),
+                             msg=f"volume {vol}")
+
+    def test_status_totals_a_financial_year(self):
+        self.sell(self.life, 250000, date(2026, 6, 10))
+        self.sell(self.life, 60000, date(2026, 9, 5))    # crosses 3L
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["volume"], Decimal("310000"))
+        self.assertEqual(st["base"], Decimal("5425.000"))
+        self.assertEqual(st["level"], Decimal("3000"))
+        self.assertEqual(st["released"], Decimal("3000.000"))
+
+    def test_months_run_april_to_march_and_carry_a_running_total(self):
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual([m["month"] for m in st["months"]],
+                         [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3])
+        # January onward belongs to the next calendar year.
+        self.assertEqual(st["months"][9]["year"], 2027)
+
+    def test_running_total_accumulates_across_the_year(self):
+        self.sell(self.life, 100000, date(2026, 6, 1))
+        self.sell(self.life, 100000, date(2026, 11, 1))
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        by_month = {m["month"]: m for m in st["months"]}
+        self.assertEqual(by_month[6]["running"], Decimal("100000"))
+        self.assertEqual(by_month[11]["running"], Decimal("200000"))
+        self.assertEqual(st["months"][-1]["running"], Decimal("200000"))
+
+    def test_legacy_column_prices_each_month_on_its_own(self):
+        # 3L in one month would have paid 8,000 under the old grid; the FY
+        # ladder pays 3,000 for the same business.
+        self.sell(self.life, 300000, date(2026, 6, 10))
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["legacy"], Decimal("8000"))
+        self.assertEqual(st["level"], Decimal("3000"))
+        self.assertEqual(st["net_vs_legacy"], Decimal("-5000"))
+
+    def test_a_repeating_month_multiplies_the_legacy_figure_not_the_ladder(self):
+        for m in (6, 7, 8):
+            self.sell(self.life, 300000, date(2026, m, 10))
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["legacy"], Decimal("24000"))   # 8,000 x 3 months
+        self.assertEqual(st["volume"], Decimal("900000"))
+        self.assertEqual(st["level"], Decimal("7500"))     # one yearly prize
+        self.assertEqual(st["net_vs_legacy"], Decimal("-16500"))
+
+    def test_page_renders_and_expands_one_employee(self):
+        self.sell(self.life, 310000, date(2026, 6, 10))
+        r = self.client.get(self.url, {"fy": 2026, "employee": self.emp.id})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["detail"]["employee"], self.emp)
+        self.assertEqual(len(r.context["detail"]["months"]), 12)
+
+    def test_employees_cannot_open_it(self):
+        plain = User.objects.create_user("plain2", password="x")
+        Employee.objects.create(user=plain, role="employee")
+        self.client.force_login(plain)
+        self.assertEqual(self.client.get(self.url).status_code, 302)

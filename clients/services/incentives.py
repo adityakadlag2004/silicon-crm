@@ -60,6 +60,83 @@ def unit_rate_percent(rule):
     return (rule.points_per_unit or ZERO) / rule.unit_amount * Decimal("100")
 
 
+# The pre-2026 monthly life slab, kept ONLY as a reconciliation figure: it is
+# what the old structure would have paid for a given month's life volume, so a
+# fixed monthly payout still being made by hand can be netted against the
+# financial-year ladder. Nothing computes pay from this — see life_bonus_status.
+LEGACY_MONTHLY_SLAB = [
+    (Decimal("1500000"), Decimal("40000")),
+    (Decimal("1200000"), Decimal("32000")),
+    (Decimal("900000"), Decimal("24000")),
+    (Decimal("600000"), Decimal("16000")),
+    (Decimal("300000"), Decimal("8000")),
+]
+
+
+def legacy_monthly_payout(volume):
+    """What the old monthly slab would have paid for one month's life volume."""
+    volume = Decimal(str(volume or 0))
+    return next((amt for thr, amt in LEGACY_MONTHLY_SLAB if volume >= thr), ZERO)
+
+
+def life_bonus_status(rule, employee, fy_year):
+    """One employee's whole financial year on a bonus ladder.
+
+    Returns the FY totals plus a month-by-month strip, each month carrying what
+    the old monthly slab would have paid for it — the figure a hand-made fixed
+    payout is reconciled against.
+    """
+    from calendar import monthrange
+    from django.db.models import Q, Sum
+
+    from ..models import Sale
+
+    start = date(fy_year, FY_START_MONTH, 1)
+    end = date(fy_year + 1, FY_START_MONTH, 1) - _one_day()
+
+    qs = Sale.objects.filter(employee=employee, status=Sale.STATUS_APPROVED,
+                             date__gte=start, date__lte=end)
+    if rule.product_ref_id:
+        qs = qs.filter(Q(product_ref_id=rule.product_ref_id)
+                       | (Q(product_ref__isnull=True) & Q(product=rule.product)))
+    else:
+        qs = qs.filter(product=rule.product)
+
+    months = []
+    volume = ZERO
+    base_total = ZERO
+    released_total = ZERO
+    legacy_total = ZERO
+    for i in range(12):
+        m = (FY_START_MONTH - 1 + i) % 12 + 1
+        y = fy_year + (1 if m < FY_START_MONTH else 0)
+        m_start = date(y, m, 1)
+        m_end = date(y, m, monthrange(y, m)[1])
+        agg = qs.filter(date__gte=m_start, date__lte=m_end).aggregate(
+            vol=Sum("amount"), pts=Sum("points"), bonus=Sum("bonus_points"))
+        vol = agg["vol"] or ZERO
+        bonus = agg["bonus"] or ZERO
+        base = (agg["pts"] or ZERO) - bonus
+        legacy = legacy_monthly_payout(vol)
+        volume += vol
+        base_total += base
+        released_total += bonus
+        legacy_total += legacy
+        months.append({"year": y, "month": m, "volume": vol, "base": base,
+                       "released": bonus, "legacy": legacy, "running": volume})
+
+    level = bonus_released_for(rule, volume)
+    return {
+        "employee": employee, "fy_year": fy_year,
+        "volume": volume, "base": base_total,
+        "level": level, "released": released_total,
+        "legacy": legacy_total,
+        "net_vs_legacy": level - legacy_total,
+        "next": next_rung(rule, volume),
+        "months": months,
+    }
+
+
 def accrual_schedule(sale):
     """[(year_index, due_date, slice)] for a multiyear health policy's later years.
 

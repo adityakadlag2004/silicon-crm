@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Life Bonus Status{% endblock %}
+{% block page_title %}Life Bonus Status{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <h2 class="ki-section-title mb-0"><i class="bi bi-graph-up-arrow"></i> FY {{ fy_label }}</h2>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <label class="form-label mb-0" for="fy">Financial year</label>
+    <select class="form-select" name="fy" id="fy" onchange="this.form.submit()">
+      {% for y in fy_options %}<option value="{{ y }}" {% if y == fy %}selected{% endif %}>{{ y }}–{{ y|add:1 }}</option>{% endfor %}
+    </select>
+    <noscript><button class="ki-btn ki-btn-secondary" type="submit">Show</button></noscript>
+  </form>
+</div>
+
+<p class="text-muted mb-4" style="font-size:.92rem;max-width:76ch;">
+  Where every employee stands on the yearly life ladder, and what has already
+  been released to them. The last two columns exist to reconcile the fixed
+  monthly payout still being made by hand against the year's entitlement.
+</p>
+
+<div class="ki-table-wrap mb-4">
+  <table class="ki-table">
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th class="text-end">Life sold this FY</th>
+        <th class="text-end">Base paid</th>
+        <th class="text-end">Prize level reached</th>
+        <th class="text-end">Ladder released</th>
+        <th>Next level</th>
+        <th class="text-end">Old monthly slab would have paid</th>
+        <th class="text-end">Level − old slab</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>
+          <a href="?fy={{ fy }}&amp;employee={{ r.employee.id }}">
+            {{ r.employee.user.get_full_name|default:r.employee.user.username }}
+          </a>
+        </td>
+        <td class="text-end">₹{{ r.volume|inr }}</td>
+        <td class="text-end">{{ r.base|inr }}</td>
+        <td class="text-end">{% if r.level %}<strong>{{ r.level|inr }}</strong>{% else %}none yet{% endif %}</td>
+        <td class="text-end">{{ r.released|inr }}</td>
+        <td style="font-size:.86rem;">
+          {% if r.next %}
+            ₹{{ r.next.gap|inr }} more → ₹{{ r.next.slab.threshold|inr }}
+            <span class="text-muted">(worth {{ r.next.worth|inr }})</span>
+          {% else %}<span class="text-muted">Top level</span>{% endif %}
+        </td>
+        <td class="text-end">{{ r.legacy|inr }}</td>
+        <td class="text-end">
+          {% if r.net_vs_legacy < 0 %}
+            <span style="color:#B91C1C;">{{ r.net_vs_legacy|inr }}</span>
+          {% else %}{{ r.net_vs_legacy|inr }}{% endif %}
+        </td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="8" class="text-muted">No life business booked in this financial year.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot>
+      <tr>
+        <th>Total</th>
+        <th class="text-end">₹{{ totals.volume|inr }}</th>
+        <th class="text-end">{{ totals.base|inr }}</th>
+        <th class="text-end">{{ totals.level|inr }}</th>
+        <th class="text-end">{{ totals.released|inr }}</th>
+        <th></th>
+        <th class="text-end">{{ totals.legacy|inr }}</th>
+        <th class="text-end">{{ totals.net|inr }}</th>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+
+<p class="form-text mb-4">
+  <strong>Level − old slab</strong> is the year's ladder entitlement minus everything
+  the old monthly grid would have paid across the same twelve months. A negative
+  figure means the monthly payouts already exceed the year's ladder entitlement.
+</p>
+
+{% if detail %}
+<h2 class="ki-section-title mb-2">
+  <i class="bi bi-calendar3"></i>
+  {{ detail.employee.user.get_full_name|default:detail.employee.user.username }} — month by month
+</h2>
+<div class="ki-table-wrap mb-4">
+  <table class="ki-table">
+    <thead>
+      <tr>
+        <th>Month</th>
+        <th class="text-end">Life sold</th>
+        <th class="text-end">Running FY total</th>
+        <th class="text-end">Base paid</th>
+        <th class="text-end">Ladder released</th>
+        <th class="text-end">Old monthly slab</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for m in detail.months %}
+      <tr>
+        <td>{{ m.month|month_short }} {{ m.year }}</td>
+        <td class="text-end">{% if m.volume %}₹{{ m.volume|inr }}{% else %}—{% endif %}</td>
+        <td class="text-end">₹{{ m.running|inr }}</td>
+        <td class="text-end">{% if m.base %}{{ m.base|inr }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if m.released %}<strong>{{ m.released|inr }}</strong>{% else %}—{% endif %}</td>
+        <td class="text-end">{% if m.legacy %}{{ m.legacy|inr }}{% else %}—{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th>Year</th>
+        <th class="text-end">₹{{ detail.volume|inr }}</th>
+        <th></th>
+        <th class="text-end">{{ detail.base|inr }}</th>
+        <th class="text-end">{{ detail.released|inr }}</th>
+        <th class="text-end">{{ detail.legacy|inr }}</th>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<p class="text-muted mb-4" style="font-size:.9rem;">Pick an employee above for their month-by-month breakdown.</p>
+{% endif %}
+
+<div class="ki-card">
+  <h3 class="mb-2" style="font-size:1rem;font-weight:700;">The ladder</h3>
+  <div class="ki-table-wrap">
+    <table class="ki-table">
+      <thead><tr><th>Reach this in the FY</th><th class="text-end">Prize</th><th class="text-end">Year total (base + prize)</th></tr></thead>
+      <tbody>
+      {% for row in ladder %}
+        <tr>
+          <td>₹{{ row.slab.threshold|inr }}</td>
+          <td class="text-end">{{ row.slab.payout|inr }}</td>
+          <td class="text-end">{{ row.at_threshold|inr }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
