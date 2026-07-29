@@ -65,6 +65,12 @@ def finalize_new_sale(sale, actor, *, auto_approve):
     - admin-entered sales are approved on the spot; everything else starts
       pending review
     Points are computed inside save().
+
+    A sale that lands approved immediately changes its period's pool, so the
+    siblings are recomputed here too. Without it an admin-entered sale that
+    crosses a rate band priced only itself at the new band and left the rest of
+    the month on the old one — the employee-entry path got this right because
+    approval routes through _finish_review.
     """
     if sale.product and not sale.product_ref_id:
         sale.product_ref = Product.objects.filter(name=sale.product).first()
@@ -82,6 +88,8 @@ def finalize_new_sale(sale, actor, *, auto_approve):
     sale.rejection_reason = ""
     sale._audit_actor = actor  # picked up by the AuditLog signal
     sale.save()
+    if sale.status == Sale.STATUS_APPROVED:
+        recompute_sibling_sales(sale)
     _sync_insurance_tracker(sale)
     return sale
 

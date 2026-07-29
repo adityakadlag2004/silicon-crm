@@ -89,11 +89,14 @@ class HealthBandTests(_Base):
         first = self.sell(self.health, 20000, date(2026, 6, 2), policy_type="fresh")
         self.assertEqual(first.points, Decimal("300.000"))  # 1.50% band
 
-        # Crossing 25,000 re-rates the whole month at 2.00%.
+        # Crossing 25,000 puts this sale in the 2.00% band.
         second = self.sell(self.health, 10000, date(2026, 6, 12), policy_type="fresh")
         self.assertEqual(second.points, Decimal("200.000"))
+        # These fixtures write Sale.objects.create() directly, which prices only
+        # the row being saved. Repricing the rest of the month is the service
+        # layer's job — see BandCrossingTests for the paths the app actually uses.
         first.refresh_from_db()
-        self.assertEqual(first.points, Decimal("300.000"))  # only resyncs on review
+        self.assertEqual(first.points, Decimal("300.000"))
 
     def test_every_band(self):
         rule = IncentiveRule.objects.get(product_ref=self.health)
@@ -389,3 +392,61 @@ class ExplainerNumbersTests(_Base):
             e = inc.explain(rule, is_health=bool(rule.product_ref and rule.product_ref.is_health))
             blob = " ".join([e["headline"], *e["notes"]])
             self.assertNotIn("%", blob, msg=f"{e['name']} leaks a rate")
+
+
+class BandCrossingTests(_Base):
+    """Crossing a health band must reprice the whole month, however the sale
+    was entered. The two creation paths used to disagree."""
+
+    def setUp(self):
+        self.today = timezone.localdate()
+
+    def _enter(self, amount, *, auto_approve):
+        from clients.services import sales as sales_service
+
+        s = Sale(client=self.client_rec, employee=self.emp, product=self.health.name,
+                 product_ref=self.health, amount=Decimal(str(amount)),
+                 date=self.today, policy_type="fresh")
+        return sales_service.finalize_new_sale(s, self.user, auto_approve=auto_approve)
+
+    def test_admin_entered_sale_reprices_the_month(self):
+        a = self._enter(20000, auto_approve=True)   # 1.50% band
+        b = self._enter(10000, auto_approve=True)   # month hits 30,000 -> 2.00%
+        a.refresh_from_db()
+        self.assertEqual(a.points, Decimal("400.000"))  # was 300 at the old band
+        self.assertEqual(b.points, Decimal("200.000"))
+        self.assertEqual(a.points + b.points, Decimal("600.000"))  # 30,000 @ 2.00%
+
+    def test_employee_entered_sale_reprices_on_approval(self):
+        from clients.services import sales as sales_service
+
+        a = self._enter(20000, auto_approve=True)
+        b = self._enter(10000, auto_approve=False)
+        self.assertEqual(Sale.objects.get(pk=a.pk).points, Decimal("300.000"))  # pending: no effect
+        sales_service.approve_sale(b, self.user)
+        a.refresh_from_db()
+        b.refresh_from_db()
+        self.assertEqual(a.points + b.points, Decimal("600.000"))
+
+    def test_both_entry_paths_pay_the_same(self):
+        a = self._enter(20000, auto_approve=True)
+        b = self._enter(10000, auto_approve=True)
+        a.refresh_from_db()
+        admin_total = a.points + b.points
+
+        Sale.objects.all().delete()
+        from clients.services import sales as sales_service
+        c = self._enter(20000, auto_approve=True)
+        d = self._enter(10000, auto_approve=False)
+        sales_service.approve_sale(d, self.user)
+        c.refresh_from_db()
+        d.refresh_from_db()
+        self.assertEqual(admin_total, c.points + d.points)
+
+    def test_dropping_back_a_band_reprices_down_again(self):
+        a = self._enter(20000, auto_approve=True)
+        b = self._enter(10000, auto_approve=True)
+        from clients.services import sales as sales_service
+        sales_service.delete_sale(b, self.user)
+        a.refresh_from_db()
+        self.assertEqual(a.points, Decimal("300.000"))  # back to the 1.50% band
