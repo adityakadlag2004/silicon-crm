@@ -286,6 +286,64 @@ def points_on(rule, amount, *, volume=None, policy_type="", is_health=False):
                  policy_type=policy_type, is_health=is_health)["total"]
 
 
+def walkthrough(rule, is_health=False):
+    """A worked example built from the rule's own rungs.
+
+    Generated rather than written down, so the story on the page moves if the
+    rates ever do instead of quietly going stale.
+    """
+    from ..models import IncentiveRule
+
+    slabs = sorted(rule.slabs.all(), key=lambda s: s.threshold)
+    if not slabs:
+        return []
+
+    if rule.slab_mode == IncentiveRule.MODE_RATE:
+        # Two sales, the second crossing the first real step, to show the
+        # earlier sale being pulled up with it.
+        step = next((s.threshold for s in slabs if s.threshold > 0), None)
+        if step is None:
+            return []
+        first = (step * Decimal("0.8")).quantize(Decimal("1"))
+        second = (step * Decimal("0.4")).quantize(Decimal("1"))
+        r1 = rate_for_volume(rule, first)
+        r2 = rate_for_volume(rule, first + second)
+        return [
+            {"amount": first, "running": first, "rate": r1,
+             "this_sale": first * r1 / Decimal("100"),
+             "earlier_now": None,
+             "month_total": first * r1 / Decimal("100")},
+            {"amount": second, "running": first + second, "rate": r2,
+             "this_sale": second * r2 / Decimal("100"),
+             "earlier_now": first * r2 / Decimal("100"),
+             "month_total": (first + second) * r2 / Decimal("100")},
+        ]
+
+    # Bonus ladder: a year that climbs through the first three rungs.
+    base_rate = unit_rate_percent(rule)
+    targets = [(slabs[0].threshold * Decimal("0.4")).quantize(Decimal("1"))]
+    for s in slabs[:3]:
+        targets.append(s.threshold)
+    rows = []
+    prev_total = ZERO
+    prev_prize = ZERO
+    for target in targets:
+        amount = target - prev_total
+        if amount <= 0:
+            continue
+        prize = bonus_released_for(rule, target)
+        rows.append({
+            "amount": amount,
+            "base": amount * base_rate / Decimal("100"),
+            "running": target,
+            "prize_level": prize,
+            "bonus_paid": prize - prev_prize,
+        })
+        prev_total = target
+        prev_prize = prize
+    return rows
+
+
 def explain(rule, is_health=False):
     """A plain-language description of one product's structure, in points.
 
@@ -304,14 +362,16 @@ def explain(rule, is_health=False):
     sample = Decimal("100000") if rule.unit_amount >= Decimal("100000") else Decimal("25000")
 
     out = {"name": name, "rule": rule, "is_health": is_health, "window": window,
-           "kind": "flat", "examples": [], "rungs": [], "notes": []}
+           "kind": "flat", "examples": [], "rungs": [], "notes": [],
+           "prize_intro": "", "walkthrough": walkthrough(rule, is_health=is_health)}
 
     if slabs and rule.slab_mode == IncentiveRule.MODE_RATE:
         out["kind"] = "bands"
         out["headline"] = (
-            f"The more {name.lower()} you do in a month, the more every rupee of it earns. "
-            f"Your own total {window} decides the rate, and it applies to the whole month — "
-            f"crossing a step lifts what you already sold too."
+            f"{name} is not priced one policy at a time — it is priced on your whole month. "
+            f"Add up everything you sell in the calendar month, and that total picks one "
+            f"rate. That rate then applies to the whole month's business, not only to the "
+            f"sale that got you there."
         )
         # Deliberately NOT "points for a ₹1,00,000 sale" — a sale that size
         # pushes the month into a higher step, so every row would collapse to
@@ -326,10 +386,18 @@ def explain(rule, is_health=False):
     elif slabs:
         out["kind"] = "ladder"
         base_pts = points_on(rule, sample)
+        # A ₹1,00,000 policy sits below the first rung, so this is base only.
+        per_lakh = Decimal("100000") * unit_rate_percent(rule) / Decimal("100")
         out["headline"] = (
-            f"Every policy earns points the moment it is approved — no minimum, nothing to reach first. "
-            f"A ₹{sample:,.0f} policy earns {base_pts:,.0f} points. "
-            f"Separately, your running total {window} unlocks bonus points as it passes each step below."
+            f"There are two separate payments here, and they have nothing to do with "
+            f"each other. First, a base on every single policy: a ₹{_n(sample)} policy "
+            f"earns {_n(base_pts)} points, ₹1,00,000 earns {_n(per_lakh)}. "
+            f"No minimum, nothing to reach first. Second, one prize for the whole year."
+        )
+        out["prize_intro"] = (
+            "The prize is a single reward for the year — not one per policy, and not one "
+            "per step. How much you do between April and March decides how big it gets. "
+            "The table below is the price list."
         )
         for s in slabs:
             out["rungs"].append({
@@ -339,17 +407,31 @@ def explain(rule, is_health=False):
                 # adding s.payout again double-counts the prize.
                 "total_at": points_on(rule, s.threshold),
             })
+        top = slabs[2] if len(slabs) > 2 else slabs[-1]
         out["notes"].append(
-            "The bonus figure is the total you have earned by that step, not an extra "
-            "payment on top of the one before. Reaching the second step tops you up to "
-            "its figure — you are never paid the same step twice."
+            f"Whatever level you finish the year on is the whole prize. Reach "
+            f"₹{_n(top.threshold)} and your prize is {_n(top.payout)} points — not "
+            f"{' + '.join(_n(x.payout) for x in slabs[:3])} added together. "
+            f"You are never paid the same level twice."
         )
-        out["notes"].append(f"The running total starts again at zero when {window} does.")
+        out["notes"].append(
+            "You do not wait until March for it. Each time you climb to a bigger prize "
+            "you are paid the difference straight away, so what you are holding always "
+            "matches what your year's total is worth."
+        )
+        out["notes"].append(
+            "On 1 April the year's total and the prize both reset to zero. The base does "
+            "not reset — it pays from your very first policy of the new year."
+        )
+        out["notes"].append(
+            f"Never reach ₹{_n(slabs[0].threshold)} in a year? The prize is zero, but you "
+            f"still earned the base on every policy you wrote."
+        )
     else:
         out["kind"] = "flat"
         pts = points_on(rule, sample)
-        out["headline"] = (f"A flat rate on every sale. ₹{sample:,.0f} of {name.lower()} "
-                           f"earns {pts:,.0f} points, and twice that earns twice the points.")
+        out["headline"] = (f"A flat rate on every sale. ₹{_n(sample)} of {name.lower()} "
+                           f"earns {_n(pts)} points, and twice that earns twice the points.")
         out["examples"] = [
             {"amount": a, "points": points_on(rule, a)}
             for a in (sample, sample * 2, sample * 10)
@@ -357,8 +439,12 @@ def explain(rule, is_health=False):
 
     if is_health:
         port = rule.port_percent or ZERO
+        out["notes"].insert(0,
+            "It works downwards too. If a sale is rejected or removed and your month "
+            "falls back below a step, the rest of the month follows it back down."
+        )
         out["notes"].append(
-            f"A Port policy earns {points_on(rule, Decimal('100000'), policy_type='port', is_health=True):,.0f} "
+            f"A Port policy earns {_n(points_on(rule, Decimal('100000'), policy_type='port', is_health=True))} "
             f"points per ₹1,00,000 — a flat rate of its own. It does not count towards "
             f"the monthly total that sets your step, and the step does not change it."
             if port else
@@ -461,7 +547,10 @@ def quote(rule, amount, *, prior_volume=ZERO, prior_bonus=ZERO,
 
 
 def _n(v):
-    return f"{Decimal(str(v or 0)):,.0f}"
+    # Indian digit grouping, same as the template filter — 2063297 -> 20,63,297.
+    from ..templatetags.custom_filters import inr
+
+    return inr(v)
 
 
 def _pct(v):

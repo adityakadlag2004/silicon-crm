@@ -450,3 +450,34 @@ class BandCrossingTests(_Base):
         sales_service.delete_sale(b, self.user)
         a.refresh_from_db()
         self.assertEqual(a.points, Decimal("300.000"))  # back to the 1.50% band
+
+
+class ExplainerCopyTests(_Base):
+    """The page's prose has to agree with its own tables."""
+
+    def test_prose_uses_indian_digit_grouping(self):
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        e = inc.explain(rule)
+        blob = " ".join([e["headline"], e["prize_intro"], *e["notes"]])
+        self.assertIn("₹18,00,000", blob)
+        self.assertNotIn("1,800,000", blob)  # Western grouping in the copy
+        self.assertIn("₹3,00,000", blob)
+
+    def test_life_walkthrough_pays_out_to_the_price_list(self):
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        rows = inc.walkthrough(rule)
+        # Every prize instalment together equals the level the year finishes on.
+        self.assertEqual(sum(r["bonus_paid"] for r in rows), rows[-1]["prize_level"])
+        # And the running total is the sale amounts accumulating.
+        self.assertEqual(sum(r["amount"] for r in rows), rows[-1]["running"])
+
+    def test_health_walkthrough_shows_the_earlier_sale_being_lifted(self):
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        rows = inc.walkthrough(rule, is_health=True)
+        first, second = rows
+        self.assertIsNone(first["earlier_now"])
+        self.assertGreater(second["earlier_now"], first["this_sale"])
+        # The month total is the whole month at the new step, not a running sum
+        # of what each sale earned when it was made.
+        self.assertEqual(second["month_total"],
+                         second["earlier_now"] + second["this_sale"])

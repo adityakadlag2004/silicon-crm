@@ -247,12 +247,44 @@
           </tbody>
         </table>
       </div>
+
+      {% if e.walkthrough %}
+        <p class="mt-3 mb-2" style="font-size:.92rem;"><strong>What crossing a step does</strong> —
+        the sale you already made gets pulled up with you:</p>
+        <div class="ki-table-wrap">
+          <table class="ki-table">
+            <thead>
+              <tr>
+                <th>You sell</th>
+                <th class="text-end">Your month is now</th>
+                <th class="text-end">This sale earns</th>
+                <th class="text-end">Earlier sale becomes</th>
+                <th class="text-end">Month total</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for w in e.walkthrough %}
+              <tr>
+                <td>₹{{ w.amount|inr }}</td>
+                <td class="text-end">₹{{ w.running|inr }}</td>
+                <td class="text-end">{{ w.this_sale|inr }}</td>
+                <td class="text-end">
+                  {% if w.earlier_now %}<strong>{{ w.earlier_now|inr }}</strong>{% else %}—{% endif %}
+                </td>
+                <td class="text-end"><strong>{{ w.month_total|inr }}</strong></td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
     {% elif e.kind == 'ladder' %}
+      <p style="font-size:.92rem;">{{ e.prize_intro }}</p>
       <div class="ki-table-wrap">
         <table class="ki-table">
           <thead>
             <tr>
-              <th>Once your {% if e.rule.slab_period == 'fy' %}April–March{% else %}monthly{% endif %} total reaches</th>
+              <th>Reach this much in the year</th>
               <th class="text-end">The prize is worth</th>
               <th class="text-end">Your year's total (base + prize)</th>
             </tr>
@@ -261,13 +293,42 @@
           {% for r in e.rungs %}
             <tr>
               <td>₹{{ r.from|inr }}</td>
-              <td class="text-end">{{ r.bonus|inr }}</td>
-              <td class="text-end">{{ r.total_at|inr }}</td>
+              <td class="text-end">{{ r.bonus|inr }} points</td>
+              <td class="text-end">{{ r.total_at|inr }} points</td>
             </tr>
           {% endfor %}
           </tbody>
         </table>
       </div>
+
+      {% if e.walkthrough %}
+        <p class="mt-3 mb-2" style="font-size:.92rem;"><strong>A year, step by step</strong> —
+        each time the prize grows you are paid the difference:</p>
+        <div class="ki-table-wrap">
+          <table class="ki-table">
+            <thead>
+              <tr>
+                <th>You sell</th>
+                <th class="text-end">Base paid</th>
+                <th class="text-end">Year total so far</th>
+                <th class="text-end">Prize is now worth</th>
+                <th class="text-end">Prize paid now</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for w in e.walkthrough %}
+              <tr>
+                <td>₹{{ w.amount|inr }}</td>
+                <td class="text-end">{{ w.base|inr }}</td>
+                <td class="text-end">₹{{ w.running|inr }}</td>
+                <td class="text-end">{% if w.prize_level %}{{ w.prize_level|inr }}{% else %}nothing yet{% endif %}</td>
+                <td class="text-end"><strong>{% if w.bonus_paid %}{{ w.bonus_paid|inr }}{% else %}0{% endif %}</strong></td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
     {% else %}
       <div class="ki-table-wrap">
         <table class="ki-table">
