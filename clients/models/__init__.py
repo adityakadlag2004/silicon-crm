@@ -42,6 +42,7 @@ from .targets import (  # noqa: F401
     MonthlyTargetHistory,
 )
 from .incentives import (  # noqa: F401
+    IncentiveAccrual,
     IncentiveRule,
     IncentiveSlab,
     Campaign,

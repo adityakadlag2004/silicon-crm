@@ -125,6 +125,24 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - Changing a rule never rewrites sales already saved — points are stored at save
   time. `recompute_sibling_sales` re-runs the rule's whole *period* (not just
   the month) after a status change, so rate bands re-rate when volume crosses.
+- **Multiyear health pays one year at a time.** Year 1 lands with the sale;
+  years 2..N land on the policy anniversary as an `IncentiveAccrual` row created
+  by the `multiyear_incentive_accruals` cron (daily 6:10). The premium was paid
+  up front, so there is no renewal to collect and nothing to enter — only the
+  points arrive. Idempotent via `unique_together(sale, year_index)`, so a missed
+  day catches up and a re-run is a no-op. Each year is priced by the band the
+  employee's month has reached when it lands.
+- **Points now come from two places** — `Sale.points` and `IncentiveAccrual`.
+  Any total shown to an employee as "what I earned" must add
+  `incentives.accrued_points(...)`: employee + admin dashboards, team detail,
+  the app API stats and the calculator all do. Sales *reports* stay sales-only
+  on purpose — an accrual is earned points, not a sale, and must never be
+  counted as business volume.
+- `/clients/incentives/calculator/` is the **employee-facing** page (Sales nav,
+  no `manage_incentives` needed): plain-language structure, worked examples in
+  points, and a what-if. It must never print firm margin/commission figures or
+  raw percentages — `services.incentives.explain()` renders everything in
+  points. `/clients/incentives/` is the admin structure page.
 
 ## Claim workflow
 

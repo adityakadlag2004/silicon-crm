@@ -41,6 +41,7 @@ from ..forms import (
     EmployeeDeactivateForm,
     FirmSettingsForm,
 )
+from ..services import incentives as incentives_service
 from .helpers import get_manager_access, category_name_map
 
 
@@ -319,6 +320,8 @@ def admin_dashboard(request):
     total_clients = Client.objects.count()
     total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
     total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or Decimal("0")
+    total_points += incentives_service.accrued_points(
+        None, date(year, month, 1), date(year, month, monthrange(year, month)[1]))
     total_salary_all = Employee.objects.aggregate(total=Sum("salary"))["total"] or Decimal("0")
     admin_points_scale = max(total_points, total_salary_all, Decimal("1"))
     admin_salary_ratio = (total_salary_all / admin_points_scale) * Decimal("100") if admin_points_scale else Decimal("0")
@@ -790,6 +793,11 @@ def employee_dashboard(request):
 
     total_sales = monthly_sales_approved.aggregate(total=Sum("amount"))["total"] or Decimal("0")
     total_points = monthly_sales_approved.aggregate(total=Sum("points"))["total"] or Decimal("0")
+    # Multiyear health policies pay their 2nd/3rd year on the anniversary, with
+    # no sale row behind it — those points are earned this month too.
+    accrued_points = incentives_service.accrued_points(
+        emp, date(today.year, today.month, 1), today.replace(day=monthrange(today.year, today.month)[1]))
+    total_points += accrued_points
     pending_points = monthly_sales_pending.aggregate(total=Sum("points"))["total"] or Decimal("0")
     salary_points = getattr(emp, "salary", Decimal("0")) or Decimal("0")
     if not isinstance(salary_points, Decimal):

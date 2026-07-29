@@ -25,6 +25,7 @@ from ..models import (
     Renewal,
     Sale,
 )
+from ..services import incentives as _incentives
 from ..services import sales as sales_service
 from .helpers import get_manager_access, name_words_q
 from .reports import business_overview_data
@@ -1610,10 +1611,15 @@ def app_team_detail(request, employee_id):
             "total_sales": Sale.objects.filter(employee=e).count(),
             "pending_sales": Sale.objects.filter(employee=e, status=Sale.STATUS_PENDING).count(),
             "total_amount": _money(approved.aggregate(t=Sum("amount"))["t"]),
-            "total_points": _money(approved.aggregate(t=Sum("points"))["t"]),
+            # Multiyear health later years pay on the anniversary with no sale
+            # row behind them, so they are added to both point totals.
+            "total_points": _money((approved.aggregate(t=Sum("points"))["t"] or 0)
+                                   + _incentives.accrued_points(e, date(2000, 1, 1), timezone.localdate())),
             "clients": Client.objects.filter(mapped_to=e).count(),
             "month_amount": _money(month.aggregate(t=Sum("amount"))["t"]),
-            "month_points": _money(month.aggregate(t=Sum("points"))["t"]),
+            "month_points": _money((month.aggregate(t=Sum("points"))["t"] or 0)
+                                   + _incentives.accrued_points(
+                                       e, timezone.localdate().replace(day=1), timezone.localdate())),
         },
     })
 

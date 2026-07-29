@@ -448,11 +448,20 @@ def incentive_calculator(request):
             "added": proj["added"],
             "final_volume": proj["final_volume"],
             "rate": proj["rate"],
+            # Employees read points, not rates — this is the same step said plainly.
+            "per_lakh": proj["rate"] * Decimal("1000"),
+            "port_per_lakh": (rule.port_percent or Decimal("0")) * Decimal("1000"),
             "bonus": proj["bonus"],
             "next": incentives_service.next_rung(rule, proj["final_volume"]),
         })
 
+    explainers = [e for e in (
+        incentives_service.explain(r, is_health=bool(r.product_ref and r.product_ref.is_health))
+        for r in rules) if e]
+
     return render(request, "incentives/calculator.html", {
+        "explainers": explainers,
+        "pending_accruals": incentives_service.pending_accruals(target),
         "crumbs": [{"label": "Sales", "url": reverse("clients:all_sales")},
                    {"label": "Incentive Calculator"}],
         "kpis": [

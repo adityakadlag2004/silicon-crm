@@ -157,7 +157,10 @@ def team_detail(request, employee_id):
     emp = get_object_or_404(Employee.objects.select_related("user"), id=employee_id)
 
     # Stats
+    from calendar import monthrange
     from datetime import date
+
+    from ..services import incentives as incentives_service
     today = date.today()
 
     total_sales = Sale.objects.filter(employee=emp).count()
@@ -178,9 +181,14 @@ def team_detail(request, employee_id):
     month_amount = Sale.objects.filter(
         employee=emp, date__year=today.year, date__month=today.month, status="approved"
     ).aggregate(total=Sum("amount"))["total"] or 0
-    month_points = Sale.objects.filter(
+    month_points = (Sale.objects.filter(
         employee=emp, date__year=today.year, date__month=today.month, status="approved"
-    ).aggregate(total=Sum("points"))["total"] or 0
+    ).aggregate(total=Sum("points"))["total"] or 0)
+    # Multiyear health later years pay without a sale row behind them.
+    month_points += incentives_service.accrued_points(
+        emp, date(today.year, today.month, 1),
+        date(today.year, today.month, monthrange(today.year, today.month)[1]))
+    total_points += incentives_service.accrued_points(emp, date(2000, 1, 1), today)
 
     # Recent sales
     recent_sales = Sale.objects.filter(employee=emp).select_related("client").order_by("-date", "-created_at")[:10]

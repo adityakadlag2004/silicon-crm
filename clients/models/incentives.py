@@ -88,6 +88,43 @@ class IncentiveSlab(models.Model):
         return f"{self.rule.product} – ₹{self.threshold} → {self.payout} pts"
 
 
+class IncentiveAccrual(models.Model):
+    """Points issued for a later year of a multiyear health policy.
+
+    The client pays a 2- or 3-year premium up front, but only the first year is
+    business now — so only that year's points are issued at sale time. Each
+    later year's points fall due on the policy's anniversary in that year, with
+    no renewal to collect and nothing for anyone to enter: the premium is
+    already paid, so all that happens is the points arrive.
+
+    One row per (sale, year), created by the ``multiyear_incentive_accruals``
+    cron. The unique constraint is what makes a re-run harmless.
+    """
+
+    sale = models.ForeignKey("Sale", on_delete=models.CASCADE, related_name="accruals")
+    employee = models.ForeignKey("Employee", on_delete=models.PROTECT, related_name="incentive_accruals")
+    year_index = models.PositiveSmallIntegerField(
+        help_text="Which policy year these points are for (2 = second year).",
+    )
+    due_date = models.DateField(db_index=True, help_text="The policy anniversary these points fell due on.")
+    amount = models.DecimalField(
+        max_digits=14, decimal_places=2,
+        help_text="The year's premium slice these points were computed on.",
+    )
+    points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Incentive Accrual"
+        verbose_name_plural = "Incentive Accruals"
+        ordering = ["-due_date", "-id"]
+        unique_together = [("sale", "year_index")]
+        indexes = [models.Index(fields=["employee", "due_date"], name="accrual_emp_due_idx")]
+
+    def __str__(self):
+        return f"{self.sale_id} year {self.year_index}: {self.points} pts on {self.due_date}"
+
+
 # ---------- Target & Special Campaigns (time-bound, product-wise) ----------
 class Campaign(models.Model):
     """A time-bound promotion. Sales of the campaign's products, dated within

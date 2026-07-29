@@ -60,6 +60,103 @@ def unit_rate_percent(rule):
     return (rule.points_per_unit or ZERO) / rule.unit_amount * Decimal("100")
 
 
+def accrual_schedule(sale):
+    """[(year_index, due_date, slice)] for a multiyear health policy's later years.
+
+    Year 1 was paid at sale time; years 2..N fall due on the policy's
+    anniversary in each of those years. Empty for anything that isn't an
+    approved multiyear health sale.
+    """
+    from ..models import Sale
+    from ..models.sales import _add_years
+
+    years = sale.policy_years or 1
+    if years < 2 or sale.status != Sale.STATUS_APPROVED or not sale._is_health_product():
+        return []
+    basis = sale.renewal_basis
+    if not basis:
+        return []
+    slice_amount = sale.annual_premium
+    return [(n, _add_years(basis, n - 1), slice_amount) for n in range(2, years + 1)]
+
+
+def issue_due_accruals(sale, *, on_date=None, dry_run=False):
+    """Create the accrual rows a multiyear policy has reached the date for.
+
+    Priced through the same ``quote()`` as a sale of that slice would be, using
+    the employee's health volume in the month it falls due — so a later year
+    lands in the band their business that month actually earns.
+
+    ponytail: the accrual does not re-rate the month's other sales the way a
+    real sale does. Later years are a trickle, and re-rating settled months
+    would rewrite already-reported figures; revisit if volumes make it matter.
+    """
+    from ..models import IncentiveAccrual
+
+    on_date = on_date or _today()
+    made = []
+    for year_index, due, amount in accrual_schedule(sale):
+        if due > on_date:
+            continue
+        if IncentiveAccrual.objects.filter(sale=sale, year_index=year_index).exists():
+            continue
+        rule = sale._rule()
+        prior, _bonus, _pts = period_totals(rule, sale.employee, due, is_health=True) if rule else (ZERO, ZERO, ZERO)
+        q = quote(rule, amount, prior_volume=prior,
+                  policy_type=sale.policy_type or "fresh", is_health=True)
+        if dry_run:
+            made.append(IncentiveAccrual(
+                sale=sale, employee=sale.employee, year_index=year_index,
+                due_date=due, amount=amount, points=q["total"]))
+            continue
+        made.append(IncentiveAccrual.objects.create(
+            sale=sale, employee=sale.employee, year_index=year_index,
+            due_date=due, amount=amount, points=q["total"]))
+    return made
+
+
+def accrued_points(employee, start, end):
+    """Points issued from multiyear later years in [start, end]."""
+    from django.db.models import Sum
+
+    from ..models import IncentiveAccrual
+
+    qs = IncentiveAccrual.objects.filter(due_date__gte=start, due_date__lte=end)
+    if employee is not None:
+        qs = qs.filter(employee=employee)
+    return qs.aggregate(t=Sum("points"))["t"] or ZERO
+
+
+def pending_accruals(employee):
+    """Later-year points not yet due, soonest first — what's already banked
+    for the future without another sale."""
+    from ..models import IncentiveAccrual, Sale
+
+    today = _today()
+    rows = []
+    sales = (Sale.objects.filter(employee=employee, status=Sale.STATUS_APPROVED,
+                                 policy_years__gt=1)
+             .select_related("client", "product_ref").prefetch_related("accruals"))
+    for sale in sales:
+        if not sale._is_health_product():
+            continue
+        done = {a.year_index for a in sale.accruals.all()}
+        rule = sale._rule()
+        for year_index, due, amount in accrual_schedule(sale):
+            if due <= today or year_index in done:
+                continue
+            q = quote(rule, amount, policy_type=sale.policy_type or "fresh", is_health=True)
+            rows.append({"sale": sale, "year_index": year_index, "due": due,
+                         "amount": amount, "estimate": q["total"]})
+    return sorted(rows, key=lambda r: r["due"])
+
+
+def _today():
+    from django.utils import timezone
+
+    return timezone.localdate()
+
+
 def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
     """What this employee has actually banked in the rule's current period.
 
@@ -174,6 +271,98 @@ def bonus_released_for(rule, volume):
     volume = Decimal(str(volume or 0))
     band = next((s for s in rule.slabs.all().order_by("-threshold") if volume >= s.threshold), None)
     return band.payout if band else ZERO
+
+
+def points_on(rule, amount, *, volume=None, policy_type="", is_health=False):
+    """Points a sale of `amount` earns — the plain number, for worked examples.
+
+    `volume` is the period total the band should be read at; it defaults to the
+    sale standing alone.
+    """
+    amount = Decimal(str(amount or 0))
+    prior = ZERO if volume is None else Decimal(str(volume)) - amount
+    return quote(rule, amount, prior_volume=max(prior, ZERO),
+                 prior_bonus=bonus_released_for(rule, max(prior, ZERO)),
+                 policy_type=policy_type, is_health=is_health)["total"]
+
+
+def explain(rule, is_health=False):
+    """A plain-language description of one product's structure, in points.
+
+    Deliberately free of firm margin/commission figures — this is read by the
+    people who sell, and what they need is what they earn.
+    """
+    from ..models import IncentiveRule
+
+    if rule is None or not rule.active:
+        return None
+    name = rule.product_ref.name if rule.product_ref_id else rule.product
+    slabs = sorted(rule.slabs.all(), key=lambda s: s.threshold)
+    window = "this month" if rule.slab_period == IncentiveRule.PERIOD_MONTH else "this financial year"
+
+    # An example sale big enough to be recognisable for the product.
+    sample = Decimal("100000") if rule.unit_amount >= Decimal("100000") else Decimal("25000")
+
+    out = {"name": name, "rule": rule, "is_health": is_health, "window": window,
+           "kind": "flat", "examples": [], "rungs": [], "notes": []}
+
+    if slabs and rule.slab_mode == IncentiveRule.MODE_RATE:
+        out["kind"] = "bands"
+        out["headline"] = (
+            f"The more {name.lower()} you do in a month, the more every rupee of it earns. "
+            f"Your own total {window} decides the rate, and it applies to the whole month — "
+            f"crossing a step lifts what you already sold too."
+        )
+        # Deliberately NOT "points for a ₹1,00,000 sale" — a sale that size
+        # pushes the month into a higher step, so every row would collapse to
+        # the same number. The rate for the step, and the whole month at it.
+        for s in slabs:
+            out["rungs"].append({
+                "from": s.threshold,
+                "per_10k": s.payout * Decimal("100"),
+                "month_total": (s.threshold * s.payout / Decimal("100")
+                                if s.threshold > 0 else None),
+            })
+    elif slabs:
+        out["kind"] = "ladder"
+        base_pts = points_on(rule, sample)
+        out["headline"] = (
+            f"Every policy earns points the moment it is approved — no minimum, nothing to reach first. "
+            f"A ₹{sample:,.0f} policy earns {base_pts:,.0f} points. "
+            f"Separately, your running total {window} unlocks bonus points as it passes each step below."
+        )
+        for s in slabs:
+            out["rungs"].append({
+                "from": s.threshold,
+                "bonus": s.payout,
+                "total_at": points_on(rule, s.threshold) + s.payout,
+            })
+        out["notes"].append(
+            "The bonus figure is the total you have earned by that step, not an extra "
+            "payment on top of the one before. Reaching the second step tops you up to "
+            "its figure — you are never paid the same step twice."
+        )
+        out["notes"].append(f"The running total starts again at zero when {window} does.")
+    else:
+        out["kind"] = "flat"
+        pts = points_on(rule, sample)
+        out["headline"] = (f"A flat rate on every sale. ₹{sample:,.0f} of {name.lower()} "
+                           f"earns {pts:,.0f} points, and twice that earns twice the points.")
+        out["examples"] = [
+            {"amount": a, "points": points_on(rule, a)}
+            for a in (sample, sample * 2, sample * 10)
+        ]
+
+    if is_health:
+        port = rule.port_percent or ZERO
+        out["notes"].append(
+            f"A Port policy earns {points_on(rule, Decimal('100000'), policy_type='port', is_health=True):,.0f} "
+            f"points per ₹1,00,000 — a flat rate of its own. It does not count towards "
+            f"the monthly total that sets your step, and the step does not change it."
+            if port else
+            "Port policies do not earn points."
+        )
+    return out
 
 
 def ladder(rule):

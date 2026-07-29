@@ -148,10 +148,11 @@
         <td class="text-end"><strong>₹{{ l.added|inr }}</strong></td>
         <td style="font-size:.86rem;">
           {% if l.rule.slab_mode == 'rate' %}
-            ₹{{ l.final_volume|inr }} → the <strong>{{ l.rate|floatformat:2 }}%</strong> band.
+            ₹{{ l.final_volume|inr }} this month → the <strong>{{ l.per_lakh|inr }} points per ₹1,00,000</strong> step.
             {% if l.port_assumed %}
-              <div class="text-muted">Of the assumed total, ₹{{ l.port_assumed|inr }} is Port —
-              paid at {{ l.rule.port_percent|floatformat:2 }}% and left out of the band.</div>
+              <div class="text-muted">Of that, ₹{{ l.port_assumed|inr }} is Port —
+              it earns {{ l.port_per_lakh|inr }} points per ₹1,00,000 on its own and is
+              left out of the monthly step.</div>
             {% endif %}
           {% else %}
             ₹{{ l.final_volume|inr }} cumulative.{% if l.bonus %} Releases <strong>₹{{ l.bonus|inr }}</strong> of ladder bonus.{% endif %}
@@ -178,9 +179,146 @@
   </div>
 {% endif %}
 
+{% if pending_accruals %}
+<div class="ki-card mt-4">
+  <h3 class="mb-1" style="font-size:1.05rem;font-weight:700;">
+    <i class="bi bi-hourglass-split" style="color:var(--ki-primary);"></i> Points already coming to you
+  </h3>
+  <p class="text-muted mb-3" style="font-size:.88rem;">
+    Later years of multiyear health policies you have already sold. The client has
+    paid; these points arrive on their own, on the date shown. You do not need to
+    sell anything or collect anything for them.
+  </p>
+  <div class="ki-table-wrap">
+    <table class="ki-table">
+      <thead>
+        <tr><th>Client</th><th>Policy year</th><th class="text-end">That year's premium</th>
+            <th>Arrives on</th><th class="text-end">Points (about)</th></tr>
+      </thead>
+      <tbody>
+      {% for a in pending_accruals %}
+        <tr>
+          <td>{{ a.sale.client }}</td>
+          <td>Year {{ a.year_index }} of {{ a.sale.policy_years }}</td>
+          <td class="text-end">₹{{ a.amount|inr }}</td>
+          <td>{{ a.due|date:"d M Y" }}</td>
+          <td class="text-end">{{ a.estimate|inr }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="form-text mb-0 mt-2">
+    Shown at today's rate for a policy standing on its own — the actual points follow
+    whatever step your month has reached when they arrive.
+  </p>
+</div>
+{% endif %}
+
+{# ---------------- Plain-language structure ---------------- #}
+<h2 class="ki-section-title mt-4 mb-3"><i class="bi bi-book"></i> How each product earns</h2>
+
+<div class="ki-grid-2">
+{% for e in explainers %}
+  <div class="ki-card">
+    <h3 class="mb-2" style="font-size:1.05rem;font-weight:700;color:var(--ki-dark);">
+      <i class="bi bi-box-seam me-1" style="color:var(--ki-primary);"></i> {{ e.name }}
+    </h3>
+    <p style="font-size:.92rem;">{{ e.headline }}</p>
+
+    {% if e.kind == 'bands' %}
+      <div class="ki-table-wrap">
+        <table class="ki-table">
+          <thead>
+            <tr>
+              <th>Once your month reaches</th>
+              <th class="text-end">Every ₹10,000 earns</th>
+              <th class="text-end">A month of exactly this earns</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for r in e.rungs %}
+            <tr>
+              <td>{% if r.from %}₹{{ r.from|inr }}{% else %}Your first rupee{% endif %}</td>
+              <td class="text-end">{{ r.per_10k|inr }} points</td>
+              <td class="text-end">{% if r.month_total %}{{ r.month_total|inr }} points{% else %}—{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif e.kind == 'ladder' %}
+      <div class="ki-table-wrap">
+        <table class="ki-table">
+          <thead>
+            <tr>
+              <th>Once your {% if e.rule.slab_period == 'fy' %}April–March{% else %}monthly{% endif %} total reaches</th>
+              <th class="text-end">Bonus points by then</th>
+              <th class="text-end">Total earned by then</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for r in e.rungs %}
+            <tr>
+              <td>₹{{ r.from|inr }}</td>
+              <td class="text-end">{{ r.bonus|inr }}</td>
+              <td class="text-end">{{ r.total_at|inr }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="ki-table-wrap">
+        <table class="ki-table">
+          <thead><tr><th>If you sell</th><th class="text-end">You earn</th></tr></thead>
+          <tbody>
+          {% for x in e.examples %}
+            <tr><td>₹{{ x.amount|inr }}</td><td class="text-end">{{ x.points|inr }} points</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% for n in e.notes %}
+      <p class="mt-2 mb-0" style="font-size:.88rem;">{{ n }}</p>
+    {% endfor %}
+
+    {% if e.is_health %}
+      <div class="mt-3 p-3" style="background:#f8fafc;border-radius:8px;font-size:.88rem;">
+        <strong>A 2 or 3 year policy</strong> — the client pays for every year up front,
+        but you are not paid for all of it at once. The premium is split by the number
+        of years, and you earn <strong>one year at a time</strong>:
+        <ul class="mt-2 mb-0">
+          <li>Year 1 lands with the sale.</li>
+          <li>Year 2 lands on the policy's anniversary next year, on that date.</li>
+          <li>Year 3 lands on the anniversary the year after.</li>
+        </ul>
+        <p class="mb-0 mt-2">
+          There is nothing to collect and nothing to enter — the money is already paid,
+          so the policy renews itself and the points simply arrive. Each year is priced
+          by the step your month has reached when it lands, so a good month lifts it too.
+          Anything owed to you shows in <em>Points already coming to you</em> above.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+
+<div class="ki-card mt-4">
+  <h3 class="mb-2" style="font-size:1rem;font-weight:700;">Worth knowing</h3>
+  <ul class="mb-0" style="font-size:.9rem;">
+    <li>Points are counted only once a sale is <strong>approved</strong>. A rejected sale earns nothing.</li>
+    <li>Your steps reset with their period — monthly ones on the 1st, the yearly one on 1 April.</li>
+    <li>A sale keeps the points it was given. If a rate changes later, past sales are not rewritten.</li>
+    <li>During a <strong>campaign</strong>, that product's campaign terms replace the ones here for the campaign dates.</li>
+  </ul>
+</div>
+
 <p class="text-muted mt-3" style="font-size:.85rem;max-width:72ch;">
-  Only approved sales count. Figures are what the rules pay today — changing a rule
-  later never rewrites a sale already saved.
+  Figures here are what the rules pay today.
 </p>
 
 {% endblock %}

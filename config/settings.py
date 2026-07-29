@@ -167,6 +167,9 @@ CRONJOBS = [
     ('0 * * * *', 'django.core.management.call_command', ['tasks_send_reminders']),
     # Alert admins about employees with no synced calls for 3+ days (likely app uninstall), daily 9:15 AM
     ('15 9 * * *', 'django.core.management.call_command', ['detect_silent_devices']),
+    # Issue the 2nd/3rd-year points of multiyear health policies on their
+    # anniversary — the premium was paid up front, so nothing else triggers them.
+    ('10 6 * * *', 'django.core.management.call_command', ['multiyear_incentive_accruals']),
     # Import CAMS/KFintech distributor mailback files from the feeds mailbox.
     # Hourly at :15 — on-demand mailback requests (historical backfills, AUM
     # reports) land at arbitrary times and shouldn't wait a day; the run only

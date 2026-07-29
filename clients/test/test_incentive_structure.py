@@ -255,3 +255,92 @@ class CalculatorTests(_Base):
         r = self.client.get(self.url, {"employee": self.emp.id})
         self.assertEqual(r.context["target"], self.emp)
         self.assertGreater(r.context["banked_total"], Decimal("0"))
+
+
+class MultiyearAccrualTests(_Base):
+    """Years 2 and 3 of a multiyear health policy pay on the anniversary."""
+
+    def _policy(self, start, years=3, amount=90000):
+        return self.sell(self.health, amount, start, policy_type="fresh",
+                         policy_years=years, policy_date=start)
+
+    def test_only_year_one_pays_at_sale_time(self):
+        s = self._policy(date(2026, 6, 10))
+        self.assertEqual(s.points, Decimal("600.000"))  # 30,000 slice, 2.00% band
+        self.assertEqual(s.accruals.count(), 0)
+
+    def test_schedule_is_one_row_per_later_year_on_the_anniversary(self):
+        s = self._policy(date(2026, 6, 10))
+        sched = inc.accrual_schedule(s)
+        self.assertEqual([(n, d) for n, d, _a in sched],
+                         [(2, date(2027, 6, 10)), (3, date(2028, 6, 10))])
+        self.assertEqual(sched[0][2], Decimal("30000"))
+
+    def test_a_two_year_policy_has_one_later_year(self):
+        s = self._policy(date(2026, 6, 10), years=2, amount=60000)
+        self.assertEqual([n for n, _d, _a in inc.accrual_schedule(s)], [2])
+
+    def test_single_year_policies_never_accrue(self):
+        s = self.sell(self.health, 30000, date(2026, 6, 10),
+                      policy_type="fresh", policy_date=date(2026, 6, 10))
+        self.assertEqual(inc.accrual_schedule(s), [])
+
+    def test_nothing_issues_before_the_anniversary(self):
+        s = self._policy(date(2026, 6, 10))
+        self.assertEqual(inc.issue_due_accruals(s, on_date=date(2027, 6, 9)), [])
+
+    def test_year_two_issues_on_the_anniversary(self):
+        s = self._policy(date(2026, 6, 10))
+        made = inc.issue_due_accruals(s, on_date=date(2027, 6, 10))
+        self.assertEqual(len(made), 1)
+        self.assertEqual(made[0].year_index, 2)
+        self.assertEqual(made[0].amount, Decimal("30000"))
+        self.assertEqual(made[0].points, Decimal("600.000"))  # 2.00% band
+
+    def test_rerunning_never_pays_the_same_year_twice(self):
+        s = self._policy(date(2026, 6, 10))
+        inc.issue_due_accruals(s, on_date=date(2027, 6, 10))
+        again = inc.issue_due_accruals(s, on_date=date(2027, 6, 10))
+        self.assertEqual(again, [])
+        self.assertEqual(s.accruals.count(), 1)
+
+    def test_a_missed_run_catches_up_without_duplicating(self):
+        s = self._policy(date(2026, 6, 10))
+        made = inc.issue_due_accruals(s, on_date=date(2028, 9, 1))
+        self.assertEqual(sorted(a.year_index for a in made), [2, 3])
+        self.assertEqual(s.accruals.count(), 2)
+
+    def test_a_later_year_is_priced_by_the_month_it_lands_in(self):
+        s = self._policy(date(2026, 6, 10))
+        # A big Fresh month in June 2027 lifts the year-2 slice into a higher step.
+        self.sell(self.health, 280000, date(2027, 6, 1), policy_type="fresh")
+        made = inc.issue_due_accruals(s, on_date=date(2027, 6, 10))
+        self.assertEqual(made[0].points, Decimal("1050.000"))  # 3.50% band
+
+    def test_the_cron_issues_and_notifies(self):
+        from clients.models import Notification
+
+        self._policy(date(2025, 7, 1))  # year 2 fell due 2026-07-01, already past
+        call_command("multiyear_incentive_accruals")
+        self.assertEqual(
+            inc.accrued_points(self.emp, date(2026, 7, 1), date(2026, 7, 31)),
+            Decimal("600.000"))
+        self.assertTrue(Notification.objects.filter(recipient=self.user).exists())
+
+    def test_dry_run_writes_nothing(self):
+        s = self._policy(date(2025, 7, 1))
+        call_command("multiyear_incentive_accruals", "--dry-run")
+        self.assertEqual(s.accruals.count(), 0)
+
+    def test_pending_list_shows_what_is_still_coming(self):
+        self._policy(date(2026, 6, 10))
+        rows = inc.pending_accruals(self.emp)
+        self.assertEqual([r["year_index"] for r in rows], [2, 3])
+        self.assertEqual(rows[0]["amount"], Decimal("30000"))
+
+    def test_rejecting_the_sale_stops_future_years(self):
+        s = self._policy(date(2026, 6, 10))
+        s.status = Sale.STATUS_REJECTED
+        s.save()
+        self.assertEqual(inc.accrual_schedule(s), [])
+        self.assertEqual(inc.issue_due_accruals(s, on_date=date(2028, 1, 1)), [])
