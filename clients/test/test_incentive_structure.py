@@ -809,3 +809,56 @@ class AppIncentiveApiTests(_Base):
             data=json.dumps({"threshold": "12000000", "payout": "180000"}),
             content_type="application/json")
         self.assertEqual(r.status_code, 200)
+
+
+class CalculatorLadderStatusTests(_Base):
+    """The calculator has to show where the year's ladder stands, not just hint."""
+
+    def setUp(self):
+        self.client.force_login(self.user)
+        self.url = reverse("clients:incentive_calculator")
+        self.today = timezone.localdate()
+
+    def test_life_ladder_status_is_on_the_page(self):
+        self.sell(self.life, 310000, self.today)
+        r = self.client.get(self.url)
+        st = next(s for s in r.context["ladder_status"]
+                  if s["rule"].product == "Life Insurance")
+        self.assertEqual(st["volume"], Decimal("310000"))
+        self.assertEqual(st["level"], Decimal("3000"))
+        self.assertEqual(len(st["rungs"]), 8)
+
+    def test_health_has_no_ladder_status(self):
+        # Health is rate-banded, not a ladder — it must not appear here.
+        self.sell(self.health, 50000, self.today, policy_type="fresh")
+        r = self.client.get(self.url)
+        self.assertNotIn("Health Insurance",
+                         [s["rule"].product for s in r.context["ladder_status"]])
+
+    def test_shortfall_is_what_the_year_still_owes(self):
+        from clients.models import BonusPayout
+
+        self.sell(self.life, 310000, self.today)
+        r = self.client.get(self.url)
+        st = r.context["ladder_status"][0]
+        self.assertEqual(st["shortfall"], Decimal("0"))  # released with the sale
+
+        BonusPayout.objects.create(
+            employee=self.emp, rule=IncentiveRule.objects.get(product_ref=self.life),
+            for_month=self.today.replace(day=1), amount=Decimal("8000"))
+        r = self.client.get(self.url)
+        st = r.context["ladder_status"][0]
+        self.assertEqual(st["paid_manually"], Decimal("8000"))
+        self.assertEqual(st["shortfall"], Decimal("0"))   # monthly payout covers it
+
+    def test_an_employee_sees_only_their_own_standing(self):
+        other_user = User.objects.create_user("rival2", password="x")
+        other = Employee.objects.create(user=other_user, role="employee")
+        Sale.objects.create(client=self.client_rec, employee=other,
+                            product=self.life.name, product_ref=self.life,
+                            amount=Decimal("900000"), date=self.today,
+                            status=Sale.STATUS_APPROVED)
+        r = self.client.get(self.url, {"employee": other.id})
+        st = r.context["ladder_status"][0]
+        self.assertEqual(st["employee"], self.emp)
+        self.assertEqual(st["volume"], Decimal("0"))

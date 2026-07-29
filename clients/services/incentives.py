@@ -141,6 +141,7 @@ def life_bonus_status(rule, employee, fy_year):
     # released_total already contains the recorded manual payouts (period_totals
     # folds them in), so the shortfall is simply what the level still owes.
     return {
+        "rule": rule,
         "employee": employee, "fy_year": fy_year,
         "volume": volume, "base": base_total,
         "level": level, "released": released_total + paid_total,

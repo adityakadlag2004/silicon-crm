@@ -207,3 +207,13 @@ def month_short(value):
     except (TypeError, ValueError):
         return ""
     return month_abbr[n] if 1 <= n <= 12 else ""
+
+
+@register.filter
+def sub(value, arg):
+    """value - arg, for showing the gap to a threshold. 0 on bad input."""
+    from decimal import Decimal, InvalidOperation
+    try:
+        return Decimal(str(value or 0)) - Decimal(str(arg or 0))
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")

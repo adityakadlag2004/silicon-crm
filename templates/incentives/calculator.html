@@ -179,6 +179,74 @@
   </div>
 {% endif %}
 
+{# ---------------- Yearly ladder standing ---------------- #}
+{% for st in ladder_status %}
+<div class="ki-card mb-4">
+  <h3 class="mb-1" style="font-size:1.05rem;font-weight:700;">
+    <i class="bi bi-trophy" style="color:var(--ki-primary);"></i>
+    {{ st.rule.product_ref.name|default:st.rule.product }} — yearly bonus status
+  </h3>
+  <p class="text-muted mb-3" style="font-size:.86rem;">FY {{ fy_label }}, April to March.</p>
+
+  <div class="ki-grid-3 mb-3">
+    <div>
+      <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;">Sold this year</div>
+      <div style="font-size:1.5rem;font-weight:800;">₹{{ st.volume|inr }}</div>
+    </div>
+    <div>
+      <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;">Prize level reached</div>
+      <div style="font-size:1.5rem;font-weight:800;color:var(--ki-primary);">
+        {% if st.level %}{{ st.level|inr }}{% else %}none yet{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;">Still to be released</div>
+      <div style="font-size:1.5rem;font-weight:800;color:#15803D;">
+        {% if st.shortfall %}{{ st.shortfall|inr }}{% else %}nil{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="ki-table-wrap">
+    <table class="ki-table">
+      <thead>
+        <tr>
+          <th>Level</th>
+          <th class="text-end">Reach this in the year</th>
+          <th class="text-end">Prize</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in st.rungs %}
+        <tr {% if st.volume >= row.slab.threshold %}style="background:#f0fdf4;"{% endif %}>
+          <td>{{ forloop.counter }}</td>
+          <td class="text-end">₹{{ row.slab.threshold|inr }}</td>
+          <td class="text-end">{{ row.slab.payout|inr }}</td>
+          <td>
+            {% if st.volume >= row.slab.threshold %}
+              <span style="color:#15803D;font-weight:600;">Reached</span>
+            {% else %}
+              <span class="text-muted">₹{{ row.slab.threshold|sub:st.volume|inr }} away</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="form-text mb-0 mt-2">
+    Already released this year: <strong>{{ st.released|inr }}</strong>
+    {% if st.paid_manually %}(including {{ st.paid_manually|inr }} paid as the fixed monthly bonus){% endif %}.
+    Base earned separately: <strong>{{ st.base|inr }}</strong>.
+    {% if st.next %}
+      Reaching ₹{{ st.next.slab.threshold|inr }} releases {{ st.next.worth|inr }} more.
+    {% else %}Top level reached.{% endif %}
+  </p>
+</div>
+{% endfor %}
+
 {% if pending_accruals %}
 <div class="ki-card mt-4">
   <h3 class="mb-1" style="font-size:1.05rem;font-weight:700;">

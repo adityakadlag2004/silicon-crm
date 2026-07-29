@@ -642,12 +642,25 @@ def incentive_calculator(request):
             "next": incentives_service.next_rung(rule, proj["final_volume"]),
         })
 
+    # Where this person stands on every yearly ladder — the thing the results
+    # table only hints at, and the reason someone opens this page in a payout week.
+    ladder_status = []
+    for rule in rules:
+        if rule.slab_mode != IncentiveRule.MODE_BONUS or not rule.slabs.exists():
+            continue
+        st = incentives_service.life_bonus_status(
+            rule, target, incentives_service.fy_start_year(today))
+        st["rungs"] = incentives_service.ladder(rule)
+        ladder_status.append(st)
+
     explainers = [e for e in (
         incentives_service.explain(r, is_health=bool(r.product_ref and r.product_ref.is_health))
         for r in rules) if e]
 
     return render(request, "incentives/calculator.html", {
         "explainers": explainers,
+        "ladder_status": ladder_status,
+        "fy_label": f"{incentives_service.fy_start_year(today)}–{incentives_service.fy_start_year(today) + 1}",
         "pending_accruals": incentives_service.pending_accruals(target),
         "crumbs": [{"label": "Sales", "url": reverse("clients:all_sales")},
                    {"label": "Incentive Calculator"}],
