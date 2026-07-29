@@ -31,8 +31,8 @@
         <th class="text-end">Prize level reached</th>
         <th class="text-end">Ladder released</th>
         <th>Next level</th>
-        <th class="text-end">Old monthly slab would have paid</th>
-        <th class="text-end">Level − old slab</th>
+        <th class="text-end">Paid by hand</th>
+        <th class="text-end">Still owed by the ladder</th>
       </tr>
     </thead>
     <tbody>
@@ -53,11 +53,10 @@
             <span class="text-muted">(worth {{ r.next.worth|inr }})</span>
           {% else %}<span class="text-muted">Top level</span>{% endif %}
         </td>
-        <td class="text-end">{{ r.legacy|inr }}</td>
+        <td class="text-end">{{ r.paid_manually|inr }}</td>
         <td class="text-end">
-          {% if r.net_vs_legacy < 0 %}
-            <span style="color:#B91C1C;">{{ r.net_vs_legacy|inr }}</span>
-          {% else %}{{ r.net_vs_legacy|inr }}{% endif %}
+          {% if r.shortfall %}<strong style="color:#15803D;">{{ r.shortfall|inr }}</strong>
+          {% else %}<span class="text-muted">nil</span>{% endif %}
         </td>
       </tr>
     {% empty %}
@@ -73,8 +72,8 @@
         <th class="text-end">{{ totals.level|inr }}</th>
         <th class="text-end">{{ totals.released|inr }}</th>
         <th></th>
-        <th class="text-end">{{ totals.legacy|inr }}</th>
-        <th class="text-end">{{ totals.net|inr }}</th>
+        <th class="text-end">{{ totals.paid|inr }}</th>
+        <th class="text-end">{{ totals.shortfall|inr }}</th>
       </tr>
     </tfoot>
     {% endif %}
@@ -82,9 +81,11 @@
 </div>
 
 <p class="form-text mb-4">
-  <strong>Level − old slab</strong> is the year's ladder entitlement minus everything
-  the old monthly grid would have paid across the same twelve months. A negative
-  figure means the monthly payouts already exceed the year's ladder entitlement.
+  <strong>Ladder released</strong> is everything already in the employee's hands this
+  year — bonus released by sales plus the fixed monthly payouts recorded below.
+  <strong>Still owed</strong> is what the year's level has yet to pay after that
+  deduction; nil means the monthly payouts have already covered it. Nothing is ever
+  clawed back.
 </p>
 
 {% if detail %}
@@ -102,6 +103,8 @@
         <th class="text-end">Base paid</th>
         <th class="text-end">Ladder released</th>
         <th class="text-end">Old monthly slab</th>
+        <th class="text-end">Paid by hand</th>
+        <th>Record payout</th>
       </tr>
     </thead>
     <tbody>
@@ -113,6 +116,26 @@
         <td class="text-end">{% if m.base %}{{ m.base|inr }}{% else %}—{% endif %}</td>
         <td class="text-end">{% if m.released %}<strong>{{ m.released|inr }}</strong>{% else %}—{% endif %}</td>
         <td class="text-end">{% if m.legacy %}{{ m.legacy|inr }}{% else %}—{% endif %}</td>
+        <td class="text-end">{% if m.paid %}<strong>{{ m.paid|inr }}</strong>{% else %}—{% endif %}</td>
+        <td>
+          <form method="post" action="{% url 'clients:record_bonus_payout' %}" class="d-flex gap-1">
+            {% csrf_token %}
+            <input type="hidden" name="employee" value="{{ detail.employee.id }}">
+            <input type="hidden" name="rule" value="{{ rule.id }}">
+            <input type="hidden" name="fy" value="{{ fy }}">
+            <input type="hidden" name="for_month" value="{{ m.for_month|date:'Y-m-d' }}">
+            <label class="visually-hidden" for="pay-{{ m.year }}-{{ m.month }}">
+              Amount paid for {{ m.month|month_short }} {{ m.year }}
+            </label>
+            <input class="form-control form-control-sm" style="max-width:110px;"
+                   type="number" min="0" step="1" name="amount"
+                   id="pay-{{ m.year }}-{{ m.month }}"
+                   value="{{ m.paid|default_if_none:''|floatformat:'0' }}"
+                   placeholder="{{ m.suggested|floatformat:'0' }}">
+            <button class="ki-btn ki-btn-secondary" style="padding:2px 8px;font-size:.8rem;"
+                    type="submit">Save</button>
+          </form>
+        </td>
       </tr>
     {% endfor %}
     </tbody>
@@ -124,6 +147,8 @@
         <th class="text-end">{{ detail.base|inr }}</th>
         <th class="text-end">{{ detail.released|inr }}</th>
         <th class="text-end">{{ detail.legacy|inr }}</th>
+        <th class="text-end">{{ detail.paid_manually|inr }}</th>
+        <th></th>
       </tr>
     </tfoot>
   </table>

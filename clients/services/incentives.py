@@ -89,7 +89,7 @@ def life_bonus_status(rule, employee, fy_year):
     from calendar import monthrange
     from django.db.models import Q, Sum
 
-    from ..models import Sale
+    from ..models import BonusPayout, Sale
 
     start = date(fy_year, FY_START_MONTH, 1)
     end = date(fy_year + 1, FY_START_MONTH, 1) - _one_day()
@@ -102,11 +102,18 @@ def life_bonus_status(rule, employee, fy_year):
     else:
         qs = qs.filter(product=rule.product)
 
+    paid_by_month = {
+        p.for_month: p.amount
+        for p in BonusPayout.objects.filter(employee=employee, rule=rule,
+                                            for_month__gte=start, for_month__lte=end)
+    }
+
     months = []
     volume = ZERO
     base_total = ZERO
     released_total = ZERO
     legacy_total = ZERO
+    paid_total = ZERO
     for i in range(12):
         m = (FY_START_MONTH - 1 + i) % 12 + 1
         y = fy_year + (1 if m < FY_START_MONTH else 0)
@@ -118,19 +125,28 @@ def life_bonus_status(rule, employee, fy_year):
         bonus = agg["bonus"] or ZERO
         base = (agg["pts"] or ZERO) - bonus
         legacy = legacy_monthly_payout(vol)
+        recorded = paid_by_month.get(m_start)
         volume += vol
         base_total += base
         released_total += bonus
         legacy_total += legacy
+        if recorded is not None:
+            paid_total += recorded
         months.append({"year": y, "month": m, "volume": vol, "base": base,
-                       "released": bonus, "legacy": legacy, "running": volume})
+                       "released": bonus, "legacy": legacy, "running": volume,
+                       "for_month": m_start, "paid": recorded,
+                       "suggested": legacy})
 
     level = bonus_released_for(rule, volume)
+    # released_total already contains the recorded manual payouts (period_totals
+    # folds them in), so the shortfall is simply what the level still owes.
     return {
         "employee": employee, "fy_year": fy_year,
         "volume": volume, "base": base_total,
-        "level": level, "released": released_total,
+        "level": level, "released": released_total + paid_total,
+        "from_sales": released_total, "paid_manually": paid_total,
         "legacy": legacy_total,
+        "shortfall": max(level - (released_total + paid_total), ZERO),
         "net_vs_legacy": level - legacy_total,
         "next": next_rung(rule, volume),
         "months": months,
@@ -243,7 +259,7 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
     """
     from django.db.models import Q, Sum
 
-    from ..models import Sale
+    from ..models import BonusPayout, Sale
     from ..models.sales import _ANNUAL_SLICE
 
     start, end = period_bounds(rule, on_date)
@@ -266,7 +282,13 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
     else:
         volume = qs.aggregate(t=Sum("amount"))["t"]
     agg = qs.aggregate(b=Sum("bonus_points"), p=Sum("points"))
-    return volume or ZERO, agg["b"] or ZERO, agg["p"] or ZERO
+    # Fixed monthly payouts made by hand are bonus already in the employee's
+    # hands — the ladder must net them off or the same year gets paid twice.
+    advances = (BonusPayout.objects
+                .filter(employee=employee, rule=rule,
+                        for_month__gte=start, for_month__lte=end)
+                .aggregate(t=Sum("amount"))["t"] or ZERO)
+    return volume or ZERO, (agg["b"] or ZERO) + advances, agg["p"] or ZERO
 
 
 def rate_for_volume(rule, volume):

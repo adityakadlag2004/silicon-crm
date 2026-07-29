@@ -132,12 +132,23 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   points arrive. Idempotent via `unique_together(sale, year_index)`, so a missed
   day catches up and a re-run is a no-op. Each year is priced by the band the
   employee's month has reached when it lands.
+- **A fixed monthly bonus is still paid by hand** off the legacy 3L/6L/9L/12L
+  grid. Record it as a `BonusPayout` (employee + rule + month) — `period_totals`
+  folds it into "bonus already released", so the FY ladder only ever pays a
+  shortfall and never claws back. Recording one re-saves that period's sales, or
+  the deduction would only apply to future ones. `services.incentives
+  .legacy_monthly_payout()` is the old grid, kept for reconciliation only —
+  nothing computes pay from it.
 - **Points now come from two places** — `Sale.points` and `IncentiveAccrual`.
   Any total shown to an employee as "what I earned" must add
   `incentives.accrued_points(...)`: employee + admin dashboards, team detail,
   the app API stats and the calculator all do. Sales *reports* stay sales-only
   on purpose — an accrual is earned points, not a sale, and must never be
   counted as business volume.
+- Admin screens: `/clients/incentives/payout/` (the month's bill, split
+  base / ladder bonus / multiyear, plus dated bonus releases) and
+  `/clients/incentives/life-bonus/` (FY ladder position per employee, month by
+  month, where hand-made payouts get recorded).
 - `/clients/incentives/calculator/` is the **employee-facing** page (Sales nav,
   no `manage_incentives` needed): plain-language structure, worked examples in
   points, and a what-if. It must never print firm margin/commission figures or

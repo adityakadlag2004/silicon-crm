@@ -88,6 +88,44 @@ class IncentiveSlab(models.Model):
         return f"{self.rule.product} – ₹{self.threshold} → {self.payout} pts"
 
 
+class BonusPayout(models.Model):
+    """A fixed bonus paid by hand, outside the ladder — the monthly slab payout.
+
+    The firm still makes a fixed monthly payout off the old 3L/6L/9L/12L grid.
+    That money is bonus already in the employee's hands, so the financial-year
+    ladder has to net it off or the same performance gets paid twice. Recording
+    it here is what lets ``period_totals`` see it: the ladder then only ever
+    releases a shortfall, and never claws anything back.
+
+    One row per employee, per ladder, per month.
+    """
+
+    employee = models.ForeignKey("Employee", on_delete=models.PROTECT, related_name="bonus_payouts")
+    rule = models.ForeignKey(IncentiveRule, on_delete=models.CASCADE, related_name="payouts")
+    for_month = models.DateField(
+        db_index=True,
+        help_text="The month this payout was for, stored as its 1st.",
+    )
+    amount = models.DecimalField(
+        max_digits=14, decimal_places=2,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text="Rupees paid. Counts as ladder bonus already released.",
+    )
+    note = models.CharField(max_length=200, blank=True, default="")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Bonus Payout (manual)"
+        verbose_name_plural = "Bonus Payouts (manual)"
+        ordering = ["-for_month", "-id"]
+        unique_together = [("employee", "rule", "for_month")]
+
+    def __str__(self):
+        return f"{self.employee} {self.for_month:%b %Y}: ₹{self.amount}"
+
+
 class IncentiveAccrual(models.Model):
     """Points issued for a later year of a multiyear health policy.
 

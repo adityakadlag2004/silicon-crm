@@ -5,12 +5,15 @@ figure is what the seller has earned *to date* once their Apr–Mar cumulative
 premium crosses the rung, so only the difference against what the year already
 released is paid out:
 
-    FY cumulative     bonus earned to date
+    FY cumulative     prize earned to date
     3,00,000                     3,000
     9,00,000                     7,500
     18,00,000                   20,000
     30,00,000                   40,000
     45,00,000                   65,000
+    60,00,000                   90,000
+    75,00,000                  115,000
+    90,00,000                  140,000
 
 Health — a rate band picked from the seller's own monthly Fresh volume, set at
 a flat 10% of the commission the firm earns in the matching band of its own
@@ -43,6 +46,11 @@ LIFE_LADDER = [
     ("1800000", "20000"),
     ("3000000", "40000"),
     ("4500000", "65000"),
+    # Above ₹45L the ladder used to stop, leaving a high performer on the base
+    # alone. These keep it climbing so there is no ceiling to grow into.
+    ("6000000", "90000"),
+    ("7500000", "115000"),
+    ("9000000", "140000"),
 ]
 LIFE_BASE_PER_1000 = Decimal("17.500")   # 1.75%
 

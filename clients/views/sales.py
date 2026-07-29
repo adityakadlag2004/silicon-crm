@@ -18,7 +18,8 @@ from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 
 from .. import permissions
-from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Product
+from ..models import (BonusPayout, Client, Sale, Employee, IncentiveRule,
+                      IncentiveSlab, Product)
 from ..forms import AdminSaleForm, EditSaleForm
 from ..services import incentives as incentives_service
 from ..services import sales as sales_service
@@ -399,7 +400,8 @@ def life_bonus_tracker(request):
 
     rows = []
     totals = {"volume": Decimal("0"), "base": Decimal("0"), "level": Decimal("0"),
-              "released": Decimal("0"), "legacy": Decimal("0"), "net": Decimal("0")}
+              "released": Decimal("0"), "legacy": Decimal("0"), "net": Decimal("0"),
+              "paid": Decimal("0"), "shortfall": Decimal("0")}
     for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username"):
         st = incentives_service.life_bonus_status(rule, e, fy)
         if not st["volume"]:
@@ -408,6 +410,8 @@ def life_bonus_tracker(request):
                        ("released", "released"), ("legacy", "legacy")):
             totals[k] += st[src]
         totals["net"] += st["net_vs_legacy"]
+        totals["paid"] += st["paid_manually"]
+        totals["shortfall"] += st["shortfall"]
         rows.append(st)
 
     expanded = request.GET.get("employee")
@@ -426,6 +430,49 @@ def life_bonus_tracker(request):
         "fy_options": list(range(incentives_service.fy_start_year(today), incentives_service.fy_start_year(today) - 4, -1)),
         "ladder": incentives_service.ladder(rule),
     })
+
+
+@login_required
+@require_POST
+def record_bonus_payout(request):
+    """Log a fixed monthly bonus paid by hand, so the ladder nets it off.
+
+    Idempotent per (employee, rule, month) — re-submitting a month overwrites
+    the figure rather than stacking a second payment.
+    """
+    if not permissions.can(request.user, "manage_incentives"):
+        messages.error(request, "You do not have permission to record bonus payouts.")
+        return redirect("clients:admin_dashboard")
+
+    employee = get_object_or_404(Employee, pk=request.POST.get("employee"))
+    rule = get_object_or_404(IncentiveRule, pk=request.POST.get("rule"))
+    amount = _dec_param(request.POST.get("amount"))
+    try:
+        for_month = date.fromisoformat(request.POST.get("for_month", "")).replace(day=1)
+    except ValueError:
+        messages.error(request, "Pick the month this payout was for.")
+        return redirect("clients:life_bonus_tracker")
+
+    back = f"{reverse('clients:life_bonus_tracker')}?fy={request.POST.get('fy', '')}&employee={employee.id}"
+    if amount <= 0:
+        BonusPayout.objects.filter(employee=employee, rule=rule, for_month=for_month).delete()
+        messages.success(request, f"Cleared the {for_month:%b %Y} payout for {employee}.")
+        return redirect(back)
+
+    BonusPayout.objects.update_or_create(
+        employee=employee, rule=rule, for_month=for_month,
+        defaults={"amount": amount, "created_by": request.user},
+    )
+    # The ladder reads this when pricing, so anything already booked in the
+    # window has to be re-run or the deduction only applies to future sales.
+    for sale in Sale.objects.filter(
+            employee=employee, status=Sale.STATUS_APPROVED,
+            date__range=incentives_service.period_bounds(rule, for_month)).order_by("date", "id"):
+        sale.save()
+    messages.success(
+        request,
+        f"Recorded ₹{inr(amount)} for {for_month:%b %Y}. The yearly ladder now nets it off.")
+    return redirect(back)
 
 
 @login_required

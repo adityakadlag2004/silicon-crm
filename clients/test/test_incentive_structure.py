@@ -363,6 +363,9 @@ class ExplainerNumbersTests(_Base):
             (Decimal("1800000"), Decimal("20000"), Decimal("51500")),
             (Decimal("3000000"), Decimal("40000"), Decimal("92500")),
             (Decimal("4500000"), Decimal("65000"), Decimal("143750")),
+            (Decimal("6000000"), Decimal("90000"), Decimal("195000")),
+            (Decimal("7500000"), Decimal("115000"), Decimal("246250")),
+            (Decimal("9000000"), Decimal("140000"), Decimal("297500")),
         ])
 
     def test_the_total_matches_what_selling_exactly_that_much_really_pays(self):
@@ -641,3 +644,94 @@ class LifeBonusTrackerTests(_Base):
         Employee.objects.create(user=plain, role="employee")
         self.client.force_login(plain)
         self.assertEqual(self.client.get(self.url).status_code, 302)
+
+
+class BonusPayoutNettingTests(_Base):
+    """A fixed monthly payout made by hand must reduce what the ladder owes."""
+
+    def setUp(self):
+        self.user.is_superuser = True
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.rule = IncentiveRule.objects.get(product_ref=self.life)
+
+    def _pay(self, month, amount):
+        from clients.models import BonusPayout
+
+        return BonusPayout.objects.create(
+            employee=self.emp, rule=self.rule, for_month=month,
+            amount=Decimal(str(amount)))
+
+    def test_a_recorded_payout_suppresses_the_ladder(self):
+        self._pay(date(2026, 6, 1), 8000)          # old monthly slab, paid by hand
+        crossing = self.sell(self.life, 310000, date(2026, 6, 20))
+        # Level at 3,10,000 is 3,000, but 8,000 is already in their hands.
+        self.assertEqual(crossing.bonus_points, Decimal("0.000"))
+        self.assertEqual(crossing.points, Decimal("5425.000"))  # base only
+
+    def test_the_ladder_still_pays_the_shortfall(self):
+        self._pay(date(2026, 6, 1), 2000)
+        crossing = self.sell(self.life, 310000, date(2026, 6, 20))
+        self.assertEqual(crossing.bonus_points, Decimal("1000.000"))  # 3,000 - 2,000
+
+    def test_it_never_claws_back(self):
+        self._pay(date(2026, 6, 1), 50000)
+        s = self.sell(self.life, 310000, date(2026, 6, 20))
+        self.assertEqual(s.bonus_points, Decimal("0.000"))
+        self.assertGreater(s.points, Decimal("0"))
+
+    def test_a_payout_outside_the_financial_year_is_not_netted(self):
+        self._pay(date(2026, 3, 1), 8000)   # FY2025, not FY2026
+        crossing = self.sell(self.life, 310000, date(2026, 6, 20))
+        self.assertEqual(crossing.bonus_points, Decimal("3000.000"))
+
+    def test_recording_one_reprices_sales_already_booked(self):
+        crossing = self.sell(self.life, 310000, date(2026, 6, 20))
+        self.assertEqual(crossing.bonus_points, Decimal("3000.000"))
+        r = self.client.post(reverse("clients:record_bonus_payout"), {
+            "employee": self.emp.id, "rule": self.rule.id, "fy": 2026,
+            "for_month": "2026-06-01", "amount": "8000",
+        })
+        self.assertEqual(r.status_code, 302)
+        crossing.refresh_from_db()
+        self.assertEqual(crossing.bonus_points, Decimal("0.000"))
+
+    def test_resubmitting_a_month_replaces_rather_than_stacks(self):
+        from clients.models import BonusPayout
+
+        for amount in ("8000", "6000"):
+            self.client.post(reverse("clients:record_bonus_payout"), {
+                "employee": self.emp.id, "rule": self.rule.id, "fy": 2026,
+                "for_month": "2026-06-01", "amount": amount,
+            })
+        rows = BonusPayout.objects.filter(employee=self.emp, for_month=date(2026, 6, 1))
+        self.assertEqual(rows.count(), 1)
+        self.assertEqual(rows.first().amount, Decimal("6000"))
+
+    def test_zero_clears_the_month(self):
+        from clients.models import BonusPayout
+
+        self._pay(date(2026, 6, 1), 8000)
+        self.client.post(reverse("clients:record_bonus_payout"), {
+            "employee": self.emp.id, "rule": self.rule.id, "fy": 2026,
+            "for_month": "2026-06-01", "amount": "0",
+        })
+        self.assertFalse(BonusPayout.objects.filter(employee=self.emp).exists())
+
+    def test_tracker_shows_paid_and_shortfall(self):
+        self._pay(date(2026, 6, 1), 2000)
+        self.sell(self.life, 310000, date(2026, 6, 20))
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["level"], Decimal("3000"))
+        self.assertEqual(st["paid_manually"], Decimal("2000"))
+        self.assertEqual(st["released"], Decimal("3000.000"))  # 1,000 sale + 2,000 hand
+        self.assertEqual(st["shortfall"], Decimal("0"))
+
+    def test_extended_ladder_has_no_ceiling_at_45_lakh(self):
+        rungs = {s.threshold: s.payout for s in self.rule.slabs.all()}
+        self.assertEqual(rungs[Decimal("6000000")], Decimal("90000"))
+        self.assertEqual(rungs[Decimal("7500000")], Decimal("115000"))
+        self.assertEqual(rungs[Decimal("9000000")], Decimal("140000"))
+        # And it keeps climbing rather than flattening onto the base.
+        self.assertIsNotNone(inc.next_rung(self.rule, Decimal("5000000")))
