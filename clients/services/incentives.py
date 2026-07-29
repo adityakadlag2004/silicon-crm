@@ -275,6 +275,10 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
                        | (Q(product_ref__isnull=True) & Q(product=rule.product)))
     else:
         qs = qs.filter(product=rule.product)
+    # The legacy deduction is read off the month's FULL volume — excluding the
+    # row being priced would understate the month and skip a slab it really
+    # cleared. Only the cumulative running total excludes self.
+    month_qs = qs
     if exclude_pk:
         qs = qs.exclude(pk=exclude_pk)
 
@@ -285,11 +289,42 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
     agg = qs.aggregate(b=Sum("bonus_points"), p=Sum("points"))
     # Fixed monthly payouts made by hand are bonus already in the employee's
     # hands — the ladder must net them off or the same year gets paid twice.
-    advances = (BonusPayout.objects
-                .filter(employee=employee, rule=rule,
-                        for_month__gte=start, for_month__lte=end)
-                .aggregate(t=Sum("amount"))["t"] or ZERO)
+    paid = {p.for_month: p.amount for p in BonusPayout.objects.filter(
+        employee=employee, rule=rule, for_month__gte=start, for_month__lte=end)}
+    advances = sum(paid.values(), ZERO)
+    advances += _derived_legacy_deduction(rule, month_qs, start, end, skip_months=set(paid))
     return volume or ZERO, (agg["b"] or ZERO) + advances, agg["p"] or ZERO
+
+
+def _derived_legacy_deduction(rule, sales_qs, start, end, *, skip_months=()):
+    """The fixed monthly bonus this window's volume would already have paid.
+
+    While the old monthly grid is still being paid by hand, every month whose
+    volume clears a slab has already put that money in the employee's hands, so
+    the yearly ladder must subtract it. Derived rather than typed — the payout
+    is a fixed function of the month's volume.
+
+    Months with a recorded BonusPayout are skipped: that figure is the truth and
+    is counted by the caller. Months before ``legacy_deduct_from`` are skipped
+    too — they were netted on the sales themselves when the structure changed,
+    and deriving again would deduct the same money twice.
+    """
+    from django.db.models import Sum
+    from django.db.models.functions import TruncMonth
+
+    if not (rule.deduct_legacy_monthly and rule.legacy_deduct_from):
+        return ZERO
+    cutover = max(rule.legacy_deduct_from, start)
+    total = ZERO
+    rows = (sales_qs.filter(date__gte=cutover, date__lte=end)
+            .annotate(m=TruncMonth("date")).values("m").annotate(v=Sum("amount")))
+    for row in rows:
+        month = row["m"]
+        month = month.date() if hasattr(month, "date") else month
+        if month in skip_months:
+            continue
+        total += legacy_monthly_payout(row["v"])
+    return total
 
 
 def rate_for_volume(rule, volume):

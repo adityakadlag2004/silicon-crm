@@ -27,11 +27,18 @@ margin grid. Port sits outside the ladder at 0.67%.
     2,00,000 - 3,00,000               30.0%        3.00%
     >= 3,00,000                       35.0%        3.50%
 
+The old fixed monthly bonus (3L/6L/9L/12L/15L) is still paid by hand, so the
+life ladder subtracts it automatically from Aug 2026 on — earlier months were
+already netted on the sales themselves. When that monthly bonus stops, set
+`deduct_legacy_monthly = False` on the Life rule and the scheme becomes simply
+base + yearly prize.
+
 Manual tool (not in CRONJOBS). Idempotent: re-running replaces both ladders.
 Existing sales keep the points they were paid — like every other rule change,
 this takes effect on sales saved from here on.
 """
 
+from datetime import date
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand, CommandError
@@ -77,6 +84,14 @@ class Command(BaseCommand):
             life.slab_mode = IncentiveRule.MODE_BONUS
             life.slab_period = IncentiveRule.PERIOD_FY
             life.port_percent = None
+            # The fixed monthly bonus is still being paid by hand, so the ladder
+            # nets it off automatically. August 2026 is the boundary: every month
+            # before it was already netted on the sales when the structure
+            # changed, and deriving those again would deduct the same money
+            # twice. Turn this off when the monthly bonus finally stops — then
+            # the scheme is just base + yearly prize.
+            life.deduct_legacy_monthly = True
+            life.legacy_deduct_from = date(2026, 8, 1)
             life.active = True
             life.save()
             life.slabs.all().delete()
@@ -93,6 +108,8 @@ class Command(BaseCommand):
             health.slab_mode = IncentiveRule.MODE_RATE
             health.slab_period = IncentiveRule.PERIOD_MONTH
             health.port_percent = HEALTH_PORT_PERCENT
+            health.deduct_legacy_monthly = False
+            health.legacy_deduct_from = None
             health.active = True
             health.save()
             health.slabs.all().delete()

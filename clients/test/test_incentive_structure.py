@@ -862,3 +862,92 @@ class CalculatorLadderStatusTests(_Base):
         st = r.context["ladder_status"][0]
         self.assertEqual(st["employee"], self.emp)
         self.assertEqual(st["volume"], Decimal("0"))
+
+
+class AutomaticLegacyDeductionTests(_Base):
+    """The fixed monthly bonus is derived from each month's volume, not typed."""
+
+    def setUp(self):
+        self.rule = IncentiveRule.objects.get(product_ref=self.life)
+        self.assertTrue(self.rule.deduct_legacy_monthly)
+        self.assertEqual(self.rule.legacy_deduct_from, date(2026, 8, 1))
+
+    def sell(self, product, amount, on, **kw):
+        """Book through the service, the way every real entry path does.
+
+        A bare Sale.objects.create() prices the row before it exists in the
+        table, so its own amount is missing from the month the deduction is read
+        off; the service settles that with a second pass.
+        """
+        from clients.services import sales as sales_service
+
+        s = Sale(client=self.client_rec, employee=self.emp, product=product.name,
+                 product_ref=product, amount=Decimal(str(amount)), date=on, **kw)
+        return sales_service.finalize_new_sale(s, self.user, auto_approve=True)
+
+    def test_a_month_clearing_the_old_slab_suppresses_the_ladder(self):
+        # ₹3,10,000 in one month: the old grid paid ₹8,000, so the ₹3,000 level
+        # is already covered and the ladder adds nothing.
+        s = self.sell(self.life, 310000, date(2026, 8, 10))
+        self.assertEqual(s.bonus_points, Decimal("0.000"))
+        self.assertEqual(s.points, Decimal("5425.000"))  # base only
+
+    def test_months_below_the_old_slab_deduct_nothing(self):
+        # Exactly the case the yearly ladder exists for: three months that each
+        # miss ₹3L, so the old grid paid zero, but the year reaches the level.
+        self.sell(self.life, 120000, date(2026, 8, 1))
+        self.sell(self.life, 120000, date(2026, 9, 1))
+        last = self.sell(self.life, 120000, date(2026, 10, 1))
+        self.assertEqual(last.bonus_points, Decimal("3000.000"))
+
+    def test_months_before_the_cutover_are_left_alone(self):
+        # July 2026 was priced under the old structure and already netted on the
+        # sale, so deriving it again would deduct the same ₹8,000 twice.
+        s = self.sell(self.life, 310000, date(2026, 7, 10))
+        self.assertEqual(s.bonus_points, Decimal("3000.000"))
+
+    def test_the_derived_amount_follows_the_old_grid(self):
+        cases = [(299999, 0), (300000, 8000), (600000, 16000),
+                 (900000, 24000), (1200000, 32000), (1500000, 40000)]
+        for volume, expected in cases:
+            self.assertEqual(inc.legacy_monthly_payout(Decimal(volume)),
+                             Decimal(expected), msg=f"volume {volume}")
+
+    def test_a_recorded_payout_overrides_the_derived_one(self):
+        from clients.models import BonusPayout
+
+        # Paid ₹2,000 instead of the grid's ₹8,000 — the record wins.
+        BonusPayout.objects.create(employee=self.emp, rule=self.rule,
+                                   for_month=date(2026, 8, 1), amount=Decimal("2000"))
+        s = self.sell(self.life, 310000, date(2026, 8, 10))
+        self.assertEqual(s.bonus_points, Decimal("1000.000"))  # 3,000 - 2,000
+
+    def test_turning_it_off_makes_the_ladder_pay_in_full(self):
+        # What the scheme becomes once the monthly bonus is retired.
+        self.rule.deduct_legacy_monthly = False
+        self.rule.save()
+        s = self.sell(self.life, 310000, date(2026, 8, 10))
+        self.assertEqual(s.bonus_points, Decimal("3000.000"))
+
+    def test_health_is_untouched_by_any_of_this(self):
+        health = IncentiveRule.objects.get(product_ref=self.health)
+        self.assertFalse(health.deduct_legacy_monthly)
+        s = self.sell(self.health, 310000, date(2026, 8, 10), policy_type="fresh")
+        self.assertEqual(s.points, Decimal("10850.000"))  # 3.50% band, no deduction
+
+    def test_a_later_sale_in_the_same_month_reprices_through_the_service(self):
+        from clients.services import sales as sales_service
+
+        first = Sale(client=self.client_rec, employee=self.emp, product=self.life.name,
+                     product_ref=self.life, amount=Decimal("250000"), date=date(2026, 8, 5))
+        first = sales_service.finalize_new_sale(first, self.user, auto_approve=True)
+        # 2,50,000 alone: under ₹3L monthly, so no deduction, but also no level.
+        self.assertEqual(first.bonus_points, Decimal("0.000"))
+
+        second = Sale(client=self.client_rec, employee=self.emp, product=self.life.name,
+                      product_ref=self.life, amount=Decimal("60000"), date=date(2026, 8, 20))
+        second = sales_service.finalize_new_sale(second, self.user, auto_approve=True)
+        # Month is now ₹3,10,000 -> the old grid paid ₹8,000 -> ladder stays shut.
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.bonus_points + second.bonus_points, Decimal("0.000"))

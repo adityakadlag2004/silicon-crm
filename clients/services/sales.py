@@ -39,6 +39,15 @@ def recompute_sibling_sales(sale):
     for sibling in qs.order_by("date", "id"):
         sibling.save()  # save() recomputes points
 
+    # And the sale itself. compute_points() excludes the row being saved from
+    # its own period, which is right for the cumulative volume but understates
+    # the month the derived legacy deduction is read off. One more pass, now
+    # that it is in the table, settles it. Skipped after a delete — re-saving
+    # would resurrect the row.
+    if sale.pk and Sale.objects.filter(pk=sale.pk).exists():
+        sale.refresh_from_db()
+        sale.save()
+
 
 def snapshot_ppt_margin(sale):
     """Lock in the FYC (sale margin %) for a PPT-priced life plan at the current

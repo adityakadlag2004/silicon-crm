@@ -133,12 +133,21 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   day catches up and a re-run is a no-op. Each year is priced by the band the
   employee's month has reached when it lands.
 - **A fixed monthly bonus is still paid by hand** off the legacy 3L/6L/9L/12L
-  grid. Record it as a `BonusPayout` (employee + rule + month) — `period_totals`
-  folds it into "bonus already released", so the FY ladder only ever pays a
-  shortfall and never claws back. Recording one re-saves that period's sales, or
-  the deduction would only apply to future ones. `services.incentives
-  .legacy_monthly_payout()` is the old grid, kept for reconciliation only —
-  nothing computes pay from it.
+  grid, so the FY ladder subtracts it **automatically**: any month whose volume
+  clears a slab has already put that money in the employee's hands.
+  `IncentiveRule.deduct_legacy_monthly` turns it on and `legacy_deduct_from`
+  (Aug 2026 for Life) is the boundary — months before it were netted onto the
+  sales by migration 0111, and deriving them again would deduct the same money
+  twice. **This is transitional: when the monthly bonus is retired, untick
+  `deduct_legacy_monthly` and the scheme becomes simply base + yearly prize.**
+  A `BonusPayout` row overrides the derived figure for that month, for when the
+  amount actually paid differs from the grid.
+- The month's deduction is read off the month's **full** volume, so
+  `period_totals` keeps an un-excluded `month_qs` alongside the `exclude_pk`
+  queryset the running total uses. `recompute_sibling_sales` re-saves the
+  originating sale too (guarded against a deleted row) — a sale is priced before
+  it exists in the table, so its own amount is missing from its month until a
+  second pass.
 - **Points now come from two places** — `Sale.points` and `IncentiveAccrual`.
   Any total shown to an employee as "what I earned" must add
   `incentives.accrued_points(...)`: employee + admin dashboards, team detail,
