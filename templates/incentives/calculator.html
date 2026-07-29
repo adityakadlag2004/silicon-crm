@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Incentive Calculator{% endblock %}
+{% block page_title %}Incentive Calculator{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+  <h2 class="ki-section-title mb-0"><i class="bi bi-calculator"></i> What would I earn?</h2>
+  {% if can_pick %}
+    <form method="get" class="d-flex align-items-center gap-2">
+      <label class="form-label mb-0" for="calc-emp">Show for</label>
+      <select class="form-select" name="employee" id="calc-emp" onchange="this.form.submit()" style="min-width:200px;">
+        {% for e in employees %}
+          <option value="{{ e.id }}" {% if e.id == target.id %}selected{% endif %}>{{ e.user.username }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button class="ki-btn ki-btn-secondary" type="submit">Go</button></noscript>
+    </form>
+  {% endif %}
+</div>
+
+<p class="text-muted mb-4" style="font-size:.92rem;max-width:72ch;">
+  This starts from what {% if target == request.user.employee %}you have{% else %}{{ target.user.username }} has{% endif %}
+  already banked in each ladder's current period, then adds the sales you type below.
+  It reads the live rules, so a band or rung you are close to shows up here the same
+  way it will be paid.
+</p>
+
+{# ---------------- Assumptions ---------------- #}
+<div class="ki-card mb-4">
+  <h3 class="mb-1" style="font-size:1.05rem;font-weight:700;">
+    <i class="bi bi-pencil-square" style="color:var(--ki-primary);"></i> Sales you're assuming
+  </h3>
+  <p class="text-muted mb-3" style="font-size:.86rem;">
+    Fill in as many rows as you want to model. Blank rows are ignored, and nothing is saved.
+  </p>
+
+  <form method="get" action="{% url 'clients:incentive_calculator' %}">
+    {% if can_pick %}<input type="hidden" name="employee" value="{{ target.id }}">{% endif %}
+    <div class="ki-table-scroll">
+      <table class="ki-table">
+        <thead>
+          <tr>
+            <th style="min-width:180px;">Product</th>
+            <th style="min-width:130px;">Amount (₹)</th>
+            <th style="min-width:110px;">Fresh / Port</th>
+            <th style="min-width:90px;">Years</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+          <tr>
+            <td>
+              <label class="visually-hidden" for="rule-{{ row.index }}">Product for row {{ forloop.counter }}</label>
+              <select class="form-select" name="rule_{{ row.index }}" id="rule-{{ row.index }}">
+                <option value="">—</option>
+                {% for r in rules %}
+                  <option value="{{ r.id }}" {% if row.rule_id == r.id|stringformat:"s" %}selected{% endif %}>
+                    {{ r.product_ref.name|default:r.product }}
+                  </option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              <label class="visually-hidden" for="amount-{{ row.index }}">Amount for row {{ forloop.counter }}</label>
+              <input class="form-control" type="number" min="0" step="1"
+                     name="amount_{{ row.index }}" id="amount-{{ row.index }}"
+                     value="{{ row.amount|floatformat:'0' }}">
+            </td>
+            <td>
+              <label class="visually-hidden" for="ptype-{{ row.index }}">Policy type for row {{ forloop.counter }}</label>
+              <select class="form-select" name="ptype_{{ row.index }}" id="ptype-{{ row.index }}">
+                <option value="fresh" {% if row.policy_type == 'fresh' %}selected{% endif %}>Fresh</option>
+                <option value="port" {% if row.policy_type == 'port' %}selected{% endif %}>Port</option>
+              </select>
+            </td>
+            <td>
+              <label class="visually-hidden" for="years-{{ row.index }}">Policy years for row {{ forloop.counter }}</label>
+              <select class="form-select" name="years_{{ row.index }}" id="years-{{ row.index }}">
+                {% for y in "123"|make_list %}
+                  <option value="{{ y }}" {% if row.policy_years|stringformat:"s" == y %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+              </select>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="d-flex gap-2 mt-3 flex-wrap">
+      <button class="ki-btn ki-btn-primary" type="submit"><i class="bi bi-play-fill"></i> Calculate</button>
+      <a class="ki-btn ki-btn-secondary" href="{% url 'clients:incentive_calculator' %}{% if can_pick %}?employee={{ target.id }}{% endif %}">
+        <i class="bi bi-arrow-counterclockwise"></i> Clear
+      </a>
+    </div>
+    <p class="form-text mt-2 mb-0">
+      Fresh / Port and Years only affect health insurance. A multiyear premium counts
+      one year at a time, so enter the full amount and pick the term.
+    </p>
+  </form>
+</div>
+
+{# ---------------- The answer ---------------- #}
+<div class="ki-card mb-4">
+  <div class="ki-grid-3">
+    <div>
+      <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;">Earned so far</div>
+      <div style="font-size:1.6rem;font-weight:800;">₹{{ banked_total|inr }}</div>
+    </div>
+    <div>
+      <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;">These assumptions add</div>
+      <div style="font-size:1.6rem;font-weight:800;color:#B45309;">₹{{ added_total|inr }}</div>
+    </div>
+    <div>
+      <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;">Would total</div>
+      <div style="font-size:1.6rem;font-weight:800;color:var(--ki-primary);">₹{{ grand_total|inr }}</div>
+    </div>
+  </div>
+  <p class="form-text mb-0 mt-2">
+    "Earned so far" is points on approved sales inside each ladder's current period —
+    monthly ladders since the 1st, the life ladder since 1 April.
+  </p>
+</div>
+
+{% if lines %}
+<div class="ki-table-wrap">
+  <table class="ki-table">
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th class="text-end">Already sold</th>
+        <th class="text-end">Earned</th>
+        <th class="text-end">Assumed</th>
+        <th class="text-end">Adds</th>
+        <th>Where that leaves them</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for l in lines %}
+      <tr>
+        <td>
+          <strong>{{ l.rule.product_ref.name|default:l.rule.product }}</strong>
+          <div class="text-muted" style="font-size:.8rem;">{{ l.period_label }}</div>
+        </td>
+        <td class="text-end">₹{{ l.volume|inr }}</td>
+        <td class="text-end">₹{{ l.booked|inr }}</td>
+        <td class="text-end">{% if l.assumed %}₹{{ l.assumed|inr }}{% else %}—{% endif %}</td>
+        <td class="text-end"><strong>₹{{ l.added|inr }}</strong></td>
+        <td style="font-size:.86rem;">
+          {% if l.rule.slab_mode == 'rate' %}
+            ₹{{ l.final_volume|inr }} → the <strong>{{ l.rate|floatformat:2 }}%</strong> band.
+            {% if l.port_assumed %}
+              <div class="text-muted">Of the assumed total, ₹{{ l.port_assumed|inr }} is Port —
+              paid at {{ l.rule.port_percent|floatformat:2 }}% and left out of the band.</div>
+            {% endif %}
+          {% else %}
+            ₹{{ l.final_volume|inr }} cumulative.{% if l.bonus %} Releases <strong>₹{{ l.bonus|inr }}</strong> of ladder bonus.{% endif %}
+          {% endif %}
+          {% if l.next %}
+            <div class="text-muted mt-1">
+              ₹{{ l.next.gap|inr }} more reaches ₹{{ l.next.slab.threshold|inr }} — worth about
+              <strong>₹{{ l.next.worth|inr }}</strong>.
+            </div>
+          {% else %}
+            <div class="text-muted mt-1">Top band reached.</div>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <div class="ki-card">
+    <p class="mb-0 text-muted">
+      Nothing banked in any current period yet. Type a sale above to see what it would pay.
+    </p>
+  </div>
+{% endif %}
+
+<p class="text-muted mt-3" style="font-size:.85rem;max-width:72ch;">
+  Only approved sales count. Figures are what the rules pay today — changing a rule
+  later never rewrites a sale already saved.
+</p>
+
+{% endblock %}

@@ -313,26 +313,11 @@ class Sale(models.Model):
         APPROVED sales of this product inside the rule's accumulation window."""
         from ..services import incentives as inc
 
-        start, end = inc.period_bounds(rule, self.date or timezone.localdate())
-        qs = Sale.objects.filter(
-            employee=self.employee, status=Sale.STATUS_APPROVED,
-            date__gte=start, date__lte=end,
+        volume, bonus, _ = inc.period_totals(
+            rule, self.employee, self.date or timezone.localdate(),
+            exclude_pk=self.pk, is_health=self._is_health_product(),
         )
-        if self.product_ref_id:
-            qs = qs.filter(product_ref=self.product_ref)
-        else:
-            qs = qs.filter(product=self._effective_product_label())
-        if self.pk:
-            qs = qs.exclude(pk=self.pk)
-        if self._is_health_product():
-            # Port is paid its own flat rate, so it must not push Fresh into a
-            # higher band. Multiyear counts one year at a time.
-            volume = qs.exclude(policy_type=self.POLICY_TYPE_PORT).aggregate(
-                t=Sum(_ANNUAL_SLICE))["t"]
-        else:
-            volume = qs.aggregate(t=Sum("amount"))["t"]
-        bonus = qs.aggregate(t=Sum("bonus_points"))["t"]
-        return volume or Decimal("0"), bonus or Decimal("0")
+        return volume, bonus
 
     def _rule(self):
         from .incentives import IncentiveRule

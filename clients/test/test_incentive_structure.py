@@ -11,6 +11,7 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.test import TestCase
+from django.utils import timezone
 from django.urls import reverse
 
 from clients.models import Client, Employee, IncentiveRule, Product, Sale
@@ -160,3 +161,97 @@ class StructurePageTests(_Base):
                              "prior_volume": ""})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.context["trial"]["result"]["total"], Decimal("0"))
+
+
+class CalculatorTests(_Base):
+    """The employee-facing what-if tool."""
+
+    def setUp(self):
+        self.client.force_login(self.user)
+        self.url = reverse("clients:incentive_calculator")
+        # The tool always models the period we are in right now, so the fixture
+        # sales have to land in it — a hard-coded month silently empties out.
+        self.today = timezone.localdate()
+
+    def _rows(self, **kw):
+        base = {"rule_0": "", "amount_0": "", "ptype_0": "fresh", "years_0": "1"}
+        base.update(kw)
+        return base
+
+    def test_any_employee_can_open_it(self):
+        # No manage_incentives permission — this is the seller's own pay.
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_starts_from_what_is_already_banked(self):
+        self.sell(self.life, 250000, self.today)
+        r = self.client.get(self.url)
+        line = next(l for l in r.context["lines"] if l["rule"].product == "Life Insurance")
+        self.assertEqual(line["volume"], Decimal("250000"))
+        self.assertEqual(line["booked"], Decimal("4375.000"))  # 1.75%
+
+    def test_assumption_releases_the_rung_the_banked_volume_is_short_of(self):
+        self.sell(self.life, 250000, self.today)
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        r = self.client.get(self.url, self._rows(rule_0=str(rule.id), amount_0="60000"))
+        line = next(l for l in r.context["lines"] if l["rule"].product == "Life Insurance")
+        # 1.75% of 60,000 + the 3L rung, which 2.5L alone never reached.
+        self.assertEqual(line["added"], Decimal("4050.00"))
+
+    def test_a_rung_already_banked_is_not_offered_twice(self):
+        self.sell(self.life, 400000, self.today)
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        r = self.client.get(self.url, self._rows(rule_0=str(rule.id), amount_0="50000"))
+        line = next(l for l in r.context["lines"] if l["rule"].product == "Life Insurance")
+        self.assertEqual(line["added"], Decimal("875.00"))  # base only
+
+    def test_health_reprices_the_whole_month_when_a_band_is_crossed(self):
+        self.sell(self.health, 20000, self.today, policy_type="fresh")
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        r = self.client.get(self.url, self._rows(rule_0=str(rule.id), amount_0="10000"))
+        line = next(l for l in r.context["lines"] if l["rule"].product == "Health Insurance")
+        # 30,000 total at 2.00% = 600, against 20,000 at 1.50% = 300 already.
+        self.assertEqual(line["added"], Decimal("300.00"))
+        self.assertEqual(line["rate"], Decimal("2.00"))
+
+    def test_next_rung_names_the_gap_and_what_it_is_worth(self):
+        self.sell(self.life, 250000, self.today)
+        r = self.client.get(self.url)
+        line = next(l for l in r.context["lines"] if l["rule"].product == "Life Insurance")
+        self.assertEqual(line["next"]["gap"], Decimal("50000"))
+        self.assertEqual(line["next"]["worth"], Decimal("3000"))
+
+    def test_multiyear_health_counts_one_year(self):
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        r = self.client.get(self.url, self._rows(
+            rule_0=str(rule.id), amount_0="90000", years_0="3"))
+        line = next(l for l in r.context["lines"] if l["rule"].product == "Health Insurance")
+        self.assertEqual(line["assumed"], Decimal("30000"))
+
+    def test_port_pays_its_own_rate_without_lifting_the_band(self):
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        r = self.client.get(self.url, self._rows(
+            rule_0=str(rule.id), amount_0="400000", ptype_0="port"))
+        line = next(l for l in r.context["lines"] if l["rule"].product == "Health Insurance")
+        self.assertEqual(line["added"], Decimal("2680.00"))
+        self.assertEqual(line["final_volume"], Decimal("0"))  # Fresh ladder untouched
+
+    def test_an_employee_cannot_model_someone_else(self):
+        other_user = User.objects.create_user("rival", password="x")
+        other = Employee.objects.create(user=other_user, role="employee")
+        Sale.objects.create(client=self.client_rec, employee=other,
+                            product="Life Insurance", product_ref=self.life,
+                            amount=Decimal("900000"), date=self.today,
+                            status=Sale.STATUS_APPROVED)
+        r = self.client.get(self.url, {"employee": other.id})
+        self.assertEqual(r.context["target"], self.emp)
+        self.assertEqual(r.context["banked_total"], Decimal("0"))
+
+    def test_an_admin_can_model_someone_else(self):
+        boss = User.objects.create_user("boss", password="x")
+        Employee.objects.create(user=boss, role="admin")
+        self.sell(self.life, 900000, self.today)
+        self.client.force_login(boss)
+        r = self.client.get(self.url, {"employee": self.emp.id})
+        self.assertEqual(r.context["target"], self.emp)
+        self.assertGreater(r.context["banked_total"], Decimal("0"))

@@ -60,6 +60,110 @@ def unit_rate_percent(rule):
     return (rule.points_per_unit or ZERO) / rule.unit_amount * Decimal("100")
 
 
+def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
+    """What this employee has actually banked in the rule's current period.
+
+    Returns (volume, bonus_released, points_booked) across their APPROVED sales
+    of the rule's product. Health counts Fresh only, one year of a multiyear
+    premium at a time — Port pays its own flat rate and must never lift the band.
+    """
+    from django.db.models import Q, Sum
+
+    from ..models import Sale
+    from ..models.sales import _ANNUAL_SLICE
+
+    start, end = period_bounds(rule, on_date)
+    qs = Sale.objects.filter(
+        employee=employee, status=Sale.STATUS_APPROVED,
+        date__gte=start, date__lte=end,
+    )
+    # Legacy rows predate product_ref, so match them by name too — otherwise an
+    # old sale silently drops out of the volume that sets someone's band.
+    if rule.product_ref_id:
+        qs = qs.filter(Q(product_ref_id=rule.product_ref_id)
+                       | (Q(product_ref__isnull=True) & Q(product=rule.product)))
+    else:
+        qs = qs.filter(product=rule.product)
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+
+    if is_health:
+        volume = qs.exclude(policy_type="port").aggregate(t=Sum(_ANNUAL_SLICE))["t"]
+    else:
+        volume = qs.aggregate(t=Sum("amount"))["t"]
+    agg = qs.aggregate(b=Sum("bonus_points"), p=Sum("points"))
+    return volume or ZERO, agg["b"] or ZERO, agg["p"] or ZERO
+
+
+def rate_for_volume(rule, volume):
+    """The rate-mode band a cumulative volume lands in."""
+    from ..models import IncentiveRule
+
+    if rule is None or rule.slab_mode != IncentiveRule.MODE_RATE:
+        return unit_rate_percent(rule)
+    band = next((s for s in rule.slabs.all().order_by("-threshold")
+                 if Decimal(str(volume or 0)) >= s.threshold), None)
+    return band.payout if band else unit_rate_percent(rule)
+
+
+def next_rung(rule, volume):
+    """The next rung above `volume` and what reaching it is worth right now.
+
+    For a bonus ladder that is the extra bonus released; for rate bands it is
+    what re-rating the whole period at the higher band adds. None at the top.
+    """
+    from ..models import IncentiveRule
+
+    if rule is None:
+        return None
+    volume = Decimal(str(volume or 0))
+    ahead = [s for s in rule.slabs.all().order_by("threshold") if s.threshold > volume]
+    if not ahead:
+        return None
+    s = ahead[0]
+    if rule.slab_mode == IncentiveRule.MODE_RATE:
+        worth = (s.threshold * s.payout / Decimal("100")
+                 - volume * rate_for_volume(rule, volume) / Decimal("100"))
+    else:
+        worth = s.payout - bonus_released_for(rule, volume)
+    return {"slab": s, "gap": s.threshold - volume, "worth": max(worth, ZERO)}
+
+
+def project(rule, actual_volume, added_amount, *, added_port=ZERO):
+    """What adding `added_amount` of business to `actual_volume` would pay.
+
+    Rate bands re-rate the *whole* period when volume crosses, so the honest
+    answer is the period's value at the new volume minus its value now — not a
+    per-sale rate. Bonus ladders add their base on the new business plus
+    whatever extra the ladder releases.
+    """
+    from ..models import IncentiveRule
+
+    actual_volume = Decimal(str(actual_volume or 0))
+    added_amount = Decimal(str(added_amount or 0))
+    added_port = Decimal(str(added_port or 0))
+    final = actual_volume + added_amount
+    port_pay = added_port * (rule.port_percent or ZERO) / Decimal("100") if rule else ZERO
+
+    if rule is None or not rule.active:
+        return {"added": ZERO, "final_volume": final, "rate": ZERO,
+                "base": ZERO, "bonus": ZERO, "port": ZERO}
+
+    if rule.slab_mode == IncentiveRule.MODE_RATE and rule.slabs.exists():
+        now = actual_volume * rate_for_volume(rule, actual_volume) / Decimal("100")
+        after = final * rate_for_volume(rule, final) / Decimal("100")
+        added = after - now
+        return {"added": added + port_pay, "final_volume": final,
+                "rate": rate_for_volume(rule, final), "base": added,
+                "bonus": ZERO, "port": port_pay}
+
+    base = added_amount * unit_rate_percent(rule) / Decimal("100")
+    bonus = bonus_released_for(rule, final) - bonus_released_for(rule, actual_volume)
+    return {"added": base + max(bonus, ZERO) + port_pay, "final_volume": final,
+            "rate": unit_rate_percent(rule), "base": base,
+            "bonus": max(bonus, ZERO), "port": port_pay}
+
+
 def bonus_released_for(rule, volume):
     """Bonus a period would already have released by the time it reached
     `volume` — the payout of the highest rung that volume clears."""

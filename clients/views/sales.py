@@ -371,6 +371,104 @@ def manage_incentive_rules(request):
     )
 
 
+ASSUMPTION_ROWS = 6
+
+
+@login_required
+def incentive_calculator(request):
+    """"What would I earn if…" — for every employee, not just admins.
+
+    Starts from what the employee has actually banked in each rule's current
+    period (so a ladder already half-climbed counts), then adds the typed
+    assumptions on top. The maths is ``services.incentives``, the same module
+    that pays a real sale, so this can't quote a rate the system won't honour.
+    """
+    viewer = getattr(request.user, "employee", None)
+    can_pick = permissions.is_admin_or_manager(request.user)
+    employees = (Employee.objects.select_related("user").filter(active=True).order_by("user__username")
+                 if can_pick else [])
+
+    target = viewer
+    if can_pick and request.GET.get("employee"):
+        target = Employee.objects.filter(pk=request.GET["employee"]).select_related("user").first() or viewer
+    if target is None:
+        messages.error(request, "Your account is not mapped to an employee, so there is nothing to calculate.")
+        return redirect("clients:dashboard")
+
+    today = timezone.localdate()
+    rules = list(
+        IncentiveRule.objects.filter(active=True)
+        .select_related("product_ref").prefetch_related("slabs").order_by("product")
+    )
+
+    # Typed assumptions, grouped by rule: {rule_id: {"fresh": ₹, "port": ₹}}
+    added = {}
+    rows = []
+    for i in range(ASSUMPTION_ROWS):
+        rule_id = request.GET.get(f"rule_{i}") or ""
+        amount = _dec_param(request.GET.get(f"amount_{i}"))
+        policy_type = request.GET.get(f"ptype_{i}") or "fresh"
+        years = max(1, int(request.GET.get(f"years_{i}") or 1))
+        rows.append({"index": i, "rule_id": rule_id, "amount": amount or "",
+                     "policy_type": policy_type, "policy_years": years})
+        rule = next((r for r in rules if str(r.id) == rule_id), None)
+        if rule is None or amount <= 0:
+            continue
+        is_health = bool(rule.product_ref and rule.product_ref.is_health)
+        credit = (amount / years) if (is_health and years > 1) else amount
+        bucket = added.setdefault(rule.id, {"fresh": Decimal("0"), "port": Decimal("0")})
+        bucket["port" if (is_health and policy_type == "port") else "fresh"] += credit
+
+    lines = []
+    banked_total = Decimal("0")
+    added_total = Decimal("0")
+    for rule in rules:
+        is_health = bool(rule.product_ref and rule.product_ref.is_health)
+        volume, _bonus, booked = incentives_service.period_totals(
+            rule, target, today, is_health=is_health)
+        extra = added.get(rule.id)
+        proj = incentives_service.project(
+            rule, volume,
+            extra["fresh"] if extra else Decimal("0"),
+            added_port=extra["port"] if extra else Decimal("0"),
+        )
+        banked_total += booked
+        added_total += proj["added"]
+        if not (booked or volume or extra):
+            continue  # nothing banked, nothing assumed — don't pad the table
+        lines.append({
+            "rule": rule,
+            "is_health": is_health,
+            "period_label": ("this month" if rule.slab_period == IncentiveRule.PERIOD_MONTH
+                             else "this financial year"),
+            "volume": volume,
+            "booked": booked,
+            "assumed": (proj["final_volume"] - volume) + (extra["port"] if extra else Decimal("0")),
+            "port_assumed": extra["port"] if extra else Decimal("0"),
+            "added": proj["added"],
+            "final_volume": proj["final_volume"],
+            "rate": proj["rate"],
+            "bonus": proj["bonus"],
+            "next": incentives_service.next_rung(rule, proj["final_volume"]),
+        })
+
+    return render(request, "incentives/calculator.html", {
+        "crumbs": [{"label": "Sales", "url": reverse("clients:all_sales")},
+                   {"label": "Incentive Calculator"}],
+        "kpis": [
+            {"label": "Earned so far", "value": f"₹{inr(banked_total)}", "color": "#15803D"},
+            {"label": "Assumptions add", "value": f"₹{inr(added_total)}", "color": "#B45309"},
+            {"label": "Would total", "value": f"₹{inr(banked_total + added_total)}", "color": "#4338CA"},
+        ],
+        "target": target, "employees": employees, "can_pick": can_pick,
+        "rules": rules, "rows": rows, "lines": lines,
+        "banked_total": banked_total, "added_total": added_total,
+        "grand_total": banked_total + added_total,
+        "has_assumptions": bool(added),
+        "today": today,
+    })
+
+
 @login_required
 def incentive_structure(request):
     """The incentive structure, explained — plus a what-if calculator.
