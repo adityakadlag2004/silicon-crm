@@ -16,13 +16,22 @@ from ..models import Product, Sale
 
 def recompute_sibling_sales(sale):
     """Re-run points on sales that share this sale's slab pool (same employee +
-    product within the slab month, or the campaign window). Needed after a
-    status change or delete so slab-delta payouts stay consistent."""
+    product within the rule's accumulation window, or the campaign window).
+    Needed after a status change or delete so slab-delta payouts stay
+    consistent — and, for rate slabs, so every sale in the window re-rates when
+    the volume crosses a band."""
+    from . import incentives as inc
+
     qs = Sale.objects.filter(employee=sale.employee).exclude(pk=sale.pk)
     if sale.campaign_id:
         qs = qs.filter(date__range=[sale.campaign.start_date, sale.campaign.end_date])
     elif sale.date:
-        qs = qs.filter(date__year=sale.date.year, date__month=sale.date.month)
+        rule = sale._rule()
+        if rule is not None:
+            start, end = inc.period_bounds(rule, sale.date)
+            qs = qs.filter(date__gte=start, date__lte=end)
+        else:
+            qs = qs.filter(date__year=sale.date.year, date__month=sale.date.month)
     if sale.product_ref_id:
         qs = qs.filter(product_ref_id=sale.product_ref_id)
     else:

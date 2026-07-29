@@ -397,6 +397,7 @@
               <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
               {% if nav.can_incentives or nav.can_recalc or nav.can_analysis %}<li><div class="kn-menu-divider"></div></li>{% endif %}
               {% if nav.can_incentives %}
+                <li><a class="kn-menu-item" href="{% url 'clients:incentive_structure' %}"><i class="bi bi-diagram-3-fill"></i> Incentive Structure</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:manage_incentive_rules' %}"><i class="bi bi-trophy-fill"></i> Incentive Rules</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:manage_campaigns' %}"><i class="bi bi-megaphone-fill"></i> Campaigns</a></li>
               {% endif %}

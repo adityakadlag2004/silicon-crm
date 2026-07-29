@@ -19,6 +19,7 @@ from django.views.decorators.http import require_POST
 from .. import permissions
 from ..models import Client, Sale, Employee, IncentiveRule, IncentiveSlab, Product
 from ..forms import AdminSaleForm, EditSaleForm
+from ..services import incentives as incentives_service
 from ..services import sales as sales_service
 from ..templatetags.custom_filters import inr
 from .helpers import get_manager_access, parse_date_param, success_with_drive_link, name_words_q
@@ -368,6 +369,79 @@ def manage_incentive_rules(request):
             "product_options": product_options,
         },
     )
+
+
+@login_required
+def incentive_structure(request):
+    """The incentive structure, explained — plus a what-if calculator.
+
+    The calculator runs the same ``services.incentives.quote()`` that pays a
+    real sale, so what this page prints is what the sale would actually earn.
+    """
+    if not permissions.can(request.user, "manage_incentives"):
+        messages.error(request, "You do not have permission to view the incentive structure.")
+        return redirect("clients:admin_dashboard")
+
+    rules = list(
+        IncentiveRule.objects.filter(active=True)
+        .select_related("product_ref").prefetch_related("slabs")
+        .order_by("product")
+    )
+    cards = [{
+        "rule": r,
+        "base_percent": incentives_service.unit_rate_percent(r),
+        "ladder": incentives_service.ladder(r),
+        "is_health": bool(r.product_ref and r.product_ref.is_health),
+    } for r in rules]
+
+    trial = None
+    picked = request.GET.get("rule") or ""
+    if picked:
+        rule = next((r for r in rules if str(r.id) == picked), None)
+        amount = _dec_param(request.GET.get("amount"))
+        prior = _dec_param(request.GET.get("prior_volume"))
+        years = max(1, int(request.GET.get("policy_years") or 1))
+        policy_type = request.GET.get("policy_type") or ""
+        is_health = bool(rule and rule.product_ref and rule.product_ref.is_health)
+        credit = (amount / years) if (is_health and years > 1) else amount
+        result = incentives_service.quote(
+            rule, credit,
+            prior_volume=prior,
+            prior_bonus=incentives_service.bonus_released_for(rule, prior),
+            policy_type=policy_type if is_health else "",
+            is_health=is_health,
+        )
+        trial = {
+            "rule": rule, "amount": amount, "credit": credit, "prior_volume": prior,
+            "policy_years": years, "policy_type": policy_type, "is_health": is_health,
+            "result": result,
+            "effective": (result["total"] / amount * Decimal("100")) if amount else Decimal("0"),
+        }
+
+    return render(request, "incentives/structure.html", {
+        "crumbs": [
+            {"label": "Admin", "url": reverse("clients:admin_dashboard")},
+            {"label": "Incentive Structure"},
+        ],
+        "kpis": [
+            {"label": "Active Rules", "value": len(rules), "color": "#4338CA"},
+            {"label": "Products with Ladders",
+             "value": sum(1 for c in cards if c["ladder"]), "color": "#B45309"},
+            {"label": "Edit Rules", "value": "Open", "color": "#15803D",
+             "url": reverse("clients:manage_incentive_rules")},
+        ],
+        "cards": cards,
+        "rules": rules,
+        "trial": trial,
+    })
+
+
+def _dec_param(raw):
+    """A rupee figure typed into the calculator, or 0 for anything unusable."""
+    try:
+        return Decimal(str(raw or "0").replace(",", "").strip() or "0")
+    except (ArithmeticError, ValueError):
+        return Decimal("0")
 
 
 @login_required

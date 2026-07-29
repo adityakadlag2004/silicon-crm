@@ -5,8 +5,15 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Sum
+from django.db.models import DecimalField, ExpressionWrapper, F, Sum
 from django.utils import timezone
+
+# A multiyear health premium is credited one year at a time; policy_years is 1
+# for ordinary sales, so the slice equals the amount for them.
+_ANNUAL_SLICE = ExpressionWrapper(
+    F("amount") / F("policy_years"),
+    output_field=DecimalField(max_digits=16, decimal_places=4),
+)
 
 
 def _add_years(d, n):
@@ -111,6 +118,11 @@ class Sale(models.Model):
     emi_months = models.PositiveSmallIntegerField(default=0, choices=EMI_MONTH_CHOICES)
 
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
+    # The slab-ladder portion of `points`, tracked separately because the
+    # earned-to-date delta must be measured against bonus already released —
+    # summing `points` would count the flat base rate as bonus and starve the
+    # ladder. points = base rate + bonus_points.
+    bonus_points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     incentive_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0.00"))
     # Records which campaign (if any) awarded the points on this sale; null = regular mechanism.
     campaign = models.ForeignKey("Campaign", null=True, blank=True, on_delete=models.SET_NULL, related_name="sales")
@@ -280,100 +292,108 @@ class Sale(models.Model):
         self.points = delta
         self.incentive_amount = delta
 
-    def compute_points(self):
-        """Compute points based on IncentiveRule + IncentiveSlab in DB"""
-        from .incentives import IncentiveRule, IncentiveSlab
+    def _zero_points(self):
+        self.points = Decimal("0.000")
+        self.bonus_points = Decimal("0.000")
+        self.incentive_amount = Decimal("0.00")
 
-        product_label = self._effective_product_label()
+    def creditable_amount(self):
+        """The amount incentive is paid on.
+
+        A multiyear health premium buys several years at once, so only the
+        year being sold counts now — the rest is recognised as renewals on each
+        anniversary, exactly as the margin report already values it.
+        """
+        if self._is_health_product():
+            return self.annual_premium
+        return self.amount or Decimal("0")
+
+    def _period_priors(self, rule):
+        """(volume, bonus already released) across this employee's other
+        APPROVED sales of this product inside the rule's accumulation window."""
+        from ..services import incentives as inc
+
+        start, end = inc.period_bounds(rule, self.date or timezone.localdate())
+        qs = Sale.objects.filter(
+            employee=self.employee, status=Sale.STATUS_APPROVED,
+            date__gte=start, date__lte=end,
+        )
+        if self.product_ref_id:
+            qs = qs.filter(product_ref=self.product_ref)
+        else:
+            qs = qs.filter(product=self._effective_product_label())
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        if self._is_health_product():
+            # Port is paid its own flat rate, so it must not push Fresh into a
+            # higher band. Multiyear counts one year at a time.
+            volume = qs.exclude(policy_type=self.POLICY_TYPE_PORT).aggregate(
+                t=Sum(_ANNUAL_SLICE))["t"]
+        else:
+            volume = qs.aggregate(t=Sum("amount"))["t"]
+        bonus = qs.aggregate(t=Sum("bonus_points"))["t"]
+        return volume or Decimal("0"), bonus or Decimal("0")
+
+    def _rule(self):
+        from .incentives import IncentiveRule
+
+        qs = IncentiveRule.objects.filter(active=True)
+        if self.product_ref_id:
+            qs = qs.filter(product_ref=self.product_ref)
+        else:
+            qs = qs.filter(product=self._effective_product_label())
+        # first() instead of get(): a stray duplicate rule must degrade to
+        # deterministic behaviour, not crash every save of this product.
+        return qs.order_by("id").first()
+
+    def compute_points(self):
+        """Points for this sale, from its IncentiveRule + slabs.
+
+        The maths lives in ``services.incentives.quote`` so the Incentive
+        Structure page's calculator answers with the same numbers this pays.
+        """
+        from ..services import incentives as inc
 
         # Rejected sales earn nothing.
         if self.status == self.STATUS_REJECTED:
             self.campaign = None
-            self.points = Decimal("0.000")
-            self.incentive_amount = Decimal("0.00")
+            self._zero_points()
             return
 
-        if self._is_health_product() and self.policy_type == self.POLICY_TYPE_PORT:
+        rule = self._rule()
+        is_health = self._is_health_product()
+
+        # Port sits outside both the Fresh ladder and any campaign — it is its
+        # own flat rate on the premium.
+        if is_health and self.policy_type == self.POLICY_TYPE_PORT:
             self.campaign = None
-            self.points = Decimal("0.000")
-            self.incentive_amount = Decimal("0.00")
+            q = inc.quote(rule, self.creditable_amount(),
+                          policy_type=self.policy_type, is_health=True)
+            self.points = q["total"]
+            self.bonus_points = Decimal("0.000")
+            self.incentive_amount = q["total"]
             return
 
         # Time-bound campaign takes precedence and fully replaces regular points.
         cp = self._active_campaign_product()
         if cp is not None:
             self.campaign = cp.campaign
+            self.bonus_points = Decimal("0.000")
             self._compute_campaign_points(cp)
             return
         self.campaign = None
 
-        try:
-            rule_qs = IncentiveRule.objects.filter(active=True)
-            if self.product_ref_id:
-                rule_qs = rule_qs.filter(product_ref=self.product_ref)
-            else:
-                rule_qs = rule_qs.filter(product=product_label)
-            # first() instead of get(): a stray duplicate rule must degrade to
-            # deterministic behaviour, not crash every save of this product.
-            rule = rule_qs.order_by("id").first()
-            if rule is None:
-                raise IncentiveRule.DoesNotExist
+        if rule is None:
+            self._zero_points()
+            return
 
-            # Check if this rule has slabs → slab-based calculation
-            slab_qs = IncentiveSlab.objects.filter(rule=rule).order_by("-threshold")
-
-            if slab_qs.exists():
-                # Slab-based incentive (e.g. Life Insurance)
-                premium = self.amount or Decimal("0")
-
-                if not rule.active:
-                    self.points = Decimal("0.000")
-                    self.incentive_amount = Decimal("0.00")
-                    return
-
-                sale_month = self.date.month if self.date else timezone.now().month
-                sale_year = self.date.year if self.date else timezone.now().year
-                # Only approved sales count toward the monthly slab cumulative.
-                qs = Sale.objects.filter(
-                    employee=self.employee,
-                    status=Sale.STATUS_APPROVED,
-                    date__year=sale_year,
-                    date__month=sale_month,
-                )
-                if self.product_ref_id:
-                    qs = qs.filter(product_ref=self.product_ref)
-                else:
-                    qs = qs.filter(product=product_label)
-                if self.pk:
-                    qs = qs.exclude(pk=self.pk)
-                cumulative_amount = (qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")) + premium
-
-                # Match highest slab threshold <= cumulative amount
-                payout = Decimal("0.00")
-                for slab in slab_qs:
-                    if cumulative_amount >= slab.threshold:
-                        payout = slab.payout
-                        break
-
-                already_awarded = qs.aggregate(total=Sum("points"))["total"] or Decimal("0.00")
-                delta = payout - already_awarded
-                if delta < 0:
-                    delta = Decimal("0.00")
-
-                self.points = delta
-                self.incentive_amount = delta
-                return
-
-            # Unit-based incentive (e.g. SIP, PMS, etc.)
-            if rule.unit_amount > 0:
-                self.points = (self.amount / rule.unit_amount) * rule.points_per_unit
-                self.incentive_amount = self.points  # You can later define ₹ conversion
-            else:
-                self.points = Decimal("0.000")
-                self.incentive_amount = Decimal("0.00")
-        except IncentiveRule.DoesNotExist:
-            self.points = Decimal("0.000")
-            self.incentive_amount = Decimal("0.00")
+        prior_volume, prior_bonus = self._period_priors(rule)
+        q = inc.quote(rule, self.creditable_amount(),
+                      prior_volume=prior_volume, prior_bonus=prior_bonus,
+                      policy_type=self.policy_type, is_health=is_health)
+        self.points = q["total"]
+        self.bonus_points = q["bonus"]
+        self.incentive_amount = q["total"]
 
     def save(self, *args, **kwargs):
         if self.product_ref_id:

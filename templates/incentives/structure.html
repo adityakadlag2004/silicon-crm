@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Incentive Structure{% endblock %}
+{% block page_title %}Incentive Structure{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+  <h2 class="ki-section-title mb-0"><i class="bi bi-diagram-3"></i> How incentive is earned</h2>
+  <a class="ki-btn ki-btn-secondary" href="{% url 'clients:manage_incentive_rules' %}">
+    <i class="bi bi-sliders"></i> Edit rules &amp; slabs
+  </a>
+</div>
+
+<p class="text-muted mb-4" style="font-size:.92rem;max-width:70ch;">
+  Every approved sale earns points, and a point is a rupee. Two things can pay:
+  a <strong>base rate</strong> on the sale itself, and a <strong>ladder</strong> driven by
+  how much the seller has already done in the period. The calculator at the
+  bottom runs the same code that pays a real sale.
+</p>
+
+{# ---------------- The trial calculator ---------------- #}
+<div class="ki-card mb-4" id="calculator">
+  <h3 class="mb-1" style="font-size:1.05rem;font-weight:700;">
+    <i class="bi bi-calculator" style="color:var(--ki-primary);"></i> Try a sale
+  </h3>
+  <p class="text-muted mb-3" style="font-size:.86rem;">
+    Type a sale and see exactly what it pays. Nothing is saved.
+  </p>
+
+  <form method="get" action="{% url 'clients:incentive_structure' %}#calculator" class="row g-3 align-items-end">
+    <div class="col-12 col-md-4">
+      <label class="form-label" for="calc-rule">Product</label>
+      <select class="form-select" name="rule" id="calc-rule" required>
+        <option value="">Choose a product…</option>
+        {% for r in rules %}
+          <option value="{{ r.id }}" {% if trial.rule.id == r.id %}selected{% endif %}>
+            {{ r.product_ref.name|default:r.product }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="calc-amount">Sale amount (₹)</label>
+      <input class="form-control" type="number" min="0" step="1" name="amount" id="calc-amount"
+             value="{{ trial.amount|default_if_none:''|floatformat:'0' }}" required>
+    </div>
+    <div class="col-6 col-md-5">
+      <label class="form-label" for="calc-prior">Already sold this period (₹)</label>
+      <input class="form-control" type="number" min="0" step="1" name="prior_volume" id="calc-prior"
+             value="{{ trial.prior_volume|default_if_none:''|floatformat:'0' }}"
+             placeholder="0 — this is their first sale of the period">
+      <div class="form-text">
+        Same product, same seller, approved, inside the ladder's month or financial year.
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="calc-ptype">Policy type <span class="text-muted">(health)</span></label>
+      <select class="form-select" name="policy_type" id="calc-ptype">
+        <option value="fresh" {% if trial.policy_type == 'fresh' %}selected{% endif %}>Fresh</option>
+        <option value="port" {% if trial.policy_type == 'port' %}selected{% endif %}>Port</option>
+      </select>
+    </div>
+    <div class="col-6 col-md-3">
+      <label class="form-label" for="calc-years">Policy years <span class="text-muted">(health)</span></label>
+      <select class="form-select" name="policy_years" id="calc-years">
+        {% for y in "123"|make_list %}
+          <option value="{{ y }}" {% if trial.policy_years|stringformat:"s" == y %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <button class="ki-btn ki-btn-primary w-100" type="submit">
+        <i class="bi bi-play-fill"></i> Calculate
+      </button>
+    </div>
+  </form>
+
+  {% if trial %}
+    {% if trial.rule %}
+      <hr class="my-4">
+      <div class="ki-grid-2">
+        <div>
+          <div class="ki-field-grid">
+            <div><span>Product</span><strong>{{ trial.rule.product_ref.name|default:trial.rule.product }}</strong></div>
+            <div><span>Sale amount</span><strong>₹{{ trial.amount|inr }}</strong></div>
+            {% if trial.is_health and trial.policy_years > 1 %}
+              <div>
+                <span>Counted now</span>
+                <strong>₹{{ trial.credit|inr }}</strong>
+                <div class="form-text">{{ trial.policy_years }}-year policy — one year at a time.</div>
+              </div>
+            {% endif %}
+            <div><span>Base rate</span><strong>₹{{ trial.result.base|inr }}</strong></div>
+            <div><span>Ladder bonus</span><strong>₹{{ trial.result.bonus|inr }}</strong></div>
+          </div>
+        </div>
+        <div>
+          <div class="ki-card" style="background:#f8fafc;">
+            <div class="text-muted" style="font-size:.82rem;text-transform:uppercase;letter-spacing:.04em;">
+              This sale pays
+            </div>
+            <div style="font-size:2rem;font-weight:800;color:var(--ki-primary);line-height:1.1;">
+              ₹{{ trial.result.total|inr }}
+            </div>
+            <div class="text-muted" style="font-size:.88rem;">
+              {{ trial.effective|floatformat:2 }}% of the ₹{{ trial.amount|inr }} sale
+            </div>
+          </div>
+          <p class="mt-3 mb-0" style="font-size:.9rem;">{{ trial.result.basis }}</p>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-warning mt-3 mb-0">Pick a product to calculate.</div>
+    {% endif %}
+  {% endif %}
+</div>
+
+{# ---------------- The structure, product by product ---------------- #}
+<h2 class="ki-section-title mb-3"><i class="bi bi-list-ol"></i> The structure</h2>
+
+<div class="ki-grid-2">
+{% for c in cards %}
+  <div class="ki-card">
+    <h3 class="mb-2" style="font-size:1.05rem;font-weight:700;color:var(--ki-dark);">
+      <i class="bi bi-box-seam me-1" style="color:var(--ki-primary);"></i>
+      {{ c.rule.product_ref.name|default:c.rule.product }}
+    </h3>
+
+    {% if c.ladder and c.rule.slab_mode == 'rate' %}
+      <p style="font-size:.9rem;">
+        The rate depends on how much <strong>this seller</strong> has sold
+        {% if c.rule.slab_period == 'fy' %}this financial year{% else %}this month{% endif %},
+        counting the sale being paid. The whole sale is paid at the band that
+        running total lands in — there is no separate base rate.
+      </p>
+    {% elif c.ladder %}
+      <p style="font-size:.9rem;">
+        <strong>{{ c.base_percent|floatformat:2 }}%</strong> of every sale, always, with no minimum.
+        On top of that, a bonus is released as the seller's
+        {% if c.rule.slab_period == 'fy' %}April–March{% else %}monthly{% endif %}
+        running total crosses each rung. The rung figure is what they have earned
+        <em>to date</em>, so only the difference against what the period already
+        released is paid out.
+      </p>
+    {% else %}
+      <p style="font-size:.9rem;">
+        Flat <strong>{{ c.base_percent|floatformat:3 }}%</strong> of every sale
+        ({{ c.rule.points_per_unit|floatformat:"-3" }} points per ₹{{ c.rule.unit_amount|inr }}).
+        No ladder.
+      </p>
+    {% endif %}
+
+    {% if c.ladder %}
+      <div class="ki-table-wrap">
+        <table class="ki-table">
+          <thead>
+            <tr>
+              <th>{% if c.rule.slab_mode == 'rate' %}Running total{% else %}Cumulative reaches{% endif %}</th>
+              <th class="text-end">{% if c.rule.slab_mode == 'rate' %}Rate paid{% else %}Bonus to date{% endif %}</th>
+              {% if c.rule.slab_mode != 'rate' %}<th class="text-end">Effective at the rung</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for row in c.ladder %}
+            <tr>
+              <td>₹{{ row.slab.threshold|inr }}{% if c.rule.slab_mode == 'rate' %} and up{% endif %}</td>
+              <td class="text-end">
+                {% if c.rule.slab_mode == 'rate' %}{{ row.slab.payout|floatformat:2 }}%
+                {% else %}₹{{ row.slab.payout|inr }}{% endif %}
+              </td>
+              {% if c.rule.slab_mode != 'rate' %}
+                <td class="text-end">{{ row.effective|floatformat:2 }}%</td>
+              {% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    {% if c.is_health %}
+      <p class="mt-3 mb-0" style="font-size:.88rem;">
+        <strong>Port</strong> policies sit outside the ladder at a flat
+        {% if c.rule.port_percent %}{{ c.rule.port_percent|floatformat:2 }}%{% else %}0%{% endif %}
+        and never push Fresh into a higher band.
+        A <strong>multiyear</strong> premium is credited one year at a time —
+        the later years pay as renewals on each anniversary.
+      </p>
+    {% endif %}
+  </div>
+{% empty %}
+  <div class="ki-card"><p class="mb-0 text-muted">No active incentive rules.</p></div>
+{% endfor %}
+</div>
+
+<div class="ki-card mt-4">
+  <h3 class="mb-2" style="font-size:1rem;font-weight:700;">Rules that apply to everything</h3>
+  <ul class="mb-0" style="font-size:.9rem;">
+    <li>Only <strong>approved</strong> sales count toward a ladder. A rejected sale earns nothing and is left out of everyone's running total.</li>
+    <li>Changing a rule does <strong>not</strong> rewrite sales already saved — it applies to sales entered from then on.</li>
+    <li>A running total resets when its period does: on the 1st for monthly ladders, on 1 April for financial-year ladders.</li>
+    <li>An active <strong>campaign</strong> on a product replaces its regular incentive for the campaign's dates.</li>
+  </ul>
+</div>
+
+{% endblock %}

@@ -11,6 +11,7 @@ urlpatterns = [
     path("sales/<int:sale_id>/delete/", sales.delete_sale, name="delete_sale"),
     path("sales/recalc/", sales.recalc_points, name="recalc_points"),
     path("sales/all/", sales.all_sales, name="all_sales"),
+    path("incentives/", sales.incentive_structure, name="incentive_structure"),
     path("incentives/manage/", sales.manage_incentive_rules, name="manage_incentive_rules"),
     path("incentives/rule/add/", sales.add_incentive_rule, name="add_incentive_rule"),
     path("incentives/rule/<int:rule_id>/update/", sales.update_incentive_rule, name="update_incentive_rule"),

@@ -103,6 +103,29 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `insurance_renewal` calendar feed now keys on the **mapped** employee and skips
   the paid multiyear years too.
 
+## Employee incentive (points = rupees)
+
+- `services/incentives.py` owns the maths — `quote()` is the single
+  implementation, called by `Sale.compute_points()` on every save **and** by the
+  Incentive Structure page's what-if calculator, so the page can never quote a
+  number the sale wouldn't pay.
+- A rule's slabs are read one of two ways (`IncentiveRule.slab_mode`):
+  **bonus** = rupees *earned to date* once the period's cumulative volume
+  crosses the rung, paid on top of the flat unit rate and only as the delta
+  against what the period already released (Life: 1.75% base + Apr–Mar ladder);
+  **rate** = a percent resolved from the period's volume and applied to the sale
+  instead of the unit rate (Health: the seller's own monthly Fresh volume).
+  `IncentiveRule.slab_period` is the window — calendar month or Apr–Mar FY.
+- The delta is measured against `Sale.bonus_points`, **not** `points` — points
+  now mixes base and bonus, and summing it would starve the ladder.
+- Health **Port** pays `IncentiveRule.port_percent` (0.67%), sits outside the
+  Fresh ladder, and never pushes Fresh into a higher band. A **multiyear**
+  premium is credited one year at a time (`Sale.creditable_amount()`), matching
+  how the margin report already recognises it.
+- Changing a rule never rewrites sales already saved — points are stored at save
+  time. `recompute_sibling_sales` re-runs the rule's whole *period* (not just
+  the month) after a status change, so rate bands re-rate when volume crosses.
+
 ## Claim workflow
 
 - Claims are raised and worked **in-app** now (not just admin): "Raise Claim"
@@ -234,7 +257,12 @@ signal there is, since the app is self-hosted with no Play Console.
 - (none currently — `monthly_snapshot` + `MonthlyIncentive` deleted 2026-07-16;
   the admin incentive report always computes live from `Sale` now)
 - Manual tools (intentionally not in CRONJOBS): `prod_readiness_check`,
-  `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`.
+  `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`,
+  `seed_incentive_structure`.
+  `seed_incentive_structure` sets the *employee* incentive: Life = 1.75% base +
+  the Apr–Mar bonus ladder, Health = the per-employee monthly Fresh rate bands
+  (1.50%→3.50%, a flat tenth of the firm's own margin grid) + Port 0.67%.
+  Idempotent; re-run after changing either ladder.
   `seed_health_slabs` sets the Health Insurance Fresh margin slabs (volume-band,
   15%→35%) plus flat 15% Port/renewal; idempotent, re-run if the structure
   changes.
