@@ -92,8 +92,8 @@ dict built in dashboards.employee_dashboard. Styled with shared --ki-* tokens.
     <div class="panel">
       <div class="p-head"><h3>My day</h3><div class="psub">Do these before you chase new business</div></div>
       <ul class="day-list">
-        <li><a href="{% url 'clients:task_my' %}?range=today&amp;status=open">
-          <span class="ico g">✓</span><div class="body"><b>Tasks due today</b><small>assigned to me</small></div><span class="cnt num">{{ o.tasks_due }}</span><span class="arr">→</span></a></li>
+        <li><a href="{% url 'clients:task_my' %}?range=due&amp;status=open">
+          <span class="ico g">✓</span><div class="body"><b>Tasks to clear</b><small>{% if o.tasks_overdue %}due today · <b style="color:var(--bad)">{{ o.tasks_overdue }} overdue</b>{% else %}due today, nothing overdue{% endif %}</small></div><span class="cnt num">{{ o.tasks_due }}</span><span class="arr">→</span></a></li>
         <li><a href="{% url 'clients:employee_calendar_page' %}">
           <span class="ico b">☎</span><div class="body"><b>Today's meetings &amp; calls</b><small>on my calendar</small></div><span class="cnt num">{{ o.events_today }}</span><span class="arr">→</span></a></li>
         <li><a href="{% url 'clients:all_sales' %}?focus=renewals7">

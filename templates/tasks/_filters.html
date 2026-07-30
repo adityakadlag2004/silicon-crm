@@ -21,6 +21,7 @@
   {% endif %}
   <select name="range" class="form-select form-select-sm" style="width:auto;">
     <option value="">Any date</option>
+    <option value="due" {% if f.range == 'due' %}selected{% endif %}>Due &amp; overdue</option>
     <option value="today" {% if f.range == 'today' %}selected{% endif %}>Today</option>
     <option value="tomorrow" {% if f.range == 'tomorrow' %}selected{% endif %}>Tomorrow</option>
     <option value="this_week" {% if f.range == 'this_week' %}selected{% endif %}>This week</option>

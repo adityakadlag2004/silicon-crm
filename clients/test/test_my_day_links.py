@@ -33,11 +33,16 @@ class MyDayLinkTests(TestCase):
         r = self._dash()
         self.assertEqual(r.status_code, 200)
         html = r.content.decode()
-        for target in (f"{reverse('clients:task_my')}?range=today&amp;status=open",
+        for target in (f"{reverse('clients:task_my')}?range=due&amp;status=open",
                        reverse("clients:employee_calendar_page"),
                        f"{reverse('clients:all_sales')}?focus=renewals7",
                        f"{reverse('clients:all_sales')}?focus=emi"):
             self.assertIn(target, html, msg=f"missing link to {target}")
+
+    def _task_titles(self, response):
+        if "tasks" in response.context:
+            return {t.title for t in response.context["tasks"]}
+        return {t.title for col in response.context["columns"] for t in col["tasks"]}
 
     def test_tasks_link_opens_exactly_what_was_counted(self):
         Task.objects.create(title="Due today", assigned_to=self.emp,
@@ -54,12 +59,48 @@ class MyDayLinkTests(TestCase):
         self.assertEqual(counted, 1)
 
         listed = self.client.get(reverse("clients:task_my"),
-                                 {"range": "today", "status": "open"})
-        titles = {t.title for t in listed.context["tasks"]} if "tasks" in listed.context else None
-        if titles is None:   # board view groups by column
-            titles = {t.title for col in listed.context["columns"] for t in col["tasks"]}
+                                 {"range": "due", "status": "open"})
+        titles = self._task_titles(listed)
         self.assertEqual(titles, {"Due today"})
         self.assertNotIn(done.title, titles)
+
+    def test_overdue_work_is_counted_and_listed(self):
+        """The reported bug: every open task was late, so the row read zero."""
+        Task.objects.create(title="Late by a day", assigned_to=self.emp,
+                            created_by=self.user,
+                            due_date=self.today - timedelta(days=1),
+                            status=Task.STATUS_OVERDUE)
+        Task.objects.create(title="Late by a week", assigned_to=self.emp,
+                            created_by=self.user,
+                            due_date=self.today - timedelta(days=7),
+                            status=Task.STATUS_IN_PROGRESS)
+        Task.objects.create(title="Next week", assigned_to=self.emp,
+                            created_by=self.user,
+                            due_date=self.today + timedelta(days=7),
+                            status=Task.STATUS_PENDING)
+
+        o = self._dash().context["emp_overview"]
+        self.assertEqual(o["tasks_due"], 2)
+        self.assertEqual(o["tasks_overdue"], 2)
+
+        listed = self.client.get(reverse("clients:task_my"),
+                                 {"range": "due", "status": "open"})
+        self.assertEqual(self._task_titles(listed),
+                         {"Late by a day", "Late by a week"})
+
+    def test_the_row_says_how_many_are_overdue(self):
+        Task.objects.create(title="Late", assigned_to=self.emp,
+                            created_by=self.user,
+                            due_date=self.today - timedelta(days=3),
+                            status=Task.STATUS_OVERDUE)
+        self.assertContains(self._dash(), "1 overdue")
+
+    def test_a_completed_overdue_task_is_not_counted(self):
+        Task.objects.create(title="Late but done", assigned_to=self.emp,
+                            created_by=self.user,
+                            due_date=self.today - timedelta(days=3),
+                            status=Task.STATUS_COMPLETED)
+        self.assertEqual(self._dash().context["emp_overview"]["tasks_due"], 0)
 
     def test_renewals_link_opens_exactly_what_was_counted(self):
         soon = Sale.objects.create(

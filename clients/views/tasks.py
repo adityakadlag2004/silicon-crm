@@ -140,7 +140,16 @@ def _visible_task_or_404(request, pk, include_deleted=False):
 # ─────────────────────────── filtering / sorting ───────────────────────────
 
 def _quick_range(key, today):
-    """Return (start_date, end_date) for a named quick range, or (None, None)."""
+    """Return (start_date, end_date) for a named quick range, or (None, None).
+
+    Either end may be None for an open-ended range — "due" has no start because
+    the point of it is everything not yet dealt with, however old.
+    """
+    if key == "due":
+        # The day's real workload: due today plus everything already overdue.
+        # A named range beats a literal ?to=<date> in a dashboard link, which
+        # would go stale the moment anyone bookmarked it.
+        return None, today
     if key == "today":
         return today, today
     if key == "tomorrow":
@@ -198,7 +207,7 @@ def _apply_filters(qs, request):
     # Date range on the due date — quick range wins, else custom from/to.
     today = timezone.localdate()
     start, end = _quick_range(request.GET.get("range", ""), today)
-    if start is None:
+    if start is None and end is None:
         start = parse_date_param(request.GET.get("from"))
         end = parse_date_param(request.GET.get("to"))
     if start:

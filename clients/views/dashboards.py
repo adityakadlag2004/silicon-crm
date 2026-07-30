@@ -1098,8 +1098,13 @@ def employee_dashboard(request):
         "attainment": my_attainment, "target_total": my_target_total,
         "points": total_points, "extra_points": extra_points,
         "pending_count": monthly_sales_pending.count(),
-        "tasks_due": Task.objects.filter(assigned_to=emp, due_date=today,
+        # Due today OR already overdue. Keying this on due_date == today read as
+        # zero on a day when the only open work was late, which is exactly when
+        # someone needs to see it.
+        "tasks_due": Task.objects.filter(assigned_to=emp, due_date__lte=today,
                                          status__in=Task.OPEN_STATUSES, is_deleted=False).count(),
+        "tasks_overdue": Task.objects.filter(assigned_to=emp, due_date__lt=today,
+                                             status__in=Task.OPEN_STATUSES, is_deleted=False).count(),
         "events_today": todays_events.count(),
         "renewals_7": _ra["c7"], "renewals_7_premium": _ra["prem30"],
         "emis_due": _emis_due_this_month(today, employee=emp),
