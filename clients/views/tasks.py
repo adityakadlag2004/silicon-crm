@@ -172,7 +172,11 @@ def _apply_filters(qs, request):
         qs = qs.filter(cond)
 
     status = request.GET.get("status")
-    if status in dict(Task.STATUS_CHOICES):
+    if status == "open":
+        # What the dashboard's "Tasks due today" counts, so the link it opens
+        # shows the same set rather than including everything already finished.
+        qs = qs.filter(status__in=Task.OPEN_STATUSES)
+    elif status in dict(Task.STATUS_CHOICES):
         qs = qs.filter(status=status)
 
     priority = request.GET.get("priority")

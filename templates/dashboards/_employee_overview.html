@@ -23,8 +23,14 @@ dict built in dashboards.employee_dashboard. Styled with shared --ki-* tokens.
 .edash .p-head{margin-bottom:.9rem}
 /* my day */
 .edash .day-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem}
-.edash .day-list li{display:flex;align-items:center;gap:.65rem;padding:.55rem .7rem;border-radius:var(--ki-radius-sm);background:var(--ki-body-bg);border:1px solid var(--ki-card-border);text-decoration:none;color:inherit}
-.edash .day-list li:hover{box-shadow:var(--ki-shadow)}
+.edash .day-list li{list-style:none}
+/* The row itself is the link, so the whole tile is the target — the flex box
+   has to sit on the anchor, not the li, or the children stop laying out. */
+.edash .day-list li>a{display:flex;align-items:center;gap:.65rem;padding:.55rem .7rem;border-radius:var(--ki-radius-sm);background:var(--ki-body-bg);border:1px solid var(--ki-card-border);text-decoration:none;color:inherit}
+.edash .day-list li>a:hover{box-shadow:var(--ki-shadow);border-color:var(--ki-primary)}
+.edash .day-list li>a:focus-visible{outline:2px solid var(--ki-primary);outline-offset:2px}
+.edash .day-list li>a:hover .arr{color:var(--ki-primary);transform:translateX(2px)}
+.edash .day-list .arr{transition:transform .12s,color .12s}
 .edash .day-list .ico{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:.95rem;flex:none;background:var(--ki-primary-pale);color:var(--ki-primary)}
 .edash .day-list .ico.b{background:var(--ki-danger-light);color:var(--bad)}.edash .day-list .ico.i{background:var(--ki-info-light);color:var(--info)}.edash .day-list .ico.g{background:var(--ki-success-light);color:var(--good)}
 .edash .day-list .body{flex:1}.edash .day-list .body b{font-weight:700;color:var(--ki-text-primary)}
@@ -86,10 +92,14 @@ dict built in dashboards.employee_dashboard. Styled with shared --ki-* tokens.
     <div class="panel">
       <div class="p-head"><h3>My day</h3><div class="psub">Do these before you chase new business</div></div>
       <ul class="day-list">
-        <li><span class="ico g">✓</span><div class="body"><b>Tasks due today</b><small>assigned to me</small></div><span class="cnt num">{{ o.tasks_due }}</span><span class="arr">→</span></li>
-        <li><span class="ico b">☎</span><div class="body"><b>Today's meetings &amp; calls</b><small>on my calendar</small></div><span class="cnt num">{{ o.events_today }}</span><span class="arr">→</span></li>
-        <li><span class="ico i">↻</span><div class="body"><b>My renewals ≤7 days</b><small>{% if o.renewals_7 %}₹{{ o.renewals_7_premium|compact_inr }} premium up for renewal{% else %}nothing due{% endif %}</small></div><span class="cnt num">{{ o.renewals_7 }}</span><span class="arr">→</span></li>
-        <li><span class="ico i">₹</span><div class="body"><b>My EMIs · this month</b><small>call clients before the 5th</small></div><span class="cnt num">{{ o.emis_due }}</span><span class="arr">→</span></li>
+        <li><a href="{% url 'clients:task_my' %}?range=today&amp;status=open">
+          <span class="ico g">✓</span><div class="body"><b>Tasks due today</b><small>assigned to me</small></div><span class="cnt num">{{ o.tasks_due }}</span><span class="arr">→</span></a></li>
+        <li><a href="{% url 'clients:employee_calendar_page' %}">
+          <span class="ico b">☎</span><div class="body"><b>Today's meetings &amp; calls</b><small>on my calendar</small></div><span class="cnt num">{{ o.events_today }}</span><span class="arr">→</span></a></li>
+        <li><a href="{% url 'clients:all_sales' %}?focus=renewals7">
+          <span class="ico i">↻</span><div class="body"><b>My renewals ≤7 days</b><small>{% if o.renewals_7 %}₹{{ o.renewals_7_premium|compact_inr }} premium up for renewal{% else %}nothing due{% endif %}</small></div><span class="cnt num">{{ o.renewals_7 }}</span><span class="arr">→</span></a></li>
+        <li><a href="{% url 'clients:all_sales' %}?focus=emi">
+          <span class="ico i">₹</span><div class="body"><b>My EMIs · this month</b><small>call clients before the 5th</small></div><span class="cnt num">{{ o.emis_due }}</span><span class="arr">→</span></a></li>
       </ul>
     </div>
     <div class="panel">

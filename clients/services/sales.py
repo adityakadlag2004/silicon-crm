@@ -49,6 +49,53 @@ def recompute_sibling_sales(sale):
         sale.save()
 
 
+def _own_book(qs, employee):
+    """Scope to one person's book — sold by them, or theirs to service."""
+    from django.db.models import Q
+
+    if employee is None:
+        return qs
+    return qs.filter(Q(employee=employee) | Q(client__mapped_to=employee))
+
+
+def renewal_due_sale_ids(today, employee=None, within_days=7):
+    """Approved insurance policies renewing within `within_days`.
+
+    The dashboard counts these and "My day" links to them, so both read this
+    one selector — a count that doesn't match the list it opens is worse than
+    no count at all.
+    """
+    from django.db.models import Q
+
+    from ..models import Sale
+
+    qs = _own_book(
+        Sale.objects.filter(status=Sale.STATUS_APPROVED).filter(
+            Q(product_ref__code__in=["HEALTH_INS", "LIFE_INS"])
+            | Q(product__iexact="Health Insurance")
+            | Q(product__iexact="Life Insurance")
+        ).select_related("product_ref"),
+        employee,
+    )
+    ids = []
+    for sale in qs:
+        nxt = sale.next_renewal_date(today)
+        if nxt and 0 <= (nxt - today).days <= within_days:
+            ids.append(sale.pk)
+    return ids
+
+
+def emi_due_sale_ids(today, employee=None):
+    """Multiyear-EMI policies whose EMI schedule covers `today`'s month."""
+    from ..management.commands.emi_reminders import emi_window_contains
+    from ..models import Sale
+
+    qs = _own_book(Sale.objects.filter(emi_months__gt=0, status=Sale.STATUS_APPROVED),
+                   employee)
+    return [s.pk for s in qs
+            if s.date and emi_window_contains(s, today.year, today.month)]
+
+
 def snapshot_ppt_margin(sale):
     """Lock in the FYC (sale margin %) for a PPT-priced life plan at the current
     designation. Called on create and edit so the sale carries a frozen margin —

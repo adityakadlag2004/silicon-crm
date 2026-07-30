@@ -186,7 +186,7 @@ def _renewal_attention(today, employee=None):
     )
     if employee is not None:
         qs = qs.filter(Q(employee=employee) | Q(client__mapped_to=employee))
-    c30, c5, c7, prem30 = 0, 0, 0, Decimal("0")
+    c30, c5, prem30 = 0, 0, Decimal("0")
     for sale in qs:
         nxt = sale.next_renewal_date(today)
         if not nxt:
@@ -195,10 +195,10 @@ def _renewal_attention(today, employee=None):
         if 0 <= days <= 30:
             c30 += 1
             prem30 += sale.annual_premium or Decimal("0")
-            if days <= 7:
-                c7 += 1
             if days <= 5:
                 c5 += 1
+    from ..services import sales as sales_service
+    c7 = len(sales_service.renewal_due_sale_ids(today, employee=employee))
     return {"c30": c30, "prem30": prem30, "c5": c5, "c7": c7}
 
 
@@ -206,11 +206,8 @@ def _emis_due_this_month(today, employee=None):
     """Count of multiyear-EMI health policies whose EMI schedule covers this
     month (the emi_reminders cron would call these clients). Scope to one
     employee (seller or the client's mapped owner) when given."""
-    from ..management.commands.emi_reminders import emi_window_contains
-    sales = Sale.objects.filter(emi_months__gt=0, status=Sale.STATUS_APPROVED)
-    if employee is not None:
-        sales = sales.filter(Q(employee=employee) | Q(client__mapped_to=employee))
-    return sum(1 for s in sales if s.date and emi_window_contains(s, today.year, today.month))
+    from ..services import sales as sales_service
+    return len(sales_service.emi_due_sale_ids(today, employee=employee))
 
 
 _PRODUCT_DISPLAY = {"Lumsum": "Lumpsum"}

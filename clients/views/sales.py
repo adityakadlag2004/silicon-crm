@@ -210,7 +210,22 @@ def all_sales(request):
     if start_date and end_date:
         sales_qs = sales_qs.filter(date__range=[start_date, end_date])
 
-    if not (product or client or employee or policy_type or start_date or end_date or q):
+    # "My day" links land here. The counts on the dashboard come from the same
+    # selectors, so the list always matches the number that was clicked.
+    focus = (request.GET.get("focus") or "").strip()
+    focus_label = ""
+    if focus in ("renewals7", "emi"):
+        scope = None if permissions.is_admin(request.user) else user_emp
+        today_ = timezone.localdate()
+        if focus == "renewals7":
+            ids = sales_service.renewal_due_sale_ids(today_, employee=scope)
+            focus_label = "Policies renewing within 7 days"
+        else:
+            ids = sales_service.emi_due_sale_ids(today_, employee=scope)
+            focus_label = "EMI instalments due this month"
+        sales_qs = sales_qs.filter(pk__in=ids)
+
+    if not (product or client or employee or policy_type or start_date or end_date or q or focus):
         sales_qs = sales_qs.filter(date=date.today())
 
     paginator = Paginator(sales_qs, 50)
@@ -234,7 +249,8 @@ def all_sales(request):
     )
     base = reverse("clients:all_sales")
     context = {
-        "crumbs": [{"label": "Sales"}],
+        "crumbs": [{"label": "Sales"}] + ([{"label": focus_label}] if focus_label else []),
+        "focus_label": focus_label,
         "kpis": [
             {"label": "All Sales", "value": agg["total"], "color": "#4338CA",
              "url": base, "active": not status},
