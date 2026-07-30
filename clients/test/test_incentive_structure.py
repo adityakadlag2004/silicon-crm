@@ -1013,3 +1013,54 @@ class CalculatorRosterTests(_Base):
         st = self._status(self.user)
         self.assertEqual(st["roster"], [])
         self.assertEqual(st["volume"], Decimal("310000"))   # own standing still shown
+
+
+class MonthlyGridExplainerTests(_Base):
+    """The page describes the monthly payout only while it is actually running."""
+
+    def setUp(self):
+        self.rule = IncentiveRule.objects.get(product_ref=self.life)
+
+    def test_the_grid_is_described_while_the_deduction_is_on(self):
+        e = inc.explain(self.rule)
+        self.assertEqual([(g["volume"], g["payout"]) for g in e["monthly_grid"]], [
+            (Decimal("300000"), Decimal("8000")),
+            (Decimal("600000"), Decimal("16000")),
+            (Decimal("900000"), Decimal("24000")),
+            (Decimal("1200000"), Decimal("32000")),
+            (Decimal("1500000"), Decimal("40000")),
+        ])
+        self.assertTrue(e["monthly_notes"])
+
+    def test_it_disappears_when_the_monthly_bonus_is_retired(self):
+        # The end state: untick the toggle and the page must stop mentioning it.
+        self.rule.deduct_legacy_monthly = False
+        self.rule.save()
+        e = inc.explain(self.rule)
+        self.assertEqual(e["monthly_grid"], [])
+        self.assertEqual(e["monthly_notes"], [])
+        # The base and prize explanation survives.
+        self.assertIn("base on every single policy", e["headline"])
+        self.assertTrue(e["rungs"])
+
+    def test_health_never_describes_a_monthly_grid(self):
+        e = inc.explain(IncentiveRule.objects.get(product_ref=self.health),
+                        is_health=True)
+        self.assertEqual(e["monthly_grid"], [])
+
+    def test_the_copy_states_the_base_is_untouched(self):
+        blob = " ".join(inc.explain(self.rule)["monthly_notes"])
+        self.assertIn("base is never touched", blob)
+        self.assertIn("never goes below zero", blob)
+
+    def test_the_copy_carries_no_percentages(self):
+        e = inc.explain(self.rule)
+        blob = " ".join([e["headline"], e["prize_intro"], *e["notes"], *e["monthly_notes"]])
+        self.assertNotIn("%", blob)
+
+    def test_the_copy_says_a_monthly_step_pays_better(self):
+        blob = " ".join(inc.explain(self.rule)["monthly_notes"])
+        # Explained off the ENTRY step: ₹3,00,000 in one month pays 8,000 on the
+        # grid, where the same amount spread over the year is worth 3,000.
+        self.assertIn("₹3,00,000 in one month pays 8,000", blob)
+        self.assertIn("worth 3,000 as prize", blob)

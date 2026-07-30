@@ -467,6 +467,35 @@
       <p class="mt-2 mb-0" style="font-size:.88rem;">{{ n }}</p>
     {% endfor %}
 
+    {% if e.monthly_grid %}
+      <div class="mt-3 p-3" style="background:#f8fafc;border-radius:8px;">
+        <h4 class="mb-2" style="font-size:.95rem;font-weight:700;">
+          The fixed monthly payout — paid on top
+        </h4>
+        <div class="ki-table-wrap">
+          <table class="ki-table">
+            <thead>
+              <tr>
+                <th>If one month reaches</th>
+                <th class="text-end">You are paid that month</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for g in e.monthly_grid %}
+              <tr>
+                <td>₹{{ g.volume|inr }}</td>
+                <td class="text-end"><strong>{{ g.payout|inr }}</strong></td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% for n in e.monthly_notes %}
+          <p class="mt-2 mb-0" style="font-size:.88rem;">{{ n }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+
     {% if e.is_health %}
       <div class="mt-3 p-3" style="background:#f8fafc;border-radius:8px;font-size:.88rem;">
         <strong>A 2 or 3 year policy</strong> — the client pays for every year up front,

@@ -498,7 +498,14 @@ def explain(rule, is_health=False):
 
     out = {"name": name, "rule": rule, "is_health": is_health, "window": window,
            "kind": "flat", "examples": [], "rungs": [], "notes": [],
-           "prize_intro": "", "walkthrough": walkthrough(rule, is_health=is_health)}
+           "prize_intro": "", "walkthrough": walkthrough(rule, is_health=is_health),
+           # Only described while it is actually running. Untick
+           # deduct_legacy_monthly and the page stops mentioning it, leaving
+           # base + yearly prize — which is where the scheme is headed.
+           "monthly_grid": ([{"volume": t, "payout": a}
+                             for t, a in sorted(LEGACY_MONTHLY_SLAB)]
+                            if rule.deduct_legacy_monthly else []),
+           "monthly_notes": []}
 
     if slabs and rule.slab_mode == IncentiveRule.MODE_RATE:
         out["kind"] = "bands"
@@ -562,6 +569,26 @@ def explain(rule, is_health=False):
             f"Never reach ₹{_n(slabs[0].threshold)} in a year? The prize is zero, but you "
             f"still earned the base on every policy you wrote."
         )
+        if rule.deduct_legacy_monthly:
+            # LEGACY_MONTHLY_SLAB is ordered highest-first for matching, so
+            # [-1] is the ENTRY step — the right one to explain from.
+            entry = LEGACY_MONTHLY_SLAB[-1]
+            out["monthly_notes"] = [
+                f"Any single month that reaches ₹{_n(entry[0])} or more is paid straight "
+                f"away, at the amount shown above. That is separate money, in your hands "
+                f"that month.",
+                "Because it is already paid, the same amount comes off the yearly "
+                "prize — otherwise one good month would be paid for twice.",
+                "It only ever comes off the prize. Your base is never touched, and the "
+                "prize never goes below zero, so a big month can never leave you owing "
+                "anything.",
+                f"Hitting a monthly step is always the better outcome: ₹{_n(entry[0])} in "
+                f"one month pays {_n(entry[1])} on the grid, where the same ₹{_n(entry[0])} "
+                f"spread across the year is worth {_n(bonus_released_for(rule, entry[0]))} "
+                f"as prize.",
+                "Every rupee still counts towards your yearly total, whether the month "
+                "reached a step or not.",
+            ]
     else:
         out["kind"] = "flat"
         pts = points_on(rule, sample)
