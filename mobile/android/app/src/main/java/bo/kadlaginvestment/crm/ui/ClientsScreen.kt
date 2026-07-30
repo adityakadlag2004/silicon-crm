@@ -343,7 +343,15 @@ private fun AddClientForm(
             ),
             modifier = Modifier.fillMaxWidth(), singleLine = true,
         )
-        OutlinedTextField(value = pan, onValueChange = { pan = it.uppercase() }, label = { Text("PAN") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        // Raw while typing — uppercasing each keystroke reset the cursor to the
+        // end. validate_pan() strips and upper-cases it server-side.
+        OutlinedTextField(
+            value = pan, onValueChange = { pan = it }, label = { Text("PAN") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters
+            ),
+            modifier = Modifier.fillMaxWidth(), singleLine = true,
+        )
         OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth())
         // A birthday can't be in the future, and typing "YYYY-MM-DD" on a phone
         // keyboard was a guaranteed source of 400s.

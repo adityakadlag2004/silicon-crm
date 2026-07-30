@@ -395,9 +395,14 @@ private fun AddRenewalForm(
             if (policyId == NEW_POLICY) {
                 OutlinedTextField(
                     value = newPolicyNumber,
-                    onValueChange = { newPolicyNumber = it.uppercase().trim() },
+                    // Raw while typing — rewriting resets the cursor. Normalised
+                    // server-side.
+                    onValueChange = { newPolicyNumber = it },
                     label = { Text("Policy number") },
                     supportingText = { Text("From the policy document", fontSize = rsp(11)) },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                 )

@@ -262,9 +262,17 @@ fun AddSaleScreen(
             DateField("Policy start date *", policyDate) { policyDate = it }
             OutlinedTextField(
                 value = policyNumber,
-                onValueChange = { policyNumber = it.uppercase().trim() },
+                // Do NOT rewrite the text while it is being typed. Handing the
+                // field a different string than it holds collapses the selection
+                // and throws the cursor to the end, which makes a typo mid-number
+                // impossible to fix. The keyboard capitalises instead, and
+                // Sale.save() upper-cases and strips server-side anyway.
+                onValueChange = { policyNumber = it },
                 label = { Text("Policy number *") },
                 supportingText = { Text("Read both off the policy document", fontSize = rsp(11)) },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Characters
+                ),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
             )

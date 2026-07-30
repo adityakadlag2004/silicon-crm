@@ -54,6 +54,11 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   number so "ins123 " and "INS123" can't become two policies. The mobile Add
   Sale screen has both fields; it used to have neither, which silently dated
   every renewal reminder off the approval date.
+- `InsurancePolicy.save()` upper-cases and strips `policy_number`, same as
+  `Sale.save()` — the number arrives from the web form, the app API,
+  `insurance_sync` and `link_renewal_to_policy`, and only the model covers all
+  four. `link_renewal_to_policy` used to merely strip, which the Android
+  screens' client-side uppercasing was accidentally masking.
 - An approved Health/Life **sale** auto-creates one `InsurancePolicy`
   (idempotent, linked via `InsurancePolicy.source_sale`), start date = the
   sale's `policy_date`. Un-approving/rejecting removes it unless someone has
@@ -238,6 +243,13 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   a `contentDescription`.
 - Dates are picked, never typed. Times come from `pickTime`, which honours the
   device's 12/24h setting.
+- **Never rewrite a `TextField`'s text inside `onValueChange`** (`.uppercase()`,
+  `.trim()`, a character filter). Handing the String overload a value different
+  from the one it holds collapses the selection and throws the cursor to the end,
+  so a typo mid-word cannot be fixed — this is what "the keyboard doesn't work"
+  reports actually are. Use `KeyboardOptions` (`capitalization`, `keyboardType`)
+  to shape input, and normalise on the server. `moneyInput()` is safe only
+  because those fields set `KeyboardType.Decimal`, so it never rewrites.
 - Every `ApiClient.post` call site must handle `Result.Error`. Writes that are
   safe to replay pass `offlineQueue = context` so they survive no signal
   (`net/Outbox.kt`); creating a sale or client deliberately does not.

@@ -62,6 +62,15 @@ class InsurancePolicy(models.Model):
         verbose_name_plural = "Insurance policies"
         ordering = ["-end_date", "policy_number"]
 
+    def save(self, *args, **kwargs):
+        # The policy number is a matching key — the same normalisation Sale.save()
+        # does, for the same reason: "ins123 " and "INS123" must not become two
+        # policies. Guarded here rather than in each caller, because the number
+        # arrives from the web form, the app API, insurance_sync and
+        # link_renewal_to_policy, and only this point covers all four.
+        self.policy_number = (self.policy_number or "").strip().upper()
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.policy_number} · {self.client.name}"
 

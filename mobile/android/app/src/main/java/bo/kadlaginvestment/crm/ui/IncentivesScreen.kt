@@ -483,7 +483,10 @@ private fun RuleDialog(
                 )
                 OutlinedTextField(
                     value = points, onValueChange = { points = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                    label = { Text("Points per unit") }, modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("Points per unit") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    ), modifier = Modifier.fillMaxWidth(), singleLine = true,
                 )
             }
         },
@@ -515,7 +518,10 @@ private fun SlabDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = threshold, onValueChange = { threshold = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                    label = { Text("Threshold (₹ cumulative)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    label = { Text("Threshold (₹ cumulative)") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    ), modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(value = payout, onValueChange = { payout = it.filter { ch -> ch.isDigit() || ch == '.' } },
                     label = { Text(if (payoutIsPercent) "Rate for this band (%)" else "Payout (points)") },
                     supportingText = {
@@ -619,9 +625,15 @@ private fun CampaignProductDialog(
                 }
                 if (benefitType == "unit") {
                     OutlinedTextField(value = unit, onValueChange = { unit = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                        label = { Text("Unit amount (₹)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        label = { Text("Unit amount (₹)") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    ), modifier = Modifier.fillMaxWidth(), singleLine = true)
                     OutlinedTextField(value = points, onValueChange = { points = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                        label = { Text("Points per unit") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        label = { Text("Points per unit") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal
+                    ), modifier = Modifier.fillMaxWidth(), singleLine = true)
                 } else {
                     Text("Add slabs after creating (target payouts use cumulative slabs).",
                         fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
