@@ -274,6 +274,7 @@ class ShellActivity : ComponentActivity() {
                 // dialog owns the screen until the installer takes over.
                 var update by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
                 var downloading by remember { mutableStateOf(false) }
+                var updateStatus by remember { mutableStateOf("") }
                 LaunchedEffect(Unit) {
                     update = withContext(Dispatchers.IO) { UpdateManager.checkForUpdate(this@ShellActivity) }
                 }
@@ -287,12 +288,16 @@ class ShellActivity : ComponentActivity() {
                         title = { Text("Update required — v${info.versionName}") },
                         text = {
                             Text(
-                                if (downloading) {
-                                    "Downloading… the installer opens when it's ready. " +
-                                        "Tap Retry if nothing happens."
-                                } else {
-                                    info.notes.ifEmpty { "A new version of the app is ready." } +
-                                        "\n\nThe app can't be used until it's updated."
+                                when {
+                                    // A silent failure used to look exactly like a
+                                    // working download that never finished.
+                                    updateStatus.isNotEmpty() -> updateStatus
+                                    downloading ->
+                                        "Downloading… the installer opens when it's ready. " +
+                                            "Tap Retry if nothing happens."
+                                    else ->
+                                        info.notes.ifEmpty { "A new version of the app is ready." } +
+                                            "\n\nThe app can't be used until it's updated."
                                 }
                             )
                         },
@@ -301,7 +306,8 @@ class ShellActivity : ComponentActivity() {
                             // otherwise leave the app stuck behind a dead button.
                             Button(onClick = {
                                 downloading = true
-                                UpdateManager.downloadAndInstall(this@ShellActivity, info)
+                                updateStatus = ""
+                                UpdateManager.downloadAndInstall(this@ShellActivity, info) { updateStatus = it }
                             }) { Text(if (downloading) "Retry" else "Update now") }
                         },
                     )
