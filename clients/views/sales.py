@@ -393,9 +393,8 @@ def manage_incentive_rules(request):
 def life_bonus_tracker(request):
     """Every employee's position on the life ladder for one financial year.
 
-    Also carries what the legacy monthly slab would have paid month by month,
-    so a fixed payout still being made by hand can be reconciled against the
-    year's entitlement.
+    The prize is the rung the year's own volume reaches — nothing is deducted
+    for a big month.
     """
     if not permissions.is_admin_or_manager(request.user):
         messages.error(request, "You do not have permission to view life bonus status.")
@@ -416,16 +415,13 @@ def life_bonus_tracker(request):
 
     rows = []
     totals = {"volume": Decimal("0"), "base": Decimal("0"), "level": Decimal("0"),
-              "released": Decimal("0"), "legacy": Decimal("0"), "net": Decimal("0"),
-              "paid": Decimal("0"), "shortfall": Decimal("0")}
+              "released": Decimal("0"), "paid": Decimal("0"), "shortfall": Decimal("0")}
     for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username"):
         st = incentives_service.life_bonus_status(rule, e, fy)
         if not st["volume"]:
             continue
-        for k, src in (("volume", "volume"), ("base", "base"), ("level", "level"),
-                       ("released", "released"), ("legacy", "legacy")):
-            totals[k] += st[src]
-        totals["net"] += st["net_vs_legacy"]
+        for k in ("volume", "base", "level", "released"):
+            totals[k] += st[k]
         totals["paid"] += st["paid_manually"]
         totals["shortfall"] += st["shortfall"]
         rows.append(st)

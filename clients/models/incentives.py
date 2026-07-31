@@ -45,20 +45,6 @@ class IncentiveRule(models.Model):
         max_length=10, choices=PERIOD_CHOICES, default=PERIOD_MONTH,
         help_text="Window the cumulative volume driving the slabs is measured over.",
     )
-    # The firm still pays a fixed monthly bonus off the pre-2026 slab grid. While
-    # that lasts, the yearly ladder has to net it off automatically or the same
-    # month gets paid twice. When the monthly grid is finally retired, untick
-    # this and the ladder pays in full — base + yearly prize, nothing else.
-    deduct_legacy_monthly = models.BooleanField(
-        default=False,
-        help_text="Subtract the old monthly slab payout from this ladder, derived "
-                  "from each month's volume. Turn off once the monthly bonus stops.",
-    )
-    legacy_deduct_from = models.DateField(
-        null=True, blank=True,
-        help_text="Only derive the deduction for months on or after this date. "
-                  "Earlier months were already netted when the structure changed.",
-    )
     port_percent = models.DecimalField(
         max_digits=6, decimal_places=3, null=True, blank=True,
         validators=[MinValueValidator(Decimal("0"))],

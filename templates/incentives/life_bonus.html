@@ -17,10 +17,10 @@
 
 <p class="text-muted mb-4" style="font-size:.92rem;max-width:76ch;">
   Where every employee stands on the yearly life ladder, and what has already
-  been released to them. Any month whose volume reaches the old grid is
-  <strong>deducted automatically</strong> — you do not need to record it. The
-  boxes below are only for a month where the amount actually paid differed from
-  the grid; typing one overrides the derived figure for that month.
+  been released to them. The prize is decided by the <strong>year's total life
+  business</strong> and nothing else — a big single month is never deducted from
+  it. The boxes below are only for recording a prize amount you paid by hand;
+  that much is then treated as already released.
 </p>
 
 <div class="ki-table-wrap mb-4">
@@ -84,10 +84,9 @@
 
 <p class="form-text mb-4">
   <strong>Ladder released</strong> is everything already in the employee's hands this
-  year — bonus released by sales plus the fixed monthly payouts recorded below.
-  <strong>Still owed</strong> is what the year's level has yet to pay after that
-  deduction; nil means the monthly payouts have already covered it. Nothing is ever
-  clawed back.
+  year — prize released on their sales plus anything recorded as paid by hand below.
+  <strong>Still owed</strong> is the rest of the level the year has reached. Nothing is
+  ever clawed back.
 </p>
 
 {% if detail %}
@@ -104,9 +103,8 @@
         <th class="text-end">Running FY total</th>
         <th class="text-end">Base paid</th>
         <th class="text-end">Ladder released</th>
-        <th class="text-end">Old monthly slab</th>
         <th class="text-end">Paid by hand</th>
-        <th>Override (if you paid something else)</th>
+        <th>Record a hand payment</th>
       </tr>
     </thead>
     <tbody>
@@ -117,7 +115,6 @@
         <td class="text-end">₹{{ m.running|inr }}</td>
         <td class="text-end">{% if m.base %}{{ m.base|inr }}{% else %}—{% endif %}</td>
         <td class="text-end">{% if m.released %}<strong>{{ m.released|inr }}</strong>{% else %}—{% endif %}</td>
-        <td class="text-end">{% if m.legacy %}{{ m.legacy|inr }}{% else %}—{% endif %}</td>
         <td class="text-end">{% if m.paid %}<strong>{{ m.paid|inr }}</strong>{% else %}—{% endif %}</td>
         <td>
           <form method="post" action="{% url 'clients:record_bonus_payout' %}" class="d-flex gap-1">
@@ -133,7 +130,7 @@
                    type="number" min="0" step="1" name="amount"
                    id="pay-{{ m.year }}-{{ m.month }}"
                    value="{{ m.paid|default_if_none:''|floatformat:'0' }}"
-                   placeholder="{{ m.suggested|floatformat:'0' }}">
+                   placeholder="0">
             <button class="ki-btn ki-btn-secondary" style="padding:2px 8px;font-size:.8rem;"
                     type="submit">Save</button>
           </form>
@@ -148,7 +145,6 @@
         <th></th>
         <th class="text-end">{{ detail.base|inr }}</th>
         <th class="text-end">{{ detail.released|inr }}</th>
-        <th class="text-end">{{ detail.legacy|inr }}</th>
         <th class="text-end">{{ detail.paid_manually|inr }}</th>
         <th></th>
       </tr>

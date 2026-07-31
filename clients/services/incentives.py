@@ -60,31 +60,13 @@ def unit_rate_percent(rule):
     return (rule.points_per_unit or ZERO) / rule.unit_amount * Decimal("100")
 
 
-# The pre-2026 monthly life slab, kept ONLY as a reconciliation figure: it is
-# what the old structure would have paid for a given month's life volume, so a
-# fixed monthly payout still being made by hand can be netted against the
-# financial-year ladder. Nothing computes pay from this — see life_bonus_status.
-LEGACY_MONTHLY_SLAB = [
-    (Decimal("1500000"), Decimal("40000")),
-    (Decimal("1200000"), Decimal("32000")),
-    (Decimal("900000"), Decimal("24000")),
-    (Decimal("600000"), Decimal("16000")),
-    (Decimal("300000"), Decimal("8000")),
-]
-
-
-def legacy_monthly_payout(volume):
-    """What the old monthly slab would have paid for one month's life volume."""
-    volume = Decimal(str(volume or 0))
-    return next((amt for thr, amt in LEGACY_MONTHLY_SLAB if volume >= thr), ZERO)
-
-
 def life_bonus_status(rule, employee, fy_year):
     """One employee's whole financial year on a bonus ladder.
 
-    Returns the FY totals plus a month-by-month strip, each month carrying what
-    the old monthly slab would have paid for it — the figure a hand-made fixed
-    payout is reconciled against.
+    Returns the FY totals plus a month-by-month strip. The prize is a pure
+    function of the year's volume: how much life business the year holds picks
+    the rung, and that rung is what is paid. A month that happens to be large
+    changes nothing — there is no monthly deduction anywhere in this.
     """
     from calendar import monthrange
     from django.db.models import Q, Sum
@@ -112,7 +94,6 @@ def life_bonus_status(rule, employee, fy_year):
     volume = ZERO
     base_total = ZERO
     released_total = ZERO
-    legacy_total = ZERO
     paid_total = ZERO
     for i in range(12):
         m = (FY_START_MONTH - 1 + i) % 12 + 1
@@ -124,18 +105,15 @@ def life_bonus_status(rule, employee, fy_year):
         vol = agg["vol"] or ZERO
         bonus = agg["bonus"] or ZERO
         base = (agg["pts"] or ZERO) - bonus
-        legacy = legacy_monthly_payout(vol)
         recorded = paid_by_month.get(m_start)
         volume += vol
         base_total += base
         released_total += bonus
-        legacy_total += legacy
         if recorded is not None:
             paid_total += recorded
         months.append({"year": y, "month": m, "volume": vol, "base": base,
-                       "released": bonus, "legacy": legacy, "running": volume,
-                       "for_month": m_start, "paid": recorded,
-                       "suggested": legacy})
+                       "released": bonus, "running": volume,
+                       "for_month": m_start, "paid": recorded})
 
     level = bonus_released_for(rule, volume)
     # released_total already contains the recorded manual payouts (period_totals
@@ -146,9 +124,7 @@ def life_bonus_status(rule, employee, fy_year):
         "volume": volume, "base": base_total,
         "level": level, "released": released_total + paid_total,
         "from_sales": released_total, "paid_manually": paid_total,
-        "legacy": legacy_total,
         "shortfall": max(level - (released_total + paid_total), ZERO),
-        "net_vs_legacy": level - legacy_total,
         "next": next_rung(rule, volume),
         "months": months,
     }
@@ -275,10 +251,6 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
                        | (Q(product_ref__isnull=True) & Q(product=rule.product)))
     else:
         qs = qs.filter(product=rule.product)
-    # The legacy deduction is read off the month's FULL volume — excluding the
-    # row being priced would understate the month and skip a slab it really
-    # cleared. Only the cumulative running total excludes self.
-    month_qs = qs
     if exclude_pk:
         qs = qs.exclude(pk=exclude_pk)
 
@@ -287,44 +259,16 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
     else:
         volume = qs.aggregate(t=Sum("amount"))["t"]
     agg = qs.aggregate(b=Sum("bonus_points"), p=Sum("points"))
-    # Fixed monthly payouts made by hand are bonus already in the employee's
-    # hands — the ladder must net them off or the same year gets paid twice.
-    paid = {p.for_month: p.amount for p in BonusPayout.objects.filter(
-        employee=employee, rule=rule, for_month__gte=start, for_month__lte=end)}
-    advances = sum(paid.values(), ZERO)
-    advances += _derived_legacy_deduction(rule, month_qs, start, end, skip_months=set(paid))
+    # A bonus recorded as paid by hand is prize money already in the employee's
+    # hands, so the ladder releases only the rest. Nothing else is ever netted
+    # off: the prize is what the year's volume reaches, whatever any single
+    # month did.
+    advances = sum(
+        (p.amount for p in BonusPayout.objects.filter(
+            employee=employee, rule=rule, for_month__gte=start, for_month__lte=end)),
+        ZERO,
+    )
     return volume or ZERO, (agg["b"] or ZERO) + advances, agg["p"] or ZERO
-
-
-def _derived_legacy_deduction(rule, sales_qs, start, end, *, skip_months=()):
-    """The fixed monthly bonus this window's volume would already have paid.
-
-    While the old monthly grid is still being paid by hand, every month whose
-    volume clears a slab has already put that money in the employee's hands, so
-    the yearly ladder must subtract it. Derived rather than typed — the payout
-    is a fixed function of the month's volume.
-
-    Months with a recorded BonusPayout are skipped: that figure is the truth and
-    is counted by the caller. Months before ``legacy_deduct_from`` are skipped
-    too — they were netted on the sales themselves when the structure changed,
-    and deriving again would deduct the same money twice.
-    """
-    from django.db.models import Sum
-    from django.db.models.functions import TruncMonth
-
-    if not (rule.deduct_legacy_monthly and rule.legacy_deduct_from):
-        return ZERO
-    cutover = max(rule.legacy_deduct_from, start)
-    total = ZERO
-    rows = (sales_qs.filter(date__gte=cutover, date__lte=end)
-            .annotate(m=TruncMonth("date")).values("m").annotate(v=Sum("amount")))
-    for row in rows:
-        month = row["m"]
-        month = month.date() if hasattr(month, "date") else month
-        if month in skip_months:
-            continue
-        total += legacy_monthly_payout(row["v"])
-    return total
 
 
 def rate_for_volume(rule, volume):
@@ -498,14 +442,7 @@ def explain(rule, is_health=False):
 
     out = {"name": name, "rule": rule, "is_health": is_health, "window": window,
            "kind": "flat", "examples": [], "rungs": [], "notes": [],
-           "prize_intro": "", "walkthrough": walkthrough(rule, is_health=is_health),
-           # Only described while it is actually running. Untick
-           # deduct_legacy_monthly and the page stops mentioning it, leaving
-           # base + yearly prize — which is where the scheme is headed.
-           "monthly_grid": ([{"volume": t, "payout": a}
-                             for t, a in sorted(LEGACY_MONTHLY_SLAB)]
-                            if rule.deduct_legacy_monthly else []),
-           "monthly_notes": []}
+           "prize_intro": "", "walkthrough": walkthrough(rule, is_health=is_health)}
 
     if slabs and rule.slab_mode == IncentiveRule.MODE_RATE:
         out["kind"] = "bands"
@@ -569,26 +506,11 @@ def explain(rule, is_health=False):
             f"Never reach ₹{_n(slabs[0].threshold)} in a year? The prize is zero, but you "
             f"still earned the base on every policy you wrote."
         )
-        if rule.deduct_legacy_monthly:
-            # LEGACY_MONTHLY_SLAB is ordered highest-first for matching, so
-            # [-1] is the ENTRY step — the right one to explain from.
-            entry = LEGACY_MONTHLY_SLAB[-1]
-            out["monthly_notes"] = [
-                f"Any single month that reaches ₹{_n(entry[0])} or more is paid straight "
-                f"away, at the amount shown above. That is separate money, in your hands "
-                f"that month.",
-                "Because it is already paid, the same amount comes off the yearly "
-                "prize — otherwise one good month would be paid for twice.",
-                "It only ever comes off the prize. Your base is never touched, and the "
-                "prize never goes below zero, so a big month can never leave you owing "
-                "anything.",
-                f"Hitting a monthly step is always the better outcome: ₹{_n(entry[0])} in "
-                f"one month pays {_n(entry[1])} on the grid, where the same ₹{_n(entry[0])} "
-                f"spread across the year is worth {_n(bonus_released_for(rule, entry[0]))} "
-                f"as prize.",
-                "Every rupee still counts towards your yearly total, whether the month "
-                "reached a step or not.",
-            ]
+        out["notes"].append(
+            "Only the year's total decides the prize. It makes no difference whether it "
+            "arrives in a few big months or a lot of small ones, and a big month is never "
+            "deducted from anything."
+        )
     else:
         out["kind"] = "flat"
         pts = points_on(rule, sample)

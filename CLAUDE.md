@@ -137,22 +137,19 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   points arrive. Idempotent via `unique_together(sale, year_index)`, so a missed
   day catches up and a re-run is a no-op. Each year is priced by the band the
   employee's month has reached when it lands.
-- **A fixed monthly bonus is still paid by hand** off the legacy 3L/6L/9L/12L
-  grid, so the FY ladder subtracts it **automatically**: any month whose volume
-  clears a slab has already put that money in the employee's hands.
-  `IncentiveRule.deduct_legacy_monthly` turns it on and `legacy_deduct_from`
-  (Aug 2026 for Life) is the boundary — months before it were netted onto the
-  sales by migration 0111, and deriving them again would deduct the same money
-  twice. **This is transitional: when the monthly bonus is retired, untick
-  `deduct_legacy_monthly` and the scheme becomes simply base + yearly prize.**
-  A `BonusPayout` row overrides the derived figure for that month, for when the
-  amount actually paid differs from the grid.
-- The month's deduction is read off the month's **full** volume, so
-  `period_totals` keeps an un-excluded `month_qs` alongside the `exclude_pk`
-  queryset the running total uses. `recompute_sibling_sales` re-saves the
-  originating sale too (guarded against a deleted row) — a sale is priced before
-  it exists in the table, so its own amount is missing from its month until a
-  second pass.
+- **No monthly deduction exists.** The Life prize is decided by the financial
+  year's volume and nothing else: whatever rung Apr–Mar reaches is what is paid,
+  however the months fall. The old 3L/6L/9L/12L/15L monthly grid used to be
+  netted off automatically (`deduct_legacy_monthly` / `legacy_deduct_from`,
+  `LEGACY_MONTHLY_SLAB`) — **all of it was deleted on 2026-07-31, migration
+  0116**, because a month over ₹3L cancelled the prize it had just earned. Don't
+  reintroduce a per-month adjustment to a per-year ladder.
+- A `BonusPayout` row is the one thing that still nets off, and only because an
+  admin typed it: it records prize money handed over outside the system for a
+  given month, so the ladder releases the rest instead of paying it twice.
+- `recompute_sibling_sales` re-saves the originating sale too (guarded against a
+  deleted row) — a sale is priced before it exists in the table, so its own
+  amount is missing from its period until a second pass.
 - **Points now come from two places** — `Sale.points` and `IncentiveAccrual`.
   Any total shown to an employee as "what I earned" must add
   `incentives.accrued_points(...)`: employee + admin dashboards, team detail,

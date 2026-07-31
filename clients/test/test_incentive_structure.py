@@ -84,6 +84,56 @@ class LifeLadderTests(_Base):
         self.assertEqual(after.bonus_points, Decimal("0.000"))
 
 
+class NoMonthlyDeductionTests(_Base):
+    """The prize is decided by the financial year's life volume and nothing else.
+
+    Until 2026-07-31 a month that crossed ₹3,00,000 had the old monthly grid
+    (8,000 per step) subtracted from the yearly prize, which cancelled it
+    outright and made a good month worth less than the same business spread
+    thinly. That deduction was removed from the system.
+    """
+
+    def sell_life(self, amount, on):
+        """Book through the service — the path every real entry uses."""
+        from clients.services import sales as sales_service
+
+        s = Sale(client=self.client_rec, employee=self.emp, product=self.life.name,
+                 product_ref=self.life, amount=Decimal(str(amount)), date=on)
+        return sales_service.finalize_new_sale(s, self.user, auto_approve=True)
+
+    def test_a_month_over_three_lakh_pays_the_rung_in_full(self):
+        s = self.sell_life(310000, date(2026, 8, 10))
+        self.assertEqual(s.bonus_points, Decimal("3000.000"))
+        self.assertEqual(s.points, Decimal("8425.000"))   # 1.75% of 3.1L + 3,000
+
+    def test_the_same_year_pays_the_same_however_the_months_fall(self):
+        """₹9L in one month, or in three, or in nine — one ₹7,500 prize."""
+        splits = {
+            "one month": [(date(2026, 8, 10), 900000)],
+            "three months": [(date(2026, m, 10), 300000) for m in (8, 9, 10)],
+            "nine months": [(date(2026, m, 10), 100000) for m in (5, 6, 7, 8, 9, 10, 11, 12)]
+                            + [(date(2027, 1, 10), 100000)],
+        }
+        totals = {}
+        for label, sales in splits.items():
+            Sale.objects.filter(employee=self.emp).delete()
+            for on, amount in sales:
+                self.sell_life(amount, on)
+            st = inc.life_bonus_status(self.rule_life(), self.emp, 2026)
+            totals[label] = (st["volume"], st["level"], st["released"])
+        self.assertEqual(len(set(totals.values())), 1, totals)
+        self.assertEqual(list(totals.values())[0][1], Decimal("7500"))
+
+    def test_the_rule_carries_no_deduction_switch_any_more(self):
+        rule = self.rule_life()
+        self.assertFalse(hasattr(rule, "deduct_legacy_monthly"))
+        self.assertFalse(hasattr(inc, "legacy_monthly_payout"))
+        self.assertFalse(hasattr(inc, "LEGACY_MONTHLY_SLAB"))
+
+    def rule_life(self):
+        return IncentiveRule.objects.get(product_ref=self.life)
+
+
 class HealthBandTests(_Base):
     def test_band_comes_from_the_sellers_own_monthly_volume(self):
         first = self.sell(self.health, 20000, date(2026, 6, 2), policy_type="fresh")
@@ -581,14 +631,6 @@ class LifeBonusTrackerTests(_Base):
         self.url = reverse("clients:life_bonus_tracker")
         self.rule = IncentiveRule.objects.get(product_ref=self.life)
 
-    def test_legacy_monthly_grid(self):
-        cases = [("0", "0"), ("299999", "0"), ("300000", "8000"),
-                 ("599999", "8000"), ("600000", "16000"), ("900000", "24000"),
-                 ("1200000", "32000"), ("1500000", "40000"), ("9000000", "40000")]
-        for vol, pay in cases:
-            self.assertEqual(inc.legacy_monthly_payout(Decimal(vol)), Decimal(pay),
-                             msg=f"volume {vol}")
-
     def test_status_totals_a_financial_year(self):
         self.sell(self.life, 250000, date(2026, 6, 10))
         self.sell(self.life, 60000, date(2026, 9, 5))    # crosses 3L
@@ -614,23 +656,25 @@ class LifeBonusTrackerTests(_Base):
         self.assertEqual(by_month[11]["running"], Decimal("200000"))
         self.assertEqual(st["months"][-1]["running"], Decimal("200000"))
 
-    def test_legacy_column_prices_each_month_on_its_own(self):
-        # 3L in one month would have paid 8,000 under the old grid; the FY
-        # ladder pays 3,000 for the same business.
+    def test_a_big_single_month_is_never_deducted_from_the_prize(self):
+        """The rule the monthly deduction was removed for: ₹3L in one month
+        used to cancel the prize it earned. Now the year's volume is all that
+        counts, so this pays exactly the ₹3L rung."""
         self.sell(self.life, 300000, date(2026, 6, 10))
         st = inc.life_bonus_status(self.rule, self.emp, 2026)
-        self.assertEqual(st["legacy"], Decimal("8000"))
         self.assertEqual(st["level"], Decimal("3000"))
-        self.assertEqual(st["net_vs_legacy"], Decimal("-5000"))
+        self.assertEqual(st["released"], Decimal("3000.000"))
+        self.assertEqual(st["shortfall"], Decimal("0"))
 
-    def test_a_repeating_month_multiplies_the_legacy_figure_not_the_ladder(self):
+    def test_the_prize_follows_the_year_however_it_is_split(self):
+        """Three ₹3L months and one ₹9L month must pay the same prize."""
         for m in (6, 7, 8):
             self.sell(self.life, 300000, date(2026, m, 10))
         st = inc.life_bonus_status(self.rule, self.emp, 2026)
-        self.assertEqual(st["legacy"], Decimal("24000"))   # 8,000 x 3 months
         self.assertEqual(st["volume"], Decimal("900000"))
-        self.assertEqual(st["level"], Decimal("7500"))     # one yearly prize
-        self.assertEqual(st["net_vs_legacy"], Decimal("-16500"))
+        self.assertEqual(st["level"], Decimal("7500"))     # the ₹9L rung, in full
+        self.assertEqual(st["released"], Decimal("7500.000"))
+        self.assertEqual(st["shortfall"], Decimal("0"))
 
     def test_page_renders_and_expands_one_employee(self):
         self.sell(self.life, 310000, date(2026, 6, 10))
@@ -864,95 +908,6 @@ class CalculatorLadderStatusTests(_Base):
         self.assertEqual(st["volume"], Decimal("0"))
 
 
-class AutomaticLegacyDeductionTests(_Base):
-    """The fixed monthly bonus is derived from each month's volume, not typed."""
-
-    def setUp(self):
-        self.rule = IncentiveRule.objects.get(product_ref=self.life)
-        self.assertTrue(self.rule.deduct_legacy_monthly)
-        self.assertEqual(self.rule.legacy_deduct_from, date(2026, 8, 1))
-
-    def sell(self, product, amount, on, **kw):
-        """Book through the service, the way every real entry path does.
-
-        A bare Sale.objects.create() prices the row before it exists in the
-        table, so its own amount is missing from the month the deduction is read
-        off; the service settles that with a second pass.
-        """
-        from clients.services import sales as sales_service
-
-        s = Sale(client=self.client_rec, employee=self.emp, product=product.name,
-                 product_ref=product, amount=Decimal(str(amount)), date=on, **kw)
-        return sales_service.finalize_new_sale(s, self.user, auto_approve=True)
-
-    def test_a_month_clearing_the_old_slab_suppresses_the_ladder(self):
-        # ₹3,10,000 in one month: the old grid paid ₹8,000, so the ₹3,000 level
-        # is already covered and the ladder adds nothing.
-        s = self.sell(self.life, 310000, date(2026, 8, 10))
-        self.assertEqual(s.bonus_points, Decimal("0.000"))
-        self.assertEqual(s.points, Decimal("5425.000"))  # base only
-
-    def test_months_below_the_old_slab_deduct_nothing(self):
-        # Exactly the case the yearly ladder exists for: three months that each
-        # miss ₹3L, so the old grid paid zero, but the year reaches the level.
-        self.sell(self.life, 120000, date(2026, 8, 1))
-        self.sell(self.life, 120000, date(2026, 9, 1))
-        last = self.sell(self.life, 120000, date(2026, 10, 1))
-        self.assertEqual(last.bonus_points, Decimal("3000.000"))
-
-    def test_months_before_the_cutover_are_left_alone(self):
-        # July 2026 was priced under the old structure and already netted on the
-        # sale, so deriving it again would deduct the same ₹8,000 twice.
-        s = self.sell(self.life, 310000, date(2026, 7, 10))
-        self.assertEqual(s.bonus_points, Decimal("3000.000"))
-
-    def test_the_derived_amount_follows_the_old_grid(self):
-        cases = [(299999, 0), (300000, 8000), (600000, 16000),
-                 (900000, 24000), (1200000, 32000), (1500000, 40000)]
-        for volume, expected in cases:
-            self.assertEqual(inc.legacy_monthly_payout(Decimal(volume)),
-                             Decimal(expected), msg=f"volume {volume}")
-
-    def test_a_recorded_payout_overrides_the_derived_one(self):
-        from clients.models import BonusPayout
-
-        # Paid ₹2,000 instead of the grid's ₹8,000 — the record wins.
-        BonusPayout.objects.create(employee=self.emp, rule=self.rule,
-                                   for_month=date(2026, 8, 1), amount=Decimal("2000"))
-        s = self.sell(self.life, 310000, date(2026, 8, 10))
-        self.assertEqual(s.bonus_points, Decimal("1000.000"))  # 3,000 - 2,000
-
-    def test_turning_it_off_makes_the_ladder_pay_in_full(self):
-        # What the scheme becomes once the monthly bonus is retired.
-        self.rule.deduct_legacy_monthly = False
-        self.rule.save()
-        s = self.sell(self.life, 310000, date(2026, 8, 10))
-        self.assertEqual(s.bonus_points, Decimal("3000.000"))
-
-    def test_health_is_untouched_by_any_of_this(self):
-        health = IncentiveRule.objects.get(product_ref=self.health)
-        self.assertFalse(health.deduct_legacy_monthly)
-        s = self.sell(self.health, 310000, date(2026, 8, 10), policy_type="fresh")
-        self.assertEqual(s.points, Decimal("10850.000"))  # 3.50% band, no deduction
-
-    def test_a_later_sale_in_the_same_month_reprices_through_the_service(self):
-        from clients.services import sales as sales_service
-
-        first = Sale(client=self.client_rec, employee=self.emp, product=self.life.name,
-                     product_ref=self.life, amount=Decimal("250000"), date=date(2026, 8, 5))
-        first = sales_service.finalize_new_sale(first, self.user, auto_approve=True)
-        # 2,50,000 alone: under ₹3L monthly, so no deduction, but also no level.
-        self.assertEqual(first.bonus_points, Decimal("0.000"))
-
-        second = Sale(client=self.client_rec, employee=self.emp, product=self.life.name,
-                      product_ref=self.life, amount=Decimal("60000"), date=date(2026, 8, 20))
-        second = sales_service.finalize_new_sale(second, self.user, auto_approve=True)
-        # Month is now ₹3,10,000 -> the old grid paid ₹8,000 -> ladder stays shut.
-        first.refresh_from_db()
-        second.refresh_from_db()
-        self.assertEqual(first.bonus_points + second.bonus_points, Decimal("0.000"))
-
-
 class CalculatorRosterTests(_Base):
     """The yearly bonus section lists everyone — for people allowed to see it."""
 
@@ -1015,52 +970,3 @@ class CalculatorRosterTests(_Base):
         self.assertEqual(st["volume"], Decimal("310000"))   # own standing still shown
 
 
-class MonthlyGridExplainerTests(_Base):
-    """The page describes the monthly payout only while it is actually running."""
-
-    def setUp(self):
-        self.rule = IncentiveRule.objects.get(product_ref=self.life)
-
-    def test_the_grid_is_described_while_the_deduction_is_on(self):
-        e = inc.explain(self.rule)
-        self.assertEqual([(g["volume"], g["payout"]) for g in e["monthly_grid"]], [
-            (Decimal("300000"), Decimal("8000")),
-            (Decimal("600000"), Decimal("16000")),
-            (Decimal("900000"), Decimal("24000")),
-            (Decimal("1200000"), Decimal("32000")),
-            (Decimal("1500000"), Decimal("40000")),
-        ])
-        self.assertTrue(e["monthly_notes"])
-
-    def test_it_disappears_when_the_monthly_bonus_is_retired(self):
-        # The end state: untick the toggle and the page must stop mentioning it.
-        self.rule.deduct_legacy_monthly = False
-        self.rule.save()
-        e = inc.explain(self.rule)
-        self.assertEqual(e["monthly_grid"], [])
-        self.assertEqual(e["monthly_notes"], [])
-        # The base and prize explanation survives.
-        self.assertIn("base on every single policy", e["headline"])
-        self.assertTrue(e["rungs"])
-
-    def test_health_never_describes_a_monthly_grid(self):
-        e = inc.explain(IncentiveRule.objects.get(product_ref=self.health),
-                        is_health=True)
-        self.assertEqual(e["monthly_grid"], [])
-
-    def test_the_copy_states_the_base_is_untouched(self):
-        blob = " ".join(inc.explain(self.rule)["monthly_notes"])
-        self.assertIn("base is never touched", blob)
-        self.assertIn("never goes below zero", blob)
-
-    def test_the_copy_carries_no_percentages(self):
-        e = inc.explain(self.rule)
-        blob = " ".join([e["headline"], e["prize_intro"], *e["notes"], *e["monthly_notes"]])
-        self.assertNotIn("%", blob)
-
-    def test_the_copy_says_a_monthly_step_pays_better(self):
-        blob = " ".join(inc.explain(self.rule)["monthly_notes"])
-        # Explained off the ENTRY step: ₹3,00,000 in one month pays 8,000 on the
-        # grid, where the same amount spread over the year is worth 3,000.
-        self.assertIn("₹3,00,000 in one month pays 8,000", blob)
-        self.assertIn("worth 3,000 as prize", blob)
