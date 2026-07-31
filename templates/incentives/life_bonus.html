@@ -109,7 +109,7 @@
     </thead>
     <tbody>
     {% for m in detail.months %}
-      <tr>
+      <tr {% if not m.volume and not m.paid %}class="text-muted"{% endif %}>
         <td>{{ m.month|month_short }} {{ m.year }}</td>
         <td class="text-end">{% if m.volume %}₹{{ m.volume|inr }}{% else %}—{% endif %}</td>
         <td class="text-end">₹{{ m.running|inr }}</td>
@@ -117,6 +117,7 @@
         <td class="text-end">{% if m.released %}<strong>{{ m.released|inr }}</strong>{% else %}—{% endif %}</td>
         <td class="text-end">{% if m.paid %}<strong>{{ m.paid|inr }}</strong>{% else %}—{% endif %}</td>
         <td>
+          {% if m.volume or m.paid %}
           <form method="post" action="{% url 'clients:record_bonus_payout' %}" class="d-flex gap-1">
             {% csrf_token %}
             <input type="hidden" name="employee" value="{{ detail.employee.id }}">
@@ -134,6 +135,9 @@
             <button class="ki-btn ki-btn-secondary" style="padding:2px 8px;font-size:.8rem;"
                     type="submit">Save</button>
           </form>
+          {% else %}
+            <span class="text-muted">—</span>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}
@@ -142,7 +146,7 @@
       <tr>
         <th>Year</th>
         <th class="text-end">₹{{ detail.volume|inr }}</th>
-        <th></th>
+        <th class="text-end"></th>
         <th class="text-end">{{ detail.base|inr }}</th>
         <th class="text-end">{{ detail.released|inr }}</th>
         <th class="text-end">{{ detail.paid_manually|inr }}</th>

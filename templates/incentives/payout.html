@@ -54,8 +54,8 @@
       <tr>
         <th>Total</th>
         <th class="text-end">{{ totals.base|inr }}</th>
-        <th class="text-end">{{ totals.bonus|inr }}</th>
-        <th class="text-end">{{ totals.accrued|inr }}</th>
+        <th class="text-end">{% if totals.bonus %}{{ totals.bonus|inr }}{% else %}—{% endif %}</th>
+        <th class="text-end">{% if totals.accrued %}{{ totals.accrued|inr }}{% else %}—{% endif %}</th>
         <th class="text-end">₹{{ totals.total|inr }}</th>
       </tr>
     </tfoot>
@@ -113,8 +113,7 @@
       </tr>
     </thead>
     <tbody>
-    {% for r in rows %}
-      {% if r.ladder.volume %}
+    {% for r in ladder_rows %}
       <tr>
         <td>{{ r.employee.user.get_full_name|default:r.employee.user.username }}</td>
         <td class="text-end">₹{{ r.ladder.volume|inr }}</td>
@@ -129,7 +128,8 @@
         </td>
         <td class="text-end">{% if r.ladder.next %}{{ r.ladder.next.worth|inr }}{% else %}—{% endif %}</td>
       </tr>
-      {% endif %}
+    {% empty %}
+      <tr><td colspan="6" class="text-muted">No life business booked this financial year.</td></tr>
     {% endfor %}
     </tbody>
   </table>

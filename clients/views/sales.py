@@ -582,6 +582,9 @@ def incentive_payout(request):
             {"label": "Multiyear credited", "value": f"₹{inr(totals['accrued'])}", "color": "#15803D"},
         ],
         "rows": rows, "totals": totals, "releases": releases,
+        # Filtered here rather than with an {% if %} inside the loop: the
+        # template could otherwise render a header over an empty body.
+        "ladder_rows": [r for r in rows if r["ladder"] and r["ladder"]["volume"]],
         "life_rule": life_rule,
         "months": [(i, month_name[i]) for i in range(1, 13)],
         "years": list(range(today.year - 3, today.year + 1)),

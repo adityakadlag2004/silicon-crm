@@ -989,6 +989,54 @@ class CalculatorLadderStatusTests(_Base):
         self.assertEqual(st["volume"], Decimal("0"))
 
 
+class AdminTableRenderingTests(_Base):
+    """Two tables that rendered badly rather than wrongly.
+
+    The month strip drew a payment form on all twelve rows, so a year with
+    one month of business showed eleven rows of em-dashes each with its own
+    input box. The payout page's ladder table filtered its rows inside the
+    loop, so with no life business it drew a header with nothing under it.
+    """
+
+    def setUp(self):
+        self.user.is_superuser = True
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.today = timezone.localdate()
+
+    def test_the_month_strip_only_offers_a_form_where_there_is_business(self):
+        self.sell(self.life, 950000, date(2026, 7, 10))
+        html = self.client.get(reverse("clients:life_bonus_tracker"),
+                               {"fy": 2026, "employee": self.emp.id}).content.decode()
+        # One row has business, so exactly one payment form is drawn.
+        self.assertEqual(html.count('name="for_month"'), 1)
+        self.assertIn('value="2026-07-01"', html)
+
+    def test_a_month_with_a_recorded_payment_keeps_its_form(self):
+        from clients.models import BonusPayout
+
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        BonusPayout.objects.create(employee=self.emp, rule=rule,
+                                   for_month=date(2026, 9, 1), amount=Decimal("2000"))
+        self.sell(self.life, 950000, date(2026, 7, 10))
+        html = self.client.get(reverse("clients:life_bonus_tracker"),
+                               {"fy": 2026, "employee": self.emp.id}).content.decode()
+        self.assertEqual(html.count('name="for_month"'), 2)   # July + September
+
+    def test_the_payout_ladder_table_says_when_it_is_empty(self):
+        resp = self.client.get(reverse("clients:incentive_payout"),
+                               {"month": self.today.month, "year": self.today.year})
+        self.assertEqual(resp.context["ladder_rows"], [])
+        self.assertContains(resp, "No life business booked this financial year")
+
+    def test_the_payout_ladder_table_lists_only_people_with_volume(self):
+        self.sell(self.life, 500000, self.today)
+        resp = self.client.get(reverse("clients:incentive_payout"),
+                               {"month": self.today.month, "year": self.today.year})
+        self.assertEqual([r["employee"] for r in resp.context["ladder_rows"]], [self.emp])
+
+
 class CalculatorRosterTests(_Base):
     """The yearly bonus section lists everyone — for people allowed to see it."""
 
