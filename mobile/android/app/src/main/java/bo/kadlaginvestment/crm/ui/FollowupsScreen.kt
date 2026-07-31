@@ -161,9 +161,16 @@ fun FollowupsScreen(
     var laterFor by remember { mutableStateOf<JSONObject?>(null) }
     var noteFor by remember { mutableStateOf<JSONObject?>(null) }
 
-    fun act(id: Int, action: String, at: String? = null, outcome: String? = null, note: String? = null) {
+    fun act(
+        id: Int,
+        action: String,
+        at: String? = null,
+        outcome: String? = null,
+        note: String? = null,
+        kind: String = "call",
+    ) {
         scope.launch {
-            val body = JSONObject().put("action", action)
+            val body = JSONObject().put("action", action).put("kind", kind)
             at?.let { body.put("at", it) }
             outcome?.let { body.put("outcome", it) }
             note?.let { body.put("note", it) }
@@ -237,21 +244,21 @@ fun FollowupsScreen(
             name = displayName(context, f),
             outcomes = d.optJSONArray("outcomes").rows(),
             onDismiss = { outcomeFor = null },
-            onPick = { key -> outcomeFor = null; act(f.getInt("id"), "done", outcome = key) },
+            onPick = { key -> outcomeFor = null; act(f.getInt("id"), "done", outcome = key, kind = f.optString("kind")) },
         )
     }
     laterFor?.let { f ->
         LaterDialog(
             name = displayName(context, f),
             onDismiss = { laterFor = null },
-            onPick = { iso -> laterFor = null; act(f.getInt("id"), "reschedule", at = iso) },
+            onPick = { iso -> laterFor = null; act(f.getInt("id"), "reschedule", at = iso, kind = f.optString("kind")) },
         )
     }
     noteFor?.let { f ->
         NoteDialog(
             initial = f.optString("note"),
             onDismiss = { noteFor = null },
-            onSave = { text -> noteFor = null; act(f.getInt("id"), "note", note = text) },
+            onSave = { text -> noteFor = null; act(f.getInt("id"), "note", note = text, kind = f.optString("kind")) },
         )
     }
 
@@ -259,12 +266,19 @@ fun FollowupsScreen(
     val allPending = d.optJSONArray("pending").rows()
     val doneToday = d.optJSONArray("done_today").rows()
     val q = query.trim().lowercase()
-    val pendingRows = if (q.isEmpty()) allPending else allPending.filter {
+    val now = System.currentTimeMillis()
+    val pendingRows = (if (q.isEmpty()) allPending else allPending.filter {
         displayName(context, it).lowercase().contains(q) ||
             it.optString("phone").contains(q) ||
             it.optString("note").lowercase().contains(q)
-    }
-    val now = System.currentTimeMillis()
+    }).sortedWith(
+        // Time order, except inside "Due now": the number chased four times
+        // is the one to call first, not the one that happened to be booked
+        // earliest this morning.
+        compareBy({ bucketOf(it.optLong("scheduled_at_ms"), now) },
+            { if (bucketOf(it.optLong("scheduled_at_ms"), now) == 0) -it.optInt("attempts", 1) else 0 },
+            { it.optLong("scheduled_at_ms") })
+    )
 
     Box(modifier.fillMaxSize()) {
     RefreshableBox(refreshing = loader.refreshing, onRefresh = loader.reload) {
@@ -316,7 +330,7 @@ fun FollowupsScreen(
             if (doneToday.isEmpty()) {
                 item { HintText("Nothing closed yet today.") }
             }
-            items(doneToday, key = { it.optInt("id") }) { f -> DoneCard(context, f) }
+            items(doneToday, key = { it.optString("kind") + it.optInt("id") }) { f -> DoneCard(context, f) }
         } else {
             if (allPending.size > 5) {
                 item {
@@ -366,10 +380,10 @@ fun FollowupsScreen(
                         }
                     }
                 }
-                item(key = f.optInt("id")) {
+                item(key = f.optString("kind") + f.optInt("id")) {
                     SwipeableFollowup(
-                        onDone = { act(f.getInt("id"), "done") },
-                        onDismiss = { act(f.getInt("id"), "dismiss") },
+                        onDone = { act(f.getInt("id"), "done", kind = f.optString("kind")) },
+                        onDismiss = { act(f.getInt("id"), "dismiss", kind = f.optString("kind")) },
                     ) {
                         FollowupCard(
                             context = context,
@@ -394,7 +408,7 @@ fun FollowupsScreen(
                             onDone = { outcomeFor = f },
                             onLater = { laterFor = f },
                             onNote = { noteFor = f },
-                            onDismissFollowup = { act(f.getInt("id"), "dismiss") },
+                            onDismissFollowup = { act(f.getInt("id"), "dismiss", kind = f.optString("kind")) },
                             onOpenClient = {
                                 val id = f.optInt("client_id")
                                 if (id > 0) onOpenWeb("/clients/clients/$id/profile/")
@@ -522,8 +536,20 @@ private fun FollowupCard(
 
             val attempts = f.optInt("attempts", 1)
             val lastCall = f.optString("last_call")
-            if (attempts > 1 || lastCall.isNotEmpty()) {
+            val isLead = f.optString("kind") == "lead"
+            if (attempts > 1 || lastCall.isNotEmpty() || isLead) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (isLead) {
+                        Text(
+                            "LEAD",
+                            fontSize = rsp(11),
+                            fontWeight = FontWeight.Bold,
+                            color = BrandGoldDark,
+                            modifier = Modifier
+                                .background(BrandGoldDark.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
                     if (attempts > 1) {
                         Text(
                             "Attempt $attempts",
@@ -549,8 +575,11 @@ private fun FollowupCard(
                 Text(f.optString("note"), fontSize = rsp(13))
             }
             ActionRow {
-                Button(onClick = onCall) { Text("📞 Call") }
-                OutlinedButton(onClick = onWhatsapp) { Text("💬 WhatsApp", fontSize = rsp(13)) }
+                // A lead can be saved without a number; don't offer a dead dialler.
+                if (f.optString("phone").isNotEmpty()) {
+                    Button(onClick = onCall) { Text("📞 Call") }
+                    OutlinedButton(onClick = onWhatsapp) { Text("💬 WhatsApp", fontSize = rsp(13)) }
+                }
                 OutlinedButton(onClick = onDone) { Text("Done") }
                 OutlinedButton(onClick = onLater) { Text("🕑 Later") }
             }

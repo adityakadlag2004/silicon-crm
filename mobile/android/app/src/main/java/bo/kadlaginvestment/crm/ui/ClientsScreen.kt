@@ -229,7 +229,9 @@ private fun ClientDetail(
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits")))
                 }) { Text("WhatsApp") }
             }
-            OutlinedButton(onClick = { onOpenWeb("/clients/$clientId/edit/") }) { Text("Edit") }
+            // /clients/<id>/edit/ resolves to nothing — the app prefix is
+            // "clients/" and so is the pattern. This button opened a 404.
+            OutlinedButton(onClick = { onOpenWeb("/clients/clients/$clientId/edit/") }) { Text("Edit") }
         }
 
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {

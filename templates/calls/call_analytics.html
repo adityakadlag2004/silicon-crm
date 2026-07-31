@@ -104,6 +104,27 @@
   <div class="col-6 col-md"><div class="ki-card text-center"><div style="font-size:1.5rem;font-weight:800;">{{ totals.talk_minutes }}</div><div class="text-muted">Talk min</div></div></div>
 </div>
 
+{% comment %}
+What the calls produced, not just how many there were. Recorded when a
+follow-up is closed with an outcome (app v4.27+ and the web follow-up list).
+{% endcomment %}
+<div class="ki-card mb-3">
+  <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
+    <i class="bi bi-clipboard-check me-2" style="color:var(--ki-primary);"></i>
+    Follow-up outcomes · {{ start|date:"d M" }} – {{ end|date:"d M Y" }}
+  </h3>
+  <div class="row g-2">
+    {% for o in outcomes %}
+    <div class="col-6 col-md">
+      <div class="ki-card text-center">
+        <div style="font-size:1.35rem;font-weight:800;{% if o.key == 'converted' %}color:#16a34a;{% elif o.key == 'not_interested' %}color:#dc2626;{% elif not o.key %}color:#6B7280;{% endif %}">{{ o.count }}</div>
+        <div class="text-muted">{{ o.label }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="ki-card mb-3">
   <h3 style="font-size:1rem;font-weight:700;margin-bottom:14px;">
     <i class="bi bi-people-fill me-2" style="color:var(--ki-primary);"></i> Per employee · {{ start|date:"d M" }} – {{ end|date:"d M Y" }}

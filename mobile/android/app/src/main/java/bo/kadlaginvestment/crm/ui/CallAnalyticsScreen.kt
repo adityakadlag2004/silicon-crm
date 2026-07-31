@@ -181,6 +181,20 @@ fun CallAnalyticsScreen(
         }
         Spacer(Modifier.height(10.dp))
 
+        // What those calls produced, recorded when a follow-up is closed.
+        val outcomes = d.optJSONArray("outcomes")
+        if (outcomes != null && outcomes.length() > 0) {
+            Text("Follow-up outcomes", fontSize = rsp(14), fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            ActionRow {
+                for (i in 0 until outcomes.length()) {
+                    val o = outcomes.getJSONObject(i)
+                    Chip("${o.optString("label")} ${o.optInt("count")}", false) {}
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
         val calls = d.optJSONArray("calls")
         val rows = (0 until (calls?.length() ?: 0)).map { calls!!.getJSONObject(it) }
         LazyColumn(

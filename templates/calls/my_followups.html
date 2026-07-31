@@ -18,7 +18,7 @@
           <th>Who</th>
           <th>Phone</th>
           <th>Note</th>
-          <th style="width:260px;">Actions</th>
+          <th style="width:340px;">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -27,6 +27,9 @@
           <td>
             {{ fu.scheduled_at|date:"d M, h:i A" }}
             {% if fu.scheduled_at <= now %}<span class="badge bg-warning text-dark ms-1">Due</span>{% endif %}
+            {% if fu.attempts > 1 %}
+              <span class="badge bg-warning text-dark ms-1" title="Times this number has been chased">Attempt {{ fu.attempts }}</span>
+            {% endif %}
           </td>
           <td>
             {% if fu.client %}
@@ -34,11 +37,23 @@
             {% else %}—{% endif %}
           </td>
           <td>{{ fu.phone }}</td>
-          <td>{{ fu.note|default:"—" }}</td>
+          <td>
+            <form method="post" action="{% url 'clients:call_followup_update' fu.id %}" class="d-flex gap-1">
+              {% csrf_token %}
+              <input type="text" name="note" value="{{ fu.note }}" maxlength="255"
+                     class="form-control form-control-sm" placeholder="Note" aria-label="Follow-up note">
+              <button name="action" value="note" class="btn btn-sm btn-outline-secondary">Save</button>
+            </form>
+          </td>
           <td>
             <a class="btn btn-sm btn-success" href="tel:{{ fu.phone }}"><i class="bi bi-telephone-fill"></i> Call</a>
-            <form method="post" action="{% url 'clients:call_followup_update' fu.id %}" style="display:inline;">
+            <form method="post" action="{% url 'clients:call_followup_update' fu.id %}" class="d-inline-flex gap-1 align-items-center">
               {% csrf_token %}
+              <select name="outcome" class="form-select form-select-sm" style="width:auto;"
+                      aria-label="Call outcome">
+                <option value="">Outcome…</option>
+                {% for key, label in outcomes %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+              </select>
               <button name="action" value="done" class="btn btn-sm btn-outline-success">Done</button>
               <button name="action" value="snooze" class="btn btn-sm btn-outline-secondary">+1h</button>
               <button name="action" value="dismiss" class="btn btn-sm btn-outline-danger">Dismiss</button>
@@ -61,13 +76,14 @@
   </h3>
   <div class="table-responsive">
     <table class="table align-middle">
-      <thead><tr><th>Scheduled</th><th>Who</th><th>Phone</th><th>Status</th><th>Closed</th></tr></thead>
+      <thead><tr><th>Scheduled</th><th>Who</th><th>Phone</th><th>Outcome</th><th>Status</th><th>Closed</th></tr></thead>
       <tbody>
         {% for fu in recent_done %}
         <tr>
           <td>{{ fu.scheduled_at|date:"d M, h:i A" }}</td>
           <td>{% if fu.client %}{{ fu.client.name }}{% else %}—{% endif %}</td>
           <td>{{ fu.phone }}</td>
+          <td>{% if fu.outcome %}{{ fu.get_outcome_display }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
           <td><span class="badge {% if fu.status == 'done' %}bg-success{% else %}bg-secondary{% endif %}">{{ fu.get_status_display }}</span></td>
           <td>{{ fu.completed_at|date:"d M, h:i A"|default:"—" }}</td>
         </tr>

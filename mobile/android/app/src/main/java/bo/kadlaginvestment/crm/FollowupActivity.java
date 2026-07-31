@@ -106,6 +106,16 @@ public class FollowupActivity extends Activity {
         subtitle.setPadding(0, dp(4), 0, dp(10));
         root.addView(subtitle);
 
+        // Who this is and how often they've been called — fetched after the
+        // popup is already up, so it costs no time on screen.
+        final TextView context = new TextView(this);
+        context.setTextSize(12);
+        context.setTextColor(gold());
+        context.setVisibility(android.view.View.GONE);
+        context.setPadding(0, 0, 0, dp(10));
+        root.addView(context);
+        loadContext(phone, context);
+
         // Optional note, saved with whichever timing is tapped.
         noteInput = new EditText(this);
         noteInput.setHint("Note (optional) — e.g. discuss SIP top-up");
@@ -149,6 +159,15 @@ public class FollowupActivity extends Activity {
         customLp.bottomMargin = dp(8);
         root.addView(custom, customLp);
 
+        // Stop chasing this number. Without it the only way to give up was to
+        // schedule nothing and leave the old reminder pending for ever.
+        TextView notInterested = pill("🚫  Not interested — stop chasing", neutralBg(), muted());
+        notInterested.setOnClickListener(v -> closeNumber(phone, "not_interested"));
+        LinearLayout.LayoutParams notLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        notLp.bottomMargin = dp(8);
+        root.addView(notInterested, notLp);
+
         TextView ignore = pill("✕  Ignore — no follow-up", neutralBg(), muted());
         ignore.setOnClickListener(v -> finish());
         LinearLayout.LayoutParams ignoreLp = new LinearLayout.LayoutParams(
@@ -165,6 +184,46 @@ public class FollowupActivity extends Activity {
             getWindow().setGravity(Gravity.CENTER);
             getWindow().setBackgroundDrawableResource(android.R.color.transparent);
         }
+    }
+
+    /** Fill the context line once the server answers; stay hidden if it can't. */
+    private void loadContext(final String phone, final TextView view) {
+        new Thread(() -> {
+            String line = "";
+            try {
+                String body = BackendClient.getJson(
+                        "/clients/api/calls/context/?phone="
+                                + java.net.URLEncoder.encode(phone, "UTF-8"));
+                if (body != null) line = new JSONObject(body).optString("line", "");
+            } catch (Exception ignored) {
+                // No context is fine — the popup's job is the timing chips.
+            }
+            final String text = line;
+            runOnUiThread(() -> {
+                if (!text.isEmpty()) {
+                    view.setText(text);
+                    view.setVisibility(android.view.View.VISIBLE);
+                }
+            });
+        }).start();
+    }
+
+    /** Close every pending follow-up for this number, recording why. */
+    private void closeNumber(final String phone, final String outcome) {
+        final String json = "{\"phone\":\"" + BackendClient.jsonEscape(phone)
+                + "\",\"outcome\":\"" + outcome + "\"}";
+        new Thread(() -> {
+            final String body = BackendClient.postJsonForBody("/clients/api/calls/close/", json);
+            runOnUiThread(() -> {
+                if (body == null) {
+                    Toast.makeText(this, "No signal — follow-up left as it is",
+                            Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(this, "Marked not interested", Toast.LENGTH_SHORT).show();
+                }
+                finish();
+            });
+        }).start();
     }
 
     /** Chip list from the cached server config; classic grid as fallback. */

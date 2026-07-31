@@ -20,6 +20,7 @@ from ..models import (
     CallFollowUp,
     Client,
     Employee,
+    LeadFollowUp,
     Notification,
     Product,
     Renewal,
@@ -62,11 +63,17 @@ def app_me(request):
             recipient=request.user, is_read=False
         ).count(),
         # Drives the Calls tab badge, so a due call is visible without
-        # opening the screen.
-        "overdue_followups": CallFollowUp.objects.filter(
-            employee=emp, status=CallFollowUp.STATUS_PENDING,
-            scheduled_at__lte=timezone.now(),
-        ).count() if emp else 0,
+        # opening the screen. Counts both lists the screen shows.
+        "overdue_followups": (
+            CallFollowUp.objects.filter(
+                employee=emp, status=CallFollowUp.STATUS_PENDING,
+                scheduled_at__lte=timezone.now(),
+            ).count()
+            + LeadFollowUp.objects.filter(
+                assigned_to=emp, status="pending", lead__is_discarded=False,
+                scheduled_time__lte=timezone.now(),
+            ).count()
+        ) if emp else 0,
     })
 
 
@@ -505,6 +512,7 @@ def app_client_detail(request, client_id):
 def _fu_row(fu, now, last_calls=None):
     return {
         "id": fu.id,
+        "kind": "call",
         "phone": fu.phone,
         "client": fu.client.name if fu.client_id else "",
         "client_id": fu.client_id,
@@ -521,6 +529,41 @@ def _fu_row(fu, now, last_calls=None):
         # "2 days ago · 3m 12s" for the last call to this number, "" if never.
         "last_call": (last_calls or {}).get(_fu_digits(fu.phone), ""),
     }
+
+
+def _lead_fu_rows(emp, now):
+    """Pending lead follow-ups, shaped like call follow-ups.
+
+    Staff had two call lists — this one lived only on the web Leads screen,
+    so a lead call scheduled there never reached the phone. Same row shape,
+    marked `kind: "lead"`; the actions route by that.
+    """
+    from ..models import LeadFollowUp
+
+    if emp is None:
+        return []
+    rows = []
+    for f in LeadFollowUp.objects.filter(
+        assigned_to=emp, status="pending", lead__is_discarded=False
+    ).select_related("lead").order_by("scheduled_time")[:200]:
+        rows.append({
+            "id": f.id,
+            "kind": "lead",
+            "phone": f.lead.phone or "",
+            "client": f.lead.customer_name,
+            "client_id": f.lead.converted_client_id,
+            "scheduled_at": timezone.localtime(f.scheduled_time).strftime("%d %b, %I:%M %p"),
+            "scheduled_at_ms": int(f.scheduled_time.timestamp() * 1000),
+            "overdue": f.scheduled_time <= now,
+            "note": (f.note or "")[:255],
+            "status": f.status,
+            "outcome": "",
+            "outcome_label": "",
+            "attempts": 1,
+            "last_call": "",
+            "lead_id": f.lead_id,
+        })
+    return rows
 
 
 def _fu_digits(phone):
@@ -601,7 +644,7 @@ def app_followups(request):
     pending = list(
         CallFollowUp.objects.filter(
             employee=emp, status=CallFollowUp.STATUS_PENDING
-        ).select_related("client").order_by("scheduled_at")[:100]
+        ).select_related("client").order_by("scheduled_at")[:500]
     )
     # Closed today, so the screen can show what was worked, not just what's left.
     done = CallFollowUp.objects.filter(
@@ -610,10 +653,12 @@ def app_followups(request):
         completed_at__date=timezone.localdate(),
     ).select_related("client").order_by("-completed_at")[:50]
     last_calls = _last_call_map(emp, pending)
+    rows = [_fu_row(f, now, last_calls) for f in pending] + _lead_fu_rows(emp, now)
+    rows.sort(key=lambda r: r["scheduled_at_ms"])
     return JsonResponse({
-        "pending": [_fu_row(f, now, last_calls) for f in pending],
+        "pending": rows,
         "done_today": [_fu_row(f, now) for f in done],
-        "overdue": sum(1 for f in pending if f.scheduled_at <= now),
+        "overdue": sum(1 for r in rows if r["overdue"]),
         "stats": _today_call_stats(emp),
         "outcomes": [
             {"key": k, "label": v} for k, v in CallFollowUp.OUTCOME_CHOICES
@@ -673,14 +718,18 @@ def app_today(request):
 @require_POST
 def app_followup_action(request, followup_id):
     emp = _emp(request)
-    fu = get_object_or_404(CallFollowUp, pk=followup_id)
-    if not (_is_admin(request) or (emp and fu.employee_id == emp.id)):
-        return JsonResponse({"ok": False, "error": "Not your follow-up."}, status=403)
     try:
         body = json.loads(request.body.decode("utf-8"))
     except Exception:
         body = {}
     action = body.get("action")
+
+    if body.get("kind") == "lead":
+        return _lead_followup_action(request, emp, followup_id, action, body)
+
+    fu = get_object_or_404(CallFollowUp, pk=followup_id)
+    if not (_is_admin(request) or (emp and fu.employee_id == emp.id)):
+        return JsonResponse({"ok": False, "error": "Not your follow-up."}, status=403)
 
     if action == "done":
         fu.status = CallFollowUp.STATUS_DONE
@@ -717,6 +766,42 @@ def app_followup_action(request, followup_id):
     return JsonResponse({"ok": True})
 
 
+def _lead_followup_action(request, emp, followup_id, action, body):
+    """Same three verbs on a lead follow-up.
+
+    LeadFollowUp only has pending/done, so "dismiss" closes it the same way
+    "done" does — there is nowhere else for it to go, and leaving it pending
+    is what the Dismiss button exists to avoid.
+    """
+    from ..models import LeadFollowUp
+
+    fu = get_object_or_404(LeadFollowUp, pk=followup_id)
+    if not (_is_admin(request) or (emp and fu.assigned_to_id == emp.id)):
+        return JsonResponse({"ok": False, "error": "Not your follow-up."}, status=403)
+
+    if action in ("done", "dismiss"):
+        fu.status = "done"
+        fu.save(update_fields=["status"])
+    elif action == "note":
+        fu.note = str(body.get("note") or "").strip()[:255]
+        fu.save(update_fields=["note"])
+    elif action in ("snooze", "reschedule"):
+        if action == "reschedule":
+            from .calls import parse_custom_at
+
+            scheduled, err = parse_custom_at(body.get("at"))
+            if err:
+                return JsonResponse({"ok": False, "error": err}, status=400)
+        else:
+            scheduled = timezone.now() + timedelta(hours=1)
+        fu.scheduled_time = scheduled
+        fu.reminded = False
+        fu.save(update_fields=["scheduled_time", "reminded"])
+    else:
+        return JsonResponse({"ok": False, "error": "Unknown action."}, status=400)
+    return JsonResponse({"ok": True})
+
+
 @login_required
 @require_POST
 def app_followups_push_overdue(request):
@@ -738,9 +823,16 @@ def app_followups_push_overdue(request):
     scheduled, err = parse_custom_at(body.get("at"))
     if err:
         return JsonResponse({"ok": False, "error": err}, status=400)
+    from ..models import LeadFollowUp
+
+    now = timezone.now()
     moved = CallFollowUp.objects.filter(
-        employee=emp, status=CallFollowUp.STATUS_PENDING, scheduled_at__lte=timezone.now()
+        employee=emp, status=CallFollowUp.STATUS_PENDING, scheduled_at__lte=now
     ).update(scheduled_at=scheduled, reminded=False)
+    # Lead follow-ups share the screen, so "Move all" moves them too.
+    moved += LeadFollowUp.objects.filter(
+        assigned_to=emp, status="pending", scheduled_time__lte=now
+    ).update(scheduled_time=scheduled, reminded=False)
     return JsonResponse({"ok": True, "moved": moved, "message": f"Moved {moved} follow-ups"})
 
 
@@ -1599,6 +1691,15 @@ def app_call_analytics(request):
         })
     by_employee.sort(key=lambda x: (-x["calls"], -x["talk_minutes"]))
 
+    from ..services.calls import outcome_breakdown
+
+    if rng == "today":
+        out_start = out_end = today
+    elif rng == "week":
+        out_start, out_end = today - timedelta(days=6), today
+    else:
+        out_start, out_end = today.replace(day=1), today
+
     return JsonResponse({
         "totals": {
             "dialed": totals["dialed"] or 0,
@@ -1607,6 +1708,12 @@ def app_call_analytics(request):
             "missed": totals["missed"] or 0,
             "talk_minutes": round((totals["talk_seconds"] or 0) / 60, 1),
         },
+        # What those calls produced — same helper the web page uses.
+        "outcomes": outcome_breakdown(
+            out_start, out_end,
+            employee_id=(int(request.GET["employee_id"])
+                         if str(request.GET.get("employee_id", "")).isdigit() else None),
+        ),
         "by_employee": by_employee,
         "employees": [
             {"id": e.id, "name": e.user.get_full_name() or e.user.username}

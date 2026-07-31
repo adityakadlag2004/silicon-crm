@@ -409,6 +409,228 @@ class FollowupScreenTests(_CallSetup):
         self.assertEqual(fu.scheduled_at, before)
 
 
+class OutcomeReportTests(_CallSetup):
+    """Outcomes are only worth recording if something reports on them."""
+
+    def _close(self, phone, outcome):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone=phone, scheduled_at=timezone.now()
+        )
+        self.employee.post(
+            reverse("clients:app_followup_action", args=[fu.id]),
+            data=json.dumps({"action": "done", "outcome": outcome}),
+            content_type="application/json",
+        )
+        return fu
+
+    def test_breakdown_covers_every_outcome_including_zeros(self):
+        self._close("1", "converted")
+        self._close("2", "no_answer")
+        self._close("3", "")  # closed without picking one
+
+        from clients.services.calls import outcome_breakdown
+
+        today = timezone.localdate()
+        rows = {r["key"]: r["count"] for r in outcome_breakdown(today, today)}
+        self.assertEqual(rows["converted"], 1)
+        self.assertEqual(rows["no_answer"], 1)
+        self.assertEqual(rows["not_interested"], 0)  # zeros are the finding too
+        self.assertEqual(rows[""], 1)                 # "Not recorded"
+
+    def test_web_and_app_analytics_show_the_same_numbers(self):
+        self._close("1", "converted")
+        web = self.admin.get(reverse("clients:call_analytics")).context["outcomes"]
+        app = self.admin.get(
+            reverse("clients:app_call_analytics"), {"range": "today"}
+        ).json()["outcomes"]
+        self.assertEqual(
+            [(r["key"], r["count"]) for r in web],
+            [(r["key"], r["count"]) for r in app],
+        )
+
+    def test_breakdown_can_be_scoped_to_one_employee(self):
+        self._close("1", "converted")
+        CallFollowUp.objects.create(
+            employee=self.admin_emp, phone="9", scheduled_at=timezone.now(),
+            status=CallFollowUp.STATUS_DONE, outcome="converted",
+            completed_at=timezone.now(),
+        )
+        data = self.admin.get(
+            reverse("clients:app_call_analytics"),
+            {"range": "today", "employee_id": self.emp.id},
+        ).json()
+        row = next(r for r in data["outcomes"] if r["key"] == "converted")
+        self.assertEqual(row["count"], 1)  # not 2
+
+    def test_web_done_button_records_the_outcome(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now()
+        )
+        self.employee.post(
+            reverse("clients:call_followup_update", args=[fu.id]),
+            {"action": "done", "outcome": "converted"},
+        )
+        fu.refresh_from_db()
+        self.assertEqual(fu.outcome, "converted")
+
+    def test_web_note_can_be_edited(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now(), note="old"
+        )
+        self.employee.post(
+            reverse("clients:call_followup_update", args=[fu.id]),
+            {"action": "note", "note": "new note"},
+        )
+        fu.refresh_from_db()
+        self.assertEqual(fu.note, "new note")
+        self.assertEqual(fu.status, CallFollowUp.STATUS_PENDING)
+
+
+class PopupContextTests(_CallSetup):
+    """The popup used to ask about a number while showing nothing about it."""
+
+    def test_context_line_names_the_client_and_the_history(self):
+        CallFollowUp.objects.create(
+            employee=self.emp, phone="9876543210", client=self.customer,
+            scheduled_at=timezone.now(), attempts=3, note="wants term cover",
+        )
+        for i in range(2):
+            CallLogEntry.objects.create(
+                employee=self.emp, phone="+919876543210", direction="outgoing",
+                connected=True, duration_seconds=60,
+                started_at=timezone.now() - timedelta(hours=i + 1),
+            )
+        data = self.employee.get(
+            reverse("clients:call_context"), {"phone": "+91 98765 43210"}
+        ).json()
+        self.assertIn("Callee", data["line"])
+        self.assertIn("attempt 3", data["line"])
+        self.assertIn("2 calls before this", data["line"])
+        self.assertIn("wants term cover", data["line"])
+
+    def test_unknown_number_returns_an_empty_line(self):
+        data = self.employee.get(
+            reverse("clients:call_context"), {"phone": "9000000000"}
+        ).json()
+        self.assertEqual(data["line"], "")
+        self.assertEqual(data["pending_id"], 0)
+
+    def test_not_interested_closes_the_number(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="9876543210", scheduled_at=timezone.now()
+        )
+        other = CallFollowUp.objects.create(
+            employee=self.emp, phone="9000000001", scheduled_at=timezone.now()
+        )
+        resp = self.employee.post(
+            reverse("clients:call_close"),
+            data=json.dumps({"phone": "+919876543210", "outcome": "not_interested"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.json()["closed_ids"], [fu.id])
+        fu.refresh_from_db(); other.refresh_from_db()
+        self.assertEqual(fu.status, CallFollowUp.STATUS_DONE)
+        self.assertEqual(fu.outcome, "not_interested")
+        self.assertEqual(other.status, CallFollowUp.STATUS_PENDING)
+
+
+class LeadFollowupsOnCallsScreenTests(_CallSetup):
+    """Lead follow-ups were a second call list, visible only on the web."""
+
+    def setUp(self):
+        super().setUp()
+        from clients.models import Lead, LeadFollowUp
+
+        self.lead = Lead.objects.create(
+            customer_name="Prospect", phone="9123456780", assigned_to=self.emp
+        )
+        self.lead_fu = LeadFollowUp.objects.create(
+            lead=self.lead, assigned_to=self.emp,
+            scheduled_time=timezone.now() + timedelta(hours=2), note="send brochure",
+        )
+
+    def _rows(self):
+        return self.employee.get(reverse("clients:app_followups")).json()["pending"]
+
+    def test_lead_followups_appear_in_the_same_list(self):
+        CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now() + timedelta(hours=1)
+        )
+        rows = self._rows()
+        self.assertEqual([r["kind"] for r in rows], ["call", "lead"])  # merged, time-ordered
+        lead_row = rows[1]
+        self.assertEqual(lead_row["client"], "Prospect")
+        self.assertEqual(lead_row["phone"], "9123456780")
+        self.assertEqual(lead_row["note"], "send brochure")
+
+    def test_discarded_leads_stay_out(self):
+        self.lead.is_discarded = True
+        self.lead.save(update_fields=["is_discarded"])
+        self.assertEqual(self._rows(), [])
+
+    def test_done_and_reschedule_route_to_the_lead_model(self):
+        target = (timezone.localtime() + timedelta(days=1)).replace(
+            hour=11, minute=0, second=0, microsecond=0
+        )
+        self.employee.post(
+            reverse("clients:app_followup_action", args=[self.lead_fu.id]),
+            data=json.dumps({"action": "reschedule", "kind": "lead",
+                             "at": target.strftime("%Y-%m-%dT%H:%M")}),
+            content_type="application/json",
+        )
+        self.lead_fu.refresh_from_db()
+        self.assertEqual(timezone.localtime(self.lead_fu.scheduled_time), target)
+
+        self.employee.post(
+            reverse("clients:app_followup_action", args=[self.lead_fu.id]),
+            data=json.dumps({"action": "done", "kind": "lead"}),
+            content_type="application/json",
+        )
+        self.lead_fu.refresh_from_db()
+        self.assertEqual(self.lead_fu.status, "done")
+
+    def test_cannot_touch_someone_elses_lead_followup(self):
+        from clients.models import LeadFollowUp
+
+        theirs = LeadFollowUp.objects.create(
+            lead=self.lead, assigned_to=self.admin_emp, scheduled_time=timezone.now()
+        )
+        resp = self.employee.post(
+            reverse("clients:app_followup_action", args=[theirs.id]),
+            data=json.dumps({"action": "done", "kind": "lead"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_move_all_moves_lead_rows_too(self):
+        self.lead_fu.scheduled_time = timezone.now() - timedelta(hours=1)
+        self.lead_fu.save(update_fields=["scheduled_time"])
+        CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now() - timedelta(hours=1)
+        )
+        target = (timezone.localtime() + timedelta(days=1)).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
+        resp = self.employee.post(
+            reverse("clients:app_followups_push_overdue"),
+            data=json.dumps({"at": target.strftime("%Y-%m-%dT%H:%M")}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.json()["moved"], 2)
+        self.lead_fu.refresh_from_db()
+        self.assertEqual(timezone.localtime(self.lead_fu.scheduled_time), target)
+
+    def test_badge_counts_both_lists(self):
+        self.lead_fu.scheduled_time = timezone.now() - timedelta(minutes=1)
+        self.lead_fu.save(update_fields=["scheduled_time"])
+        CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now() - timedelta(minutes=1)
+        )
+        self.assertEqual(
+            self.employee.get(reverse("clients:app_me")).json()["overdue_followups"], 2
+        )
+
+
 class AutoCloseOnCallTests(_CallSetup):
     """A connected outgoing call closes the follow-up it answers — the list
     used to fill with rows people had already called and forgotten to tick."""

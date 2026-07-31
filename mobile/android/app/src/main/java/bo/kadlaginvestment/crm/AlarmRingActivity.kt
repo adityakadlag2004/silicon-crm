@@ -29,6 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import bo.kadlaginvestment.crm.ui.KadlagTheme
 import bo.kadlaginvestment.crm.ui.rsp
 import java.text.SimpleDateFormat
@@ -41,6 +45,16 @@ import java.util.Locale
  * heads-up tap otherwise). The looping alarm sound lives on the notification;
  * every way out of this screen silences it.
  */
+/** Mirrors CallFollowUp.OUTCOME_CHOICES — the ones worth a tap while a phone
+ * is ringing in your hand. "Spoke" is first because it is the common one. */
+private val OUTCOMES = listOf(
+    "spoke" to "Spoke",
+    "no_answer" to "No answer",
+    "call_back" to "Call back later",
+    "not_interested" to "Not interested",
+    "converted" to "Converted",
+)
+
 class AlarmRingActivity : ComponentActivity() {
 
     private var followupId = 0
@@ -66,6 +80,18 @@ class AlarmRingActivity : ComponentActivity() {
         fun silenceAndFinish() {
             FollowupAlarmNotifier.silence(this, alarm.id)
             finish()
+        }
+
+        /** Close the follow-up, recording what the call produced. Ringing was
+         * the most-used Done path in the app and it recorded nothing. */
+        fun closeWithOutcome(outcome: String) {
+            FollowupAlarmScheduler.cancel(this, alarm.id)
+            val body = if (outcome.isEmpty()) "{\"action\":\"done\"}"
+            else "{\"action\":\"done\",\"outcome\":\"$outcome\"}"
+            Thread {
+                BackendClient.postJson("/clients/api/app/followups/${alarm.id}/action/", body)
+            }.start()
+            silenceAndFinish()
         }
 
         setContent {
@@ -125,20 +151,34 @@ class AlarmRingActivity : ComponentActivity() {
                             ),
                         ) { Text("📞  Call now", fontSize = rsp(18), fontWeight = FontWeight.Bold) }
 
+                        // Closing from here is the most-used Done path there
+                        // is — it used to record nothing, so the outcome
+                        // report never saw the calls that rang.
                         Spacer(Modifier.height(12.dp))
-                        OutlinedButton(
-                            onClick = {
-                                FollowupAlarmScheduler.cancel(this@AlarmRingActivity, alarm.id)
-                                Thread {
-                                    BackendClient.postJson(
-                                        "/clients/api/app/followups/${alarm.id}/action/",
-                                        "{\"action\":\"done\"}",
-                                    )
-                                }.start()
-                                silenceAndFinish()
-                            },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
-                        ) { Text("✓  Mark done", fontSize = rsp(16)) }
+                        var closing by remember { mutableStateOf(false) }
+                        if (!closing) {
+                            OutlinedButton(
+                                onClick = { closing = true },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+                            ) { Text("✓  Mark done", fontSize = rsp(16)) }
+                        } else {
+                            Text(
+                                "How did it go?",
+                                fontSize = rsp(14),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            OUTCOMES.forEach { (key, label) ->
+                                OutlinedButton(
+                                    onClick = { closeWithOutcome(key) },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
+                                ) { Text(label, fontSize = rsp(15)) }
+                                Spacer(Modifier.height(6.dp))
+                            }
+                            TextButton(onClick = { closeWithOutcome("") }) {
+                                Text("Skip — just mark done", fontSize = rsp(14))
+                            }
+                        }
 
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(

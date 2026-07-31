@@ -203,6 +203,19 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - `/api/app/followups/` serves pending + `done_today` + the overdue count that
   badges the Calls tab (also on `/api/app/me/` so the badge is right at launch).
   `push-overdue/` reschedules every overdue row at once.
+- **Lead follow-ups share the screen.** `LeadFollowUp` rows come through the
+  same endpoint marked `kind: "lead"`, and `app_followup_action` routes by that
+  field — staff had two call lists, one of them web-only. Row ids collide
+  between the two models, so anything keyed by id must key on `kind + id`.
+  LeadFollowUp has no dismissed state, so Dismiss closes it as done.
+- **Outcomes are reported by `services/calls.outcome_breakdown()`** — one
+  implementation feeding both the web Call Analytics page and
+  `app_call_analytics`, the way the call counts should have been from the start.
+- The post-call popup reads `/api/calls/context/` for a one-line history of the
+  number (client, attempt count, prior calls, pending note) *after* it is on
+  screen, so it costs no latency, and `/api/calls/close/` backs
+  "Not interested — stop chasing". The ringing AlarmRingActivity asks for an
+  outcome too; it is the most-used Done path there is.
 
 ## UI conventions (record shell)
 

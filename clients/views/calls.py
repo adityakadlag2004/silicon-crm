@@ -333,6 +333,90 @@ def call_followup_create(request):
     })
 
 
+@login_required
+@require_GET
+def call_context(request):
+    """One line of history for a number, for the post-call popup.
+
+    The popup asked "when shall I remind you?" while showing nothing about
+    the number it was asking about — whether this was the first call or the
+    fifth, and who they are. Fetched after the popup is on screen, so it
+    costs no latency; the line just fills in.
+    """
+    emp = _user_emp(request)
+    phone = request.GET.get("phone", "")
+    digits = _normalize_digits(phone)
+    if emp is None or not digits:
+        return JsonResponse({"line": "", "pending_id": 0})
+
+    client = _match_client(phone)
+    pending = next(
+        (
+            f for f in CallFollowUp.objects.filter(
+                employee=emp, status=CallFollowUp.STATUS_PENDING
+            ).order_by("scheduled_at")
+            if _normalize_digits(f.phone) == digits
+        ),
+        None,
+    )
+    # Calls before this one, from the log the app already syncs.
+    prior = sum(
+        1
+        for c in CallLogEntry.objects.filter(
+            employee=emp, direction=CallLogEntry.DIRECTION_OUTGOING
+        ).only("phone")[:1000]
+        if _normalize_digits(c.phone) == digits
+    )
+
+    bits = []
+    if client:
+        bits.append(client.name)
+    if pending and pending.attempts > 1:
+        bits.append(f"attempt {pending.attempts}")
+    if prior > 1:
+        bits.append(f"{prior} calls before this")
+    if pending and pending.note:
+        bits.append(f"“{pending.note}”")
+    return JsonResponse({
+        "line": " · ".join(bits),
+        "pending_id": pending.id if pending else 0,
+    })
+
+
+@login_required
+@require_POST
+def call_close(request):
+    """Close this number's follow-up without scheduling another.
+
+    "Not interested" had no expression in the popup: the only way to stop
+    chasing someone was to schedule nothing and leave the old reminder
+    pending, which is exactly how a list rots.
+    """
+    emp = _user_emp(request)
+    if emp is None:
+        return JsonResponse({"ok": False, "error": "no employee account"}, status=403)
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        data = {}
+    digits = _normalize_digits(str(data.get("phone") or ""))
+    if not digits:
+        return JsonResponse({"ok": False, "error": "phone required"}, status=400)
+    outcome = data.get("outcome") or ""
+    if outcome not in dict(CallFollowUp.OUTCOME_CHOICES):
+        outcome = ""
+
+    ids = [
+        f.id
+        for f in CallFollowUp.objects.filter(employee=emp, status=CallFollowUp.STATUS_PENDING)
+        if _normalize_digits(f.phone) == digits
+    ]
+    CallFollowUp.objects.filter(pk__in=ids).update(
+        status=CallFollowUp.STATUS_DONE, outcome=outcome, completed_at=timezone.now()
+    )
+    return JsonResponse({"ok": True, "closed_ids": ids, "message": "Closed"})
+
+
 # ── Employee-facing follow-up list ───────────────────────────────────────────
 
 @login_required
@@ -359,6 +443,7 @@ def my_call_followups(request):
         "pending": pending,
         "recent_done": recent_done,
         "now": timezone.now(),
+        "outcomes": CallFollowUp.OUTCOME_CHOICES,
     })
 
 
@@ -375,8 +460,15 @@ def call_followup_update(request, followup_id):
     if action == "done":
         fu.status = CallFollowUp.STATUS_DONE
         fu.completed_at = timezone.now()
-        fu.save(update_fields=["status", "completed_at"])
+        outcome = request.POST.get("outcome", "")
+        if outcome in dict(CallFollowUp.OUTCOME_CHOICES):
+            fu.outcome = outcome
+        fu.save(update_fields=["status", "completed_at", "outcome"])
         messages.success(request, "Follow-up marked done.")
+    elif action == "note":
+        fu.note = (request.POST.get("note") or "").strip()[:255]
+        fu.save(update_fields=["note"])
+        messages.success(request, "Note saved.")
     elif action == "dismiss":
         fu.status = CallFollowUp.STATUS_DISMISSED
         fu.completed_at = timezone.now()
@@ -522,9 +614,13 @@ def call_analytics(request):
             "status": s,  # None = app never opened / not installed
         })
 
+    from ..services.calls import outcome_breakdown
+
     return render(request, "calls/call_analytics.html", {
         "rows": rows,
         "totals": totals,
+        # What the calls in this window actually produced.
+        "outcomes": outcome_breakdown(start, end),
         "start": start,
         "end": end,
         "cfg": cfg,
