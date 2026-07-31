@@ -162,9 +162,9 @@ class HealthBandTests(_Base):
                           policy_type="fresh", is_health=True)
             self.assertEqual(q["rate"], Decimal(rate), msg=f"volume {volume}")
 
-    def test_port_pays_its_own_flat_rate_and_stays_out_of_the_ladder(self):
+    def test_port_earns_nothing_and_stays_out_of_the_ladder(self):
         port = self.sell(self.health, 400000, date(2026, 6, 2), policy_type="port")
-        self.assertEqual(port.points, Decimal("2680.000"))  # 0.67% of 4,00,000
+        self.assertEqual(port.points, Decimal("0.000"))
 
         # That 4L must not push a small Fresh sale into the top band.
         fresh = self.sell(self.health, 10000, date(2026, 6, 5), policy_type="fresh")
@@ -180,6 +180,40 @@ class HealthBandTests(_Base):
         self.sell(self.health, 250000, date(2026, 6, 2), policy_type="fresh")
         july = self.sell(self.health, 10000, date(2026, 7, 2), policy_type="fresh")
         self.assertEqual(july.points, Decimal("150.000"))  # 1.50%, not 3.00%
+
+
+class PortEarnsNothingTests(_Base):
+    """Port pays 0%, everywhere, and the Fresh band never sees it.
+
+    The dangerous failure here is silent: delete the Port branch in quote()
+    and a Port sale falls through to the Fresh band, paying the month's rate
+    instead of nothing.
+    """
+
+    def test_a_port_sale_earns_zero_whatever_the_month_has_reached(self):
+        rule = IncentiveRule.objects.get(product_ref=self.health)
+        # A month already in the top band — the branch has to hold there too.
+        self.sell(self.health, 350000, date(2026, 6, 1), policy_type="fresh")
+        port = self.sell(self.health, 200000, date(2026, 6, 5), policy_type="port")
+        self.assertEqual(port.points, Decimal("0.000"))
+        q = inc.quote(rule, Decimal("200000"), prior_volume=Decimal("350000"),
+                      policy_type="port", is_health=True)
+        self.assertEqual(q["total"], Decimal("0"))
+        self.assertEqual(q["rate"], Decimal("0"))
+
+    def test_port_volume_never_lifts_the_fresh_band(self):
+        self.sell(self.health, 400000, date(2026, 7, 2), policy_type="port")
+        fresh = self.sell(self.health, 10000, date(2026, 7, 5), policy_type="fresh")
+        self.assertEqual(fresh.points, Decimal("150.000"))   # still the 1.50% band
+
+    def test_the_rule_carries_no_port_rate_any_more(self):
+        self.assertFalse(hasattr(IncentiveRule.objects.get(product_ref=self.health),
+                                 "port_percent"))
+
+    def test_the_explainer_says_port_earns_nothing(self):
+        e = inc.explain(IncentiveRule.objects.get(product_ref=self.health), is_health=True)
+        blob = " ".join(e["notes"]).lower()
+        self.assertIn("port policy earns no points", blob)
 
 
 class StructurePageTests(_Base):
@@ -321,12 +355,12 @@ class CalculatorTests(_Base):
         line = next(l for l in r.context["lines"] if l["rule"].product == "Health Insurance")
         self.assertEqual(line["assumed"], Decimal("30000"))
 
-    def test_port_pays_its_own_rate_without_lifting_the_band(self):
+    def test_port_earns_nothing_and_does_not_lift_the_band(self):
         rule = IncentiveRule.objects.get(product_ref=self.health)
         r = self.client.get(self.url, self._rows(
             rule_0=str(rule.id), amount_0="400000", ptype_0="port"))
         line = next(l for l in r.context["lines"] if l["rule"].product == "Health Insurance")
-        self.assertEqual(line["added"], Decimal("2680.00"))
+        self.assertEqual(line["added"], Decimal("0"))
         self.assertEqual(line["final_volume"], Decimal("0"))  # Fresh ladder untouched
 
     def test_an_employee_cannot_model_someone_else(self):
@@ -849,13 +883,13 @@ class AppIncentiveApiTests(_Base):
         h = rules["Health Insurance"]
         self.assertEqual(h["slab_unit"], "percent")
         self.assertEqual(h["slab_period"], "month")
-        self.assertEqual(h["port_percent"], 0.67)
+        self.assertNotIn("port_percent", h)   # Port earns nothing; no rate to send
 
     def test_life_is_flagged_as_a_points_ladder_over_the_year(self):
         life = self._rules()["Life Insurance"]
         self.assertEqual(life["slab_unit"], "points")
         self.assertEqual(life["slab_period"], "fy")
-        self.assertIsNone(life["port_percent"])
+        self.assertNotIn("port_percent", life)
 
     def test_a_rupee_amount_cannot_be_saved_as_a_rate_band(self):
         import json

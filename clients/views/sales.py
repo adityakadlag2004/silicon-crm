@@ -669,7 +669,6 @@ def incentive_calculator(request):
             "rate": proj["rate"],
             # Employees read points, not rates — this is the same step said plainly.
             "per_lakh": proj["rate"] * Decimal("1000"),
-            "port_per_lakh": (rule.port_percent or Decimal("0")) * Decimal("1000"),
             "bonus": proj["bonus"],
             "next": incentives_service.next_rung(rule, proj["final_volume"]),
         })

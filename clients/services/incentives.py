@@ -319,7 +319,7 @@ def project(rule, actual_volume, added_amount, *, added_port=ZERO):
     added_amount = Decimal(str(added_amount or 0))
     added_port = Decimal(str(added_port or 0))
     final = actual_volume + added_amount
-    port_pay = added_port * (rule.port_percent or ZERO) / Decimal("100") if rule else ZERO
+    port_pay = ZERO          # Port earns nothing; kept so the shape doesn't change.
 
     if rule is None or not rule.active:
         return {"added": ZERO, "final_volume": final, "rate": ZERO,
@@ -523,17 +523,13 @@ def explain(rule, is_health=False):
         ]
 
     if is_health:
-        port = rule.port_percent or ZERO
         out["notes"].insert(0,
             "It works downwards too. If a sale is rejected or removed and your month "
             "falls back below a step, the rest of the month follows it back down."
         )
         out["notes"].append(
-            f"A Port policy earns {_n(points_on(rule, Decimal('100000'), policy_type='port', is_health=True))} "
-            f"points per ₹1,00,000 — a flat rate of its own. It does not count towards "
-            f"the monthly total that sets your step, and the step does not change it."
-            if port else
-            "Port policies do not earn points."
+            "A Port policy earns no points, and it does not count towards the monthly "
+            "total that sets your step either — only Fresh business moves your step."
         )
     return out
 
@@ -583,14 +579,13 @@ def quote(rule, amount, *, prior_volume=ZERO, prior_bonus=ZERO,
 
     from ..models import IncentiveRule
 
-    # Port is worked the same as Fresh but earns the firm a flat 15%, so it
-    # pays its own reduced rate outside the volume ladder.
+    # Port earns nothing. This branch has to stay: without it a Port sale would
+    # fall through to the Fresh band below and be paid at the month's rate,
+    # which is the opposite of the rule.
     if is_health and policy_type == "port":
-        rate = rule.port_percent if rule.port_percent is not None else ZERO
-        base = amount * rate / Decimal("100")
-        return {"base": base, "bonus": ZERO, "total": base, "rate": rate,
+        return {"base": ZERO, "bonus": ZERO, "total": ZERO, "rate": ZERO,
                 "volume": amount, "band": None,
-                "basis": f"Port policy — flat {_pct(rate)}% of premium."}
+                "basis": "Port policy — earns no points."}
 
     slabs = list(rule.slabs.all().order_by("-threshold"))
     volume = prior_volume + amount

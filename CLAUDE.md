@@ -123,10 +123,13 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `IncentiveRule.slab_period` is the window — calendar month or Apr–Mar FY.
 - The delta is measured against `Sale.bonus_points`, **not** `points` — points
   now mixes base and bonus, and summing it would starve the ladder.
-- Health **Port** pays `IncentiveRule.port_percent` (0.67%), sits outside the
-  Fresh ladder, and never pushes Fresh into a higher band. A **multiyear**
-  premium is credited one year at a time (`Sale.creditable_amount()`), matching
-  how the margin report already recognises it.
+- Health **Port earns nothing** (settled 2026-07-31; `port_percent` deleted,
+  migration 0117). It sits outside the Fresh ladder and never pushes Fresh into
+  a higher band. **The `policy_type == "port"` early return in `quote()` must
+  stay** — without it a Port sale falls through to the Fresh band and is paid
+  the month's rate, which is the opposite of the rule. A **multiyear** premium is
+  credited one year at a time (`Sale.creditable_amount()`), matching how the
+  margin report already recognises it.
 - Changing a rule never rewrites sales already saved — points are stored at save
   time. `recompute_sibling_sales` re-runs the rule's whole *period* (not just
   the month) after a status change, so rate bands re-rate when volume crosses.
@@ -338,7 +341,7 @@ signal there is, since the app is self-hosted with no Play Console.
   `seed_incentive_structure`.
   `seed_incentive_structure` sets the *employee* incentive: Life = 1.75% base +
   the Apr–Mar bonus ladder, Health = the per-employee monthly Fresh rate bands
-  (1.50%→3.50%, a flat tenth of the firm's own margin grid) + Port 0.67%.
+  (1.50%→3.50%, a flat tenth of the firm's own margin grid); Port earns nothing.
   Idempotent; re-run after changing either ladder.
   `seed_health_slabs` sets the Health Insurance Fresh margin slabs (volume-band,
   15%→35%) plus flat 15% Port/renewal; idempotent, re-run if the structure

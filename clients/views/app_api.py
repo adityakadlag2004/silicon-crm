@@ -2093,7 +2093,6 @@ def app_incentives(request):
             "slab_mode": r.slab_mode,
             "slab_unit": "percent" if r.slab_mode == IncentiveRule.MODE_RATE else "points",
             "slab_period": r.slab_period,
-            "port_percent": _money(r.port_percent) if r.port_percent is not None else None,
             "active": r.active,
             "slabs": [
                 {"id": s.id, "threshold": _money(s.threshold), "payout": _money(s.payout), "label": s.label}

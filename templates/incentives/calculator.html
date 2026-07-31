@@ -151,8 +151,7 @@
             ₹{{ l.final_volume|inr }} this month → the <strong>{{ l.per_lakh|inr }} points per ₹1,00,000</strong> step.
             {% if l.port_assumed %}
               <div class="text-muted">Of that, ₹{{ l.port_assumed|inr }} is Port —
-              it earns {{ l.port_per_lakh|inr }} points per ₹1,00,000 on its own and is
-              left out of the monthly step.</div>
+              it earns no points and is left out of the monthly step.</div>
             {% endif %}
           {% else %}
             ₹{{ l.final_volume|inr }} cumulative.{% if l.bonus %} Releases <strong>₹{{ l.bonus|inr }}</strong> of ladder bonus.{% endif %}

@@ -45,12 +45,6 @@ class IncentiveRule(models.Model):
         max_length=10, choices=PERIOD_CHOICES, default=PERIOD_MONTH,
         help_text="Window the cumulative volume driving the slabs is measured over.",
     )
-    port_percent = models.DecimalField(
-        max_digits=6, decimal_places=3, null=True, blank=True,
-        validators=[MinValueValidator(Decimal("0"))],
-        help_text="Health insurance only: flat % paid on Port policies, which sit "
-                  "outside the Fresh volume ladder. Blank = Port earns nothing.",
-    )
     active = models.BooleanField(default=True)
 
     class Meta:
@@ -89,13 +83,13 @@ class IncentiveSlab(models.Model):
 
 
 class BonusPayout(models.Model):
-    """A fixed bonus paid by hand, outside the ladder — the monthly slab payout.
+    """Prize money handed over outside the system, recorded so it counts.
 
-    The firm still makes a fixed monthly payout off the old 3L/6L/9L/12L grid.
-    That money is bonus already in the employee's hands, so the financial-year
-    ladder has to net it off or the same performance gets paid twice. Recording
-    it here is what lets ``period_totals`` see it: the ladder then only ever
-    releases a shortfall, and never claws anything back.
+    That money is already in the employee's hands, so the ladder has to net it
+    off or the same performance gets paid twice. Recording it here is what lets
+    ``period_totals`` see it: the ladder then only ever releases the shortfall,
+    and never claws anything back. It is the only thing that reduces a ladder
+    payout — nothing is ever deducted automatically.
 
     One row per employee, per ladder, per month.
     """

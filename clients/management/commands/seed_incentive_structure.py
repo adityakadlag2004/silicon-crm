@@ -17,7 +17,7 @@ released is paid out:
 
 Health — a rate band picked from the seller's own monthly Fresh volume, set at
 a flat 10% of the commission the firm earns in the matching band of its own
-margin grid. Port sits outside the ladder at 0.67%.
+margin grid. Port earns nothing and never counts towards the band.
 
     Monthly Fresh (per employee)   firm earns   seller gets
     < 25,000                          15.0%        1.50%
@@ -67,7 +67,6 @@ HEALTH_BANDS = [
     ("200000", "3.00"),
     ("300000", "3.50"),
 ]
-HEALTH_PORT_PERCENT = Decimal("0.670")
 
 
 class Command(BaseCommand):
@@ -80,7 +79,6 @@ class Command(BaseCommand):
             life.points_per_unit = LIFE_BASE_PER_1000
             life.slab_mode = IncentiveRule.MODE_BONUS
             life.slab_period = IncentiveRule.PERIOD_FY
-            life.port_percent = None
             life.active = True
             life.save()
             life.slabs.all().delete()
@@ -96,7 +94,6 @@ class Command(BaseCommand):
             health.points_per_unit = Decimal("200.000")
             health.slab_mode = IncentiveRule.MODE_RATE
             health.slab_period = IncentiveRule.PERIOD_MONTH
-            health.port_percent = HEALTH_PORT_PERCENT
             health.active = True
             health.save()
             health.slabs.all().delete()
@@ -108,7 +105,7 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             f"Life: 1.75% base + {len(LIFE_LADDER)} FY rungs. "
-            f"Health: {len(HEALTH_BANDS)} monthly rate bands, Port {HEALTH_PORT_PERCENT}%."
+            f"Health: {len(HEALTH_BANDS)} monthly rate bands, Port earns nothing."
         ))
 
     def _rule(self, code, name):
