@@ -238,7 +238,7 @@
 
   <p class="form-text mb-0 mt-2">
     Already released this year: <strong>{{ st.released|inr }}</strong>
-    {% if st.paid_manually %}(including {{ st.paid_manually|inr }} paid as the fixed monthly bonus){% endif %}.
+    {% if st.paid_manually %}(including {{ st.paid_manually|inr }} paid to you by hand){% endif %}.
     Base earned separately: <strong>{{ st.base|inr }}</strong>.
     {% if st.next %}
       Reaching ₹{{ st.next.slab.threshold|inr }} releases {{ st.next.worth|inr }} more.
@@ -352,17 +352,19 @@
         <table class="ki-table">
           <thead>
             <tr>
-              <th>Once your month reaches</th>
-              <th class="text-end">Every ₹10,000 earns</th>
-              <th class="text-end">A month of exactly this earns</th>
+              <th>If your month totals</th>
+              <th class="text-end">Every ₹1,00,000 of it earns</th>
             </tr>
           </thead>
           <tbody>
           {% for r in e.rungs %}
             <tr>
-              <td>{% if r.from %}₹{{ r.from|inr }}{% else %}Your first rupee{% endif %}</td>
-              <td class="text-end">{{ r.per_10k|inr }} points</td>
-              <td class="text-end">{% if r.month_total %}{{ r.month_total|inr }} points{% else %}—{% endif %}</td>
+              <td>
+                {% if not r.from %}Under ₹{{ r.upto|inr }}
+                {% elif r.upto %}₹{{ r.from|inr }} to ₹{{ r.upto|inr }}
+                {% else %}₹{{ r.from|inr }} or more{% endif %}
+              </td>
+              <td class="text-end"><strong>{{ r.per_lakh|inr }} points</strong></td>
             </tr>
           {% endfor %}
           </tbody>
@@ -370,17 +372,17 @@
       </div>
 
       {% if e.walkthrough %}
-        <p class="mt-3 mb-2" style="font-size:.92rem;"><strong>What crossing a step does</strong> —
-        the sale you already made gets pulled up with you:</p>
+        <p class="mt-3 mb-2" style="font-size:.92rem;"><strong>Why the month matters more than the sale</strong> —
+        when your month moves up a row, the sales you already made move up with it:</p>
         <div class="ki-table-wrap">
           <table class="ki-table">
             <thead>
               <tr>
                 <th>You sell</th>
-                <th class="text-end">Your month is now</th>
-                <th class="text-end">This sale earns</th>
-                <th class="text-end">Earlier sale becomes</th>
                 <th class="text-end">Month total</th>
+                <th class="text-end">This sale earns</th>
+                <th class="text-end">Your earlier sale is topped up to</th>
+                <th class="text-end">Month's points</th>
               </tr>
             </thead>
             <tbody>

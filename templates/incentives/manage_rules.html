@@ -10,9 +10,13 @@
   </button>
 </div>
 
-<p class="text-muted mb-4" style="font-size:.92rem;">
-  Configure product-wise incentive rules. <strong>Unit-based rules</strong> award points per unit of sale amount.
-  <strong>Slab-based rules</strong> (like Life Insurance) award payouts based on cumulative monthly thresholds.
+<p class="text-muted mb-4" style="font-size:.92rem;max-width:80ch;">
+  What each product pays. Every rule has a <strong>base rate</strong> paid on every sale,
+  and may add <strong>levels</strong> on top. A level is read off the seller's own total
+  for the period — either as a <strong>prize</strong> (a fixed amount for reaching it) or
+  as a <strong>rate</strong> (a percentage the whole period is then paid at). Points are
+  rupees. Changing a rule affects sales saved from now on; sales already paid keep
+  their points.
 </p>
 
 <!-- Rules Grid -->
@@ -39,8 +43,10 @@
       </div>
     </div>
 
-    <!-- Unit-based config -->
-    <div class="row g-2 mb-3" id="rule-fields-{{ rule.id }}">
+    <p class="text-muted mb-3" style="font-size:.86rem;">{{ rule.summary }}</p>
+
+    <!-- Base rate -->
+    <div class="row g-2 mb-1" id="rule-fields-{{ rule.id }}">
       <div class="col-6">
         <label class="form-label" style="font-size:.8rem;font-weight:600;">Unit Amount (₹)</label>
         <input type="number" step="0.01" class="form-control form-control-sm" id="unit-{{ rule.id }}" value="{{ rule.unit_amount }}" onchange="saveRuleField({{ rule.id }})" aria-label="Unit Amount (₹)">
@@ -50,6 +56,10 @@
         <input type="number" step="0.001" class="form-control form-control-sm" id="ppu-{{ rule.id }}" value="{{ rule.points_per_unit }}" onchange="saveRuleField({{ rule.id }})" aria-label="Points Per Unit">
       </div>
     </div>
+    <p class="text-muted mb-3" style="font-size:.82rem;">
+      Base rate = <strong>{{ rule.base_percent|floatformat:2 }}% of the sale</strong>
+      ({{ rule.points_per_unit|floatformat:"-3" }} points per ₹{{ rule.unit_amount|floatformat:0 }}).
+    </p>
 
     <!-- Active toggle -->
     <div class="d-flex align-items-center gap-2 mb-3 pb-2" style="border-bottom:1px solid var(--ki-border);">
@@ -63,7 +73,9 @@
     <div class="slabs-section">
       <div class="d-flex align-items-center justify-content-between mb-2">
         <h4 class="mb-0" style="font-size:.92rem;font-weight:700;color:var(--ki-dark);">
-          <i class="bi bi-layers me-1"></i> Incentive Slabs
+          <i class="bi bi-layers me-1"></i>
+          {% if rule.is_rate %}Rate bands — on the {{ rule.window_word }}'s total
+          {% else %}Prize levels — on the {{ rule.window_word }}'s total{% endif %}
         </h4>
         <button class="ki-btn ki-btn-primary" style="padding:3px 10px;font-size:.78rem;" onclick="showAddSlabModal({{ rule.id }})">
           <i class="bi bi-plus"></i> Add Slab
@@ -80,8 +92,17 @@
             </div>
             <div style="font-size:.88rem;">
               <strong style="color:var(--ki-primary);">₹{{ slab.threshold|floatformat:0 }}</strong>
+              <span class="text-muted" style="font-size:.8rem;">or more</span>
               <i class="bi bi-arrow-right mx-1" style="font-size:.7rem;color:#94a3b8;"></i>
-              <strong style="color:#059669;">{{ slab.payout|floatformat:0 }} pts</strong>
+              {# A rate band's payout is a percent, not points. floatformat:0 #}
+              {# rendered 1.50% as "2", which is simply the wrong number. #}
+              {% if rule.is_rate %}
+                <strong style="color:#059669;">{{ slab.payout|floatformat:2 }}%</strong>
+                <span class="text-muted" style="font-size:.8rem;">on the whole {{ rule.window_word }}</span>
+              {% else %}
+                <strong style="color:#059669;">{{ slab.payout|floatformat:0 }} points</strong>
+                <span class="text-muted" style="font-size:.8rem;">prize</span>
+              {% endif %}
             </div>
           </div>
           <div class="d-flex gap-1">
@@ -97,7 +118,7 @@
       </div>
       {% else %}
       <div class="text-muted text-center py-3" style="font-size:.85rem;background:var(--ki-body);border-radius:8px;" id="slabs-{{ rule.id }}">
-        <i class="bi bi-inbox"></i> No slabs configured — using unit-based calculation.
+        <i class="bi bi-inbox"></i> No levels — this product pays the base rate and nothing else.
       </div>
       {% endif %}
     </div>
@@ -166,14 +187,19 @@
         </div>
         <div class="row g-2">
           <div class="col-6">
-            <label class="form-label fw-semibold">Threshold (₹)</label>
+            <label class="form-label fw-semibold" for="slabThreshold">Reached when the total hits (₹)</label>
             <input type="number" step="0.01" id="slabThreshold" class="form-control" placeholder="e.g. 300000">
           </div>
           <div class="col-6">
-            <label class="form-label fw-semibold">Payout (Points)</label>
-            <input type="number" step="0.01" id="slabPayout" class="form-control" placeholder="e.g. 8000">
+            <label class="form-label fw-semibold" for="slabPayout">Pays</label>
+            <input type="number" step="0.01" id="slabPayout" class="form-control" placeholder="e.g. 3000">
           </div>
         </div>
+        <p class="form-text mb-0 mt-2">
+          On a <strong>prize</strong> rule, "Pays" is the points earned to date for reaching
+          this level — not added to the level below it. On a <strong>rate</strong> rule it is
+          a percentage (type <code>2.25</code> for 2.25%), applied to the whole period.
+        </p>
       </div>
       <div class="modal-footer" style="border-top:1px solid var(--ki-border);padding:12px 20px;">
         <button class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>

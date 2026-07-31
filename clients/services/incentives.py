@@ -447,20 +447,21 @@ def explain(rule, is_health=False):
     if slabs and rule.slab_mode == IncentiveRule.MODE_RATE:
         out["kind"] = "bands"
         out["headline"] = (
-            f"{name} is not priced one policy at a time — it is priced on your whole month. "
-            f"Add up everything you sell in the calendar month, and that total picks one "
-            f"rate. That rate then applies to the whole month's business, not only to the "
-            f"sale that got you there."
+            f"Your whole month decides the rate. Add up all the {name.lower()} you sell "
+            f"in the month — that one total picks a row in the table below, and every "
+            f"rupee of the month earns at that row. Not the sale, the month."
         )
-        # Deliberately NOT "points for a ₹1,00,000 sale" — a sale that size
-        # pushes the month into a higher step, so every row would collapse to
-        # the same number. The rate for the step, and the whole month at it.
-        for s in slabs:
+        # Read as ranges ("₹25,000 to ₹50,000"), which is how people think about
+        # where their month stands, and priced per ₹1,00,000 — the unit the rest
+        # of the app quotes. NOT "points for a ₹1,00,000 sale": a sale that size
+        # would push the month into a higher row and every line would collapse
+        # to the same number.
+        for i, s in enumerate(slabs):
+            nxt = slabs[i + 1].threshold if i + 1 < len(slabs) else None
             out["rungs"].append({
                 "from": s.threshold,
-                "per_10k": s.payout * Decimal("100"),
-                "month_total": (s.threshold * s.payout / Decimal("100")
-                                if s.threshold > 0 else None),
+                "upto": nxt,
+                "per_lakh": s.payout * Decimal("1000"),
             })
     elif slabs:
         out["kind"] = "ladder"

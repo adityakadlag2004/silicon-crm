@@ -365,6 +365,26 @@ def manage_incentive_rules(request):
         return redirect("clients:admin_dashboard")
 
     rules = IncentiveRule.objects.select_related("product_ref").prefetch_related("slabs").all()
+    # One plain sentence per rule, derived from the rule itself, so the screen
+    # says what a rule does instead of leaving it to be read off two raw fields.
+    for r in rules:
+        r.base_percent = incentives_service.unit_rate_percent(r)
+        r.is_yearly = r.slab_period == IncentiveRule.PERIOD_FY
+        r.is_rate = r.slab_mode == IncentiveRule.MODE_RATE and r.slabs.exists()
+        r.window_word = "year (April–March)" if r.is_yearly else "month"
+        if r.is_rate:
+            r.summary = (
+                f"The seller's own {r.window_word} total picks a rate from the table "
+                f"below, and the whole {r.window_word.split(' ')[0]} is paid at that rate."
+            )
+        elif r.slabs.exists():
+            r.summary = (
+                f"{r.base_percent:.2f}% of every sale, plus one prize decided by the "
+                f"seller's {r.window_word} total. The prize is the level reached, paid "
+                f"once — climbing releases only the difference."
+            )
+        else:
+            r.summary = f"{r.base_percent:.2f}% of every sale. No levels, no targets."
     product_options = Product.objects.filter(
         is_active=True,
         archived_at__isnull=True,

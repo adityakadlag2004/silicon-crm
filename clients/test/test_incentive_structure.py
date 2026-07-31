@@ -216,6 +216,46 @@ class StructurePageTests(_Base):
         self.assertEqual(r.context["trial"]["result"]["total"], Decimal("0"))
 
 
+class RuleScreenReadsPlainlyTests(_Base):
+    """The rules screen must say what a rule does, not leave it to be worked
+    out from `unit_amount` and `points_per_unit`.
+
+    It also used to print a rate band's payout with floatformat:0, so Health's
+    2.25% band rendered as "2 pts" — the wrong number and the wrong unit.
+    """
+
+    def setUp(self):
+        self.user.is_superuser = True
+        self.user.is_staff = True
+        self.user.save()
+        self.client.force_login(self.user)
+        self.url = reverse("clients:manage_incentive_rules")
+
+    def test_each_rule_carries_a_plain_sentence_and_its_base_percent(self):
+        r = self.client.get(self.url)
+        rules = {x.product: x for x in r.context["rules"]}
+        life = rules["Life Insurance"]
+        self.assertEqual(life.base_percent, Decimal("1.7500"))
+        self.assertIn("prize", life.summary.lower())
+        self.assertIn("April–March", life.summary)
+        health = rules["Health Insurance"]
+        self.assertIn("rate", health.summary.lower())
+        self.assertIn("month", health.summary)
+
+    def test_a_rate_band_is_shown_as_a_percentage_not_as_points(self):
+        html = self.client.get(self.url).content.decode()
+        self.assertIn("2.25%", html)            # the band's real value
+        self.assertNotIn("2.25 pts", html)
+        self.assertIn("1.75% of the sale", html)  # base, stated once, plainly
+
+    def test_the_screen_never_mentions_a_deduction(self):
+        # Bare "legacy" is not checked: base.html carries it in an unrelated
+        # script comment, and this assertion is about what the page says.
+        html = self.client.get(self.url).content.decode().lower()
+        for word in ("deduct", "legacy slab", "monthly bonus", "netted"):
+            self.assertNotIn(word, html, msg=f"rule screen still mentions {word!r}")
+
+
 class CalculatorTests(_Base):
     """The employee-facing what-if tool."""
 
@@ -427,18 +467,25 @@ class ExplainerNumbersTests(_Base):
         rung = next(r for r in e["rungs"] if r["from"] == Decimal("300000"))
         self.assertEqual(sale.points, rung["total_at"])
 
-    def test_health_month_totals_are_the_band_applied_once(self):
+    def test_health_bands_read_as_ranges_priced_per_lakh(self):
+        """Each row is a range the month can fall in and one number: what every
+        ₹1,00,000 of that month earns. "Once your month reaches X, every ₹10,000
+        earns Y" made people read Y as the value of a single sale."""
         rule = IncentiveRule.objects.get(product_ref=self.health)
         e = inc.explain(rule, is_health=True)
-        got = [(r["from"], r["per_10k"], r["month_total"]) for r in e["rungs"]]
+        got = [(r["from"], r["upto"], r["per_lakh"]) for r in e["rungs"]]
         self.assertEqual(got, [
-            (Decimal("0"), Decimal("150"), None),
-            (Decimal("25000"), Decimal("200"), Decimal("500")),
-            (Decimal("50000"), Decimal("225"), Decimal("1125")),
-            (Decimal("100000"), Decimal("275"), Decimal("2750")),
-            (Decimal("200000"), Decimal("300"), Decimal("6000")),
-            (Decimal("300000"), Decimal("350"), Decimal("10500")),
+            (Decimal("0"), Decimal("25000"), Decimal("1500")),
+            (Decimal("25000"), Decimal("50000"), Decimal("2000")),
+            (Decimal("50000"), Decimal("100000"), Decimal("2250")),
+            (Decimal("100000"), Decimal("200000"), Decimal("2750")),
+            (Decimal("200000"), Decimal("300000"), Decimal("3000")),
+            (Decimal("300000"), None, Decimal("3500")),   # top band, open-ended
         ])
+        # The rate a real sale is paid at must match the row it falls in.
+        q = inc.quote(rule, Decimal("100000"), prior_volume=Decimal("0"),
+                      policy_type="fresh", is_health=True)
+        self.assertEqual(q["total"], Decimal("2750"))     # ₹1L month -> its own row
 
     def test_no_explainer_text_leaks_a_percentage(self):
         for rule in IncentiveRule.objects.filter(active=True):
