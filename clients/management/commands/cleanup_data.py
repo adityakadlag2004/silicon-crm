@@ -93,7 +93,11 @@ class Command(BaseCommand):
         from clients.models import CallFollowUp
 
         old_followups = CallFollowUp.objects.filter(
-            status__in=[CallFollowUp.STATUS_DONE, CallFollowUp.STATUS_DISMISSED],
+            status__in=[
+                CallFollowUp.STATUS_DONE,
+                CallFollowUp.STATUS_DISMISSED,
+                CallFollowUp.STATUS_SUPERSEDED,
+            ],
             created_at__lt=cutoff,
         )
         count = old_followups.count()

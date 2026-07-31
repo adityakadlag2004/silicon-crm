@@ -187,6 +187,23 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   FCM). No new cron — it rides the every-minute one already in CRONJOBS. Every
   stage update / note can attach a follow-up in the same submit.
 
+## Call follow-ups (the app's Calls tab)
+
+- One number = one pending reminder. A new follow-up for a number retires the
+  older pending ones as `superseded` — **kept, not deleted**: `attempts` counts
+  how often that number has been chased, and the card shows it.
+- A **connected outgoing call closes the follow-up it answers**
+  (`_close_called_followups` in `views/calls.py`, run from `calls_sync`), with
+  outcome "spoke". Only calls placed *after* the row was created count — the
+  post-call popup creates the next follow-up seconds later and that one must
+  survive — and only connected ones: an unanswered dial is exactly when the
+  reminder still matters.
+- "Done" carries an **outcome** (`CallFollowUp.OUTCOME_CHOICES`). Swiping a card
+  right closes it without asking; the Done button asks. Swipe left dismisses.
+- `/api/app/followups/` serves pending + `done_today` + the overdue count that
+  badges the Calls tab (also on `/api/app/me/` so the badge is right at launch).
+  `push-overdue/` reschedules every overdue row at once.
+
 ## UI conventions (record shell)
 
 - Every module screen leads with a breadcrumb and, for list screens, a KPI

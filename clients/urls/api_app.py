@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/app/today/", app_api.app_today, name="app_today"),
     path("api/app/followups/", app_api.app_followups, name="app_followups"),
     path("api/app/followups/<int:followup_id>/action/", app_api.app_followup_action, name="app_followup_action"),
+    path("api/app/followups/push-overdue/", app_api.app_followups_push_overdue, name="app_followups_push_overdue"),
     path("api/app/logout/", app_api.app_logout, name="app_logout"),
     path("api/app/renewal-meta/", app_api.app_renewal_meta, name="app_renewal_meta"),
     path("api/app/renewals/", app_api.app_renewals, name="app_renewals"),

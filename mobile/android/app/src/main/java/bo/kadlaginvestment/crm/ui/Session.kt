@@ -45,13 +45,27 @@ object Session {
         role = json.optString("role").ifBlank { "employee" }
         name = json.optString("name")
         NotificationBadge.set(json.optInt("unread_notifications", NotificationBadge.unread))
+        FollowupBadge.set(json.optInt("overdue_followups", FollowupBadge.overdue))
     }
 
     fun clear() {
         role = null
         name = ""
         NotificationBadge.set(0)
+        FollowupBadge.set(0)
     }
+}
+
+/**
+ * Follow-ups that are due right now. On the Calls tab, so a call you should
+ * already have made is visible without opening the screen. Refreshed by
+ * `/api/app/me/` on launch and by the Calls screen itself.
+ */
+object FollowupBadge {
+    var overdue by mutableIntStateOf(0)
+        private set
+
+    fun set(n: Int) { overdue = n.coerceAtLeast(0) }
 }
 
 /**

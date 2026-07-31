@@ -102,6 +102,7 @@ def calls_sync(request):
         return JsonResponse({"ok": False, "error": "invalid payload"}, status=400)
 
     created = 0
+    connected_calls = []  # (last-10-digits, started_at) — see _close_called_followups
     for ev in events[:100]:  # sanity cap per request
         phone = str(ev.get("phone") or "").strip()[:32]
         direction = ev.get("direction")
@@ -138,8 +139,47 @@ def calls_sync(request):
         )
         if was_created:
             created += 1
+        if direction == CallLogEntry.DIRECTION_OUTGOING and ev.get("connected"):
+            digits = _normalize_digits(phone)
+            if digits:
+                connected_calls.append((digits, started_at))
 
-    return JsonResponse({"ok": True, "created": created})
+    return JsonResponse({
+        "ok": True,
+        "created": created,
+        # Ids the app can stop ringing alarms for.
+        "closed_followup_ids": _close_called_followups(emp, connected_calls),
+    })
+
+
+def _close_called_followups(emp, connected_calls):
+    """A connected outgoing call *is* the follow-up — close it.
+
+    Otherwise the list fills with rows someone already called and forgot to
+    tick. Only calls placed *after* the follow-up was created count (the
+    post-call popup creates the next follow-up seconds after the call it
+    followed, and that one must survive), and only connected ones: an
+    unanswered dial is precisely when the reminder still matters.
+    """
+    if not connected_calls:
+        return []
+    closed = []
+    for fu in CallFollowUp.objects.filter(
+        employee=emp, status=CallFollowUp.STATUS_PENDING
+    ):
+        digits = _normalize_digits(fu.phone)
+        if not digits:
+            continue
+        at = next(
+            (t for (d, t) in connected_calls if d == digits and t >= fu.created_at), None
+        )
+        if at:
+            fu.status = CallFollowUp.STATUS_DONE
+            fu.outcome = "spoke"
+            fu.completed_at = at
+            fu.save(update_fields=["status", "outcome", "completed_at"])
+            closed.append(fu.id)
+    return closed
 
 
 # Quick-choice → delay from now. Server-side so phone clock skew doesn't
@@ -259,18 +299,26 @@ def call_followup_create(request):
     # pending ones for the same employee + number (matched on the last 10
     # digits, so "+91XXXXXXXXXX" and "0XXXXXXXXXX" collapse). The app cancels
     # the superseded on-device alarms from the ids returned below.
+    #
+    # Superseded rows are kept, not deleted: the count of them is how often
+    # this number has been chased, which is the whole prioritisation signal.
     superseded_ids = []
     digits = _normalize_digits(phone)
     if digits:
-        superseded_ids = [
-            old.id
+        old_rows = [
+            old
             for old in CallFollowUp.objects.filter(
                 employee=emp, status=CallFollowUp.STATUS_PENDING
             ).exclude(pk=fu.pk)
             if _normalize_digits(old.phone) == digits
         ]
-        if superseded_ids:
-            CallFollowUp.objects.filter(pk__in=superseded_ids).delete()
+        superseded_ids = [old.id for old in old_rows]
+        if old_rows:
+            CallFollowUp.objects.filter(pk__in=superseded_ids).update(
+                status=CallFollowUp.STATUS_SUPERSEDED, completed_at=timezone.now()
+            )
+            fu.attempts = max(old.attempts for old in old_rows) + 1
+            fu.save(update_fields=["attempts"])
 
     return JsonResponse({
         "ok": True,
@@ -280,6 +328,7 @@ def call_followup_create(request):
         "scheduled_at_ms": int(fu.scheduled_at.timestamp() * 1000),
         "client": fu.client.name if fu.client_id else "",
         "note": fu.note,
+        "attempts": fu.attempts,
         "superseded_ids": superseded_ids,
     })
 

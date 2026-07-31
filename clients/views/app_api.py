@@ -61,6 +61,12 @@ def app_me(request):
         "unread_notifications": Notification.objects.filter(
             recipient=request.user, is_read=False
         ).count(),
+        # Drives the Calls tab badge, so a due call is visible without
+        # opening the screen.
+        "overdue_followups": CallFollowUp.objects.filter(
+            employee=emp, status=CallFollowUp.STATUS_PENDING,
+            scheduled_at__lte=timezone.now(),
+        ).count() if emp else 0,
     })
 
 
@@ -496,7 +502,7 @@ def app_client_detail(request, client_id):
 
 # ── Screen 4: Call follow-ups ────────────────────────────────────────────────
 
-def _fu_row(fu, now):
+def _fu_row(fu, now, last_calls=None):
     return {
         "id": fu.id,
         "phone": fu.phone,
@@ -508,7 +514,48 @@ def _fu_row(fu, now):
         "overdue": fu.scheduled_at <= now,
         "note": fu.note or "",
         "status": fu.status,
+        "outcome": fu.outcome,
+        "outcome_label": fu.get_outcome_display() if fu.outcome else "",
+        # How many times this number has been chased (1 = first attempt).
+        "attempts": fu.attempts,
+        # "2 days ago · 3m 12s" for the last call to this number, "" if never.
+        "last_call": (last_calls or {}).get(_fu_digits(fu.phone), ""),
     }
+
+
+def _fu_digits(phone):
+    """Last 10 digits — the same key views/calls.py matches numbers on."""
+    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+def _last_call_map(emp, followups):
+    """{last-10-digits: "3 days ago · 2m 05s"} for the numbers in `followups`.
+
+    One query for the whole list: what a card needs to open the call is when
+    this number was last reached and for how long, and the call log already
+    knows it.
+    """
+    from ..models import CallLogEntry
+
+    wanted = {_fu_digits(f.phone) for f in followups if _fu_digits(f.phone)}
+    if not emp or not wanted:
+        return {}
+    out = {}
+    # Newest first, so the first row seen per number is the last call.
+    for entry in CallLogEntry.objects.filter(employee=emp).order_by("-started_at")[:500]:
+        key = _fu_digits(entry.phone)
+        if key not in wanted or key in out:
+            continue
+        days = (timezone.localdate() - timezone.localtime(entry.started_at).date()).days
+        when = "today" if days == 0 else "yesterday" if days == 1 else f"{days} days ago"
+        if not entry.connected:
+            out[key] = f"Last {when}: not connected"
+        else:
+            secs = entry.duration_seconds
+            length = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+            out[key] = f"Last {when} · {length}"
+    return out
 
 
 _SERIOUS_CALL_SECONDS = 150  # calls longer than this count as "serious"
@@ -551,13 +598,26 @@ def app_followups(request):
     if emp is None:
         return JsonResponse({"pending": [], "stats": None})
     now = timezone.now()
-    # Only pending — completed/dismissed follow-ups drop off the screen.
-    pending = CallFollowUp.objects.filter(
-        employee=emp, status=CallFollowUp.STATUS_PENDING
-    ).select_related("client").order_by("scheduled_at")[:100]
+    pending = list(
+        CallFollowUp.objects.filter(
+            employee=emp, status=CallFollowUp.STATUS_PENDING
+        ).select_related("client").order_by("scheduled_at")[:100]
+    )
+    # Closed today, so the screen can show what was worked, not just what's left.
+    done = CallFollowUp.objects.filter(
+        employee=emp,
+        status__in=[CallFollowUp.STATUS_DONE, CallFollowUp.STATUS_DISMISSED],
+        completed_at__date=timezone.localdate(),
+    ).select_related("client").order_by("-completed_at")[:50]
+    last_calls = _last_call_map(emp, pending)
     return JsonResponse({
-        "pending": [_fu_row(f, now) for f in pending],
+        "pending": [_fu_row(f, now, last_calls) for f in pending],
+        "done_today": [_fu_row(f, now) for f in done],
+        "overdue": sum(1 for f in pending if f.scheduled_at <= now),
         "stats": _today_call_stats(emp),
+        "outcomes": [
+            {"key": k, "label": v} for k, v in CallFollowUp.OUTCOME_CHOICES
+        ],
     })
 
 
@@ -625,7 +685,15 @@ def app_followup_action(request, followup_id):
     if action == "done":
         fu.status = CallFollowUp.STATUS_DONE
         fu.completed_at = timezone.now()
-        fu.save(update_fields=["status", "completed_at"])
+        outcome = body.get("outcome") or ""
+        if outcome in dict(CallFollowUp.OUTCOME_CHOICES):
+            fu.outcome = outcome
+        fu.save(update_fields=["status", "completed_at", "outcome"])
+    elif action == "note":
+        # A note was write-once on every surface — a follow-up you can't
+        # correct is one you stop trusting.
+        fu.note = str(body.get("note") or "").strip()[:255]
+        fu.save(update_fields=["note"])
     elif action == "dismiss":
         fu.status = CallFollowUp.STATUS_DISMISSED
         fu.completed_at = timezone.now()
@@ -647,6 +715,33 @@ def app_followup_action(request, followup_id):
     else:
         return JsonResponse({"ok": False, "error": "Unknown action."}, status=400)
     return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def app_followups_push_overdue(request):
+    """End-of-day cleanup: move every overdue follow-up to a picked moment.
+
+    Twenty rows that all say DUE are as good as no list at all; rescheduling
+    them one at a time is why they get left to rot instead.
+    """
+    emp = _emp(request)
+    if emp is None:
+        return JsonResponse({"ok": False, "error": "No employee account."}, status=403)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        body = {}
+
+    from .calls import parse_custom_at
+
+    scheduled, err = parse_custom_at(body.get("at"))
+    if err:
+        return JsonResponse({"ok": False, "error": err}, status=400)
+    moved = CallFollowUp.objects.filter(
+        employee=emp, status=CallFollowUp.STATUS_PENDING, scheduled_at__lte=timezone.now()
+    ).update(scheduled_at=scheduled, reminded=False)
+    return JsonResponse({"ok": True, "moved": moved, "message": f"Moved {moved} follow-ups"})
 
 
 # ── Screen 5: Sales list + approvals ─────────────────────────────────────────

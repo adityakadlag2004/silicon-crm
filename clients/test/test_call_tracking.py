@@ -131,7 +131,7 @@ class FollowUpTests(_CallSetup):
         self.assertEqual((local.date() - timezone.localdate()).days, 60)
 
     def test_new_followup_supersedes_older_pending_for_same_number(self):
-        """One number = one reminder: creating a follow-up deletes older
+        """One number = one reminder: creating a follow-up retires older
         PENDING ones for the same employee + number (any +91/0 format),
         returns their ids so the app drops their alarms, and leaves other
         numbers and completed history untouched."""
@@ -151,7 +151,12 @@ class FollowUpTests(_CallSetup):
 
         second = create("+91 98765 43210")  # same number, different format
         self.assertEqual(second["superseded_ids"], [first["id"]])
-        self.assertFalse(CallFollowUp.objects.filter(pk=first["id"]).exists())
+        # Kept, not deleted — the chase history is the prioritisation signal.
+        self.assertEqual(
+            CallFollowUp.objects.get(pk=first["id"]).status,
+            CallFollowUp.STATUS_SUPERSEDED,
+        )
+        self.assertEqual(CallFollowUp.objects.get(pk=second["id"]).attempts, 2)
         self.assertTrue(CallFollowUp.objects.filter(pk=other["id"]).exists())
         self.assertTrue(CallFollowUp.objects.filter(pk=done.pk).exists())
         # Exactly one pending reminder remains for this number.
@@ -292,6 +297,169 @@ class FollowUpTests(_CallSetup):
             reverse("clients:call_followup_update", args=[fu.id]), {"action": "done"}
         )
         self.assertEqual(resp.status_code, 403)
+
+
+class FollowupScreenTests(_CallSetup):
+    """What the Calls screen needs beyond a flat pending list: attempts,
+    outcomes, last-call context, today's closed rows, bulk reschedule."""
+
+    def _screen(self):
+        return self.employee.get(reverse("clients:app_followups")).json()
+
+    def _act(self, fu, body):
+        return self.employee.post(
+            reverse("clients:app_followup_action", args=[fu.id]),
+            data=json.dumps(body), content_type="application/json",
+        )
+
+    def test_done_records_an_outcome_and_shows_in_today(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="9876543210", scheduled_at=timezone.now()
+        )
+        self.assertEqual(
+            self._act(fu, {"action": "done", "outcome": "not_interested"}).status_code, 200
+        )
+        fu.refresh_from_db()
+        self.assertEqual(fu.outcome, "not_interested")
+
+        data = self._screen()
+        self.assertEqual(data["pending"], [])
+        self.assertEqual(
+            [(r["status"], r["outcome_label"]) for r in data["done_today"]],
+            [("done", "Not interested")],
+        )
+
+    def test_unknown_outcome_is_ignored_not_stored(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now()
+        )
+        self._act(fu, {"action": "done", "outcome": "sold_them_a_boat"})
+        fu.refresh_from_db()
+        self.assertEqual(fu.outcome, "")
+
+    def test_note_can_be_edited(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now(), note="old"
+        )
+        self._act(fu, {"action": "note", "note": "  wants a term plan  "})
+        fu.refresh_from_db()
+        self.assertEqual(fu.note, "wants a term plan")
+        self.assertEqual(fu.status, CallFollowUp.STATUS_PENDING)  # still to be called
+
+    def test_row_carries_last_call_and_attempts(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="9876543210", client=self.customer,
+            scheduled_at=timezone.now() + timedelta(hours=1), attempts=3,
+        )
+        CallLogEntry.objects.create(
+            employee=self.emp, phone="+919876543210", direction="outgoing",
+            connected=True, duration_seconds=185,
+            started_at=timezone.now() - timedelta(days=2),
+        )
+        row = next(r for r in self._screen()["pending"] if r["id"] == fu.id)
+        self.assertEqual(row["attempts"], 3)
+        self.assertEqual(row["last_call"], "Last 2 days ago · 3m 05s")
+
+    def test_overdue_count_drives_the_tab_badge(self):
+        CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now() - timedelta(minutes=5)
+        )
+        CallFollowUp.objects.create(
+            employee=self.emp, phone="2", scheduled_at=timezone.now() + timedelta(days=1)
+        )
+        self.assertEqual(self._screen()["overdue"], 1)
+        self.assertEqual(
+            self.employee.get(reverse("clients:app_me")).json()["overdue_followups"], 1
+        )
+
+    def test_push_overdue_moves_only_overdue_ones(self):
+        overdue = CallFollowUp.objects.create(
+            employee=self.emp, phone="1", reminded=True,
+            scheduled_at=timezone.now() - timedelta(hours=2),
+        )
+        later = CallFollowUp.objects.create(
+            employee=self.emp, phone="2", scheduled_at=timezone.now() + timedelta(days=2)
+        )
+        was = later.scheduled_at
+        target = (timezone.localtime() + timedelta(days=1)).replace(
+            hour=10, minute=0, second=0, microsecond=0
+        )
+        resp = self.employee.post(
+            reverse("clients:app_followups_push_overdue"),
+            data=json.dumps({"at": target.strftime("%Y-%m-%dT%H:%M")}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.json()["moved"], 1)
+        overdue.refresh_from_db(); later.refresh_from_db()
+        self.assertEqual(timezone.localtime(overdue.scheduled_at), target)
+        self.assertFalse(overdue.reminded)  # reminder re-arms
+        self.assertEqual(later.scheduled_at, was)
+
+    def test_push_overdue_rejects_a_past_moment(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="1", scheduled_at=timezone.now() - timedelta(hours=2)
+        )
+        before = fu.scheduled_at
+        resp = self.employee.post(
+            reverse("clients:app_followups_push_overdue"),
+            data=json.dumps({"at": "2020-01-01T10:00"}), content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        fu.refresh_from_db()
+        self.assertEqual(fu.scheduled_at, before)
+
+
+class AutoCloseOnCallTests(_CallSetup):
+    """A connected outgoing call closes the follow-up it answers — the list
+    used to fill with rows people had already called and forgotten to tick."""
+
+    def _sync_call(self, phone, when, connected=True, direction="outgoing"):
+        return self._sync(self.employee, [{
+            "phone": phone, "direction": direction, "connected": connected,
+            "duration_seconds": 90 if connected else 0,
+            "started_at": int(when.timestamp() * 1000),
+        }]).json()
+
+    def test_connected_call_closes_the_followup(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="9876543210",
+            scheduled_at=timezone.now() + timedelta(hours=1),
+        )
+        data = self._sync_call("+91 98765 43210", timezone.now() + timedelta(minutes=1))
+        self.assertEqual(data["closed_followup_ids"], [fu.id])
+        fu.refresh_from_db()
+        self.assertEqual(fu.status, CallFollowUp.STATUS_DONE)
+        self.assertEqual(fu.outcome, "spoke")
+
+    def test_unanswered_call_leaves_it_pending(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="9876543210", scheduled_at=timezone.now()
+        )
+        self._sync_call("9876543210", timezone.now(), connected=False)
+        fu.refresh_from_db()
+        self.assertEqual(fu.status, CallFollowUp.STATUS_PENDING)
+
+    def test_call_before_the_followup_existed_does_not_close_it(self):
+        """The post-call popup creates the next follow-up seconds after the
+        call it followed; re-syncing that call must not wipe it out."""
+        call_time = timezone.now()
+        fu = CallFollowUp.objects.create(
+            employee=self.emp, phone="9876543210",
+            scheduled_at=timezone.now() + timedelta(days=1),
+        )
+        CallFollowUp.objects.filter(pk=fu.pk).update(created_at=call_time + timedelta(seconds=30))
+        data = self._sync_call("9876543210", call_time)
+        self.assertEqual(data["closed_followup_ids"], [])
+        fu.refresh_from_db()
+        self.assertEqual(fu.status, CallFollowUp.STATUS_PENDING)
+
+    def test_another_employees_followup_is_untouched(self):
+        fu = CallFollowUp.objects.create(
+            employee=self.admin_emp, phone="9876543210", scheduled_at=timezone.now()
+        )
+        self._sync_call("9876543210", timezone.now() + timedelta(minutes=1))
+        fu.refresh_from_db()
+        self.assertEqual(fu.status, CallFollowUp.STATUS_PENDING)
 
 
 class AnalyticsTests(_CallSetup):

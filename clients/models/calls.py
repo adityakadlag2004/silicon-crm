@@ -137,10 +137,23 @@ class CallFollowUp(models.Model):
     STATUS_PENDING = "pending"
     STATUS_DONE = "done"
     STATUS_DISMISSED = "dismissed"
+    # Replaced by a newer follow-up for the same number. Kept (it used to be
+    # deleted) so "chased four times, never picked up" stays visible.
+    STATUS_SUPERSEDED = "superseded"
     STATUS_CHOICES = [
         (STATUS_PENDING, "Pending"),
         (STATUS_DONE, "Done"),
         (STATUS_DISMISSED, "Dismissed"),
+        (STATUS_SUPERSEDED, "Superseded"),
+    ]
+
+    # What the call produced. Blank for anything closed before outcomes existed.
+    OUTCOME_CHOICES = [
+        ("spoke", "Spoke"),
+        ("no_answer", "No answer"),
+        ("call_back", "Call back later"),
+        ("not_interested", "Not interested"),
+        ("converted", "Converted"),
     ]
 
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="call_followups")
@@ -151,6 +164,9 @@ class CallFollowUp(models.Model):
     scheduled_at = models.DateTimeField(db_index=True)
     note = models.CharField(max_length=255, blank=True, default="")
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    outcome = models.CharField(max_length=20, choices=OUTCOME_CHOICES, blank=True, default="")
+    # 1 for a fresh number; +1 each time this follow-up supersedes an earlier one.
+    attempts = models.PositiveSmallIntegerField(default=1)
     reminded = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)

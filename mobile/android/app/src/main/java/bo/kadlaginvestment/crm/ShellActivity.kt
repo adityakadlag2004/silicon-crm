@@ -518,7 +518,18 @@ class ShellActivity : ComponentActivity() {
                                         if (tab.label == "Tasks") TasksActivity.open(this@ShellActivity)
                                         else { selected = i; overlay = null }
                                     },
-                                    icon = { Icon(tab.icon, contentDescription = tab.label) },
+                                    icon = {
+                                        val due = bo.kadlaginvestment.crm.ui.FollowupBadge.overdue
+                                        if (tab.label == "Calls" && due > 0) {
+                                            androidx.compose.material3.BadgedBox(
+                                                badge = {
+                                                    androidx.compose.material3.Badge { Text("$due") }
+                                                }
+                                            ) { Icon(tab.icon, contentDescription = "$due follow-ups due") }
+                                        } else {
+                                            Icon(tab.icon, contentDescription = tab.label)
+                                        }
+                                    },
                                     label = { Text(tab.label) },
                                 )
                             }
@@ -607,7 +618,7 @@ class ShellActivity : ComponentActivity() {
                         )
                         selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = routeLink)
                         selected == 2 -> AddSaleScreen(m, onSessionExpired = goLogin)
-                        selected == 3 -> FollowupsScreen(m, onSessionExpired = goLogin)
+                        selected == 3 -> FollowupsScreen(m, onSessionExpired = goLogin, onOpenWeb = openWeb)
                         else -> MenuScreen(
                             modifier = m,
                             onOpenWeb = openWeb,
