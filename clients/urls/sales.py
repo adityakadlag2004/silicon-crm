@@ -1,7 +1,7 @@
 """Sales CRUD/approval, incentive rules, performance, financial planner."""
 from django.urls import path
 
-from ..views import sales
+from ..views import planner, sales
 
 urlpatterns = [
     path("sales/add/", sales.add_sale, name="add_sale"),
@@ -23,6 +23,6 @@ urlpatterns = [
     path("incentives/rule/<int:rule_id>/slab/add/", sales.add_incentive_slab, name="add_incentive_slab"),
     path("incentives/slab/<int:slab_id>/update/", sales.update_incentive_slab, name="update_incentive_slab"),
     path("incentives/slab/<int:slab_id>/delete/", sales.delete_incentive_slab, name="delete_incentive_slab"),
-    path("sales/financial-planner/", sales.financial_planner, name="financial_planner"),
-    path("sales/financial-planner/download-report/", sales.financial_planner_download_report, name="financial_planner_download_report"),
+    path("sales/financial-planner/", planner.financial_planner, name="financial_planner"),
+    path("sales/financial-planner/download-report/", planner.financial_planner_download_report, name="financial_planner_download_report"),
 ]

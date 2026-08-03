@@ -21,6 +21,7 @@ SCREENS = [
     "links_dashboard", "team_list", "my_call_followups",
     "manage_campaigns", "manage_incentive_rules",
     "business_overview", "net_business", "net_sip", "monthly_business_report",
+    "financial_planner",
     "firm_settings", "product_management", "target_management", "audit_log",
     "admin_dashboard",
 ]

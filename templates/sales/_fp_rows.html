@@ -1,0 +1,15 @@
+{% comment %}
+One computed block: label (with the workbook's own explanation under it) and
+the value on the right. `rows` come straight from services.financial_plan.
+{% endcomment %}
+<div class="fp-rows">
+  {% for row in rows %}
+    <div class="fp-row {% if row.big %}is-big{% endif %}">
+      <div class="k">
+        {{ row.label }}
+        {% if row.note %}<span class="note">{{ row.note }}</span>{% endif %}
+      </div>
+      <div class="v">{{ row.value }}</div>
+    </div>
+  {% endfor %}
+</div>

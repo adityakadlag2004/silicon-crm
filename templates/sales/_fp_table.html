@@ -1,0 +1,20 @@
+{% comment %}
+A plain lookup/projection table: {title, columns, rows, note}. Rows are lists
+of already-formatted strings, so this partial never does arithmetic.
+{% endcomment %}
+<div class="fp-block">
+  <h3 class="fp-h3">{{ table.title }}</h3>
+  <div class="ki-table-scroll">
+    <table class="ki-table">
+      <thead>
+        <tr>{% for column in table.columns %}<th>{{ column }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for row in table.rows %}
+          <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if table.note %}<p class="fp-note">{{ table.note }}</p>{% endif %}
+</div>

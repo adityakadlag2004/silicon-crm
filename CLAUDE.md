@@ -169,6 +169,35 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   raw percentages — `services.incentives.explain()` renders everything in
   points. `/clients/incentives/` is the admin structure page.
 
+## Financial planner
+
+- `services/financial_plan.py` is a port of
+  `docs/planner_fin/Financial_Plan_Template.xlsx` — inputs, insurance, goals,
+  retirement, allocation, the year-by-year projection and the eight standalone
+  calculators. `compute()` is the only implementation; the page and the PDF
+  both call it, so **nothing recalculates in the browser**. The old module did,
+  and its PDF endpoint rendered whatever numbers the page posted.
+- The workbook ships cached formula results, and
+  `test/test_financial_plan.py` asserts against them cell by cell. Re-run it
+  after touching any formula; if a number drifts from the sheet, the sheet
+  wins. Excel's `FV/PV/PMT/NPER/RATE` are reimplemented at the top of the
+  service with Excel's sign convention (money leaving you is negative).
+- Order matters and is not obvious: **insurance premiums are computed before
+  the investible surplus**, because the surplus is post-tax income less living
+  expenses less the protection bill, and every SIP is sized inside it.
+- Section order follows the sheet: protection → emergency fund → goals →
+  retirement → allocation. Each row carries the workbook's own "Formula /
+  Logic Used" note; that column is half the value of the sheet, so it renders
+  with the numbers rather than being dropped.
+- `INPUT_GROUPS` / `CALC_GROUPS` drive the form, the parser and the defaults
+  from one list — a new input cannot be added to only two of the three.
+  Percent fields are typed as percents and stored as fractions.
+- Lookup tables (income multiples, term/health premium per lakh, glide path)
+  are module constants, not admin-editable — they are indicative retail
+  benchmarks and must be replaced with real quotes per client.
+- The PDF prints "Rs", not ₹: the base-14 PDF fonts have no rupee glyph and it
+  renders as a black box. Don't "fix" it back without bundling a font.
+
 ## Claim workflow
 
 - Claims are raised and worked **in-app** now (not just admin): "Raise Claim"
