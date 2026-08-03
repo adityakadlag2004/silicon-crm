@@ -43,3 +43,4 @@ design-refs/
 
 # Raw insurer chart uploads (parsed into life_rates.json)
 docs/insurance/uploads/
+logs/*.log.*
