@@ -87,26 +87,29 @@ class AppScreenApiTests(TestCase):
         c.force_login(user)
         return c
 
-    def test_sale_meta_employee_has_no_employee_list(self):
+    def test_sale_meta_employee_gets_the_employee_list(self):
+        # The picker is for everyone now, so the list must reach a non-admin —
+        # but the commission figures next to it must not.
         data = self._http(self.emp_user).get(reverse("clients:app_sale_meta")).json()
         self.assertFalse(data["is_admin"])
-        self.assertNotIn("employees", data)
+        self.assertIn("employees", data)
+        self.assertNotIn("ppt_fyc", data)
         self.assertTrue(any(p["name"] == "SIP" for p in data["products"]))
 
-    def test_sale_create_employee_is_pending_and_self_attributed(self):
+    def test_sale_create_employee_can_attribute_but_still_pends(self):
         import json as _json
         resp = self._http(self.emp_user).post(
             reverse("clients:app_sale_create"),
             data=_json.dumps({
                 "client_id": self.customer.id, "product_id": self.product.id,
-                "amount": "5000", "employee_id": self.admin_emp.id,  # spoof attempt
+                "amount": "5000", "employee_id": self.admin_emp.id,
             }),
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 200)
         sale = Sale.objects.latest("id")
-        self.assertEqual(sale.status, Sale.STATUS_PENDING)
-        self.assertEqual(sale.employee, self.emp)  # spoof ignored
+        self.assertEqual(sale.employee, self.admin_emp)
+        self.assertEqual(sale.status, Sale.STATUS_PENDING)  # never self-approving
 
     def test_sale_create_admin_auto_approves(self):
         import json as _json

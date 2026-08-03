@@ -321,12 +321,15 @@ fun AddSaleScreen(
             }
         }
 
-        if (isAdmin) {
+        // Shown to everyone, not just admins — a colleague's sale is often
+        // entered from whichever phone is to hand. Gated on the list actually
+        // arriving so an older backend simply hides it.
+        val emps = m.optJSONArray("employees")
+        if ((emps?.length() ?: 0) > 0) {
             PickerField("Assign to employee", selectedEmployee?.second ?: "Myself", { employeeMenuOpen = true }) {
                 DropdownMenu(expanded = employeeMenuOpen, onDismissRequest = { employeeMenuOpen = false }) {
-                    val emps = m.optJSONArray("employees")
-                    for (i in 0 until (emps?.length() ?: 0)) {
-                        val e = emps!!.getJSONObject(i)
+                    for (i in 0 until emps!!.length()) {
+                        val e = emps.getJSONObject(i)
                         DropdownMenuItem(
                             text = { Text(e.optString("name")) },
                             onClick = {

@@ -43,16 +43,12 @@
         </div>
         <div class="col-12">
           <label for="employee-select" class="form-label fw-semibold">Assigned Employee</label>
-          {% if can_pick_employee %}
-            <select id="employee-select" name="employee" class="form-select">
-              {% for emp in employees %}
-                <option value="{{ emp.id }}" {% if emp.id == current_employee_id %}selected{% endif %}>{{ emp.user.get_full_name|default:emp.user.username }}</option>
-              {% endfor %}
-            </select>
-          {% else %}
-            <input type="text" class="form-control" value="{{ request.user.get_full_name|default:request.user.username }}" disabled>
-            <small class="form-text text-muted">Sales are logged under your own name.</small>
-          {% endif %}
+          <select id="employee-select" name="employee" class="form-select">
+            {% for emp in employees %}
+              <option value="{{ emp.id }}" {% if emp.id == current_employee_id %}selected{% endif %}>{{ emp.user.get_full_name|default:emp.user.username }}</option>
+            {% endfor %}
+          </select>
+          <small class="form-text text-muted">Defaults to you. Pick a colleague to credit the sale to them.</small>
         </div>
       </div>
     </div>

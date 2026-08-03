@@ -283,6 +283,12 @@ def app_sale_meta(request):
         "is_admin": is_admin,
         "employee_id": emp.id if emp else None,
         "products": products,
+        # Everyone may credit a sale to a colleague (a non-admin's sale still
+        # lands pending), so the picker list is not admin-only.
+        "employees": [
+            {"id": e.id, "name": e.user.get_full_name() or e.user.username}
+            for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username")
+        ],
     }
     if is_admin:
         # FYC (sale margin %) per plan+PPT at the active designation — admin-only,
@@ -297,18 +303,14 @@ def app_sale_meta(request):
             fyc.setdefault(r.product.name, {})[r.ppt] = str(r.fyc)
         data["ppt_fyc"] = fyc
         data["mdrt_active"] = mdrt
-        data["employees"] = [
-            {"id": e.id, "name": e.user.get_full_name() or e.user.username}
-            for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username")
-        ]
     return JsonResponse(data)
 
 
 @login_required
 @require_POST
 def app_sale_create(request):
-    """Create a sale. Mirrors the web add_sale rules: only admins may
-    attribute to another employee; admin sales auto-approve."""
+    """Create a sale. Mirrors the web add_sale rules: anyone may attribute the
+    sale to another employee; admin sales auto-approve, everyone else's pend."""
     emp = _emp(request)
     is_admin = _is_admin(request)
     try:
@@ -411,7 +413,7 @@ def app_sale_create(request):
         policy_years, emi_months = 1, 0
 
     sale_emp = emp
-    if is_admin and body.get("employee_id"):
+    if body.get("employee_id"):
         sale_emp = Employee.objects.filter(pk=body.get("employee_id"), active=True).first() or emp
     if sale_emp is None:
         return JsonResponse({"ok": False, "error": "Your account is not mapped to an employee."}, status=403)

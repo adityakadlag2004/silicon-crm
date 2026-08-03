@@ -69,13 +69,11 @@ def add_sale(request):
         if form.is_valid():
             sale = form.save(commit=False)
 
-            # Only admins may attribute a sale to someone else; everyone else
-            # always logs sales under their own employee record.
-            chosen_emp = form.cleaned_data.get("employee")
-            if is_admin_user and chosen_emp:
-                sale.employee = chosen_emp
-            else:
-                sale.employee = getattr(request.user, "employee", None)
+            # Anyone may attribute a sale to a colleague — a sale is often
+            # entered by whoever is at a desk. A non-admin's sale still goes to
+            # pending below, so crediting someone else is not self-approval.
+            sale.employee = (form.cleaned_data.get("employee")
+                             or getattr(request.user, "employee", None))
 
             if sale.employee is None:
                 messages.error(request, "Your account is not mapped to an employee. Contact an administrator.")
@@ -84,9 +82,8 @@ def add_sale(request):
                     "sales/add_sale.html",
                     {
                         "form": form,
-                        "employees": Employee.objects.select_related("user").all(),
+                        "employees": Employee.objects.filter(active=True).select_related("user"),
                         "current_employee_id": None,
-                        "can_pick_employee": is_admin_user,
                         **product_meta,
                     },
                 )
@@ -100,12 +97,11 @@ def add_sale(request):
                         "sales/add_sale.html",
                         {
                             "form": form,
-                            "employees": Employee.objects.select_related("user").all(),
+                            "employees": Employee.objects.filter(active=True).select_related("user"),
                             "current_employee_id": getattr(request.user, "employee").id
                             if hasattr(request.user, "employee")
                             else None,
-                            "can_pick_employee": is_admin_user,
-                            **product_meta,
+                                **product_meta,
                         },
                     )
                 try:
@@ -117,12 +113,11 @@ def add_sale(request):
                         "sales/add_sale.html",
                         {
                             "form": form,
-                            "employees": Employee.objects.select_related("user").all(),
+                            "employees": Employee.objects.filter(active=True).select_related("user"),
                             "current_employee_id": getattr(request.user, "employee").id
                             if hasattr(request.user, "employee")
                             else None,
-                            "can_pick_employee": is_admin_user,
-                            **product_meta,
+                                **product_meta,
                         },
                     )
 
@@ -137,7 +132,7 @@ def add_sale(request):
             initial["date"] = date.today()
         form = AdminSaleForm(initial=initial)
 
-    employees_qs = Employee.objects.select_related("user").all()
+    employees_qs = Employee.objects.filter(active=True).select_related("user")
     current_emp_id = (
         getattr(request.user, "employee").id if hasattr(request.user, "employee") else None
     )
@@ -148,7 +143,6 @@ def add_sale(request):
             "form": form,
             "employees": employees_qs,
             "current_employee_id": current_emp_id,
-            "can_pick_employee": is_admin_user,
             **product_meta,
         },
     )

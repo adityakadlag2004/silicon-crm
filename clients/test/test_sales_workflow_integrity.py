@@ -55,21 +55,23 @@ class _WorkflowSetup(TestCase):
 
 
 class SaleAttributionTests(_WorkflowSetup):
-    def test_employee_cannot_log_sale_under_someone_else(self):
+    def test_employee_can_log_sale_under_a_colleague(self):
+        # Anyone may credit a sale to a colleague — but it still pends, so this
+        # is never a route to approving your own or anyone else's business.
         resp = self.http["employee"].post(reverse("clients:add_sale"), {
             "client": self.customer.id,
-            "employee": self.other_emp.id,   # attempt to spoof attribution
+            "employee": self.other_emp.id,
             "product": "SIP",
             "amount": "5000",
             "date": "2026-07-01",
         })
         self.assertEqual(resp.status_code, 302)
         sale = Sale.objects.latest("id")
-        self.assertEqual(sale.employee, self.emps["employee"])
+        self.assertEqual(sale.employee, self.other_emp)
+        self.assertEqual(sale.status, Sale.STATUS_PENDING)
 
     def test_employee_can_add_sale_without_employee_field(self):
-        # The web form hides the employee field for non-admins, so a real
-        # browser POST omits it. The sale must still save under the logged-in
+        # An omitted employee field must still save under the logged-in
         # employee (regression: form treated employee as required → 200, no save).
         before = Sale.objects.count()
         resp = self.http["employee"].post(reverse("clients:add_sale"), {
