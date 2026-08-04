@@ -10,7 +10,7 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
-from clients.models import CallFollowUp, CallLogEntry, Employee, Notification
+from clients.models import AuditLog, CallFollowUp, CallLogEntry, Employee, Notification
 
 
 class CleanupDataTests(TestCase):
@@ -87,6 +87,21 @@ class CleanupDataTests(TestCase):
         self._run()
 
         self.assertFalse(Notification.objects.filter(pk=notif.pk).exists())
+
+    def test_old_audit_logs_deleted_recent_kept(self):
+        old = AuditLog.objects.create(
+            action="app.crash", summary="old",
+            created_at=timezone.now() - timedelta(days=400),
+        )
+        recent = AuditLog.objects.create(
+            action="sale.approved", summary="recent",
+            created_at=timezone.now() - timedelta(days=30),
+        )
+
+        self._run()
+
+        self.assertFalse(AuditLog.objects.filter(pk=old.pk).exists())
+        self.assertTrue(AuditLog.objects.filter(pk=recent.pk).exists())
 
     def test_dry_run_deletes_nothing(self):
         old_call = self._make_call(days_ago=400, phone="9000000013")

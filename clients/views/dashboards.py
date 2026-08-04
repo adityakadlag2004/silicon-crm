@@ -1707,20 +1707,16 @@ def employee_performance(request):
             total_amount = 0
     points = sales_qs.aggregate(total=Sum('points'))['total'] or 0
 
-    # Calling component removed — call/connect metrics no longer tracked.
-    calls_made = 0
-    connects = 0
-    connect_rate = 0
-    conversion_rate = 0
-
+    counts_by_day = {
+        row['date']: row['cnt']
+        for row in sales_qs.values('date').annotate(cnt=Count('id'))
+    }
     days = []
     sales_series = []
-    calls_series = []
     current = start
     while current <= end:
         days.append(current.strftime('%Y-%m-%d'))
-        sales_series.append(sales_qs.filter(date=current).aggregate(cnt=Count('id'))['cnt'] or 0)
-        calls_series.append(0)
+        sales_series.append(counts_by_day.get(current, 0))
         current += timedelta(days=1)
 
     recent_sales = sales_qs.order_by('-date')[:10]
@@ -1733,7 +1729,7 @@ def employee_performance(request):
         resp['Content-Disposition'] = f'attachment; filename="{filename}"'
         writer = _csv.writer(resp)
         writer.writerow(['date', 'client', 'amount', 'points', 'product'])
-        for s in sales_qs.order_by('date'):
+        for s in sales_qs.select_related('client').order_by('date'):
             client_name = s.client.name if getattr(s, 'client', None) else ''
             amount = getattr(s, 'total_amount', None) or getattr(s, 'amount', None) or ''
             points_v = getattr(s, 'points', '')
@@ -1748,13 +1744,8 @@ def employee_performance(request):
         'total_sales': total_sales,
         'total_amount': total_amount,
         'points': points,
-        'calls_made': calls_made,
-        'connects': connects,
-        'connect_rate': round(connect_rate, 1),
-        'conversion_rate': round(conversion_rate, 1),
         'days': days,
         'sales_series': sales_series,
-        'calls_series': calls_series,
         'recent_sales': recent_sales,
         'is_manager': is_manager,
     }

@@ -48,12 +48,8 @@
       <span class="ki-metric-value">₹{{ total_amount|floatformat:2 }}</span>
     </div>
     <div class="ki-metric-card">
-      <span class="ki-metric-label">Calls Made</span>
-      <span class="ki-metric-value">{{ calls_made }}</span>
-    </div>
-    <div class="ki-metric-card">
-      <span class="ki-metric-label">Conversion Rate</span>
-      <span class="ki-metric-value">{{ conversion_rate }}%</span>
+      <span class="ki-metric-label">Points</span>
+      <span class="ki-metric-value">{{ points|floatformat:2 }}</span>
     </div>
   </div>
 
@@ -86,13 +82,11 @@
 
 {{ days|json_script:"perf-days" }}
 {{ sales_series|json_script:"perf-sales" }}
-{{ calls_series|json_script:"perf-calls" }}
 
 <script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
 <script>
   const days = JSON.parse(document.getElementById('perf-days').textContent);
   const sales = JSON.parse(document.getElementById('perf-sales').textContent);
-  const calls = JSON.parse(document.getElementById('perf-calls').textContent);
 
   const ctx = document.getElementById('trendChart').getContext('2d');
   new Chart(ctx, {
@@ -104,12 +98,6 @@
         data: sales,
         borderColor: '#2563eb',
         backgroundColor: 'rgba(37,99,235,0.12)',
-        tension: 0.2,
-      },{
-        label: 'Calls',
-        data: calls,
-        borderColor: '#3182ce',
-        backgroundColor: 'rgba(49,130,206,0.08)',
         tension: 0.2,
       }]
     },

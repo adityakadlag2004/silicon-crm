@@ -34,6 +34,12 @@ class Command(BaseCommand):
             help="Delete synced device call-log entries older than this many days (default: 365).",
         )
         parser.add_argument(
+            "--audit-days",
+            type=int,
+            default=365,
+            help="Delete audit-log rows older than this many days (default: 365).",
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Print what would be deleted without actually deleting.",
@@ -104,6 +110,17 @@ class Command(BaseCommand):
         if not dry_run:
             old_followups.delete()
         self.stdout.write(f"  Call follow-ups (finished): {count} {'would be ' if dry_run else ''}deleted")
+
+        # 6. Old audit-log rows. The only table nothing else prunes; it also
+        # receives every app.crash report, so it grows with the fleet.
+        from clients.models import AuditLog
+
+        audit_cutoff = timezone.now() - timedelta(days=options["audit_days"])
+        old_audit = AuditLog.objects.filter(created_at__lt=audit_cutoff)
+        count = old_audit.count()
+        if not dry_run:
+            old_audit.delete()
+        self.stdout.write(f"  Audit log (old):           {count} {'would be ' if dry_run else ''}deleted")
 
         if dry_run:
             self.stdout.write(self.style.WARNING("Dry run — nothing was deleted."))

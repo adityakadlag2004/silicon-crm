@@ -1,10 +1,13 @@
 """The dashboards show one row per product CATEGORY: sub-product sales fold into
 their parent, and sub-product rows never appear."""
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import Client as TestClient, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -121,3 +124,39 @@ class DashboardRollupTests(TestCase):
         self.assertEqual(len(sellers), 1)
         self.assertEqual(sellers[0]["total_amount"], 160000.0)
         self.assertNotContains(resp, "Roll Plan A")
+
+
+class EmployeePerformanceSeriesTests(TestCase):
+    """The daily chart series comes from one group-by, not a COUNT per day."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("perf_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.user, role="employee", salary=0, active=True)
+        cls.customer = Client.objects.create(name="Perf Customer")
+        today = timezone.localdate()
+        for days_ago, amt in ((0, "1000"), (0, "2000"), (3, "500")):
+            Sale.objects.create(
+                client=cls.customer, employee=cls.emp, product="SIP",
+                amount=Decimal(amt), status=Sale.STATUS_APPROVED,
+                date=today - timedelta(days=days_ago),
+            )
+
+    def test_daily_series_counts_and_bounded_queries(self):
+        http = TestClient()
+        http.force_login(self.user)
+        today = timezone.localdate()
+        start = today - timedelta(days=59)
+        with CaptureQueriesContext(connection) as ctx:
+            resp = http.get(
+                reverse("clients:employee_performance"),
+                {"start": start.isoformat(), "end": today.isoformat()},
+            )
+        self.assertEqual(resp.status_code, 200)
+        series = resp.context["sales_series"]
+        self.assertEqual(len(series), 60)
+        self.assertEqual(series[-1], 2)   # two sales today
+        self.assertEqual(series[-4], 1)   # one sale three days ago
+        self.assertEqual(sum(series), 3)  # nothing else, anywhere
+        # 60 days must not mean 60 COUNT queries.
+        self.assertLess(len(ctx.captured_queries), 30)
