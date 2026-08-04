@@ -94,8 +94,8 @@
       .kn-link, .kn-dropdown-toggle {
         display: inline-flex;
         align-items: center;
-        gap: 0.4rem;
-        padding: 0.45rem 0.8rem;
+        gap: 0.35rem;
+        padding: 0.45rem 0.6rem;
         border-radius: 6px;
         font-size: 0.9rem;
         font-weight: 500;
@@ -139,7 +139,11 @@
         transform: translateY(-4px);
         transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
         z-index: 1040;
+        max-height: min(72vh, 560px);
+        overflow-y: auto;
       }
+      /* Last group in the bar would spill past the right edge. */
+      .kn-dropdown.kn-align-right .kn-menu { left: auto; right: 0; }
       .kn-dropdown.open .kn-menu,
       .kn-dropdown:hover .kn-menu {
         opacity: 1;
@@ -235,51 +239,11 @@
         .kn-content { padding: 1rem; }
       }
 
-      /* ── Desktop: the nav is a permanent left sidebar ──────────────
-         Below 1180px this whole block switches off and the existing
-         off-canvas drawer takes over unchanged (see the media query
-         further down) — same markup, same links, same JS.            */
-      @media (min-width: 1181px) {
-        :root { --kn-side: 260px; }
-        .kn-nav {
-          position: fixed;
-          top: var(--kn-h); left: 0;
-          width: var(--kn-side);
-          height: calc(100vh - var(--kn-h));
-          background: var(--kn-bg);
-          border-right: 1px solid var(--kn-border);
-          flex-direction: column;
-          align-items: stretch;
-          gap: .1rem;
-          padding: .6rem .5rem;
-          overflow-y: auto;
-          z-index: 1035;
-        }
-        .kn-nav .kn-link,
-        .kn-nav .kn-dropdown-toggle {
-          width: 100%; justify-content: flex-start;
-          padding: .55rem .7rem; border-radius: var(--ki-radius-sm);
-        }
-        .kn-nav .kn-dropdown { width: 100%; position: static; }
-        /* Sub-items expand inline instead of floating out sideways. */
-        .kn-nav .kn-menu {
-          position: static; opacity: 1; visibility: visible; transform: none;
-          width: 100%; box-shadow: none; border: none;
-          padding: 0 0 .3rem 1.6rem; margin-top: -.1rem; display: none;
-          min-width: 0;
-        }
-        .kn-nav .kn-dropdown.open .kn-menu { display: block; }
-        .kn-dropdown-toggle .kn-caret { margin-left: auto; transition: transform .2s; }
-        .kn-dropdown.open .kn-dropdown-toggle .kn-caret { transform: rotate(180deg); }
-        .kn-content { margin-left: var(--kn-side); max-width: calc(1600px - var(--kn-side)); }
-        .kn-toggle { display: none; }
-      }
-
       /* Module monogram — the coloured two-letter chip on each nav group. */
       .kn-mono {
-        width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto;
+        width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto;
         display: inline-grid; place-items: center; color: #fff;
-        font-size: .68rem; font-weight: 700; letter-spacing: .01em;
+        font-size: .62rem; font-weight: 700; letter-spacing: .01em;
         background: var(--c, var(--ki-primary));
       }
 
@@ -296,8 +260,10 @@
         color: var(--kn-fg);
       }
 
-      /* ── Mobile: hamburger collapses nav into off-canvas ── */
-      @media (max-width: 1180px) {
+      /* ── Narrow screens: hamburger collapses nav into off-canvas ──
+         1280 is where eight groups stop fitting on one line. Keep the JS
+         MOBILE constant below in step with it. */
+      @media (max-width: 1280px) {
         .kn-toggle { display: inline-flex; align-items: center; }
         .kn-nav {
           position: fixed;
@@ -324,6 +290,7 @@
           position: static;
           opacity: 1; visibility: visible; transform: none;
           width: 100%;
+          max-height: none;
           box-shadow: none;
           border: none;
           padding: 0 0 0.4rem 1.2rem;
@@ -372,31 +339,43 @@
             <span class="kn-mono" style="--c:#0369A1;">Db</span> Dashboard
           </a>
 
+          {# Clients — the book, plus the pipeline that feeds it. #}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
               <span class="kn-mono" style="--c:#BE123C;">Cl</span> Clients <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
+              <li class="kn-menu-section">Book</li>
               <li><a class="kn-menu-item" href="{% url 'clients:all_clients' %}"><i class="bi bi-people-fill"></i> All Clients</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:family_list' %}"><i class="bi bi-house-heart-fill"></i> Households</a></li>
               {% if nav.show_my_clients %}<li><a class="kn-menu-item" href="{% url 'clients:my_clients' %}"><i class="bi bi-person-check-fill"></i> My Clients</a></li>{% endif %}
+              <li><a class="kn-menu-item" href="{% url 'clients:family_list' %}"><i class="bi bi-house-heart-fill"></i> Households</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:add_client' %}"><i class="bi bi-person-plus-fill"></i> Add Client</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">Data quality</li>
               <li><a class="kn-menu-item" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-person-vcard"></i> KYC Issues</a></li>
               {% if nav.show_bulk_reassign %}<li><a class="kn-menu-item" href="{% url 'clients:bulk_reassign' %}"><i class="bi bi-arrow-left-right"></i> Bulk Reassign</a></li>{% endif %}
+              {% if nav.can_leads %}
+                <li><div class="kn-menu-divider"></div></li>
+                <li class="kn-menu-section">Prospects</li>
+                <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
+              {% endif %}
             </ul>
           </div>
 
+          {# Sales — booking a sale, chasing it, and what it pays. #}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
               <span class="kn-mono" style="--c:#B45309;">Sa</span> Sales <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
+              <li class="kn-menu-section">Sales</li>
               <li><a class="kn-menu-item" href="{% url 'clients:all_sales' %}"><i class="bi bi-receipt"></i> All Sales</a></li>
               <li><a class="kn-menu-item" href="{% if nav.is_admin %}{% url 'clients:admin_add_sale' %}{% else %}{% url 'clients:add_sale' %}{% endif %}"><i class="bi bi-plus-circle-fill"></i> Add Sale</a></li>
               {% if nav.can_approve %}<li><a class="kn-menu-item" href="{% url 'clients:approve_sales' %}"><i class="bi bi-check-circle-fill"></i> Approve Sales</a></li>{% endif %}
               <li><a class="kn-menu-item" href="{% url 'clients:my_call_followups' %}"><i class="bi bi-telephone-forward-fill"></i> Call Follow-ups</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">Incentives</li>
               <li><a class="kn-menu-item" href="{% url 'clients:incentive_calculator' %}"><i class="bi bi-calculator-fill"></i> Incentive Calculator</a></li>
-              {% if nav.can_incentives or nav.can_recalc or nav.can_analysis %}<li><div class="kn-menu-divider"></div></li>{% endif %}
               {% if nav.can_incentives %}
                 <li><a class="kn-menu-item" href="{% url 'clients:incentive_structure' %}"><i class="bi bi-diagram-3-fill"></i> Incentive Structure</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:incentive_payout' %}"><i class="bi bi-cash-stack"></i> Incentive Payout</a></li>
@@ -408,88 +387,61 @@
               <li>
                 <form method="post" action="{% url 'clients:recalc_points' %}" onsubmit="return confirm('Recalculate points on ALL sales using the current rules?');" style="margin:0;">
                   {% csrf_token %}
-                  <button type="submit" class="kn-menu-item" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;"><i class="bi bi-calculator-fill"></i> Recalculate Points</button>
+                  <button type="submit" class="kn-menu-item" style="width:100%;background:none;border:none;text-align:left;cursor:pointer;"><i class="bi bi-arrow-clockwise"></i> Recalculate Points</button>
                 </form>
               </li>
               {% endif %}
-              {% if nav.can_analysis %}<li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>{% endif %}
-              <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
             </ul>
           </div>
 
+          {# Insurance — policies, the renewals that keep them, the claims that test them. #}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
               <span class="kn-mono" style="--c:#0F766E;">In</span> Insurance <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
+              <li class="kn-menu-section">Policies</li>
               <li><a class="kn-menu-item" href="{% url 'clients:policy_list' %}"><i class="bi bi-shield-check"></i> Insurance Tracker</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:claim_list' %}"><i class="bi bi-file-medical"></i> Claim Tracker</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:raise_claim' %}"><i class="bi bi-plus-circle-fill"></i> Raise Claim</a></li>
               <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">Renewals</li>
               <li><a class="kn-menu-item" href="{% url 'clients:all_renewals' %}"><i class="bi bi-arrow-repeat"></i> All Renewals</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:add_renewal' %}"><i class="bi bi-plus-circle"></i> Add Renewal</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">Claims</li>
+              <li><a class="kn-menu-item" href="{% url 'clients:claim_list' %}"><i class="bi bi-file-medical"></i> Claim Tracker</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:raise_claim' %}"><i class="bi bi-plus-circle-fill"></i> Raise Claim</a></li>
               <li><div class="kn-menu-divider"></div></li>
               <li><a class="kn-menu-item" href="{% url 'clients:meeting_list' %}"><i class="bi bi-calendar-event"></i> Meetings</a></li>
             </ul>
           </div>
 
+          {# Mutual funds — the RTA feed and the book it builds. Reports live under Reports. #}
           {% if nav.show_mf %}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
               <span class="kn-mono" style="--c:#15803D;">MF</span> Mutual Funds <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
+              <li class="kn-menu-section">Feed</li>
               <li><a class="kn-menu-item" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-cloud-arrow-down"></i> RTA Feeds</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:mf_transactions' %}"><i class="bi bi-list-columns"></i> Transactions</a></li>
+              <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">Book</li>
               <li><a class="kn-menu-item" href="{% url 'clients:mf_folios' %}"><i class="bi bi-folder2-open"></i> Folios</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:mf_folio_match' %}"><i class="bi bi-person-bounding-box"></i> Match Folios</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:mf_transactions' %}"><i class="bi bi-list-columns"></i> Transactions</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:mf_sips' %}"><i class="bi bi-arrow-repeat"></i> SIP Register</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:mf_cob' %}"><i class="bi bi-arrow-left-right"></i> COB Opportunities</a></li>
-              <li><div class="kn-menu-divider"></div></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:business_analytics' %}"><i class="bi bi-percent"></i> Business Analytics</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:call_analytics' %}"><i class="bi bi-telephone-fill"></i> Call Analytics</a></li>
             </ul>
           </div>
           {% endif %}
 
-          {% if nav.show_reports_menu %}
-          <div class="kn-dropdown">
-            <button class="kn-dropdown-toggle" type="button">
-              <span class="kn-mono" style="--c:#0F766E;">Re</span> Reports <i class="bi bi-chevron-down kn-caret"></i>
-            </button>
-            <ul class="kn-menu">
-              {% if nav.reports_performance %}<li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>{% endif %}
-              {% if nav.reports_business %}
-                <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
-                <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
-              {% endif %}
-            </ul>
-          </div>
-          {% endif %}
-
-          {% if nav.can_leads %}
-          <div class="kn-dropdown">
-            <button class="kn-dropdown-toggle" type="button">
-              <span class="kn-mono" style="--c:#C2410C;">Le</span> Leads <i class="bi bi-chevron-down kn-caret"></i>
-            </button>
-            <ul class="kn-menu">
-              <li><a class="kn-menu-item" href="{% url 'clients:lead_management' %}"><i class="bi bi-funnel-fill"></i> Lead Pipeline</a></li>
-            </ul>
-          </div>
-          {% endif %}
-
+          {# Tasks & Links — one module, so one menu. #}
           <div class="kn-dropdown">
             <button class="kn-dropdown-toggle" type="button">
               <span class="kn-mono" style="--c:#4338CA;">Ta</span> Tasks <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
+              <li class="kn-menu-section">Work</li>
               <li><a class="kn-menu-item" href="{% url 'clients:task_dashboard' %}"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:task_my' %}"><i class="bi bi-person-check"></i> My Tasks</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:task_delegated' %}"><i class="bi bi-send"></i> Delegated</a></li>
@@ -497,30 +449,60 @@
               <li><a class="kn-menu-item" href="{% url 'clients:task_all' %}"><i class="bi bi-list-ul"></i> All Tasks</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:task_activities' %}"><i class="bi bi-activity"></i> Activities</a></li>
               <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">Manage</li>
               <li><a class="kn-menu-item" href="{% url 'clients:task_deleted' %}"><i class="bi bi-trash"></i> Deleted Tasks</a></li>
               {% if nav.show_tasks_categories %}<li><a class="kn-menu-item" href="{% url 'clients:task_categories' %}"><i class="bi bi-tags"></i> Categories</a></li>{% endif %}
+              <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">Links</li>
+              <li><a class="kn-menu-item" href="{% url 'clients:links_dashboard' %}"><i class="bi bi-link-45deg"></i> Business Links</a></li>
             </ul>
           </div>
 
-          <a class="kn-link" href="{% url 'clients:links_dashboard' %}">
-            <span class="kn-mono" style="--c:#7E22CE;">Li</span> Links
-          </a>
+          {% comment %}Reports — every number that is read, not entered. Admins see the lot; managers see what their access config grants.{% endcomment %}
+          <div class="kn-dropdown">
+            <button class="kn-dropdown-toggle" type="button">
+              <span class="kn-mono" style="--c:#7E22CE;">Re</span> Reports <i class="bi bi-chevron-down kn-caret"></i>
+            </button>
+            <ul class="kn-menu">
+              {% if nav.show_mf or nav.reports_business %}
+                <li class="kn-menu-section">Business</li>
+                <li><a class="kn-menu-item" href="{% url 'clients:business_overview' %}"><i class="bi bi-bar-chart-line-fill"></i> Business Overview</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:net_business' %}"><i class="bi bi-cash-stack"></i> Net Business</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:net_sip' %}"><i class="bi bi-arrow-repeat"></i> Net SIP</a></li>
+                <li><a class="kn-menu-item" href="{% url 'clients:monthly_business_report' %}"><i class="bi bi-file-earmark-text-fill"></i> Monthly Report</a></li>
+                {% if nav.show_mf %}<li><a class="kn-menu-item" href="{% url 'clients:business_analytics' %}"><i class="bi bi-percent"></i> Business Analytics</a></li>{% endif %}
+                <li><div class="kn-menu-divider"></div></li>
+              {% endif %}
+              {% if nav.show_mf or nav.reports_performance %}
+                <li class="kn-menu-section">Performance</li>
+                <li><a class="kn-menu-item" href="{% url 'clients:admin_past_performance' %}"><i class="bi bi-graph-up-arrow"></i> Past Performance</a></li>
+                {% if nav.show_mf %}<li><a class="kn-menu-item" href="{% url 'clients:call_analytics' %}"><i class="bi bi-telephone-fill"></i> Call Analytics</a></li>{% endif %}
+                <li><div class="kn-menu-divider"></div></li>
+              {% endif %}
+              <li class="kn-menu-section">Advisory</li>
+              {% if nav.can_analysis %}<li><a class="kn-menu-item" href="{% url 'clients:client_analysis' %}"><i class="bi bi-pie-chart-fill"></i> Client Analysis</a></li>{% endif %}
+              <li><a class="kn-menu-item" href="{% url 'clients:financial_planner' %}"><i class="bi bi-calculator"></i> Financial Planner</a></li>
+            </ul>
+          </div>
 
           {% if nav.show_settings %}
-          <div class="kn-dropdown">
+          <div class="kn-dropdown kn-align-right">
             <button class="kn-dropdown-toggle" type="button">
               <span class="kn-mono" style="--c:#57534E;">Se</span> Settings <i class="bi bi-chevron-down kn-caret"></i>
             </button>
             <ul class="kn-menu">
+              <li class="kn-menu-section">Firm</li>
               <li><a class="kn-menu-item" href="{% url 'clients:firm_settings' %}"><i class="bi bi-building-gear"></i> Firm Settings</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:product_management' %}"><i class="bi bi-box-seam"></i> Products</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:target_management' %}"><i class="bi bi-bullseye"></i> Targets</a></li>
               <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">People</li>
               <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}"><i class="bi bi-people-fill"></i> Team Members</a></li>
-              <li><a class="kn-menu-item" href="{% url 'clients:people_hub' %}"><i class="bi bi-balloon-heart"></i> People &amp; Celebrations</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:team_list' %}?add=1"><i class="bi bi-person-plus-fill"></i> Add Member</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:people_hub' %}"><i class="bi bi-balloon-heart"></i> People &amp; Celebrations</a></li>
               <li><a class="kn-menu-item" href="{% url 'clients:employee_management' %}"><i class="bi bi-shield-lock-fill"></i> Manager Rights</a></li>
               <li><div class="kn-menu-divider"></div></li>
+              <li class="kn-menu-section">System</li>
               <li><a class="kn-menu-item" href="{% url 'clients:audit_log' %}"><i class="bi bi-journal-text"></i> Audit Log</a></li>
             </ul>
           </div>
@@ -713,7 +695,7 @@
     <!-- Top navbar interactions -->
     <script>
       (function() {
-        const MOBILE = 1180;
+        const MOBILE = 1280;   // keep in step with the media query in <style>
         const nav = document.getElementById('navMenu');
         const overlay = document.getElementById('navOverlay');
         const toggle = document.getElementById('navToggle');
@@ -746,24 +728,18 @@
             e.stopPropagation();
             // On desktop dropdowns also work via :hover, but click toggles too
             const isOpen = dd.classList.contains('open');
-            // Close sibling sections in the same container (desktop only), so
-            // the sidebar behaves as an accordion and the top bar as a menu.
-            if (!isMobile()) {
-              const scope = dd.closest('.kn-nav, .kn-right') || document;
-              scope.querySelectorAll('.kn-dropdown.open').forEach(d => {
-                if (d !== dd) d.classList.remove('open');
-              });
-            }
+            // One menu open at a time — on the bar and in the drawer alike.
+            document.querySelectorAll('.kn-dropdown.open').forEach(d => {
+              if (d !== dd) d.classList.remove('open');
+            });
             dd.classList.toggle('open', !isOpen);
           });
         });
-        // Close dropdowns when clicking outside. The left sidebar is an
-        // accordion — its sections must survive a click on the page — so only
-        // the top-bar user menu collapses here.
+        // Click anywhere else closes the open menu.
         document.addEventListener('click', function(e) {
           if (isMobile()) return;
           if (!e.target.closest('.kn-dropdown')) {
-            document.querySelectorAll('.kn-right .kn-dropdown.open')
+            document.querySelectorAll('.kn-dropdown.open')
               .forEach(d => d.classList.remove('open'));
           }
         });
