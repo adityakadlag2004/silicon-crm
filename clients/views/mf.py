@@ -39,14 +39,27 @@ def mf_dashboard(request):
         "folios_unlinked": folios.filter(client__isnull=True).count(),
         "transactions": MutualFundTransaction.objects.count(),
     }
-    per_arn = (
+    per_arn = list(
         MutualFundTransaction.objects.values("arn__label")
         .annotate(txns=Count("id"), gross=Sum("amount"))
         .order_by("arn__label")
     )
+    total_gross = sum((row["gross"] or 0) for row in per_arn)
+    folios_url = reverse("clients:mf_folios")
     return render(request, "mf/dashboard.html", {
         "page_title": "Mutual Funds",
-        "stats": stats,
+        "kpis": [
+            {"label": "Folios", "value": inr(stats["folios"]), "color": "#4338CA",
+             "url": folios_url},
+            {"label": "Linked to clients", "value": inr(stats["folios_linked"]),
+             "color": "#15803D", "url": f"{folios_url}?linked=yes"},
+            {"label": "Unlinked", "value": inr(stats["folios_unlinked"]),
+             "color": "#B45309", "url": f"{folios_url}?linked=no"},
+            {"label": "Transactions", "value": inr(stats["transactions"]),
+             "color": "#0F766E", "url": reverse("clients:mf_transactions")},
+            {"label": "Gross Flows", "value": f"₹{inr(total_gross)}",
+             "color": "#0369A1"},
+        ],
         "per_arn": per_arn,
         "arn_accounts": ArnAccount.objects.all(),
         "imports": RTAFeedImport.objects.all()[:30],
@@ -348,7 +361,6 @@ def mf_transactions(request):
         "q": q,
         "arn_id": arn_id or "",
         "rta": rta or "",
-        "gross": totals["gross"] or 0,
         "arn_accounts": ArnAccount.objects.all(),
         "rta_choices": RTA_CHOICES,
     })

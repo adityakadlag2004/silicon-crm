@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}MF Transactions{% endblock %}
 {% block page_title %}Mutual Fund Transactions{% endblock %}
 
@@ -28,8 +29,6 @@
     <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_dashboard' %}"><i class="bi bi-arrow-left"></i> Back</a>
   </form>
 
-  <p class="text-muted" style="font-size:.85rem;">Gross amount of filtered rows: <strong>₹{{ gross }}</strong></p>
-
   <div class="ki-card">
     <div class="ki-card-body" style="overflow-x:auto;">
       <table class="mf-table">
@@ -46,7 +45,7 @@
             </td>
             <td>{{ txn.scheme_name|truncatechars:45 }}</td>
             <td>{{ txn.txn_type }}</td>
-            <td class="num">{% if txn.amount is not None %}₹{{ txn.amount }}{% else %}—{% endif %}</td>
+            <td class="num">{% if txn.amount is not None %}₹{{ txn.amount|inr }}{% else %}—{% endif %}</td>
             <td class="num">{{ txn.units|default_if_none:"—" }}</td>
             <td class="num">{{ txn.nav|default_if_none:"—" }}</td>
             <td>{{ txn.arn.label|default:"—" }}</td>

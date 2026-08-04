@@ -509,6 +509,20 @@ class ViewTests(TestCase):
         self.assertContains(resp, "Mutual Fund Folios")
         self.assertContains(resp, "F-1")
 
+    def test_money_renders_with_indian_grouping(self):
+        folio = MutualFundFolio.objects.create(folio_number="G-1", amc_name="HDFC", arn=self.arn)
+        MutualFundTransaction.objects.create(
+            dedupe_key="grp1", folio=folio, arn=self.arn,
+            txn_type="Purchase", amount=1234567)
+
+        resp = self.admin.get(reverse("clients:mf_dashboard"))
+        self.assertContains(resp, "12,34,567")   # per-ARN gross + Gross Flows KPI
+        self.assertNotContains(resp, "1234567.00")
+
+        resp = self.admin.get(reverse("clients:mf_transactions"))
+        self.assertContains(resp, "12,34,567")   # amount column + Gross Value KPI
+        self.assertNotContains(resp, "1234567.00")
+
 
 class KfinLinkAndFormatTests(TestCase):
     """Fixes discovered from the first real KFintech mail (2026-07-16):
