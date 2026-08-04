@@ -21,6 +21,11 @@
     margin-bottom: 1rem;
   }
   .fp-bar .fp-hint { font-size: .78rem; color: var(--ki-text-muted); margin-left: auto; }
+  .fp-dirty {
+    font-size: .78rem; font-weight: 600; color: #92400e;
+    background: #fef3c7; border-radius: 999px; padding: .25rem .7rem;
+  }
+  .fp-dirty[hidden] { display: none; }
 
   .fp-block {
     background: var(--ki-card-bg); border: 1px solid var(--ki-card-border);
@@ -101,13 +106,14 @@
 
   <div class="fp-bar">
     <button type="submit" class="ki-btn ki-btn-primary">
-      <i class="bi bi-arrow-repeat"></i> Recalculate
+      <i class="bi bi-check2"></i> Apply
     </button>
     <button type="submit" class="ki-btn ki-btn-secondary"
             formaction="{% url 'clients:financial_planner_download_report' %}">
       <i class="bi bi-file-earmark-pdf"></i> Download Report
     </button>
-    <span class="fp-hint">Every figure recalculates on the server — the report always matches this screen.</span>
+    <span class="fp-dirty" id="fpDirty" hidden>Edited — hit Apply to update the figures</span>
+    <span class="fp-hint">Fill in what you need, then Apply. Every figure is computed on the server, so the report always matches this screen.</span>
   </div>
 
   <div class="fp-tabs" role="tablist">
@@ -363,29 +369,13 @@
   tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.panel)));
   show(active.value || "summary");
 
-  // Editing any field recalculates. The server owns the maths, so the page
-  // round-trips rather than keeping a second implementation in here. The
-  // round trip costs the caret, so put it back where the user left it:
-  // name + which occurrence of that name, since goal rows repeat names.
-  function fieldRef(el) {
-    const same = [...form.querySelectorAll('[name="' + el.name + '"]')];
-    return el.name + ":" + same.indexOf(el);
-  }
-  form.addEventListener("change", e => {
-    if (e.target.name === "active_tab") return;
-    try { sessionStorage.setItem("fpFocus", fieldRef(e.target)); } catch (err) { /* private mode */ }
-    form.requestSubmit();
+  // Nothing recalculates until Apply — a round trip per keystroke makes a
+  // 35-field form unfillable. The figures on screen are therefore one edit
+  // behind until then, so say so rather than let them be read as current.
+  const dirty = document.getElementById("fpDirty");
+  form.addEventListener("input", e => {
+    if (e.target.name !== "active_tab") dirty.hidden = false;
   });
-
-  try {
-    const ref = sessionStorage.getItem("fpFocus");
-    sessionStorage.removeItem("fpFocus");
-    if (ref) {
-      const [name, index] = ref.split(":");
-      const el = form.querySelectorAll('[name="' + name + '"]')[Number(index)];
-      if (el) { el.focus(); if (el.select) el.select(); }
-    }
-  } catch (err) { /* private mode */ }
 
   document.getElementById("fpAddGoal").addEventListener("click", () => {
     const body = document.querySelector("#fpGoals tbody");
@@ -405,6 +395,7 @@
       '<button type="button" class="ki-icon-btn fp-drop" aria-label="Remove this goal">'
       + '<i class="bi bi-x-lg"></i></button>';
     body.appendChild(row);
+    dirty.hidden = false;
     row.querySelector("input[name=goal_name]").focus();
   });
 
@@ -412,7 +403,7 @@
     const drop = e.target.closest(".fp-drop");
     if (!drop) return;
     drop.closest("tr").remove();
-    form.requestSubmit();
+    dirty.hidden = false;
   });
 })();
 </script>
