@@ -322,14 +322,17 @@ class Sale(models.Model):
     def _rule(self):
         from .incentives import IncentiveRule
 
-        qs = IncentiveRule.objects.filter(active=True)
-        if self.product_ref_id:
-            qs = qs.filter(product_ref=self.product_ref)
-        else:
-            qs = qs.filter(product=self._effective_product_label())
         # first() instead of get(): a stray duplicate rule must degrade to
         # deterministic behaviour, not crash every save of this product.
-        return qs.order_by("id").first()
+        qs = IncentiveRule.objects.filter(active=True)
+        if not self.product_ref_id:
+            return qs.filter(product=self._effective_product_label()).order_by("id").first()
+        rule = qs.filter(product_ref=self.product_ref).order_by("id").first()
+        if rule is None and self.product_ref.parent_id:
+            # A plan-level sale (a specific life plan) is priced by its
+            # family's rule — rules sit on the parent product.
+            rule = qs.filter(product_ref_id=self.product_ref.parent_id).order_by("id").first()
+        return rule
 
     def compute_points(self):
         """Points for this sale, from its IncentiveRule + slabs.

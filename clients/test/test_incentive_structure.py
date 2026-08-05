@@ -1099,3 +1099,46 @@ class CalculatorRosterTests(_Base):
         self.assertEqual(st["volume"], Decimal("310000"))   # own standing still shown
 
 
+
+
+class PlanLevelSaleTests(_Base):
+    """A life sale recorded under a specific plan (a sub-product of Life
+    Insurance) must be priced by the parent's rule and count in its FY
+    ladder — plan-level sales used to earn 0 points and vanish from the
+    ladder volume."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.plan = Product.objects.create(
+            code="SFIP", name="Shubh Flexi Income Plan", parent=cls.life)
+
+    def test_plan_sale_pays_the_parent_rules_base(self):
+        s = self.sell(self.plan, 80000, date(2026, 6, 10))
+        self.assertEqual(s.points, Decimal("1400.000"))  # 1.75%
+
+    def test_plan_and_parent_sales_share_one_ladder_pool(self):
+        self.sell(self.life, 150000, date(2026, 6, 1))
+        self.sell(self.plan, 100000, date(2026, 6, 20))
+        crossing = self.sell(self.plan, 60000, date(2026, 7, 5))  # cumulative 3,10,000
+        self.assertEqual(crossing.bonus_points, Decimal("3000.000"))
+
+    def test_ladder_status_counts_plan_sales(self):
+        self.sell(self.plan, 115000, date(2026, 4, 30))
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        st = inc.life_bonus_status(rule, self.emp, 2026)
+        self.assertEqual(st["volume"], Decimal("115000"))
+
+    def test_approving_a_plan_sale_reprices_the_family(self):
+        from clients.services import sales as sales_service
+
+        old = self.sell(self.life, 250000, date(2026, 5, 10))
+        late = Sale.objects.create(
+            client=self.client_rec, employee=self.emp, product=self.plan.name,
+            product_ref=self.plan, amount=Decimal("60000"), date=date(2026, 4, 20),
+            status=Sale.STATUS_PENDING)
+        sales_service.approve_sale(late, self.user)
+        old.refresh_from_db()
+        late.refresh_from_db()
+        # 3,10,000 across the family — the 3,000 rung releases exactly once.
+        self.assertEqual(old.bonus_points + late.bonus_points, Decimal("3000.000"))

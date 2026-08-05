@@ -60,6 +60,21 @@ def unit_rate_percent(rule):
     return (rule.points_per_unit or ZERO) / rule.unit_amount * Decimal("100")
 
 
+def rule_sales_q(rule):
+    """Q matching the sales `rule` prices: its product, any **sub-product** of
+    it (a life sale carries the specific plan, the rule sits on the parent
+    Life Insurance product), or legacy rows that predate product_ref (name
+    match). Without the parent walk a plan-level sale silently drops out of
+    the volume that sets the band and the FY ladder."""
+    from django.db.models import Q
+
+    if rule.product_ref_id:
+        return (Q(product_ref_id=rule.product_ref_id)
+                | Q(product_ref__parent_id=rule.product_ref_id)
+                | (Q(product_ref__isnull=True) & Q(product=rule.product)))
+    return Q(product=rule.product)
+
+
 def life_bonus_status(rule, employee, fy_year):
     """One employee's whole financial year on a bonus ladder.
 
@@ -69,7 +84,7 @@ def life_bonus_status(rule, employee, fy_year):
     changes nothing — there is no monthly deduction anywhere in this.
     """
     from calendar import monthrange
-    from django.db.models import Q, Sum
+    from django.db.models import Sum
 
     from ..models import BonusPayout, Sale
 
@@ -77,12 +92,7 @@ def life_bonus_status(rule, employee, fy_year):
     end = date(fy_year + 1, FY_START_MONTH, 1) - _one_day()
 
     qs = Sale.objects.filter(employee=employee, status=Sale.STATUS_APPROVED,
-                             date__gte=start, date__lte=end)
-    if rule.product_ref_id:
-        qs = qs.filter(Q(product_ref_id=rule.product_ref_id)
-                       | (Q(product_ref__isnull=True) & Q(product=rule.product)))
-    else:
-        qs = qs.filter(product=rule.product)
+                             date__gte=start, date__lte=end).filter(rule_sales_q(rule))
 
     paid_by_month = {
         p.for_month: p.amount
@@ -234,7 +244,7 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
     of the rule's product. Health counts Fresh only, one year of a multiyear
     premium at a time — Port pays its own flat rate and must never lift the band.
     """
-    from django.db.models import Q, Sum
+    from django.db.models import Sum
 
     from ..models import BonusPayout, Sale
     from ..models.sales import _ANNUAL_SLICE
@@ -244,13 +254,7 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
         employee=employee, status=Sale.STATUS_APPROVED,
         date__gte=start, date__lte=end,
     )
-    # Legacy rows predate product_ref, so match them by name too — otherwise an
-    # old sale silently drops out of the volume that sets someone's band.
-    if rule.product_ref_id:
-        qs = qs.filter(Q(product_ref_id=rule.product_ref_id)
-                       | (Q(product_ref__isnull=True) & Q(product=rule.product)))
-    else:
-        qs = qs.filter(product=rule.product)
+    qs = qs.filter(rule_sales_q(rule))
     if exclude_pk:
         qs = qs.exclude(pk=exclude_pk)
 

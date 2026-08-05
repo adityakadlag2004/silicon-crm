@@ -23,6 +23,7 @@ def recompute_sibling_sales(sale):
     from . import incentives as inc
 
     qs = Sale.objects.filter(employee=sale.employee).exclude(pk=sale.pk)
+    rule = None
     if sale.campaign_id:
         qs = qs.filter(date__range=[sale.campaign.start_date, sale.campaign.end_date])
     elif sale.date:
@@ -32,7 +33,11 @@ def recompute_sibling_sales(sale):
             qs = qs.filter(date__gte=start, date__lte=end)
         else:
             qs = qs.filter(date__year=sale.date.year, date__month=sale.date.month)
-    if sale.product_ref_id:
+    if rule is not None:
+        # The slab pool is everything the rule prices — a plan-level sale
+        # shares its pool with the parent product's other sales.
+        qs = qs.filter(inc.rule_sales_q(rule))
+    elif sale.product_ref_id:
         qs = qs.filter(product_ref_id=sale.product_ref_id)
     else:
         qs = qs.filter(product=sale.product)
