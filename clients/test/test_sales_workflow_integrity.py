@@ -253,3 +253,52 @@ class RecalcPointsTests(_WorkflowSetup):
         self._make_sale(self.emps["employee"])
         resp = self.http["admin"].post(reverse("clients:recalc_points"))
         self.assertEqual(resp.status_code, 302)
+
+
+class SaleDateFilterTests(_WorkflowSetup):
+    """A single date bound must filter on its own — backdated entries were
+    invisible because ?start_date= without an end date was silently ignored."""
+
+    def _dated_sale(self, on, status=Sale.STATUS_PENDING):
+        sale = self._make_sale(self.emps["employee"], status=status)
+        Sale.objects.filter(pk=sale.pk).update(date=on)
+        return sale
+
+    def test_all_sales_start_date_alone_filters(self):
+        from datetime import date, timedelta
+
+        old = self._dated_sale(date.today() - timedelta(days=30))
+        recent = self._dated_sale(date.today())
+        resp = self.http["admin"].get(
+            reverse("clients:all_sales"),
+            {"start_date": (date.today() - timedelta(days=5)).isoformat()},
+        )
+        ids = [s.id for s in resp.context["sales"]]
+        self.assertIn(recent.id, ids)
+        self.assertNotIn(old.id, ids)
+
+    def test_all_sales_end_date_alone_finds_backdated(self):
+        from datetime import date, timedelta
+
+        old = self._dated_sale(date.today() - timedelta(days=30))
+        recent = self._dated_sale(date.today())
+        resp = self.http["admin"].get(
+            reverse("clients:all_sales"),
+            {"end_date": (date.today() - timedelta(days=5)).isoformat()},
+        )
+        ids = [s.id for s in resp.context["sales"]]
+        self.assertIn(old.id, ids)
+        self.assertNotIn(recent.id, ids)
+
+    def test_approve_sales_start_date_alone_filters(self):
+        from datetime import date, timedelta
+
+        old = self._dated_sale(date.today() - timedelta(days=30))
+        recent = self._dated_sale(date.today())
+        resp = self.http["admin"].get(
+            reverse("clients:approve_sales"),
+            {"start_date": (date.today() - timedelta(days=5)).isoformat()},
+        )
+        ids = [s.id for s in resp.context["sales"]]
+        self.assertIn(recent.id, ids)
+        self.assertNotIn(old.id, ids)

@@ -199,8 +199,11 @@ def all_sales(request):
         sales_qs = sales_qs.filter(policy_type=policy_type)
     if status in [Sale.STATUS_PENDING, Sale.STATUS_APPROVED, Sale.STATUS_REJECTED]:
         sales_qs = sales_qs.filter(status=status)
-    if start_date and end_date:
-        sales_qs = sales_qs.filter(date__range=[start_date, end_date])
+    # Each bound stands alone — "from date" without an end date must still filter.
+    if start_date:
+        sales_qs = sales_qs.filter(date__gte=start_date)
+    if end_date:
+        sales_qs = sales_qs.filter(date__lte=end_date)
 
     # "My day" links land here. The counts on the dashboard come from the same
     # selectors, so the list always matches the number that was clicked.
@@ -327,8 +330,10 @@ def approve_sales(request):
             | Q(employee__user__first_name__icontains=employee_filter)
             | Q(employee__user__last_name__icontains=employee_filter)
         )
-    if start_date and end_date:
-        sales_qs = sales_qs.filter(date__range=[start_date, end_date])
+    if start_date:
+        sales_qs = sales_qs.filter(date__gte=start_date)
+    if end_date:
+        sales_qs = sales_qs.filter(date__lte=end_date)
 
     sales = list(sales_qs.order_by("-date", "-created_at"))
 
