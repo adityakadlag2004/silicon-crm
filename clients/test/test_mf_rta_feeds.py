@@ -1523,3 +1523,67 @@ class ProfileSipTests(TestCase):
         reg.refresh_from_db()
         self.assertEqual(folio.client_id, client.id)
         self.assertEqual(reg.client_id, client.id)
+
+
+class ProfileValuationTests(TestCase):
+    """The profile's valuation report: per-fund units x last NAV, lifetime
+    invested/withdrawn, SIP vs Lumpsum mode — and the RTA-driven SIP tag."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        user = User.objects.create_user(username="pval_admin", password="x")
+        Employee.objects.create(user=user, role="admin", salary=0, active=True)
+        cls.client_obj = Client.objects.create(name="Valuation Person")
+        cls.folio = MutualFundFolio.objects.create(
+            folio_number="VAL-1", amc_name="HDFC", client=cls.client_obj)
+
+        today = timezone.localdate()
+        mk = MutualFundTransaction.objects.create
+        # Scheme A — SIP: two installments, NAV moved 100 -> 120.
+        mk(dedupe_key="v1", folio=cls.folio, scheme_name="Scheme A", txn_type="SIP",
+           amount=10000, units=50, nav=100, trade_date=today - timedelta(days=60))
+        mk(dedupe_key="v2", folio=cls.folio, scheme_name="Scheme A", txn_type="SIP",
+           amount=10000, units=50, nav=120, trade_date=today - timedelta(days=2))
+        # Scheme B — lumpsum in, part redeemed (units unsigned, as some feeds send).
+        mk(dedupe_key="v3", folio=cls.folio, scheme_name="Scheme B", txn_type="Purchase",
+           amount=50000, units=500, nav=100, trade_date=today - timedelta(days=200))
+        mk(dedupe_key="v4", folio=cls.folio, scheme_name="Scheme B", txn_type="Redemption",
+           amount=10000, units=100, nav=100, trade_date=today - timedelta(days=20))
+
+    def test_summary_totals_and_holdings(self):
+        from decimal import Decimal as D
+
+        s = rta_feed.mf_summary_for_client(self.client_obj)
+        self.assertEqual(s["funds_count"], 2)
+        # A: 100u x 120 = 12,000; B: 400u x 100 = 40,000
+        self.assertEqual(s["est_value"], D("52000"))
+        self.assertEqual(s["invested_total"], D("70000"))
+        self.assertEqual(s["withdrawn_total"], D("10000"))
+        self.assertEqual(s["net_invested"], D("60000"))
+        self.assertEqual(s["monthly_sip"], D("10000"))  # only the ≤35d installment
+        modes = {h["scheme"]: h["mode"] for h in s["holdings"]}
+        self.assertEqual(modes, {"Scheme A": "SIP", "Scheme B": "Lumpsum"})
+        self.assertEqual(s["holdings"][0]["scheme"], "Scheme B")  # biggest first
+
+    def test_valuation_renders_on_profile(self):
+        http = TestClient()
+        http.force_login(User.objects.get(username="pval_admin"))
+        resp = http.get(reverse("clients:client_profile", args=[self.client_obj.id]))
+        self.assertContains(resp, "Valuation Report (2 funds)")
+        self.assertContains(resp, "52,000")   # portfolio value, Indian-grouped
+        self.assertContains(resp, "70,000")   # invested total
+        self.assertContains(resp, "Lumpsum")
+
+    def test_refresh_sets_sip_tag_for_folio_linked_registration(self):
+        SipRegistration.objects.create(
+            dedupe_key="vtag1", folio=self.folio, folio_number="VAL-1",
+            amount=7500, status=SipRegistration.STATUS_ACTIVE)  # client FK null
+
+        rta_feed.refresh_client_sip_fields()
+
+        self.client_obj.refresh_from_db()
+        self.assertTrue(self.client_obj.sip_status)
+        self.assertEqual(self.client_obj.sip_amount, 7500)

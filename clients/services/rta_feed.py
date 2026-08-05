@@ -1099,6 +1099,8 @@ def mf_summary_for_client(client):
             "monthly_sip": register_sip, "inflow_12m": Decimal("0"),
             "outflow_12m": Decimal("0"), "lumpsum_12m": Decimal("0"),
             "est_value": None, "txn_count": 0, "last_txn_date": None,
+            "invested_total": Decimal("0"), "withdrawn_total": Decimal("0"),
+            "net_invested": Decimal("0"), "holdings": [], "funds_count": 0,
         }
 
     today = timezone.localdate()
@@ -1109,12 +1111,28 @@ def mf_summary_for_client(client):
     inflow_12m = Decimal("0")
     outflow_12m = Decimal("0")
     lumpsum_12m = Decimal("0")
+    invested_total = Decimal("0")
+    withdrawn_total = Decimal("0")
     units = defaultdict(lambda: Decimal("0"))
     latest_nav = {}
+    invested_by = defaultdict(lambda: Decimal("0"))
+    withdrawn_by = defaultdict(lambda: Decimal("0"))
+    sip_schemes = set()
+    folio_numbers = {}
 
     for txn in txns:
         amount = txn.amount or Decimal("0")
         outflow = _is_outflow(txn.txn_type) or amount < 0
+        scheme_key = (txn.folio_id, txn.scheme_name)
+        folio_numbers[txn.folio_id] = txn.folio.folio_number
+        if outflow:
+            withdrawn_total += abs(amount)
+            withdrawn_by[scheme_key] += abs(amount)
+        else:
+            invested_total += abs(amount)
+            invested_by[scheme_key] += abs(amount)
+            if _is_sip_type(txn.txn_type):
+                sip_schemes.add(scheme_key)
         if txn.trade_date:
             if txn.trade_date >= sip_cutoff and not outflow and _is_sip_type(txn.txn_type):
                 monthly_sip += abs(amount)
@@ -1126,7 +1144,6 @@ def mf_summary_for_client(client):
                     if not _is_sip_type(txn.txn_type):
                         lumpsum_12m += abs(amount)
         if txn.units is not None:
-            scheme_key = (txn.folio_id, txn.scheme_name)
             delta = txn.units
             if outflow and delta > 0:  # some feeds store redemptions unsigned
                 delta = -delta
@@ -1134,10 +1151,23 @@ def mf_summary_for_client(client):
             if txn.nav:
                 latest_nav[scheme_key] = txn.nav
 
-    est_value = sum(
-        (held * latest_nav[key] for key, held in units.items() if held > 0 and key in latest_nav),
-        Decimal("0"),
-    )
+    # Per-fund valuation: currently-held schemes at the last NAV seen.
+    holdings = []
+    for key, held in units.items():
+        if held <= 0 or key not in latest_nav:
+            continue
+        holdings.append({
+            "scheme": key[1],
+            "folio_number": folio_numbers.get(key[0], ""),
+            "units": held,
+            "nav": latest_nav[key],
+            "value": held * latest_nav[key],
+            "invested": invested_by.get(key, Decimal("0")),
+            "withdrawn": withdrawn_by.get(key, Decimal("0")),
+            "mode": "SIP" if key in sip_schemes else "Lumpsum",
+        })
+    holdings.sort(key=lambda h: h["value"], reverse=True)
+    est_value = sum((h["value"] for h in holdings), Decimal("0"))
 
     return {
         "monthly_sip": register_sip if register_sip > 0 else monthly_sip,
@@ -1147,6 +1177,11 @@ def mf_summary_for_client(client):
         "est_value": est_value if est_value > 0 else None,
         "txn_count": len(txns),
         "last_txn_date": max((t.trade_date for t in txns if t.trade_date), default=None),
+        "invested_total": invested_total,
+        "withdrawn_total": withdrawn_total,
+        "net_invested": invested_total - withdrawn_total,
+        "holdings": holdings,
+        "funds_count": len(holdings),
     }
 
 
@@ -1158,19 +1193,26 @@ def refresh_client_sip_fields(client_ids=None):
     without register rows keep their sales-derived values. Returns the
     number of clients updated.
     """
-    from django.db.models import Sum
+    from collections import defaultdict
+
+    from django.db.models import Q
 
     from ..models import Client, SipRegistration
 
-    reg_clients = SipRegistration.objects.filter(client__isnull=False)
-    if client_ids is not None:
-        reg_clients = reg_clients.filter(client_id__in=client_ids)
-    covered_ids = set(reg_clients.values_list("client_id", flat=True).distinct())
-    totals = {
-        row["client_id"]: row["t"] or Decimal("0")
-        for row in reg_clients.filter(status=SipRegistration.STATUS_ACTIVE)
-        .values("client_id").annotate(t=Sum("amount"))
-    }
+    # A registration belongs to its own client, or failing that its folio's
+    # client — the same two link directions the profile reads.
+    rows = SipRegistration.objects.filter(
+        Q(client__isnull=False) | Q(folio__client__isnull=False)
+    ).values_list("client_id", "folio__client_id", "status", "amount")
+    covered_ids = set()
+    totals = defaultdict(lambda: Decimal("0"))
+    for client_id, folio_client_id, status, amount in rows:
+        cid = client_id or folio_client_id
+        if client_ids is not None and cid not in client_ids:
+            continue
+        covered_ids.add(cid)
+        if status == SipRegistration.STATUS_ACTIVE:
+            totals[cid] += amount or Decimal("0")
     updated = 0
     for client in Client.objects.filter(id__in=covered_ids):
         total = totals.get(client.id, Decimal("0"))
