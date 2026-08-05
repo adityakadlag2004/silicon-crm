@@ -451,11 +451,14 @@ def life_bonus_tracker(request):
                    {"label": "Life Bonus Status"}],
         "kpis": [
             {"label": "Life sold this FY", "value": f"₹{inr(totals['volume'])}", "color": "#4338CA"},
-            {"label": "Ladder released", "value": f"₹{inr(totals['released'])}", "color": "#B45309"},
+            {"label": "Prize handed over", "value": f"₹{inr(totals['released'])}", "color": "#B45309"},
+            {"label": "Still owed", "value": f"₹{inr(totals['shortfall'])}", "color": "#BE123C",
+             "sub": "payable from 1 Apr " + str(fy + 1)},
             {"label": "Base paid", "value": f"₹{inr(totals['base'])}", "color": "#15803D"},
         ],
         "rule": rule, "rows": rows, "totals": totals, "detail": detail,
         "fy": fy, "fy_label": f"{fy}–{fy + 1}",
+        "fy_closed": today >= date(fy + 1, 4, 1),
         "fy_options": list(range(incentives_service.fy_start_year(today), incentives_service.fy_start_year(today) - 4, -1)),
         "ladder": incentives_service.ladder(rule),
     })

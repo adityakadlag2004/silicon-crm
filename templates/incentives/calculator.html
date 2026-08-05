@@ -154,7 +154,7 @@
               it earns no points and is left out of the monthly step.</div>
             {% endif %}
           {% else %}
-            ₹{{ l.final_volume|inr }} cumulative.{% if l.bonus %} Releases <strong>₹{{ l.bonus|inr }}</strong> of ladder bonus.{% endif %}
+            ₹{{ l.final_volume|inr }} cumulative.{% if l.bonus %} Lifts the year's prize by <strong>₹{{ l.bonus|inr }}</strong>.{% endif %}
           {% endif %}
           {% if l.next %}
             <div class="text-muted mt-1">
@@ -199,9 +199,12 @@
       </div>
     </div>
     <div>
-      <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;">Still to be released</div>
+      <div class="text-muted" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;">Still to come to you</div>
       <div style="font-size:1.5rem;font-weight:800;color:#15803D;">
         {% if st.shortfall %}{{ st.shortfall|inr }}{% else %}nil{% endif %}
+      </div>
+      <div class="text-muted" style="font-size:.78rem;">
+        paid after 1 April {{ st.payable_from|date:"Y" }}
       </div>
     </div>
   </div>
@@ -236,11 +239,13 @@
   </div>
 
   <p class="form-text mb-0 mt-2">
-    Already released this year: <strong>{{ st.released|inr }}</strong>
-    {% if st.paid_manually %}(including {{ st.paid_manually|inr }} paid to you by hand){% endif %}.
-    Base earned separately: <strong>{{ st.base|inr }}</strong>.
+    The prize is one payment for the whole year, handed to you after it closes on
+    <strong>1 April {{ st.payable_from|date:"Y" }}</strong> — it is not added to any
+    policy and does not arrive month by month, because the year can still climb.
+    Already in your hands: <strong>{{ st.released|inr }}</strong>.
+    Base earned separately, and paid as you sell: <strong>{{ st.base|inr }}</strong>.
     {% if st.next %}
-      Reaching ₹{{ st.next.slab.threshold|inr }} releases {{ st.next.worth|inr }} more.
+      Reaching ₹{{ st.next.slab.threshold|inr }} takes the prize {{ st.next.worth|inr }} higher.
     {% else %}Top level reached.{% endif %}
   </p>
 

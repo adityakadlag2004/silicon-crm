@@ -126,15 +126,22 @@ def life_bonus_status(rule, employee, fy_year):
                        "for_month": m_start, "paid": recorded})
 
     level = bonus_released_for(rule, volume)
-    # released_total already contains the recorded manual payouts (period_totals
-    # folds them in), so the shortfall is simply what the level still owes.
+    released = released_total + paid_total
+    # The prize is settled after the year closes, never month by month: a rung
+    # reached in June is a standing, not a bill. It falls due on 1 April, when
+    # the year's final volume is known and cannot climb any further.
+    payable_from = date(fy_year + 1, FY_START_MONTH, 1)
+    fy_closed = _today() >= payable_from
+    shortfall = max(level - released, ZERO)
     return {
         "rule": rule,
         "employee": employee, "fy_year": fy_year,
         "volume": volume, "base": base_total,
-        "level": level, "released": released_total + paid_total,
+        "level": level, "released": released,
         "from_sales": released_total, "paid_manually": paid_total,
-        "shortfall": max(level - (released_total + paid_total), ZERO),
+        "shortfall": shortfall,
+        "payable_from": payable_from, "fy_closed": fy_closed,
+        "due_now": shortfall if fy_closed else ZERO,
         "next": next_rung(rule, volume),
         "months": months,
     }
@@ -487,9 +494,10 @@ def explain(rule, is_health=False):
             out["rungs"].append({
                 "from": s.threshold,
                 "bonus": s.payout,
-                # points_on() already includes the rung's bonus at this volume —
-                # adding s.payout again double-counts the prize.
-                "total_at": points_on(rule, s.threshold),
+                # The prize is added here, not by points_on(): a sale only ever
+                # carries the base now, so the price list has to say what the
+                # year is worth all in.
+                "total_at": points_on(rule, s.threshold) + s.payout,
             })
         top = slabs[2] if len(slabs) > 2 else slabs[-1]
         out["notes"].append(
@@ -499,9 +507,9 @@ def explain(rule, is_health=False):
             f"You are never paid the same level twice."
         )
         out["notes"].append(
-            "You do not wait until March for it. Each time you climb to a bigger prize "
-            "you are paid the difference straight away, so what you are holding always "
-            "matches what your year's total is worth."
+            "The prize is separate money, handed over to you directly — it is not added "
+            "to a policy's points. Your ladder shows the level your year has reached and "
+            "how much of it has already been given to you."
         )
         out["notes"].append(
             "On 1 April the year's total and the prize both reset to zero. The base does "
@@ -608,14 +616,25 @@ def quote(rule, amount, *, prior_volume=ZERO, prior_bonus=ZERO,
     base = (amount / rule.unit_amount * rule.points_per_unit) if rule.unit_amount else ZERO
     bonus = ZERO
     band = None
+    # The yearly prize is handed over as cash and recorded on the Life Bonus
+    # page; a sale never releases it. Auto-releasing pinned the whole rung on
+    # whichever sale happened to cross it — a ₹1L April sale showing a ₹3,000
+    # release — and paid it twice once the cash was recorded.
+    fy_prize = rule.slab_period == IncentiveRule.PERIOD_FY
     if slabs:
         band = next((s for s in slabs if volume >= s.threshold), None)
         payout = band.payout if band else ZERO
-        bonus = max(payout - prior_bonus, ZERO)
+        if not fy_prize:
+            bonus = max(payout - prior_bonus, ZERO)
     window = "this month" if rule.slab_period == IncentiveRule.PERIOD_MONTH else "this financial year"
     basis = f"Base {_pct(rate)}% of ₹{_n(amount)}."
     if slabs:
-        if bonus > 0:
+        if fy_prize and band is not None:
+            basis += (f" Cumulative ₹{_n(volume)} {window} stands at the "
+                      f"₹{_n(band.threshold)} rung, worth ₹{_n(band.payout)} for the year — "
+                      f"prize money is paid by hand and recorded on the Life Bonus page, "
+                      f"never through a sale.")
+        elif bonus > 0:
             basis += (f" Cumulative ₹{_n(volume)} {window} reaches the "
                       f"₹{_n(band.threshold)} rung (₹{_n(band.payout)} earned to date), "
                       f"₹{_n(prior_bonus)} already released → ₹{_n(bonus)} more.")

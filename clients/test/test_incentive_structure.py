@@ -45,16 +45,23 @@ class LifeLadderTests(_Base):
         self.assertEqual(s.points, Decimal("1400.000"))
         self.assertEqual(s.bonus_points, Decimal("0.000"))
 
-    def test_rung_releases_only_the_difference(self):
+    def test_a_sale_never_carries_the_yearly_prize(self):
+        """Prize money is handed over as cash and recorded on the Life Bonus
+        page. A sale that happens to cross a rung used to swallow the whole
+        rung — a ₹60,000 policy showing a ₹3,000 release — and then paid it a
+        second time when the cash was recorded."""
         self.sell(self.life, 150000, date(2026, 6, 1))
         self.sell(self.life, 100000, date(2026, 6, 20))
         crossing = self.sell(self.life, 60000, date(2026, 7, 5))  # cumulative 3,10,000
-        self.assertEqual(crossing.bonus_points, Decimal("3000.000"))
-        self.assertEqual(crossing.points, Decimal("4050.000"))  # 1.75% of 60k + 3,000
+        self.assertEqual(crossing.bonus_points, Decimal("0.000"))
+        self.assertEqual(crossing.points, Decimal("1050.000"))  # 1.75% of 60k, no prize
 
-        # Next rung is 9L → 7,500 to date, and 3,000 is already out.
-        nxt = self.sell(self.life, 600000, date(2026, 8, 3))
-        self.assertEqual(nxt.bonus_points, Decimal("4500.000"))
+        # The year did reach the rung — the ladder is where that shows.
+        st = inc.life_bonus_status(IncentiveRule.objects.get(product_ref=self.life),
+                                   self.emp, 2026)
+        self.assertEqual(st["level"], Decimal("3000"))
+        self.assertEqual(st["released"], Decimal("0"))
+        self.assertEqual(st["shortfall"], Decimal("3000"))
 
     def test_a_rung_never_pays_twice(self):
         self.sell(self.life, 400000, date(2026, 5, 5))
@@ -65,14 +72,17 @@ class LifeLadderTests(_Base):
     def test_ladder_accumulates_across_months_and_resets_on_1_april(self):
         # Three sub-3L months inside one FY still reach the rung; under the old
         # monthly slab every one of them paid zero bonus.
+        rule = IncentiveRule.objects.get(product_ref=self.life)
         self.sell(self.life, 120000, date(2026, 6, 1))
         self.sell(self.life, 120000, date(2026, 7, 1))
-        last = self.sell(self.life, 120000, date(2026, 8, 1))
-        self.assertEqual(last.bonus_points, Decimal("3000.000"))
+        self.sell(self.life, 120000, date(2026, 8, 1))
+        self.assertEqual(inc.life_bonus_status(rule, self.emp, 2026)["level"],
+                         Decimal("3000"))
 
         # A new FY starts clean: March is FY2025, April is FY2026.
-        march = self.sell(self.life, 100000, date(2026, 3, 30))
-        self.assertEqual(march.bonus_points, Decimal("0.000"))
+        self.sell(self.life, 100000, date(2026, 3, 30))
+        self.assertEqual(inc.life_bonus_status(rule, self.emp, 2025)["level"],
+                         Decimal("0"))
 
     def test_rejected_sale_earns_nothing_and_leaves_the_running_total(self):
         self.sell(self.life, 290000, date(2026, 6, 1))
@@ -103,8 +113,10 @@ class NoMonthlyDeductionTests(_Base):
 
     def test_a_month_over_three_lakh_pays_the_rung_in_full(self):
         s = self.sell_life(310000, date(2026, 8, 10))
-        self.assertEqual(s.bonus_points, Decimal("3000.000"))
-        self.assertEqual(s.points, Decimal("8425.000"))   # 1.75% of 3.1L + 3,000
+        self.assertEqual(s.bonus_points, Decimal("0.000"))   # prize is not paid via a sale
+        self.assertEqual(s.points, Decimal("5425.000"))      # 1.75% of 3.1L
+        st = inc.life_bonus_status(self.rule_life(), self.emp, 2026)
+        self.assertEqual(st["level"], Decimal("3000"))       # the rung, undiminished
 
     def test_the_same_year_pays_the_same_however_the_months_fall(self):
         """₹9L in one month, or in three, or in nine — one ₹7,500 prize."""
@@ -493,13 +505,15 @@ class ExplainerNumbersTests(_Base):
         ])
 
     def test_the_total_matches_what_selling_exactly_that_much_really_pays(self):
-        # Sell precisely the rung amount and compare against the page's figure.
+        # Sell precisely the rung amount. The policy pays the base; the prize is
+        # handed over separately — the page's figure is the two added up.
         rule = IncentiveRule.objects.get(product_ref=self.life)
         e = inc.explain(rule)
         today = timezone.localdate()
         sale = self.sell(self.life, 300000, today)
         rung = next(r for r in e["rungs"] if r["from"] == Decimal("300000"))
-        self.assertEqual(sale.points, rung["total_at"])
+        st = inc.life_bonus_status(rule, self.emp, inc.fy_start_year(today))
+        self.assertEqual(sale.points + st["level"], rung["total_at"])
 
     def test_health_bands_read_as_ranges_priced_per_lakh(self):
         """Each row is a range the month can fall in and one number: what every
@@ -628,30 +642,29 @@ class PayoutReportTests(_Base):
         self.url = reverse("clients:incentive_payout")
         self.today = timezone.localdate()
 
-    def test_splits_base_from_bonus_and_totals_the_bill(self):
+    def test_the_month_bill_is_base_only(self):
         self.sell(self.life, 250000, self.today)
-        self.sell(self.life, 60000, self.today)   # crosses 3L -> releases 3,000
+        self.sell(self.life, 60000, self.today)   # the year reaches 3L
         r = self.client.get(self.url, {"month": self.today.month, "year": self.today.year})
         row = next(x for x in r.context["rows"] if x["employee"] == self.emp)
-        self.assertEqual(row["bonus"], Decimal("3000.000"))
+        # The prize is settled by hand, so it is never part of the month's bill.
+        self.assertEqual(row["bonus"], Decimal("0.000"))
         self.assertEqual(row["base"], Decimal("5425.000"))   # 1.75% of 3,10,000
-        self.assertEqual(row["total"], Decimal("8425.000"))
-        self.assertEqual(r.context["totals"]["total"], Decimal("8425.000"))
+        self.assertEqual(row["total"], Decimal("5425.000"))
+        self.assertEqual(r.context["totals"]["total"], Decimal("5425.000"))
 
-    def test_names_the_day_the_bonus_was_released(self):
+    def test_no_sale_is_listed_as_a_bonus_release(self):
         self.sell(self.life, 250000, self.today)
-        crossing = self.sell(self.life, 60000, self.today)
+        self.sell(self.life, 60000, self.today)
         r = self.client.get(self.url, {"month": self.today.month, "year": self.today.year})
-        self.assertIn(crossing, list(r.context["releases"]))
-        # A sale that released nothing must not be listed as a release.
-        self.assertTrue(all(s.bonus_points > 0 for s in r.context["releases"]))
+        self.assertEqual(list(r.context["releases"]), [])
 
     def test_shows_what_is_still_unclaimed_on_the_ladder(self):
         self.sell(self.life, 310000, self.today)
         r = self.client.get(self.url, {"month": self.today.month, "year": self.today.year})
         led = next(x for x in r.context["rows"] if x["employee"] == self.emp)["ladder"]
         self.assertEqual(led["level"], Decimal("3000"))
-        self.assertEqual(led["released"], Decimal("3000.000"))
+        self.assertEqual(led["released"], Decimal("0"))   # nothing handed over yet
         self.assertEqual(led["next"]["slab"].threshold, Decimal("900000"))
         self.assertEqual(led["next"]["worth"], Decimal("4500"))
 
@@ -719,7 +732,8 @@ class LifeBonusTrackerTests(_Base):
         self.assertEqual(st["volume"], Decimal("310000"))
         self.assertEqual(st["base"], Decimal("5425.000"))
         self.assertEqual(st["level"], Decimal("3000"))
-        self.assertEqual(st["released"], Decimal("3000.000"))
+        self.assertEqual(st["released"], Decimal("0"))     # no cash recorded yet
+        self.assertEqual(st["shortfall"], Decimal("3000"))
 
     def test_months_run_april_to_march_and_carry_a_running_total(self):
         st = inc.life_bonus_status(self.rule, self.emp, 2026)
@@ -744,8 +758,7 @@ class LifeBonusTrackerTests(_Base):
         self.sell(self.life, 300000, date(2026, 6, 10))
         st = inc.life_bonus_status(self.rule, self.emp, 2026)
         self.assertEqual(st["level"], Decimal("3000"))
-        self.assertEqual(st["released"], Decimal("3000.000"))
-        self.assertEqual(st["shortfall"], Decimal("0"))
+        self.assertEqual(st["shortfall"], Decimal("3000"))   # owed in full, nothing deducted
 
     def test_the_prize_follows_the_year_however_it_is_split(self):
         """Three ₹3L months and one ₹9L month must pay the same prize."""
@@ -754,8 +767,8 @@ class LifeBonusTrackerTests(_Base):
         st = inc.life_bonus_status(self.rule, self.emp, 2026)
         self.assertEqual(st["volume"], Decimal("900000"))
         self.assertEqual(st["level"], Decimal("7500"))     # the ₹9L rung, in full
-        self.assertEqual(st["released"], Decimal("7500.000"))
-        self.assertEqual(st["shortfall"], Decimal("0"))
+        self.assertEqual(st["released"], Decimal("0"))
+        self.assertEqual(st["shortfall"], Decimal("7500"))
 
     def test_page_renders_and_expands_one_employee(self):
         self.sell(self.life, 310000, date(2026, 6, 10))
@@ -795,10 +808,12 @@ class BonusPayoutNettingTests(_Base):
         self.assertEqual(crossing.bonus_points, Decimal("0.000"))
         self.assertEqual(crossing.points, Decimal("5425.000"))  # base only
 
-    def test_the_ladder_still_pays_the_shortfall(self):
+    def test_the_ladder_still_owes_the_shortfall(self):
         self._pay(date(2026, 6, 1), 2000)
-        crossing = self.sell(self.life, 310000, date(2026, 6, 20))
-        self.assertEqual(crossing.bonus_points, Decimal("1000.000"))  # 3,000 - 2,000
+        self.sell(self.life, 310000, date(2026, 6, 20))
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["released"], Decimal("2000"))
+        self.assertEqual(st["shortfall"], Decimal("1000"))   # 3,000 - 2,000
 
     def test_it_never_claws_back(self):
         self._pay(date(2026, 6, 1), 50000)
@@ -808,19 +823,25 @@ class BonusPayoutNettingTests(_Base):
 
     def test_a_payout_outside_the_financial_year_is_not_netted(self):
         self._pay(date(2026, 3, 1), 8000)   # FY2025, not FY2026
-        crossing = self.sell(self.life, 310000, date(2026, 6, 20))
-        self.assertEqual(crossing.bonus_points, Decimal("3000.000"))
+        self.sell(self.life, 310000, date(2026, 6, 20))
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["released"], Decimal("0"))
+        self.assertEqual(st["shortfall"], Decimal("3000"))
 
-    def test_recording_one_reprices_sales_already_booked(self):
+    def test_recording_one_settles_the_ladder_and_leaves_the_sale_alone(self):
         crossing = self.sell(self.life, 310000, date(2026, 6, 20))
-        self.assertEqual(crossing.bonus_points, Decimal("3000.000"))
+        booked = crossing.points
         r = self.client.post(reverse("clients:record_bonus_payout"), {
             "employee": self.emp.id, "rule": self.rule.id, "fy": 2026,
-            "for_month": "2026-06-01", "amount": "8000",
+            "for_month": "2026-06-01", "amount": "3000",
         })
         self.assertEqual(r.status_code, 302)
         crossing.refresh_from_db()
+        self.assertEqual(crossing.points, booked)          # the policy is untouched
         self.assertEqual(crossing.bonus_points, Decimal("0.000"))
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["released"], Decimal("3000"))
+        self.assertEqual(st["shortfall"], Decimal("0"))
 
     def test_resubmitting_a_month_replaces_rather_than_stacks(self):
         from clients.models import BonusPayout
@@ -850,8 +871,8 @@ class BonusPayoutNettingTests(_Base):
         st = inc.life_bonus_status(self.rule, self.emp, 2026)
         self.assertEqual(st["level"], Decimal("3000"))
         self.assertEqual(st["paid_manually"], Decimal("2000"))
-        self.assertEqual(st["released"], Decimal("3000.000"))  # 1,000 sale + 2,000 hand
-        self.assertEqual(st["shortfall"], Decimal("0"))
+        self.assertEqual(st["released"], Decimal("2000"))     # only what was handed over
+        self.assertEqual(st["shortfall"], Decimal("1000"))
 
     def test_extended_ladder_has_no_ceiling_at_45_lakh(self):
         rungs = {s.threshold: s.payout for s in self.rule.slabs.all()}
@@ -966,15 +987,15 @@ class CalculatorLadderStatusTests(_Base):
         self.sell(self.life, 310000, self.today)
         r = self.client.get(self.url)
         st = r.context["ladder_status"][0]
-        self.assertEqual(st["shortfall"], Decimal("0"))  # released with the sale
+        self.assertEqual(st["shortfall"], Decimal("3000"))  # reached, not yet handed over
 
         BonusPayout.objects.create(
             employee=self.emp, rule=IncentiveRule.objects.get(product_ref=self.life),
-            for_month=self.today.replace(day=1), amount=Decimal("8000"))
+            for_month=self.today.replace(day=1), amount=Decimal("3000"))
         r = self.client.get(self.url)
         st = r.context["ladder_status"][0]
-        self.assertEqual(st["paid_manually"], Decimal("8000"))
-        self.assertEqual(st["shortfall"], Decimal("0"))   # monthly payout covers it
+        self.assertEqual(st["paid_manually"], Decimal("3000"))
+        self.assertEqual(st["shortfall"], Decimal("0"))   # the recorded cash settles it
 
     def test_an_employee_sees_only_their_own_standing(self):
         other_user = User.objects.create_user("rival2", password="x")
@@ -1069,8 +1090,8 @@ class CalculatorRosterTests(_Base):
         mine = roster[self.emp]
         self.assertEqual(mine["volume"], Decimal("310000"))
         self.assertEqual(mine["level"], Decimal("3000"))
-        self.assertEqual(mine["released"], Decimal("3000.000"))
-        self.assertEqual(mine["pending"], Decimal("0"))
+        self.assertEqual(mine["released"], Decimal("0"))
+        self.assertEqual(mine["pending"], Decimal("3000"))
 
     def test_pending_is_what_the_ladder_still_owes(self):
         # A sale booked before the structure changed released nothing, so the
@@ -1120,8 +1141,11 @@ class PlanLevelSaleTests(_Base):
     def test_plan_and_parent_sales_share_one_ladder_pool(self):
         self.sell(self.life, 150000, date(2026, 6, 1))
         self.sell(self.plan, 100000, date(2026, 6, 20))
-        crossing = self.sell(self.plan, 60000, date(2026, 7, 5))  # cumulative 3,10,000
-        self.assertEqual(crossing.bonus_points, Decimal("3000.000"))
+        self.sell(self.plan, 60000, date(2026, 7, 5))  # cumulative 3,10,000
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        st = inc.life_bonus_status(rule, self.emp, 2026)
+        self.assertEqual(st["volume"], Decimal("310000"))
+        self.assertEqual(st["level"], Decimal("3000"))
 
     def test_ladder_status_counts_plan_sales(self):
         self.sell(self.plan, 115000, date(2026, 4, 30))
@@ -1129,16 +1153,58 @@ class PlanLevelSaleTests(_Base):
         st = inc.life_bonus_status(rule, self.emp, 2026)
         self.assertEqual(st["volume"], Decimal("115000"))
 
-    def test_approving_a_plan_sale_reprices_the_family(self):
+    def test_approving_a_plan_sale_lifts_the_family_ladder(self):
         from clients.services import sales as sales_service
 
-        old = self.sell(self.life, 250000, date(2026, 5, 10))
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        self.sell(self.life, 250000, date(2026, 5, 10))
         late = Sale.objects.create(
             client=self.client_rec, employee=self.emp, product=self.plan.name,
             product_ref=self.plan, amount=Decimal("60000"), date=date(2026, 4, 20),
             status=Sale.STATUS_PENDING)
+        self.assertEqual(inc.life_bonus_status(rule, self.emp, 2026)["level"], Decimal("0"))
+
         sales_service.approve_sale(late, self.user)
-        old.refresh_from_db()
         late.refresh_from_db()
-        # 3,10,000 across the family — the 3,000 rung releases exactly once.
-        self.assertEqual(old.bonus_points + late.bonus_points, Decimal("3000.000"))
+        self.assertEqual(late.points, Decimal("1050.000"))   # 1.75%, via the parent's rule
+        st = inc.life_bonus_status(rule, self.emp, 2026)
+        self.assertEqual(st["volume"], Decimal("310000"))
+        self.assertEqual(st["level"], Decimal("3000"))
+
+
+class PrizeFallsDueAfterMarchTests(_Base):
+    """The yearly prize is never released month by month. A rung reached in
+    June is a standing, not a bill — the money is handed over once the year
+    has closed and its final volume can no longer climb."""
+
+    def setUp(self):
+        self.rule = IncentiveRule.objects.get(product_ref=self.life)
+
+    def test_a_rung_reached_mid_year_is_not_due_yet(self):
+        # Today is inside FY2026 (Apr 2026 – Mar 2027).
+        self.sell(self.life, 310000, date(2026, 6, 20))
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["level"], Decimal("3000"))       # earned
+        self.assertEqual(st["due_now"], Decimal("0"))        # but not payable yet
+        self.assertFalse(st["fy_closed"])
+
+    def test_it_becomes_due_on_the_first_of_april(self):
+        st = inc.life_bonus_status(self.rule, self.emp, 2026)
+        self.assertEqual(st["payable_from"], date(2027, 4, 1))
+
+    def test_a_closed_year_is_due_in_full(self):
+        # FY2025 ran Apr 2025 – Mar 2026 and is over.
+        self.sell(self.life, 310000, date(2025, 6, 20))
+        st = inc.life_bonus_status(self.rule, self.emp, 2025)
+        self.assertTrue(st["fy_closed"])
+        self.assertEqual(st["due_now"], Decimal("3000"))
+
+    def test_recording_the_payout_clears_what_is_due(self):
+        from clients.models import BonusPayout
+
+        self.sell(self.life, 310000, date(2025, 6, 20))
+        BonusPayout.objects.create(employee=self.emp, rule=self.rule,
+                                   for_month=date(2025, 6, 1), amount=Decimal("3000"))
+        st = inc.life_bonus_status(self.rule, self.emp, 2025)
+        self.assertEqual(st["due_now"], Decimal("0"))
+        self.assertEqual(st["released"], Decimal("3000"))

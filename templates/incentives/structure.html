@@ -136,11 +136,14 @@
     {% elif c.ladder %}
       <p style="font-size:.9rem;">
         <strong>{{ c.base_percent|floatformat:2 }}%</strong> of every sale, always, with no minimum.
-        On top of that, a bonus is released as the seller's
-        {% if c.rule.slab_period == 'fy' %}April–March{% else %}monthly{% endif %}
-        running total crosses each rung. The rung figure is what they have earned
-        <em>to date</em>, so only the difference against what the period already
-        released is paid out.
+        On top of that, one prize for the whole
+        {% if c.rule.slab_period == 'fy' %}April–March year{% else %}month{% endif %}:
+        the rung the running total reaches is what they have earned, and the rung
+        figure is the total <em>to date</em>, never one rung plus the next.
+        {% if c.rule.slab_period == 'fy' %}
+          It is never paid through a sale and never month by month — it is settled
+          by hand after 31 March and recorded on the Life Bonus Status page.
+        {% endif %}
       </p>
     {% else %}
       <p style="font-size:.9rem;">

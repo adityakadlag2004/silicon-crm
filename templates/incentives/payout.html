@@ -20,8 +20,11 @@
 </div>
 
 <p class="text-muted mb-4" style="font-size:.92rem;max-width:74ch;">
-  What each employee earned in this month, and what is still unclaimed on the
-  yearly life ladder. Points are rupees, so the last column is the payout.
+  What each employee earned in this month, and where they stand on the yearly
+  life ladder. Points are rupees, so the last column is the payout. The life
+  ladder prize is <strong>not</strong> part of this bill: it is settled after the
+  financial year closes and recorded on the
+  <a href="{% url 'clients:life_bonus_tracker' %}">Life Bonus Status</a> page.
 </p>
 
 {# ---------------- The month's bill ---------------- #}
@@ -63,10 +66,12 @@
   </table>
 </div>
 
-{# ---------------- When each bonus was released ---------------- #}
+{# ---------------- Legacy: prize money that once rode a sale ---------------- #}
 <h2 class="ki-section-title mb-2"><i class="bi bi-calendar-check"></i> Bonus released this month</h2>
 <p class="text-muted mb-3" style="font-size:.9rem;">
-  The exact day each ladder level was reached, and the sale that crossed it.
+  Historical only. Prize money used to be attached to whichever sale crossed a
+  rung; it is now handed over after the year closes and recorded on the Life
+  Bonus Status page, so no new sale appears here.
 </p>
 <div class="ki-table-wrap mb-4">
   <table class="ki-table">
@@ -97,8 +102,9 @@
 {% if life_rule %}
 <h2 class="ki-section-title mb-2"><i class="bi bi-graph-up-arrow"></i> Life ladder — FY {{ fy_label }} to date</h2>
 <p class="text-muted mb-3" style="font-size:.9rem;">
-  Position as at the end of {{ month_label }}. "Still to come" is what reaching
-  the next level would release — it is not owed yet.
+  Position as at the end of {{ month_label }}. Nothing here is payable yet — the
+  year can still climb, and the prize is settled once it closes on 1 April.
+  "Still to come" is what reaching the next level would add.
 </p>
 <div class="ki-table-wrap">
   <table class="ki-table">
@@ -135,8 +141,9 @@
   </table>
 </div>
 <p class="form-text mt-2">
-  "Bonus paid so far" is what has actually been released this financial year, so it
-  always matches the prize level reached. Both reset on 1 April.
+  "Bonus paid so far" is prize money actually handed over and recorded this
+  financial year — it stays at nil until someone records a payment, however high
+  the level climbs. Level and volume both reset on 1 April.
 </p>
 {% endif %}
 

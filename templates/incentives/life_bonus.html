@@ -16,11 +16,16 @@
 </div>
 
 <p class="text-muted mb-4" style="font-size:.92rem;max-width:76ch;">
-  Where every employee stands on the yearly life ladder, and what has already
-  been released to them. The prize is decided by the <strong>year's total life
-  business</strong> — whatever level April to March reaches is what is paid. The
-  boxes below record a prize amount paid by hand; that much then counts as
-  already released.
+  Where every employee stands on the yearly life ladder. The prize is decided by
+  the <strong>year's total life business</strong> — whatever level April to March
+  reaches is what is paid. It is <strong>never released month by month</strong>:
+  a level reached in June is a standing, not a bill, because the year can still
+  climb. It falls due on <strong>1 April {{ fy|add:1 }}</strong>, once the year
+  is closed. Nothing leaves the system on its own — a prize counts as released
+  only when the cash paid is recorded in the boxes below.
+  {% if not fy_closed %}
+    <span class="ki-tag" style="background:#FEF3C7;color:#92400E;">This year is still open</span>
+  {% endif %}
 </p>
 
 <div class="ki-table-wrap mb-4">
@@ -31,7 +36,7 @@
         <th class="text-end">Life sold this FY</th>
         <th class="text-end">Base paid</th>
         <th class="text-end">Prize level reached</th>
-        <th class="text-end">Ladder released</th>
+        <th class="text-end">Prize handed over</th>
         <th>Next level</th>
         <th class="text-end">Paid by hand</th>
         <th class="text-end">Still owed by the ladder</th>
@@ -83,10 +88,11 @@
 </div>
 
 <p class="form-text mb-4">
-  <strong>Ladder released</strong> is everything already in the employee's hands this
-  year — prize released on their sales plus anything recorded as paid by hand below.
-  <strong>Still owed</strong> is the rest of the level the year has reached. Nothing is
-  ever clawed back.
+  <strong>Prize handed over</strong> is what is already in the employee's hands this
+  year: the amounts recorded as paid by hand below. <strong>Still owed</strong> is the
+  rest of the level the year has reached, payable once the year closes on
+  1 April {{ fy|add:1 }}. Nothing is ever clawed back — if the year ends on a lower
+  level than was already paid, the difference stays with the employee.
 </p>
 
 {% if detail %}
@@ -102,7 +108,7 @@
         <th class="text-end">Life sold</th>
         <th class="text-end">Running FY total</th>
         <th class="text-end">Base paid</th>
-        <th class="text-end">Ladder released</th>
+        <th class="text-end">Prize handed over</th>
         <th class="text-end">Paid by hand</th>
         <th>Record a hand payment</th>
       </tr>
