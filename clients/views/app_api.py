@@ -2062,6 +2062,9 @@ def app_client_create(request):
         mapped_to=mapped_to,
         status="Mapped" if mapped_to else "Unmapped",
     )
+    # PAN is mandatory here — link any RTA folios/SIPs already imported for it.
+    from ..services.rta_feed import relink_folios
+    relink_folios()
     return JsonResponse({"ok": True, "id": client.id})
 
 

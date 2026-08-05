@@ -1075,7 +1075,7 @@ def mf_summary_for_client(client):
     number). Returns None when the client has no imported transactions."""
     from collections import defaultdict
 
-    from django.db.models import Sum
+    from django.db.models import Q, Sum
     from django.utils import timezone
 
     from ..models import MutualFundTransaction, SipRegistration
@@ -1085,9 +1085,12 @@ def mf_summary_for_client(client):
         .select_related("folio").order_by("trade_date", "id")
     )
     # the SIP register is authoritative for the live SIP figure — installment
-    # inference below is the fallback for clients without register rows
+    # inference below is the fallback for clients without register rows.
+    # Match via the reg's own client OR its folio's client: a folio linked
+    # after import leaves reg.client null until the next relink pass.
     register_sip = SipRegistration.objects.filter(
-        client=client, status=SipRegistration.STATUS_ACTIVE,
+        Q(client=client) | Q(folio__client=client),
+        status=SipRegistration.STATUS_ACTIVE,
     ).aggregate(t=Sum("amount"))["t"] or Decimal("0")
     if not txns:
         if not register_sip:

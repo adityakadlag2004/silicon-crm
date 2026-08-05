@@ -371,6 +371,11 @@ def add_client(request):
         if form.is_valid():
             client = form.save()
             messages.success(request, "Client added successfully!")
+            if client.pan:
+                from ..services import rta_feed
+                linked = rta_feed.relink_folios()
+                if linked:
+                    messages.info(request, f"{linked} RTA folio/SIP record(s) matched this PAN and were linked.")
             drive_created = False
             if request.POST.get("create_drive_folder"):
                 try:
@@ -421,6 +426,11 @@ def edit_client(request, client_id):
                 updated.edited_by = user_emp
             updated.save()
             messages.success(request, "Client updated successfully!")
+            if "pan" in form.changed_data and updated.pan:
+                from ..services import rta_feed
+                linked = rta_feed.relink_folios()
+                if linked:
+                    messages.info(request, f"{linked} RTA folio/SIP record(s) matched this PAN and were linked.")
             if not is_employee:
                 return redirect("clients:all_clients")
             return redirect("clients:my_clients")
@@ -459,11 +469,19 @@ def client_profile(request, client_id):
     )
 
     from django.db.models import Count
+    from ..models import SipRegistration
     from ..services import rta_feed
     mf_folios = (
         client.mf_folios.select_related("arn")
         .annotate(txn_count=Count("transactions"))
         .order_by("amc_name", "folio_number")
+    )
+    # Match via the reg's own client OR its folio's client — a folio linked
+    # after the registration was imported leaves reg.client null.
+    mf_sips = (
+        SipRegistration.objects
+        .filter(Q(client=client) | Q(folio__client=client))
+        .order_by("status", "-registered_on", "-first_seen_at")
     )
     mf_summary = rta_feed.mf_summary_for_client(client)
 
@@ -491,6 +509,7 @@ def client_profile(request, client_id):
         "renewals": renewals,
         "open_tasks": open_tasks,
         "mf_folios": mf_folios,
+        "mf_sips": mf_sips,
         "mf_summary": mf_summary,
         "sales_total_amount": sales_summary.get("total_amount") or 0,
         "sales_total_points": sales_summary.get("total_points") or 0,

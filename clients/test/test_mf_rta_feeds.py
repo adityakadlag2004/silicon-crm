@@ -24,6 +24,7 @@ from clients.models import (
     Product,
     RTAFeedImport,
     Sale,
+    SipRegistration,
     RTA_CAMS,
     RTA_KFIN,
 )
@@ -1475,3 +1476,50 @@ class AutoLinkByNameTests(TestCase):
         c.force_login(user)
         self.assertEqual(c.post(reverse("clients:mf_folio_auto_link")).status_code, 403)
         self.assertIsNone(MutualFundFolio.objects.get(id=self.exact.id).client)
+
+
+class ProfileSipTests(TestCase):
+    """Live SIPs reach the client profile through either link direction, and
+    adding a PAN to an existing client links the already-imported records."""
+
+    @classmethod
+    def setUpTestData(cls):
+        user = User.objects.create_user(username="psip_admin", password="x")
+        Employee.objects.create(user=user, role="admin", salary=0, active=True)
+
+    def setUp(self):
+        self.http = TestClient()
+        self.http.force_login(User.objects.get(username="psip_admin"))
+
+    def test_folio_linked_sip_shows_on_profile_without_client_fk(self):
+        client = Client.objects.create(name="Sip Holder")
+        folio = MutualFundFolio.objects.create(
+            folio_number="SF-1", amc_name="HDFC", client=client)
+        SipRegistration.objects.create(
+            dedupe_key="psip1", folio=folio, folio_number="SF-1",
+            scheme_name="HDFC Flexi Cap", amount=123456,
+            status=SipRegistration.STATUS_ACTIVE)  # client FK null on purpose
+
+        resp = self.http.get(reverse("clients:client_profile", args=[client.id]))
+        self.assertContains(resp, "SIP Register")
+        self.assertContains(resp, "HDFC Flexi Cap")
+        self.assertContains(resp, "1,23,456")  # row amount + Monthly SIP KPI
+
+    def test_adding_pan_links_folio_and_sip(self):
+        client = Client.objects.create(name="Pan Later", phone="9111111111")
+        folio = MutualFundFolio.objects.create(
+            folio_number="PL-1", amc_name="HDFC", pan="ABCDE1234F")
+        reg = SipRegistration.objects.create(
+            dedupe_key="psip2", folio_number="PL-1", pan="ABCDE1234F",
+            amount=5000, status=SipRegistration.STATUS_ACTIVE)
+
+        resp = self.http.post(
+            reverse("clients:edit_client", args=[client.id]),
+            {"name": "Pan Later", "phone": "9111111111",
+             "email": "pan.later@example.com", "pan": "ABCDE1234F"})
+        self.assertEqual(resp.status_code, 302)  # form valid → redirect
+
+        folio.refresh_from_db()
+        reg.refresh_from_db()
+        self.assertEqual(folio.client_id, client.id)
+        self.assertEqual(reg.client_id, client.id)
