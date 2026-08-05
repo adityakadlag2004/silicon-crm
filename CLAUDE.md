@@ -147,9 +147,15 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `LEGACY_MONTHLY_SLAB`) — **all of it was deleted on 2026-07-31, migration
   0116**, because a month over ₹3L cancelled the prize it had just earned. Don't
   reintroduce a per-month adjustment to a per-year ladder.
-- A `BonusPayout` row is the one thing that still nets off, and only because an
-  admin typed it: it records prize money handed over outside the system for a
-  given month, so the ladder releases the rest instead of paying it twice.
+- **The FY prize is never released by a sale, and never month by month.** It is
+  handed over as cash once the year has closed and recorded as a `BonusPayout` —
+  that record is the *only* thing that marks it released. `quote()` therefore
+  returns no bonus for an FY-period ladder, so `Sale.bonus_points` stays 0 and a
+  ₹1L sale can never show a ₹3,000 release just because the year crossed a rung
+  on it. A rung reached in June is a standing, not a bill: the year can still
+  climb, so `life_bonus_status` carries `payable_from` (1 April after the FY),
+  `fy_closed` and `due_now` — nothing is due while the year is open. Health's
+  monthly rate bands are unaffected; they pay as they go.
 - `recompute_sibling_sales` re-saves the originating sale too (guarded against a
   deleted row) — a sale is priced before it exists in the table, so its own
   amount is missing from its period until a second pass.
@@ -367,7 +373,12 @@ signal there is, since the app is self-hosted with no Play Console.
   the admin incentive report always computes live from `Sale` now)
 - Manual tools (intentionally not in CRONJOBS): `prod_readiness_check`,
   `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`,
-  `seed_incentive_structure`.
+  `seed_incentive_structure`, `clear_unreleased_ladder_bonus`.
+  `clear_unreleased_ladder_bonus` is the one-off that took the FY prize back off
+  the sales carrying it (2026-08-05). Dry run by default, `--apply` writes,
+  idempotent. It strips the prize only and never re-saves a row — save() would
+  reprice a pre-restructure sale under today's structure and invent a base it was
+  never booked with.
   `seed_incentive_structure` sets the *employee* incentive: Life = 1.75% base +
   the Apr–Mar bonus ladder, Health = the per-employee monthly Fresh rate bands
   (1.50%→3.50%, a flat tenth of the firm's own margin grid); Port earns nothing.

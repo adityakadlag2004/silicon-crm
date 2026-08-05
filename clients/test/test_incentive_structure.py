@@ -1208,3 +1208,61 @@ class PrizeFallsDueAfterMarchTests(_Base):
         st = inc.life_bonus_status(self.rule, self.emp, 2025)
         self.assertEqual(st["due_now"], Decimal("0"))
         self.assertEqual(st["released"], Decimal("3000"))
+
+
+class ClearUnreleasedLadderBonusTests(_Base):
+    """The one-off that takes prize money back off the sales that carry it."""
+
+    def _stale(self, amount, on, *, points, bonus):
+        """A sale as the old scheme left it: the prize written onto the row."""
+        s = self.sell(self.life, amount, on)
+        Sale.objects.filter(pk=s.pk).update(
+            points=Decimal(points), bonus_points=Decimal(bonus),
+            incentive_amount=Decimal(points))
+        return Sale.objects.get(pk=s.pk)
+
+    def test_dry_run_writes_nothing(self):
+        s = self._stale(310000, date(2026, 6, 20), points="8000", bonus="8000")
+        call_command("clear_unreleased_ladder_bonus")
+        s.refresh_from_db()
+        self.assertEqual(s.bonus_points, Decimal("8000.000"))
+
+    def test_apply_strips_the_prize_and_keeps_the_base(self):
+        s = self._stale(310000, date(2026, 6, 20), points="13425", bonus="8000")
+        call_command("clear_unreleased_ladder_bonus", "--apply")
+        s.refresh_from_db()
+        self.assertEqual(s.bonus_points, Decimal("0.000"))
+        self.assertEqual(s.points, Decimal("5425.000"))   # the base it was booked with
+
+    def test_it_does_not_reprice_pre_restructure_rows(self):
+        # points == bonus: booked when the slab was the whole incentive and no
+        # base existed. Re-saving would invent a 1.75% base; this must not.
+        s = self._stale(103317, date(2025, 12, 16), points="8000", bonus="8000")
+        call_command("clear_unreleased_ladder_bonus", "--apply")
+        s.refresh_from_db()
+        self.assertEqual(s.points, Decimal("0.000"))
+
+    def test_the_prize_moves_to_the_ladder_as_owed(self):
+        self._stale(310000, date(2026, 6, 20), points="8000", bonus="8000")
+        rule = IncentiveRule.objects.get(product_ref=self.life)
+        self.assertEqual(inc.life_bonus_status(rule, self.emp, 2026)["shortfall"],
+                         Decimal("0"))          # looked settled while the sale held it
+        call_command("clear_unreleased_ladder_bonus", "--apply")
+        st = inc.life_bonus_status(rule, self.emp, 2026)
+        self.assertEqual(st["released"], Decimal("0"))
+        self.assertEqual(st["shortfall"], Decimal("3000"))
+
+    def test_running_twice_is_a_no_op(self):
+        self._stale(310000, date(2026, 6, 20), points="13425", bonus="8000")
+        call_command("clear_unreleased_ladder_bonus", "--apply")
+        after = Sale.objects.get(employee=self.emp).points
+        call_command("clear_unreleased_ladder_bonus", "--apply")
+        self.assertEqual(Sale.objects.get(employee=self.emp).points, after)
+
+    def test_a_monthly_bonus_rule_is_left_alone(self):
+        # Health is rate-banded and pays as it goes — not this command's business.
+        h = self.sell(self.health, 50000, date(2026, 6, 20), policy_type="fresh")
+        Sale.objects.filter(pk=h.pk).update(bonus_points=Decimal("500"))
+        call_command("clear_unreleased_ladder_bonus", "--apply")
+        h.refresh_from_db()
+        self.assertEqual(h.bonus_points, Decimal("500.000"))
