@@ -131,6 +131,17 @@ def _is_insurance_product_name(product_name):
 
 
 class SalePolicyTypeMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Amounts are written "1,50,000" / "₹50000" here. DecimalField rejects
+        # both with "Enter a number", which is a bad reason to lose a sale entry.
+        if self.is_bound:
+            self.data = self.data.copy()
+            for name in ("amount", "cover_amount"):
+                raw = self.data.get(name)
+                if isinstance(raw, str):
+                    self.data[name] = raw.replace(",", "").replace("₹", "").strip()
+
     def _configure_policy_field(self):
         if "policy_type" in self.fields:
             self.fields["policy_type"].required = False

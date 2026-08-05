@@ -302,3 +302,50 @@ class SaleDateFilterTests(_WorkflowSetup):
         ids = [s.id for s in resp.context["sales"]]
         self.assertIn(recent.id, ids)
         self.assertNotIn(old.id, ids)
+
+
+class AddSaleRejectionTests(_WorkflowSetup):
+    """A rejected Add Sale used to look exactly like a page reload: no message,
+    no error, the picked client gone, and nothing in the approval queue."""
+
+    def _post(self, **over):
+        from datetime import date
+
+        data = {
+            "client": str(self.customer.id),
+            "employee": str(self.emps["employee"].id),
+            "product": "Life Insurance",
+            "amount": "50000",
+            "cover_amount": "",
+            "date": date.today().isoformat(),
+            "policy_date": date.today().isoformat(),
+            "policy_number": "LI-REJ-1",
+            "policy_years": "1",
+            "emi_months": "0",
+        }
+        data.update(over)
+        return self.http["employee"].post(reverse("clients:add_sale"), data)
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from clients.models import Product
+
+        Product.objects.get_or_create(
+            code="LIFE_INS", defaults={"name": "Life Insurance", "is_active": True})
+
+    def test_missing_field_shows_why_and_keeps_the_client(self):
+        resp = self._post(date="")
+        body = resp.content.decode()
+        self.assertIn("This sale was not saved", body)
+        self.assertIn("This field is required.", body)
+        self.assertIn(f'id="client-id" value="{self.customer.id}"', body)
+        self.assertFalse(Sale.objects.filter(policy_number="LI-REJ-1").exists())
+
+    def test_amount_written_with_commas_is_accepted(self):
+        resp = self._post(amount="1,50,000", cover_amount="10,00,000")
+        self.assertEqual(resp.status_code, 302)
+        sale = Sale.objects.get(policy_number="LI-REJ-1")
+        self.assertEqual(sale.amount, Decimal("150000"))
+        self.assertEqual(sale.cover_amount, Decimal("1000000"))
+        self.assertEqual(sale.status, "pending")
