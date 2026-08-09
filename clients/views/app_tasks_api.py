@@ -154,6 +154,19 @@ def _parse_time(raw):
         return None
 
 
+# Rolling look-back in days, shared by the list and the scorecard so the one
+# picker on the screen means the same thing to both. All rolling (not calendar
+# month/week) — "2 months" has no calendar boundary to snap to.
+WINDOW_DAYS = {"day": 0, "week": 6, "2weeks": 13, "month": 29,
+               "2months": 59, "3months": 89, "all": None}
+
+
+def _window_start(key):
+    """First date in the window, or None for all time / an unknown key."""
+    days = WINDOW_DAYS.get(key)
+    return None if days is None else timezone.localdate() - timedelta(days=days)
+
+
 # ─────────────────────────────── tasks ───────────────────────────────
 
 @login_required
@@ -200,24 +213,19 @@ def app_tasks(request):
     if assignee and assignee.isdigit():
         qs = qs.filter(assigned_to_id=int(assignee))
 
-    # Named date range on the due date.
-    rng = request.GET.get("range", "")
-    if rng:
-        today = timezone.localdate()
-        start = end = None
-        if rng == "today":
-            start = end = today
-        elif rng == "tomorrow":
-            start = end = today + timedelta(days=1)
-        elif rng == "this_week":
-            start = today - timedelta(days=today.weekday())
-            end = start + timedelta(days=6)
-        elif rng == "this_month":
-            start = today.replace(day=1)
-            nxt = (start + timedelta(days=32)).replace(day=1)
-            end = nxt - timedelta(days=1)
-        if start:
-            qs = qs.filter(due_date__gte=start, due_date__lte=end)
+    # Time window (day/week/…/all). A task belongs to the window by its own
+    # date — due date, or creation date when it has no deadline. No upper
+    # bound: upcoming work is never hidden, only the old tail falls off, which
+    # is the whole point (the list used to be every task ever, forever).
+    start = _window_start(request.GET.get("window", "all"))
+    if start:
+        in_window = (Q(due_date__gte=start)
+                     | Q(due_date__isnull=True, created_at__date__gte=start))
+        # An open task past its deadline outlives every window — a month-old
+        # overdue task is exactly the one you must not lose. Closed rows
+        # (completed/cancelled) are what the window is here to clear away.
+        still_overdue = Q(status__in=Task.OPEN_STATUSES) & (Q(status=Task.STATUS_OVERDUE) | past_due)
+        qs = qs.filter(in_window | still_overdue)
 
     qs = qs.select_related("category", "assigned_to__user", "client").order_by("-created_at")
     counts = _scoped(request).aggregate(
@@ -297,20 +305,15 @@ def app_task_category_create(request):
 @login_required
 @require_GET
 def app_task_scorecard(request):
-    """Per-member task completion stats for a period (day/week/month).
+    """Per-member task completion stats for a period (see WINDOW_DAYS).
 
     Managers/admins get the whole team; employees get just themselves.
     Percentages are of tasks assigned within the window.
     """
     period = request.GET.get("period", "week")
-    today = timezone.localdate()
-    if period == "day":
-        start = today
-    elif period == "month":
-        start = today.replace(day=1)
-    else:
+    if period not in WINDOW_DAYS:
         period = "week"
-        start = today - timedelta(days=today.weekday())
+    start = _window_start(period)
 
     emps = Employee.objects.filter(active=True).select_related("user")
     if not _can_manage_all(request):
@@ -319,7 +322,9 @@ def app_task_scorecard(request):
 
     rows = []
     for e in emps:
-        qs = Task.objects.filter(is_deleted=False, assigned_to=e, created_at__date__gte=start)
+        qs = Task.objects.filter(is_deleted=False, assigned_to=e)
+        if start:
+            qs = qs.filter(created_at__date__gte=start)
         total = qs.count()
         completed = qs.filter(status=Task.STATUS_COMPLETED).count()
         overdue = qs.filter(status=Task.STATUS_OVERDUE).count()

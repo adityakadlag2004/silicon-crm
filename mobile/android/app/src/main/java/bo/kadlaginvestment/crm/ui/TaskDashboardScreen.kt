@@ -1,7 +1,6 @@
 package bo.kadlaginvestment.crm.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,8 +21,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
@@ -35,6 +32,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +48,12 @@ import org.json.JSONObject
 private val STATUS_TABS = listOf(
     "" to "All", "overdue" to "Overdue", "pending" to "Pending",
     "in_progress" to "In Progress", "completed" to "Completed",
+)
+
+/** Time windows — must match WINDOW_DAYS in clients/views/app_tasks_api.py. */
+private val WINDOWS = listOf(
+    "day" to "Day", "week" to "Week", "2weeks" to "2 Weeks", "month" to "Month",
+    "2months" to "2 Months", "3months" to "3 Months", "all" to "All time",
 )
 
 /**
@@ -70,9 +74,20 @@ fun TaskPagerScreen(
     val scope = rememberCoroutineScope()
     val pager = rememberPagerState(pageCount = { STATUS_TABS.size })
     var query by remember { mutableStateOf("") }
+    // One window for the whole screen: the list and the scorecard. It used to
+    // live inside the scorecard and filter nothing but the percentages.
+    var window by rememberSaveable { mutableStateOf("week") }
 
     Column(Modifier.fillMaxSize()) {
-        if (showScorecard) Scorecard(reloadSignal, onSessionExpired)
+        if (showScorecard) Scorecard(window, reloadSignal, onSessionExpired)
+
+        LazyRow(
+            Modifier.fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(WINDOWS) { (v, l) -> Chip(l, window == v) { window = v } }
+        }
 
         // Search: title, description, category, or #id.
         androidx.compose.material3.OutlinedTextField(
@@ -112,7 +127,7 @@ fun TaskPagerScreen(
             // requests at once (plus the scorecard), and every swipe fired
             // more.
             StatusTaskList(
-                tab, STATUS_TABS[page].first, query, reloadSignal,
+                tab, STATUS_TABS[page].first, query, window, reloadSignal,
                 active = pager.settledPage == page,
                 onOpenTask = onOpenTask, onSessionExpired = onSessionExpired,
             )
@@ -121,10 +136,8 @@ fun TaskPagerScreen(
 }
 
 @Composable
-private fun Scorecard(reloadSignal: Int, onSessionExpired: () -> Unit) {
-    var period by remember { mutableStateOf("week") }
+private fun Scorecard(period: String, reloadSignal: Int, onSessionExpired: () -> Unit) {
     var rows by remember { mutableStateOf(listOf<JSONObject>()) }
-    var open by remember { mutableStateOf(false) }
 
     LaunchedEffect(period, reloadSignal) {
         when (val r = ApiClient.get("/clients/api/app/tasks/scorecard/?period=$period")) {
@@ -140,21 +153,11 @@ private fun Scorecard(reloadSignal: Int, onSessionExpired: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Team scorecard", fontWeight = FontWeight.Bold, fontSize = rsp(15), modifier = Modifier.weight(1f))
-            Box {
-                Row(
-                    Modifier.clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { open = true }.padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Text(period.replaceFirstChar { it.uppercase() }, fontSize = rsp(12), fontWeight = FontWeight.SemiBold)
-                    Text(" ▾", fontSize = rsp(12))
-                }
-                DropdownMenu(open, onDismissRequest = { open = false }) {
-                    listOf("day" to "Day", "week" to "Week", "month" to "Month").forEach { (v, l) ->
-                        DropdownMenuItem(text = { Text(l) }, onClick = { period = v; open = false })
-                    }
-                }
-            }
+            Text(
+                WINDOWS.firstOrNull { it.first == period }?.second ?: period,
+                fontSize = rsp(12), fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Spacer(Modifier.height(6.dp))
         if (rows.isEmpty()) {
@@ -214,6 +217,7 @@ private fun StatusTaskList(
     tab: String,
     status: String,
     query: String,
+    window: String,
     reloadSignal: Int,
     active: Boolean,
     onOpenTask: (Int) -> Unit,
@@ -229,14 +233,14 @@ private fun StatusTaskList(
     var hasMore by remember { mutableStateOf(false) }
 
     // Any filter change starts the list over.
-    LaunchedEffect(tab, status, query, reloadSignal, localReload) { page = 1 }
+    LaunchedEffect(tab, status, query, window, reloadSignal, localReload) { page = 1 }
 
-    LaunchedEffect(tab, status, query, reloadSignal, localReload, page, active) {
+    LaunchedEffect(tab, status, query, window, reloadSignal, localReload, page, active) {
         if (!active) return@LaunchedEffect
         if (query.isNotBlank()) kotlinx.coroutines.delay(300)  // debounce typing
         loading = true; error = null
         var q = if (status.isBlank()) "?tab=$tab" else "?tab=$tab&status=$status"
-        q += "&page=$page"
+        q += "&window=$window&page=$page"
         if (query.isNotBlank()) q += "&q=" + java.net.URLEncoder.encode(query.trim(), "UTF-8")
         when (val r = ApiClient.get("/clients/api/app/tasks/$q")) {
             is ApiClient.Result.Ok -> {
@@ -277,7 +281,11 @@ private fun StatusTaskList(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("🗒️", fontSize = rsp(40))
                 Text("No Tasks Here", fontWeight = FontWeight.Bold, fontSize = rsp(16))
-                Text("Nothing in this list.", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (window == "all") "Nothing in this list."
+                    else "Nothing in this window — try a longer one.",
+                    fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         else -> RefreshableBox(refreshing = loading, onRefresh = { localReload++ }) {

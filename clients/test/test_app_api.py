@@ -967,6 +967,69 @@ class AppTaskPaginationTests(TestCase):
         self.assertEqual(first & second, set())
 
 
+class AppTaskWindowTests(TestCase):
+    """The screen's day/week/month picker used to filter the scorecard only,
+    so the list showed every task ever created."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import timedelta
+        from clients.models import Task
+        cls.user = User.objects.create_user("win_emp", password="x")
+        cls.emp = Employee.objects.create(user=cls.user, role="employee", salary=0, active=True)
+        today = timezone.localdate()
+
+        def mk(title, due, age_days, status=Task.STATUS_COMPLETED):
+            t = Task.objects.create(title=title, created_by=cls.user,
+                                    assigned_to=cls.emp, due_date=due, status=status)
+            Task.objects.filter(pk=t.pk).update(
+                created_at=timezone.now() - timedelta(days=age_days))
+            return t
+
+        mk("old done", today - timedelta(days=40), 40)
+        mk("old overdue", today - timedelta(days=40), 40, Task.STATUS_PENDING)
+        mk("due tomorrow", today + timedelta(days=1), 60, Task.STATUS_PENDING)
+        mk("undated new", None, 0)
+        mk("undated old", None, 40)
+
+    def _titles(self, window):
+        c = TestClient()
+        c.force_login(self.user)
+        data = c.get(reverse("clients:app_tasks"), {"tab": "my", "window": window}).json()
+        return {t["title"] for t in data["tasks"]}
+
+    def test_week_drops_the_old_tail_but_keeps_upcoming_work(self):
+        self.assertEqual(self._titles("week"),
+                         {"due tomorrow", "undated new", "old overdue"})
+
+    def test_an_open_overdue_task_survives_the_shortest_window(self):
+        self.assertIn("old overdue", self._titles("day"))
+        self.assertNotIn("old done", self._titles("day"))
+
+    def test_a_longer_window_brings_the_old_rows_back(self):
+        self.assertIn("old done", self._titles("2months"))
+        self.assertIn("undated old", self._titles("2months"))
+
+    def test_all_time_filters_nothing(self):
+        self.assertEqual(len(self._titles("all")), 5)
+
+    def test_missing_or_unknown_window_is_all_time(self):
+        c = TestClient()
+        c.force_login(self.user)
+        for params in ({"tab": "my"}, {"tab": "my", "window": "junk"}):
+            self.assertEqual(
+                len(c.get(reverse("clients:app_tasks"), params).json()["tasks"]), 5)
+
+    def test_scorecard_honours_the_same_windows(self):
+        c = TestClient()
+        c.force_login(self.user)
+        week = c.get(reverse("clients:app_task_scorecard"), {"period": "week"}).json()
+        every = c.get(reverse("clients:app_task_scorecard"), {"period": "all"}).json()
+        # The scorecard scores tasks *assigned* in the window — only one was.
+        self.assertEqual(week["scorecard"][0]["total"], 1)
+        self.assertEqual(every["scorecard"][0]["total"], 5)
+
+
 class AppCrashReportTests(TestCase):
     """Self-hosted APK, no Play Console — a field crash used to produce no
     signal at all beyond 'the app closed'."""
