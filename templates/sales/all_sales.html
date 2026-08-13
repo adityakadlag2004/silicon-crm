@@ -57,11 +57,16 @@
       <input type="text" name="employee" class="form-control" placeholder="Username" value="{{ request.GET.employee }}">
     </div>
     {% endif %}
-    <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date }}" aria-label="Start Date"></div>
-    <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date }}" aria-label="End Date"></div>
+    <div><label class="form-label">Start Date</label><input type="date" name="start_date" class="form-control" value="{{ start_date|date:'Y-m-d' }}" aria-label="Start Date"></div>
+    <div><label class="form-label">End Date</label><input type="date" name="end_date" class="form-control" value="{{ end_date|date:'Y-m-d' }}" aria-label="End Date"></div>
     <div class="sales-filter-actions">
       <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-search"></i> Search</button>
       <a href="{% url 'clients:all_sales' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
+      {% if default_range %}
+      <span class="text-muted align-self-center" style="font-size:.82rem;">
+        <i class="bi bi-calendar-check"></i> Showing this month to date ({{ start_date|date:'j M' }} – {{ end_date|date:'j M Y' }}). Change the dates to widen.
+      </span>
+      {% endif %}
     </div>
   </form>
 </div>

@@ -3,16 +3,58 @@
 {% block title %}Target Management{% endblock %}
 {% block page_title %}Target Management{% endblock %}
 
+{% block extra_css %}
+<style>
+  .tgt-help { color: var(--ki-text-secondary); font-size: .88rem; max-width: 78ch; }
+  .tgt-table { min-width: 760px; }
+  .tgt-table th, .tgt-table td { vertical-align: top; }
+  /* Employee column and the header row stay put while the grid scrolls. */
+  .tgt-sticky-col { position: sticky; left: 0; z-index: 2; background: var(--ki-card-bg, #fff); }
+  .tgt-table thead th { position: sticky; top: 0; z-index: 3; background: var(--ki-card-bg, #fff); }
+  .tgt-table thead th.tgt-sticky-col { z-index: 4; }
+  .tgt-cell { min-width: 148px; }
+  .tgt-input-wrap { position: relative; }
+  .tgt-input-wrap .tgt-rupee {
+    position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+    color: var(--ki-text-muted); font-size: .8rem; pointer-events: none;
+  }
+  .tgt-input {
+    width: 100%; padding: 6px 6px 6px 20px; font-size: .85rem; text-align: right;
+    border: 1px solid var(--ki-card-border); border-radius: 6px;
+    background: var(--ki-card-bg); color: var(--ki-text-primary);
+  }
+  .tgt-input:focus { outline: 2px solid var(--ki-primary); outline-offset: -1px; }
+  .tgt-input.tgt-dirty { border-color: var(--ki-primary); background: var(--ki-primary-bg, #eef2ff); }
+  .tgt-meta { font-size: .72rem; color: var(--ki-text-muted); margin-top: 2px; display: flex; justify-content: space-between; gap: 4px; }
+  .tgt-fill { width: 100%; font-size: .72rem; padding: 2px 4px; margin-top: 4px;
+              border: 1px dashed var(--ki-card-border); border-radius: 5px; text-align: right;
+              background: transparent; color: var(--ki-text-primary); }
+  .tgt-bar { height: 6px; border-radius: 4px; background: var(--ki-body-bg);
+             border: 1px solid var(--ki-card-border); overflow: hidden; margin-top: 4px; }
+  .tgt-bar > span { display: block; height: 100%; border-radius: 4px; }
+  .tgt-b-red   > span { background: #dc2626; }
+  .tgt-b-amber > span { background: #f59e0b; }
+  .tgt-b-green > span { background: #059669; }
+  /* Save bar follows the admin down a long grid. */
+  .tgt-actions { position: sticky; bottom: 0; z-index: 5; background: var(--ki-body-bg);
+                 padding: .75rem 0; border-top: 1px solid var(--ki-card-border); }
+  @media (max-width: 640px) { .tgt-actions { padding: .5rem 0; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+<div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
   <h2 class="ki-section-title mb-0"><i class="bi bi-bullseye"></i> Target Management</h2>
-  <span class="text-muted" style="font-size:.85rem;">Monthly targets &middot; {{ month_label }}</span>
+  <span class="text-muted" style="font-size:.85rem;">
+    Monthly targets &middot; {{ month_label }} &middot; day {{ day_of_month }} of {{ days_in_month }}
+  </span>
 </div>
 
-<p class="text-muted mb-3">
-  Set each employee's <strong>personal monthly target</strong> for every product. Targets are individual
-  (not a shared pool split across the team). The <em>Team Total</em> row — and the firm target on the
-  dashboard — is the sum of every employee's target for that product. Leave a cell blank for no target.
+<p class="tgt-help mb-3">
+  Each employee's <strong>personal monthly target</strong> per product. Targets are individual, not a
+  shared pool: the <em>Team Total</em> row — and the firm target on the dashboard — is the sum of every
+  employee's target. Blank clears the target. A target stands until you change it; it is not re-entered
+  each month.
 </p>
 
 {% if not products %}
@@ -20,65 +62,82 @@
 {% elif not rows %}
   <div class="ki-card"><p class="text-muted m-0">No active employees to assign targets to.</p></div>
 {% else %}
-<form method="post" action="{% url 'clients:target_management' %}">
+<form method="post" action="{% url 'clients:target_management' %}" id="tgt-form">
   {% csrf_token %}
 
   <div class="ki-card">
-    <div class="ki-table-wrap" style="overflow-x:auto;">
-      <table class="ki-table" style="min-width:720px;">
+    <div class="ki-table-wrap" style="max-height:70vh;">
+      <table class="ki-table tgt-table">
         <thead>
           <tr>
-            <th style="position:sticky;left:0;background:var(--ki-card-bg,#fff);z-index:2;">Employee</th>
-            {% for p in products %}<th class="text-center">{{ p.name }}</th>{% endfor %}
+            <th class="tgt-sticky-col">Employee</th>
+            {% for col in column_totals %}
+            <th class="text-center tgt-cell">
+              <div>{{ col.product }}</div>
+              <input type="number" min="0" step="0.01" class="tgt-fill" placeholder="set all…"
+                     data-fill-col="{{ forloop.counter0 }}"
+                     aria-label="Set {{ col.product }} target for every employee">
+            </th>
+            {% endfor %}
             <th class="text-center">Row Total</th>
           </tr>
         </thead>
         <tbody>
         {% for row in rows %}
           <tr>
-            <td style="position:sticky;left:0;background:var(--ki-card-bg,#fff);z-index:1;font-weight:600;">{{ row.name }}</td>
+            <td class="tgt-sticky-col" style="font-weight:600;">{{ row.name }}</td>
             {% for cell in row.cells %}
-              <td style="min-width:130px;">
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  name="tv-{{ row.employee.id }}-{{ cell.product_id }}"
-                  value="{{ cell.input_value }}"
-                  placeholder="0"
-                  class="ki-input"
-                  style="width:100%;padding:4px 6px;font-size:.85rem;"
-                >
-                <div class="ki-progress mt-1" title="Achieved {{ cell.achieved|floatformat:0 }} of {{ cell.effective|floatformat:0 }}">
-                  <div class="ki-bar-green" data-progress="{{ cell.progress|floatformat:0 }}">{{ cell.progress|floatformat:0 }}%</div>
+              <td class="tgt-cell">
+                <div class="tgt-input-wrap">
+                  <span class="tgt-rupee">₹</span>
+                  <input type="number" step="0.01" min="0" class="tgt-input"
+                         name="tv-{{ row.employee.id }}-{{ cell.product_id }}"
+                         value="{{ cell.input_value }}" placeholder="0"
+                         data-col="{{ forloop.counter0 }}"
+                         data-original="{{ cell.input_value }}"
+                         aria-label="{{ row.name }} target for {{ cell.product }}">
                 </div>
-                <div class="text-muted" style="font-size:.72rem;">
-                  <i class="bi bi-check2-circle"></i> {{ cell.achieved|floatformat:0 }}
+                {% if cell.effective %}
+                <div class="tgt-bar {% if cell.progress < 50 %}tgt-b-red{% elif cell.progress < 90 %}tgt-b-amber{% else %}tgt-b-green{% endif %}"
+                     title="Achieved {{ cell.achieved|floatformat:0 }} of {{ cell.effective|floatformat:0 }}">
+                  <span data-bar="{{ cell.progress|floatformat:0 }}"></span>
                 </div>
+                <div class="tgt-meta">
+                  <span>₹{{ cell.achieved|floatformat:0 }} done</span>
+                  <span>{{ cell.progress|floatformat:0 }}%</span>
+                </div>
+                {% elif cell.achieved %}
+                <div class="tgt-meta"><span>₹{{ cell.achieved|floatformat:0 }} done · no target</span></div>
+                {% endif %}
               </td>
             {% endfor %}
-            <td class="text-center" style="font-weight:600;">{{ row.target_total|floatformat:0 }}</td>
+            <td class="text-center" style="font-weight:600;">
+              <div>₹{{ row.target_total|floatformat:0 }}</div>
+              <div class="tgt-meta" style="justify-content:center;">
+                ₹{{ row.achieved_total|floatformat:0 }} · {{ row.progress|floatformat:0 }}%
+              </div>
+            </td>
           </tr>
         {% endfor %}
         </tbody>
         <tfoot>
           <tr style="border-top:2px solid var(--ki-border,#e5e7eb);font-weight:700;">
-            <td style="position:sticky;left:0;background:var(--ki-card-bg,#fff);z-index:1;">Team Total</td>
+            <td class="tgt-sticky-col">Team Total</td>
             {% for col in column_totals %}
               <td class="text-center">
-                <div>{{ col.target_total|floatformat:0 }}</div>
-                <div class="ki-progress mt-1">
-                  <div class="ki-bar-blue" data-progress="{{ col.progress|floatformat:0 }}">{{ col.progress|floatformat:0 }}%</div>
+                <div>₹{{ col.target_total|floatformat:0 }}</div>
+                <div class="tgt-bar {% if col.progress < 50 %}tgt-b-red{% elif col.progress < 90 %}tgt-b-amber{% else %}tgt-b-green{% endif %}">
+                  <span data-bar="{{ col.progress|floatformat:0 }}"></span>
                 </div>
-                <div class="text-muted" style="font-size:.72rem;font-weight:500;">
-                  <i class="bi bi-check2-circle"></i> {{ col.achieved_total|floatformat:0 }}
+                <div class="tgt-meta" style="font-weight:500;">
+                  <span>₹{{ col.achieved_total|floatformat:0 }}</span><span>{{ col.progress|floatformat:0 }}%</span>
                 </div>
               </td>
             {% endfor %}
             <td class="text-center">
-              <div>{{ grand_target|floatformat:0 }}</div>
-              <div class="text-muted" style="font-size:.72rem;font-weight:500;">
-                <i class="bi bi-check2-circle"></i> {{ grand_achieved|floatformat:0 }}
+              <div>₹{{ grand_target|floatformat:0 }}</div>
+              <div class="tgt-meta" style="justify-content:center;font-weight:500;">
+                ₹{{ grand_achieved|floatformat:0 }} · {{ grand_progress|floatformat:0 }}%
               </div>
             </td>
           </tr>
@@ -87,10 +146,57 @@
     </div>
   </div>
 
-  <div class="d-flex align-items-center gap-2 mt-3">
-    <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-save"></i> Save All Targets</button>
-    <span class="text-muted" style="font-size:.82rem;">{{ employee_count }} employee(s) &middot; {{ products|length }} product(s)</span>
+  <div class="tgt-actions d-flex align-items-center gap-2 flex-wrap">
+    <button type="submit" class="ki-btn ki-btn-primary" data-busy-text="Saving targets">
+      <i class="bi bi-save"></i> Save All Targets
+    </button>
+    <span id="tgt-dirty" class="text-muted" style="font-size:.82rem;">No unsaved changes.</span>
   </div>
 </form>
+
+<script>
+  (function () {
+    var form = document.getElementById('tgt-form');
+    if (!form) return;
+    var inputs = Array.from(form.querySelectorAll('.tgt-input'));
+    var status = document.getElementById('tgt-dirty');
+
+    // Bars are painted from data-bar so a 0% target can't render full-width.
+    form.querySelectorAll('.tgt-bar > span').forEach(function (b) {
+      var pct = parseFloat(b.dataset.bar || '0');
+      b.style.width = Math.max(0, Math.min(pct, 100)) + '%';
+    });
+
+    function refresh() {
+      var dirty = inputs.filter(function (i) { return i.value !== i.dataset.original; });
+      dirty.forEach(function (i) { i.classList.add('tgt-dirty'); });
+      inputs.filter(function (i) { return i.value === i.dataset.original; })
+            .forEach(function (i) { i.classList.remove('tgt-dirty'); });
+      status.textContent = dirty.length
+        ? dirty.length + ' unsaved change(s) — Save to apply.'
+        : 'No unsaved changes.';
+    }
+    form.addEventListener('input', refresh);
+
+    // Column header box fills that product's target for every employee.
+    form.querySelectorAll('[data-fill-col]').forEach(function (box) {
+      box.addEventListener('input', function () {
+        if (box.value === '') return;
+        inputs.filter(function (i) { return i.dataset.col === box.dataset.fillCol; })
+              .forEach(function (i) { i.value = box.value; });
+        refresh();
+      });
+    });
+
+    // Leaving with unsaved edits is the one way to lose work on this page.
+    window.addEventListener('beforeunload', function (e) {
+      if (form.dataset.submitting === '1') return;
+      if (inputs.some(function (i) { return i.value !== i.dataset.original; })) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+  })();
+</script>
 {% endif %}
 {% endblock %}

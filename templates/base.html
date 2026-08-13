@@ -838,6 +838,96 @@
       });
     </script>
 
+    <!-- Shared form/UI behaviour (every page gets these) -->
+    <script>
+      // ── One submit per form ──────────────────────────────────────────────
+      // A laggy page invites a second click on Save, which POSTs twice and
+      // creates duplicate clients/sales/leads. Guard every write form once,
+      // here, rather than per template.
+      (function () {
+        function buttons(form) {
+          return form.querySelectorAll(
+            'button[type="submit"], input[type="submit"], button:not([type]):not([data-bs-toggle])');
+        }
+        function unlock(form) {
+          delete form.dataset.submitting;
+          buttons(form).forEach(function (b) {
+            b.disabled = false;
+            if (b.dataset.kiLabel !== undefined) { b.innerHTML = b.dataset.kiLabel; delete b.dataset.kiLabel; }
+          });
+        }
+        document.addEventListener('submit', function (e) {
+          var form = e.target;
+          if (!(form instanceof HTMLFormElement)) return;
+          // GET filters are harmless to repeat; opt-outs and new-tab posts stay free.
+          if ((form.method || 'get').toLowerCase() !== 'post') return;
+          if (form.hasAttribute('data-allow-resubmit') || form.target) return;
+          if (form.dataset.submitting === '1') { e.preventDefault(); return; }
+          if (e.defaultPrevented) return;   // client-side validation / htmx already stopped it
+          form.dataset.submitting = '1';
+          // Next tick: the clicked button's name/value must still make it into the POST.
+          setTimeout(function () {
+            buttons(form).forEach(function (b) {
+              b.disabled = true;
+              if (b.tagName === 'BUTTON') {
+                b.dataset.kiLabel = b.innerHTML;
+                b.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> '
+                  + (b.dataset.busyText || (b.textContent || '').trim() || 'Working');
+              }
+            });
+            // ponytail: 20s escape hatch so a POST that never navigates (file
+            // download, silent failure) can't leave the page permanently dead.
+            setTimeout(function () { unlock(form); }, 20000);
+          }, 0);
+        });
+        // Back button / bfcache restore must not land on a dead Save button.
+        window.addEventListener('pageshow', function () {
+          document.querySelectorAll('form[data-submitting]').forEach(unlock);
+        });
+      })();
+
+      // ── Progress bars ────────────────────────────────────────────────────
+      // `.ki-progress > [data-progress]` fills to its percentage. This used to
+      // live only in the employee dashboard's script, so bars on every other
+      // page (targets, admin) rendered at content width — i.e. wrong.
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.ki-progress [data-progress]').forEach(function (bar) {
+          var pct = parseFloat(bar.dataset.progress || '0');
+          bar.style.width = Math.max(0, Math.min(pct, 100)) + '%';
+        });
+
+        // ── Searchable <select> ────────────────────────────────────────────
+        // Add `data-searchable` to any long dropdown and it gets a filter box.
+        document.querySelectorAll('select[data-searchable]').forEach(function (sel) {
+          var all = Array.from(sel.options);
+          if (all.length < 8) return;                 // short list — nothing to search
+          var box = document.createElement('input');
+          box.type = 'search';
+          box.className = sel.className.indexOf('form-select') >= 0 ? 'form-control mb-1' : 'ki-input mb-1';
+          box.placeholder = sel.dataset.searchPlaceholder || 'Type to filter…';
+          box.setAttribute('aria-label', box.placeholder);
+          box.autocomplete = 'off';
+          sel.parentNode.insertBefore(box, sel);
+          box.addEventListener('input', function () {
+            var q = box.value.trim().toLowerCase();
+            var current = sel.value;
+            var keep = all.filter(function (o) {
+              return !o.value || o.text.toLowerCase().indexOf(q) >= 0;
+            });
+            sel.replaceChildren.apply(sel, keep);
+            sel.value = keep.some(function (o) { return o.value === current; }) ? current : '';
+          });
+          // Enter in the box picks the only remaining match instead of submitting.
+          box.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            var opts = Array.from(sel.options).filter(function (o) { return o.value; });
+            if (opts.length === 1) { sel.value = opts[0].value; sel.focus(); }
+          });
+        });
+      });
+    </script>
+
     {% block extra_js %}{% endblock %}
   </body>
 </html>

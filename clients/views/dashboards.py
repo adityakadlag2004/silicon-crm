@@ -18,6 +18,7 @@ from django.core.exceptions import FieldError
 from django.db import transaction
 
 from .. import permissions
+from ..templatetags.custom_filters import inr
 from ..models import (
     Client,
     Sale,
@@ -1631,6 +1632,7 @@ def target_management(request):
             "cells": cells,
             "target_total": row_target_total,
             "achieved_total": row_achieved_total,
+            "progress": (row_achieved_total / row_target_total * 100) if row_target_total else 0,
         })
 
     column_totals = []
@@ -1648,17 +1650,42 @@ def target_management(request):
         grand_target += tt
         grand_achieved += at
 
+    # Where the month itself stands — a 60% attainment on the 5th and on the
+    # 28th are opposite stories, so the page shows the pace, not just the total.
+    days_in_month = monthrange(year, month)[1]
+    month_elapsed = Decimal(today.day) / Decimal(days_in_month)
+    expected_to_date = grand_target * month_elapsed
+    grand_progress = (grand_achieved / grand_target * 100) if grand_target else 0
+    untargeted = sum(1 for r in rows if not r["target_total"])
+
     return render(
         request,
         "settings/target_management.html",
         {
+            "crumbs": [{"label": "Settings"}, {"label": "Target Management"}],
+            "kpis": [
+                {"label": "Team Target", "value": f"₹{inr(grand_target)}", "color": "#4338CA",
+                 "sub": f"{len(employees)} employee(s) · {len(active_products)} product(s)"},
+                {"label": "Achieved", "value": f"₹{inr(grand_achieved)}", "color": "#15803D",
+                 "sub": f"{grand_progress:.0f}% of target"},
+                {"label": "Expected by today", "value": f"₹{inr(expected_to_date)}", "color": "#0F766E",
+                 "sub": f"day {today.day} of {days_in_month}"},
+                {"label": "On pace", "value": "Yes" if grand_achieved >= expected_to_date else "Behind",
+                 "color": "#15803D" if grand_achieved >= expected_to_date else "#B45309",
+                 "sub": f"₹{inr(abs(grand_achieved - expected_to_date))} {'ahead' if grand_achieved >= expected_to_date else 'short'}"},
+                {"label": "No target set", "value": untargeted, "color": "#BE123C" if untargeted else "#64748B",
+                 "sub": "employees with a blank row"},
+            ],
             "products": active_products,
             "product_names": product_names,
             "rows": rows,
             "column_totals": column_totals,
             "grand_target": grand_target,
             "grand_achieved": grand_achieved,
-            "grand_progress": (grand_achieved / grand_target * 100) if grand_target else 0,
+            "grand_progress": grand_progress,
+            "expected_to_date": expected_to_date,
+            "days_in_month": days_in_month,
+            "day_of_month": today.day,
             "month_label": today.strftime("%B %Y"),
             "employee_count": len(employees),
         },

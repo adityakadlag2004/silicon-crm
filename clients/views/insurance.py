@@ -317,11 +317,12 @@ def raise_claim(request, policy_id=None):
         form = ClaimForm(initial={"intimation_date": timezone.localdate(),
                                   "status": InsuranceClaim.STATUS_INTIMATED})
 
-    # Policies to choose from when raising without a pre-set one.
+    # Policies to choose from when raising without a pre-set one. No cap — the
+    # list is searchable, and a truncated list silently hides real policies.
     policies = None
     if policy is None:
         policies = (InsurancePolicy.objects.select_related("client")
-                    .order_by("client__name")[:500])
+                    .order_by("client__name"))
     return render(request, "insurance/claim_form.html", {
         "crumbs": [{"label": "Claim Tracker", "url": reverse("clients:claim_list")},
                    {"label": "Raise Claim"}],

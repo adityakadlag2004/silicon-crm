@@ -18,10 +18,11 @@
     {% else %}
       <div class="mb-3">
         <label class="form-label fw-semibold" for="policy-select">Policy this claim is against <span class="text-danger">*</span></label>
-        <select name="policy" id="policy-select" class="form-select" required>
+        <select name="policy" id="policy-select" class="form-select" required
+                data-searchable data-search-placeholder="Search by client, policy number or insurer…">
           <option value="">— Choose a policy —</option>
           {% for p in policies %}
-            <option value="{{ p.id }}">{{ p.client.name }} — {{ p.get_insurance_type_display }} · {{ p.policy_number }}</option>
+            <option value="{{ p.id }}">{{ p.client.name }} — {{ p.get_insurance_type_display }} · {{ p.policy_number }}{% if p.insurer %} · {{ p.insurer }}{% endif %}</option>
           {% endfor %}
         </select>
       </div>

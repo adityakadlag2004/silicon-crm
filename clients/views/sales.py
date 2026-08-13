@@ -169,6 +169,15 @@ def all_sales(request):
     start_date = parse_date_param(request.GET.get("start_date"))
     end_date = parse_date_param(request.GET.get("end_date"))
     q = (request.GET.get("q") or "").strip()
+    focus = (request.GET.get("focus") or "").strip()
+
+    # Nothing asked for → this month to date. The page used to default to
+    # today's sales, so it opened blank on any day nobody had booked yet.
+    default_range = not (product or client or employee or policy_type or status
+                         or start_date or end_date or q or focus)
+    if default_range:
+        today_ = timezone.localdate()
+        start_date, end_date = today_.replace(day=1), today_
 
     if q:
         sales_qs = sales_qs.filter(
@@ -207,7 +216,6 @@ def all_sales(request):
 
     # "My day" links land here. The counts on the dashboard come from the same
     # selectors, so the list always matches the number that was clicked.
-    focus = (request.GET.get("focus") or "").strip()
     focus_label = ""
     if focus in ("renewals7", "emi"):
         scope = None if permissions.is_admin(request.user) else user_emp
@@ -220,9 +228,6 @@ def all_sales(request):
             focus_label = "EMI instalments due this month"
         sales_qs = sales_qs.filter(pk__in=ids)
 
-    if not (product or client or employee or policy_type or start_date or end_date or q or focus):
-        sales_qs = sales_qs.filter(date=date.today())
-
     paginator = Paginator(sales_qs, 50)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
@@ -231,10 +236,15 @@ def all_sales(request):
     qdict.pop("page", None)
     qstring = qdict.urlencode()
 
-    # Status counts respect the same visibility scope as the list itself.
+    # Status counts respect the same visibility scope AND the same dates as the
+    # list itself — a tile that counts all time above a one-month list is a lie.
     scope = Sale.objects.all()
     if own_only:
         scope = scope.filter(employee=request.user.employee)
+    if start_date:
+        scope = scope.filter(date__gte=start_date)
+    if end_date:
+        scope = scope.filter(date__lte=end_date)
     agg = scope.aggregate(
         total=Count("id"),
         pending=Count("id", filter=Q(status=Sale.STATUS_PENDING)),
@@ -243,18 +253,27 @@ def all_sales(request):
         amount=Sum("amount", filter=Q(status=Sale.STATUS_APPROVED)),
     )
     base = reverse("clients:all_sales")
+    # Tiles keep the period in view — clicking "Pending" narrows the same dates.
+    period = ""
+    if start_date:
+        period += f"&start_date={start_date.isoformat()}"
+    if end_date:
+        period += f"&end_date={end_date.isoformat()}"
     context = {
         "crumbs": [{"label": "Sales"}] + ([{"label": focus_label}] if focus_label else []),
         "focus_label": focus_label,
+        "start_date": start_date,
+        "end_date": end_date,
+        "default_range": default_range,
         "kpis": [
             {"label": "All Sales", "value": agg["total"], "color": "#4338CA",
-             "url": base, "active": not status},
+             "url": f"{base}?{period.lstrip('&')}", "active": not status},
             {"label": "Pending", "value": agg["pending"], "color": "#B45309",
-             "url": f"{base}?status={Sale.STATUS_PENDING}", "active": status == Sale.STATUS_PENDING},
+             "url": f"{base}?status={Sale.STATUS_PENDING}{period}", "active": status == Sale.STATUS_PENDING},
             {"label": "Approved", "value": agg["approved"], "color": "#15803D",
-             "url": f"{base}?status={Sale.STATUS_APPROVED}", "active": status == Sale.STATUS_APPROVED},
+             "url": f"{base}?status={Sale.STATUS_APPROVED}{period}", "active": status == Sale.STATUS_APPROVED},
             {"label": "Rejected", "value": agg["rejected"], "color": "#BE123C",
-             "url": f"{base}?status={Sale.STATUS_REJECTED}", "active": status == Sale.STATUS_REJECTED},
+             "url": f"{base}?status={Sale.STATUS_REJECTED}{period}", "active": status == Sale.STATUS_REJECTED},
             {"label": "Approved Value", "value": f"₹{inr(agg['amount'] or 0)}", "color": "#0F766E"},
         ],
         "sales": page_obj,

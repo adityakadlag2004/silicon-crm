@@ -303,6 +303,35 @@ class SaleDateFilterTests(_WorkflowSetup):
         self.assertIn(recent.id, ids)
         self.assertNotIn(old.id, ids)
 
+    def test_all_sales_defaults_to_this_month_not_today(self):
+        """Unfiltered, the page used to show only *today's* sales, so it opened
+        blank on any day nobody had booked yet."""
+        from datetime import date, timedelta
+
+        today = date.today()
+        first = today.replace(day=1)
+        earlier_this_month = self._dated_sale(first)
+        last_month = self._dated_sale(first - timedelta(days=1))
+
+        resp = self.http["admin"].get(reverse("clients:all_sales"))
+        ids = [s.id for s in resp.context["sales"]]
+        self.assertIn(earlier_this_month.id, ids)
+        self.assertNotIn(last_month.id, ids)
+        self.assertEqual(resp.context["start_date"], first)
+        self.assertEqual(resp.context["end_date"], today)
+        self.assertTrue(resp.context["default_range"])
+
+    def test_all_sales_explicit_dates_beat_the_month_default(self):
+        from datetime import date, timedelta
+
+        old = self._dated_sale(date.today() - timedelta(days=200))
+        resp = self.http["admin"].get(
+            reverse("clients:all_sales"),
+            {"start_date": (date.today() - timedelta(days=365)).isoformat()},
+        )
+        self.assertIn(old.id, [s.id for s in resp.context["sales"]])
+        self.assertFalse(resp.context["default_range"])
+
 
 class AddSaleRejectionTests(_WorkflowSetup):
     """A rejected Add Sale used to look exactly like a page reload: no message,
