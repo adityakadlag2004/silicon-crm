@@ -45,7 +45,9 @@ class Sale(models.Model):
     # PROTECT: sales are the firm's business records — deleting an employee
     # must never silently erase their sales history (deactivate instead).
     employee = models.ForeignKey("Employee", on_delete=models.PROTECT, related_name="sales")
-    product = models.CharField(max_length=50)
+    # save() copies product_ref.name in here, so it must hold whatever
+    # Product.name holds (100) — life plan names run well past 50.
+    product = models.CharField(max_length=100)
     product_ref = models.ForeignKey("Product", on_delete=models.SET_NULL, null=True, blank=True, related_name="sales")
     product_name_snapshot = models.CharField(max_length=100, blank=True, default="")
 

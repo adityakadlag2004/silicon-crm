@@ -118,6 +118,19 @@ class SubProductMarginTests(TestCase):
         sale = form.save(commit=False)
         self.assertEqual(sale.product, "Term Plan")     # sub-product is what's sold
 
+    def test_long_plan_name_saves(self):
+        """Life plan names off the FYC chart run past 50 chars — Sale.product
+        must hold whatever Product.name (100) holds, or the form rejects the sale."""
+        long_name = ("Fortune Guarantee Supreme - Immediate Income | Deferred Income "
+                     "ROP or NROP | Power of 6 | Premium Offset")[:100]
+        Product.objects.create(
+            name=long_name, code="FG_SUPREME", parent=self.life,
+            domain=Product.DOMAIN_SALE, margin_percent=Decimal("15"))
+        form = AdminSaleForm(self._base_form_data(
+            product="Life Insurance", subproduct=long_name, employee=self.emp.pk))
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().product, long_name)
+
     def test_main_without_children_needs_no_subproduct(self):
         Product.objects.create(
             name="Standalone Widget", code="STANDALONE_W",
