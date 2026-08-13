@@ -410,7 +410,17 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 
 1. `dev` green: `manage.py test clients` + `manage.py check` + `makemigrations --check`.
 2. `git push origin dev:main`
-3. On server: `cd ~/silicon-crm && git pull && venv/bin/pip install -r requirements.txt && venv/bin/python manage.py migrate && sudo systemctl restart gunicorn`
+3. On server: `cd ~/silicon-crm && git pull && venv/bin/pip install -r requirements.txt && venv/bin/python manage.py migrate && venv/bin/python manage.py collectstatic --noinput`
+   - **`collectstatic` is not optional.** WhiteNoise serves from `staticfiles/`
+     via `CompressedManifestStaticFilesStorage`, so a CSS/JS change that isn't
+     collected never reaches a browser — the page ships with the old
+     stylesheet and looks broken in ways no test catches.
+   - Reload gunicorn with `kill -HUP <master-pid>` (the master runs as
+     `ubuntu`; there is no passwordless sudo on the droplet). Find it with
+     `pgrep -af "[g]unicorn"` and HUP the **parent** — note the bracket, or
+     the pattern matches your own shell and you HUP that instead.
+   - Before a migration that rewrites or drops data, run
+     `scripts/backup_db.sh` first; it dumps and mirrors to Drive in seconds.
 4. **If CRONJOBS changed:** `venv/bin/python manage.py crontab remove && venv/bin/python manage.py crontab add`
 
 ## Release checklist (Android)
