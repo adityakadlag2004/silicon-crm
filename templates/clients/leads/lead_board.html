@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Pipeline Board{% endblock %}
+{% block page_title %}Pipeline Board{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <div>
+    <h2 class="ki-section-title" style="margin-bottom:0.25rem;">SPANCO Board</h2>
+    <div class="text-muted small">Every live lead, standing at the step it has actually reached.</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_management' %}"><i class="bi bi-list-ul"></i> List</a>
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_pipeline_report' %}"><i class="bi bi-graph-up"></i> Pipeline Report</a>
+    <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:lead_create' %}"><i class="bi bi-plus-lg"></i> Add Lead</a>
+  </div>
+</div>
+
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-sm-4">
+    <label class="form-label small text-muted mb-0" for="board-q">Search</label>
+    <input type="search" id="board-q" name="q" value="{{ search_term }}" class="form-control form-control-sm" placeholder="Customer name" />
+  </div>
+  {% if employees %}
+  <div class="col-sm-3">
+    <label class="form-label small text-muted mb-0" for="board-emp">Assigned To</label>
+    <select name="assigned_to" id="board-emp" class="form-select form-select-sm">
+      <option value="">All employees</option>
+      {% for e in employees %}
+        <option value="{{ e.id }}" {% if assigned_to_filter == e.id|stringformat:"d" %}selected{% endif %}>{{ e.user.username }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+  <div class="col-sm-3 d-flex gap-2">
+    <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit">Apply</button>
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_board' %}">Clear</a>
+  </div>
+</form>
+
+{% if capped %}
+  <div class="alert alert-warning small">Showing the 400 oldest-waiting leads. Filter by employee or search to narrow the board.</div>
+{% endif %}
+
+<div class="ki-board">
+  {% for col in columns %}
+    <div class="ki-board-col" style="--c:{{ col.color }};">
+      <div class="ki-board-head">
+        <span class="t">{{ col.label }}</span>
+        <span class="n">{{ col.count }}</span>
+      </div>
+      <div class="hint">{{ col.help }}</div>
+      {% for lead in col.leads %}
+        <a class="ki-board-card" href="{% url 'clients:lead_detail' lead.id %}">
+          <div class="nm">{{ lead.customer_name }}</div>
+          <div class="mt">{{ lead.assigned_to.user.username }} · {{ lead.days_in_stage }}d here</div>
+        </a>
+      {% empty %}
+        <div class="text-muted small">Empty.</div>
+      {% endfor %}
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

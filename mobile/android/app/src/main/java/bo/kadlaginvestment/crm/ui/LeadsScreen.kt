@@ -3,8 +3,10 @@ package bo.kadlaginvestment.crm.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,14 +15,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -36,18 +44,23 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.net.ApiClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 
-/** Native Leads pipeline: stage chips, lead detail with per-product progress,
- * remarks, convert-to-client, and a create form. */
+/** Native SPANCO leads pipeline: stage-filtered list, a lead's stepper +
+ * requirements, remarks, stage history, convert-to-client, and a create form.
+ *
+ * Stages come from `/lead-meta/` rather than being hard-coded here — the
+ * server owns the method (labels, order and the meaning of each step), the
+ * app just draws it, so a change to SPANCO never needs an APK. */
 @Composable
 fun LeadsScreen(
     modifier: Modifier = Modifier,
@@ -59,22 +72,41 @@ fun LeadsScreen(
     var selectedLeadId by remember { mutableStateOf<Int?>(null) }
     var creating by remember { mutableStateOf(false) }
     var listReload by remember { mutableIntStateOf(0) }
+    var meta by remember { mutableStateOf<JSONObject?>(null) }
+    var metaError by remember { mutableStateOf<String?>(null) }
+    var metaReload by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(metaReload) {
+        when (val r = ApiClient.get("/clients/api/app/lead-meta/")) {
+            is ApiClient.Result.Ok -> meta = r.json
+            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+            is ApiClient.Result.Error -> metaError = r.message
+        }
+    }
+
+    if (metaError != null) {
+        ErrorBox(metaError!!, modifier) { metaError = null; metaReload++ }
+        return
+    }
+    val m = meta ?: run { LoadingBox(modifier); return }
 
     when {
         creating -> {
             BackHandler { creating = false }
-            LeadCreateForm(modifier, onDone = { creating = false; listReload++ }, onSessionExpired = onSessionExpired)
+            LeadCreateForm(m, modifier, onDone = { creating = false; listReload++ }, onSessionExpired = onSessionExpired)
         }
         selectedLeadId != null -> {
             BackHandler { selectedLeadId = null; listReload++ }
             LeadDetail(
                 leadId = selectedLeadId!!,
+                meta = m,
                 modifier = modifier,
                 onBack = { selectedLeadId = null; listReload++ },
                 onSessionExpired = onSessionExpired,
             )
         }
         else -> LeadList(
+            meta = m,
             modifier = modifier,
             onBack = onBack,
             reloadKey = listReload,
@@ -85,8 +117,26 @@ fun LeadsScreen(
     }
 }
 
+/** [{value,label,help}] straight off the meta payload. */
+private fun JSONObject.stageList(): List<Triple<String, String, String>> {
+    val arr = optJSONArray("stages") ?: JSONArray()
+    return (0 until arr.length()).map {
+        val o = arr.getJSONObject(it)
+        Triple(o.optString("value"), o.optString("label"), o.optString("help"))
+    }
+}
+
+private fun JSONObject.productList(): List<Pair<Int, String>> {
+    val arr = optJSONArray("products") ?: JSONArray()
+    return (0 until arr.length()).map {
+        val o = arr.getJSONObject(it)
+        o.getInt("id") to o.optString("name")
+    }
+}
+
 @Composable
 private fun LeadList(
+    meta: JSONObject,
     modifier: Modifier,
     onBack: (() -> Unit)?,
     reloadKey: Int,
@@ -103,6 +153,7 @@ private fun LeadList(
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var localReload by remember { mutableIntStateOf(0) }
+    val stageOrder = remember(meta) { meta.stageList().map { it.first } }
 
     LaunchedEffect(stage, q, page, reloadKey, localReload) {
         loading = true
@@ -126,18 +177,21 @@ private fun LeadList(
 
     Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
         ScreenHeader("Leads", onBack = onBack) {
-Button(onClick = onCreate) { Text("＋ Add") }
+            Button(onClick = onCreate) { Text("＋ Add") }
         }
 
         val c = counts
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(rdp(6)),
+        ) {
             Chip("All", stage == "") { stage = ""; page = 1 }
-            Chip("Pending ${c?.optInt("pending") ?: ""}", stage == "pending") { stage = "pending"; page = 1 }
-            Chip("Half ${c?.optInt("half_sold") ?: ""}", stage == "half_sold") { stage = "half_sold"; page = 1 }
-            Chip("Done ${c?.optInt("processed") ?: ""}", stage == "processed") { stage = "processed"; page = 1 }
-            Chip("Bin", stage == "discarded") { stage = "discarded"; page = 1 }
+            meta.stageList().forEach { (value, label, _) ->
+                Chip("$label ${c?.optInt(value) ?: ""}".trim(), stage == value) { stage = value; page = 1 }
+            }
+            Chip("Lost ${c?.optInt("lost") ?: ""}".trim(), stage == "lost") { stage = "lost"; page = 1 }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(rdp(8)))
 
         OutlinedTextField(
             value = q,
@@ -152,8 +206,8 @@ Button(onClick = onCreate) { Text("＋ Add") }
             loading && rows.isEmpty() -> LoadingBox()
             else -> LazyColumn(
                 Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(rdp(8)),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = rdp(12)),
             ) {
                 if (rows.isEmpty()) {
                     item {
@@ -161,7 +215,7 @@ Button(onClick = onCreate) { Text("＋ Add") }
                             "🫧", "No leads here",
                             if (stage.isBlank()) "Add a lead to start working the pipeline."
                             else "Nothing at this stage right now.",
-                            modifier = Modifier.heightIn(min = 200.dp),
+                            modifier = Modifier.heightIn(min = rdp(200)),
                             actionLabel = if (stage.isBlank()) "＋ Add lead" else null,
                             onAction = if (stage.isBlank()) onCreate else null,
                         )
@@ -174,7 +228,7 @@ Button(onClick = onCreate) { Text("＋ Add") }
                         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                     ) {
                         Row(
-                            Modifier.fillMaxWidth().padding(14.dp),
+                            Modifier.fillMaxWidth().padding(rdp(14)),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -185,13 +239,26 @@ Button(onClick = onCreate) { Text("＋ Add") }
                                         .filter { it.isNotEmpty() }.joinToString(" · "),
                                     fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                                if (l.optString("interests").isNotEmpty()) {
+                                    Text(
+                                        l.optString("interests"),
+                                        fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             Column(horizontalAlignment = Alignment.End) {
-                                LeadStagePill(l.optString("stage"), l.optBoolean("converted"))
+                                LeadStagePill(
+                                    l.optString("stage_label"),
+                                    l.optBoolean("is_discarded"),
+                                    l.optBoolean("converted"),
+                                )
+                                // Position on the roadmap, so a list scan shows
+                                // how far each lead has actually come.
+                                val step = stageOrder.indexOf(l.optString("stage")) + 1
                                 Text(
-                                    l.optString("progress"),
-                                    fontSize = rsp(12),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    if (step > 0) "Step $step of ${stageOrder.size} · ${l.optInt("days_in_stage")}d"
+                                    else "${l.optInt("days_in_stage")}d here",
+                                    fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -204,19 +271,68 @@ Button(onClick = onCreate) { Text("＋ Add") }
                         }
                     }
                 }
-                item { Spacer(Modifier.height(12.dp)) }
+                item { Spacer(Modifier.height(rdp(12))) }
+            }
+        }
+    }
+}
+
+/** The six SPANCO steps with the lead's position on them — the phone version
+ * of the web `.ki-steps` stepper. Display only: moves go through the Move
+ * button below it, so every change carries a note and one code path.
+ *
+ * Labels are shortened to their first word ("Approach / Analysis" →
+ * "Approach"); the full label and its meaning show under the stepper. */
+@Composable
+private fun SpancoStepper(stages: List<Triple<String, String, String>>, current: String) {
+    val currentIndex = stages.indexOfFirst { it.first == current }
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(rdp(4)),
+    ) {
+        stages.forEachIndexed { index, (_, label, _) ->
+            val done = index < currentIndex
+            val isCurrent = index == currentIndex
+            val dotColor = when {
+                done -> StatusGreen
+                isCurrent -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.widthIn(min = rdp(58)),
+            ) {
+                Box(
+                    Modifier.size(rdp(28)).clip(CircleShape).background(dotColor),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (done) "✓" else "${index + 1}",
+                        fontSize = rsp(12),
+                        fontWeight = FontWeight.Bold,
+                        color = if (done || isCurrent) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    label.substringBefore("/").trim(),
+                    fontSize = rsp(10),
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isCurrent) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun LeadStagePill(stage: String, converted: Boolean) {
+private fun LeadStagePill(stageLabel: String, lost: Boolean, converted: Boolean) {
     val (color, label) = when {
         converted -> StatusGreen to "Converted"
-        stage == "processed" -> StatusGreen to "Processed"
-        stage == "half_sold" -> StatusAmber to "Half Sold"
-        else -> BrandMuted to "Pending"
+        lost -> StatusRed to "Lost"
+        stageLabel == "Order" -> StatusGreen to stageLabel
+        else -> BrandMuted to stageLabel
     }
     Text(label, fontSize = rsp(11), color = color, fontWeight = FontWeight.Bold)
 }
@@ -224,6 +340,7 @@ private fun LeadStagePill(stage: String, converted: Boolean) {
 @Composable
 private fun LeadDetail(
     leadId: Int,
+    meta: JSONObject,
     modifier: Modifier,
     onBack: () -> Unit,
     onSessionExpired: () -> Unit,
@@ -234,6 +351,9 @@ private fun LeadDetail(
     var error by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     var remarkText by remember { mutableStateOf("") }
+    var stageNote by remember { mutableStateOf("") }
+    var correcting by remember { mutableStateOf(false) }
+    var productMenuOpen by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(leadId, reloadKey) {
@@ -257,13 +377,19 @@ private fun LeadDetail(
 
     if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
     val d = data ?: run { LoadingBox(modifier); return }
+    val stages = meta.stageList()
+    val currentStage = d.optString("stage")
 
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(rdp(16)),
+        verticalArrangement = Arrangement.spacedBy(rdp(12)),
     ) {
         ScreenHeader(d.optString("name"), onBack = onBack) {
-            LeadStagePill(d.optString("stage"), d.optInt("converted_client_id") > 0)
+            LeadStagePill(
+                d.optString("stage_label"),
+                d.optBoolean("is_discarded"),
+                d.optInt("converted_client_id") > 0,
+            )
         }
 
         val phone = d.optString("phone")
@@ -284,40 +410,133 @@ private fun LeadDetail(
                 }) { Text("Reopen") }
             } else {
                 OutlinedButton(onClick = {
-                    post("/clients/api/app/leads/$leadId/action/", JSONObject().put("action", "discard"))
-                }) { Text("Discard") }
+                    post(
+                        "/clients/api/app/leads/$leadId/action/",
+                        JSONObject().put("action", "discard").put("reason", stageNote),
+                    )
+                }) { Text("Mark lost") }
             }
         }
 
         actionError?.let { Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold) }
         if (d.optInt("converted_client_id") > 0) {
-            Text("Converted to client #${d.optInt("converted_client_id")}", color = StatusGreen, fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
+            Text(
+                "Converted to client #${d.optInt("converted_client_id")}",
+                color = StatusGreen, fontSize = rsp(13), fontWeight = FontWeight.SemiBold,
+            )
         }
 
-        SectionTitle("Product progress")
-        val progress = d.optJSONArray("progress")
-        for (i in 0 until (progress?.length() ?: 0)) {
-            val p = progress!!.getJSONObject(i)
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(p.optString("label"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
-                        val achieved = p.optDouble("achieved", 0.0)
-                        if (achieved > 0) Text(rupees(achieved), fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SectionTitle("SPANCO stage")
+        SpancoStepper(stages, currentStage)
+        Text(
+            "${d.optString("stage_label")} · ${d.optInt("days_in_stage")} days here",
+            fontSize = rsp(13), fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            d.optString("stage_help"),
+            fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = stageNote,
+            onValueChange = { stageNote = it },
+            label = { Text("What happened? (saved with the move)") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        fun move(stage: String) {
+            val note = stageNote
+            stageNote = ""
+            post(
+                "/clients/api/app/leads/$leadId/stage/",
+                JSONObject().put("stage", stage).put("note", note),
+            )
+        }
+
+        // Advancing one step is the whole job; correcting the stage is the
+        // exception, so it sits behind a disclosure rather than six equal chips.
+        val next = d.optString("next_stage")
+        if (next.isNotEmpty()) {
+            val nextLabel = stages.firstOrNull { it.first == next }
+            Button(
+                onClick = { move(next) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = rdp(52)),
+            ) { Text("Move to ${nextLabel?.second ?: next} →", fontSize = rsp(15)) }
+            Text(
+                nextLabel?.third ?: "",
+                fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = { correcting = !correcting }) {
+            Text(if (correcting) "Hide stage picker" else "Set a different stage")
+        }
+        if (correcting) {
+            ActionRow {
+                stages.forEach { (value, label, _) ->
+                    Chip(label, currentStage == value) {
+                        if (currentStage != value) move(value)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val current = p.optString("status")
-                        listOf("pending" to "Pending", "half_sold" to "Half", "processed" to "Processed").forEach { (v, label) ->
-                            Chip(label, current == v) {
-                                if (current != v) {
-                                    post(
-                                        "/clients/api/app/leads/$leadId/progress/",
-                                        JSONObject().put("product", p.optString("product")).put("status", v),
-                                    )
-                                }
-                            }
+                }
+            }
+        }
+
+        SectionTitle("Requirements")
+        val interests = d.optJSONArray("interests")
+        if ((interests?.length() ?: 0) == 0) {
+            Text(
+                "Nothing captured yet — add only what this lead actually needs.",
+                fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        for (i in 0 until (interests?.length() ?: 0)) {
+            val p = interests!!.getJSONObject(i)
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(rdp(12)),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(p.optString("label"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
+                        val amount = p.optDouble("amount", 0.0)
+                        if (amount > 0) {
+                            Text(
+                                rupees(amount), fontSize = rsp(12),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (p.optString("note").isNotEmpty()) {
+                            Text(
+                                p.optString("note"), fontSize = rsp(11),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
+                    TextButton(onClick = {
+                        post(
+                            "/clients/api/app/leads/$leadId/interest/",
+                            JSONObject().put("remove", p.optInt("id")),
+                        )
+                    }) { Text("Remove") }
+                }
+            }
+        }
+        PickerField(
+            label = "Add a product this lead needs",
+            value = "Pick a product",
+            onOpen = { productMenuOpen = true },
+        ) {
+            DropdownMenu(expanded = productMenuOpen, onDismissRequest = { productMenuOpen = false }) {
+                meta.productList().forEach { (id, name) ->
+                    DropdownMenuItem(
+                        text = { Text(name) },
+                        onClick = {
+                            productMenuOpen = false
+                            post(
+                                "/clients/api/app/leads/$leadId/interest/",
+                                JSONObject().put("product_id", id),
+                            )
+                        },
+                    )
                 }
             }
         }
@@ -343,7 +562,7 @@ private fun LeadDetail(
         val remarks = d.optJSONArray("remarks")
         for (i in 0 until (remarks?.length() ?: 0)) {
             val r = remarks!!.getJSONObject(i)
-            Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+            Column(Modifier.fillMaxWidth().padding(vertical = rdp(2))) {
                 Text(r.optString("text"), fontSize = rsp(13))
                 Text(
                     "${r.optString("by")} · ${r.optString("at")}",
@@ -352,44 +571,62 @@ private fun LeadDetail(
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        SectionTitle("Stage history")
+        val timeline = d.optJSONArray("timeline")
+        for (i in 0 until (timeline?.length() ?: 0)) {
+            val e = timeline!!.getJSONObject(i)
+            Column(Modifier.fillMaxWidth().padding(vertical = rdp(2))) {
+                Text(
+                    "${e.optString("from")} → ${e.optString("to")}" +
+                        if (e.optString("note").isNotEmpty()) " · ${e.optString("note")}" else "",
+                    fontSize = rsp(12), fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "${e.optString("by")} · ${e.optString("at")}",
+                    fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(rdp(20)))
     }
 }
 
 @Composable
 private fun LeadCreateForm(
+    meta: JSONObject,
     modifier: Modifier,
     onDone: () -> Unit,
     onSessionExpired: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var meta by remember { mutableStateOf<JSONObject?>(null) }
+    val stages = meta.stageList()
+    val products = meta.productList()
+
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var income by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
+    var stage by remember { mutableStateOf(stages.firstOrNull()?.first ?: "suspect") }
+    var stageMenuOpen by remember { mutableStateOf(false) }
+    var pickedProducts by remember { mutableStateOf(setOf<Int>()) }
     var selectedEmployee by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var employeeMenuOpen by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        when (val r = ApiClient.get("/clients/api/app/lead-meta/")) {
-            is ApiClient.Result.Ok -> meta = r.json
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> message = r.message
-        }
-    }
-    val m = meta ?: run { LoadingBox(modifier); return }
-
     Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(rdp(16)),
+        verticalArrangement = Arrangement.spacedBy(rdp(12)),
     ) {
         ScreenHeader("New Lead", onBack = onDone)
 
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Customer name *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(
+            value = name, onValueChange = { name = it }, label = { Text("Customer name *") },
+            keyboardOptions = KeyboardOptions(capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Words),
+            modifier = Modifier.fillMaxWidth(), singleLine = true,
+        )
         OutlinedTextField(
             value = phone, onValueChange = { phone = it }, label = { Text("Phone") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
@@ -408,27 +645,49 @@ private fun LeadCreateForm(
         )
         OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth())
 
-        if (m.optBoolean("can_assign")) {
-            androidx.compose.foundation.layout.Box {
-                OutlinedTextField(
-                    value = selectedEmployee?.second ?: "Myself",
-                    onValueChange = {}, readOnly = true, enabled = false,
-                    label = { Text("Assign to") },
-                    modifier = Modifier.fillMaxWidth().clickable { employeeMenuOpen = true },
-                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                        disabledBorderColor = MaterialTheme.colorScheme.outline,
-                        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
-                androidx.compose.material3.DropdownMenu(
-                    expanded = employeeMenuOpen,
-                    onDismissRequest = { employeeMenuOpen = false },
-                ) {
-                    val es = m.optJSONArray("employees")
+        PickerField(
+            label = "Starting stage",
+            value = stages.firstOrNull { it.first == stage }?.second ?: "Suspect",
+            onOpen = { stageMenuOpen = true },
+        ) {
+            DropdownMenu(expanded = stageMenuOpen, onDismissRequest = { stageMenuOpen = false }) {
+                stages.forEach { (value, label, _) ->
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        onClick = { stage = value; stageMenuOpen = false },
+                    )
+                }
+            }
+        }
+        Text(
+            stages.firstOrNull { it.first == stage }?.third ?: "",
+            fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        SectionTitle("What do they need?")
+        Text(
+            "Optional — tap only the products this lead is actually after.",
+            fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ActionRow {
+            products.forEach { (id, label) ->
+                Chip(label, pickedProducts.contains(id)) {
+                    pickedProducts = if (pickedProducts.contains(id)) pickedProducts - id else pickedProducts + id
+                }
+            }
+        }
+
+        if (meta.optBoolean("can_assign")) {
+            PickerField(
+                label = "Assign to",
+                value = selectedEmployee?.second ?: "Myself",
+                onOpen = { employeeMenuOpen = true },
+            ) {
+                DropdownMenu(expanded = employeeMenuOpen, onDismissRequest = { employeeMenuOpen = false }) {
+                    val es = meta.optJSONArray("employees")
                     for (i in 0 until (es?.length() ?: 0)) {
                         val e = es!!.getJSONObject(i)
-                        androidx.compose.material3.DropdownMenuItem(
+                        DropdownMenuItem(
                             text = { Text(e.optString("name")) },
                             onClick = {
                                 selectedEmployee = e.getInt("id") to e.optString("name")
@@ -453,6 +712,8 @@ private fun LeadCreateForm(
                         .put("email", email)
                         .put("income", income)
                         .put("notes", notes)
+                        .put("stage", stage)
+                        .put("product_ids", JSONArray(pickedProducts.toList()))
                     if (selectedEmployee != null) body.put("assigned_to_id", selectedEmployee!!.first)
                     when (val r = ApiClient.post("/clients/api/app/leads/create/", body)) {
                         is ApiClient.Result.Ok -> onDone()
@@ -463,9 +724,9 @@ private fun LeadCreateForm(
                 }
             },
             enabled = !submitting && name.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = rdp(52)),
         ) { Text(if (submitting) "Saving…" else "Create Lead", fontSize = rsp(16)) }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(rdp(24)))
     }
 }

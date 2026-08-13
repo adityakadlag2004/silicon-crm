@@ -49,7 +49,7 @@ class ShellAcrossModulesTests(TestCase):
         return r.content.decode()
 
     def test_lead_list_and_detail(self):
-        html = self._get(reverse("clients:lead_stage_list", args=["pending"]))
+        html = self._get(reverse("clients:lead_management"))
         self.assertIn("ki-kpis", html)
         self.assertIn("ki-mono", html)
         detail = self._get(reverse("clients:lead_detail", args=[self.lead.id]))

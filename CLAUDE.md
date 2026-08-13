@@ -32,6 +32,35 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - Every schema change: `makemigrations` in the same commit as the model change. `makemigrations --check` must stay clean.
 - Every feature commit includes/updates tests. Full suite green before push: `.venv/bin/python manage.py test clients`.
 
+## Main products vs sub-products
+
+- A sub-product (`Product.parent`, e.g. "Term Plan" under "Life Insurance")
+  exists so a **sale or a renewal** can name the exact plan sold. That is the
+  whole of its job. **Every other picker, filter and report in the system
+  deals in main products only**, with a sub-product's business folded into
+  its category.
+- The rule lives in one place — `ProductQuerySet` in `models/catalog.py`:
+  `Product.objects.selectable().main().in_display_order()`. Only the sale
+  entry forms (`_sale_products` / `_subproduct_choices`, `app_sale_meta`) and
+  the renewal forms (`RenewalForm`, `EditRenewalForm`, `app_renewal_meta`)
+  may drop `.main()`. Product Management is the third exception: it is the
+  catalog editor, so it shows the tree.
+- **Restricting a picker is only half the change — the matching behind it has
+  to roll up, or a category selection silently covers nothing.** Both halves
+  are done: incentive rules already matched `product_ref__parent_id`
+  (`rule_sale_q`); campaigns now do (`Sale._active_campaign_product`, exact
+  sub-product still beats its parent for legacy rows); the All Clients
+  product filters fold children into the parent
+  (`_client_product_totals_map`).
+- The margin reports print one row per main product, but **each plan's
+  revenue is still valued at its own rate** before blending — a rolled-up row
+  must never reprice a sub-product at its parent's margin. Health is the
+  exception on purpose: its slabs are a band on the *category's* monthly
+  volume, so they resolve at the category. Per-plan rates are read on Product
+  Management, where they are set.
+- `clients.test.test_product_subproducts` pins all of this
+  (`MainProductsOnlyOutsideSaleEntryTests`).
+
 ## Insurance sales & renewals
 
 - A sale is booked when the company APPROVES the policy, so `Sale.date` (sale
@@ -222,6 +251,57 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   FCM). No new cron — it rides the every-minute one already in CRONJOBS. Every
   stage update / note can attach a follow-up in the same submit.
 
+## Lead pipeline (SPANCO)
+
+- Leads move through six stages — **Suspect → Prospect → Approach →
+  Negotiation → Conclusion → Order** (`Lead.STAGE_CHOICES`, in pipeline order
+  in `Lead.STAGE_SEQUENCE`; `STAGE_HELP` is the one-line meaning of each and
+  is rendered on the stepper, the board and the app, so the method is taught
+  by the screen).
+- **The stage is recorded, never derived.** The old pipeline computed
+  pending/half-sold/processed from three hard-coded product rows, so a lead's
+  position was a side effect of what had been sold. Every move now goes
+  through `services/leads.set_stage()`, which writes a `LeadStageEvent`
+  (from → to, note, who) and stamps `stage_changed_at`. Never assign
+  `lead.stage` anywhere else — the funnel is computed from these values.
+- **Lost keeps the stage it died at** (`mark_lost` + `lost_reason`); that is
+  what makes a weak step visible. `is_discarded` is the old column name, kept
+  so no historical row moved; the UI calls it Lost.
+- `funnel()` counts a lead as having *reached* every stage at or below where
+  it stands (lost ones included — they did get that far), so stage-to-stage
+  conversion is honest without replaying the event log.
+- **Products are per lead, not a fixed trio.** `LeadInterest` points at the
+  `Product` catalog: a lead that only wants a term plan carries one row.
+  Nothing is seeded — neither the web form nor `app_lead_create` invents
+  requirements for a lead nobody has qualified. `product` is nullable *only*
+  so pre-SPANCO rows whose product left the catalog survived migration 0118
+  with their label in `note`.
+- Conversion is allowed at **Order** only, and copies no cover/SIP figures:
+  `signals.update_client_status` recomputes those from approved sales, so a
+  lead's indicative numbers would just be overwritten.
+- Migrations **0118** (schema) + **0119** (data). 0119 puts **every existing
+  lead at Suspect** — the owner's call on 2026-08-13: the old
+  pending/half_sold/processed value was derived from what had been sold, so
+  it is not a SPANCO position worth carrying. Nothing is lost even so: where
+  a lead stood is written into its first stage event ("Previously: Half
+  Sold"), lost leads stay lost, converted ones keep their client link, and
+  every product row that carried real data became a `LeadInterest` whose note
+  spells out the old target / achieved / status. The blank Health-Life-Wealth
+  rows seeded onto every lead were dropped — they are the format being
+  replaced and carried nothing. **Keep 0119 separate from 0118**: a deferred
+  CREATE INDEX cannot follow a bulk row update in one Postgres transaction.
+- `seed_demo_crm` fills the pipeline for testing: 17 leads across all six
+  stages, walked through the stages they passed (so the funnel, the stage
+  history and the "stalled 14+ days" panel all have real content), two lost
+  with reasons, per-lead requirements off the main product catalog. Demo
+  leads use ids ≥ 990000; `--undo` takes them and everything hanging off them.
+- Screens: `/clients/leads/` (list, stage KPI tiles), `/clients/leads/board/`
+  (six SPANCO columns, read-only — moves happen on the detail page so they
+  all go through one logged path) and `/clients/leads/pipeline/` (funnel,
+  per-employee win rates, leads stalled 14+ days, what the pipeline wants).
+- The stepper CSS is `.ki-steps` / `.ki-step` in `ki-record.css`, shared with
+  the claim workflow.
+
 ## Call follow-ups (the app's Calls tab)
 
 - One number = one pending reminder. A new follow-up for a number retires the
@@ -391,6 +471,6 @@ signal there is, since the app is self-hosted with no Play Console.
   from the insurer's Agency FYC-RYC chart). Run once after deploy, and again
   when the insurer publishes a new chart version. New plans land INACTIVE — an
   admin ticks the ones sold on Product Management.
-  `seed_demo_crm` seeds Households/Insurance/Claims/Meetings for testing;
+  `seed_demo_crm` seeds Households/Insurance/Claims/Meetings/Leads for testing;
   it refuses to run when `DEBUG` is off unless `--force`, and `--undo`
   removes exactly what it created (demo client ids ≥ 990000, `DEMO-` codes).

@@ -1,8 +1,10 @@
-"""Lead Pipeline: leads, remarks, follow-ups, family, product progress."""
+"""Lead Pipeline: SPANCO stages, product interests, remarks, follow-ups, family."""
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
+
 from .hr import Employee
 
 
@@ -10,14 +12,51 @@ from .hr import Employee
 
 
 class Lead(models.Model):
-    STAGE_PENDING = "pending"
-    STAGE_HALF = "half_sold"
-    STAGE_PROCESSED = "processed"
+    """A lead worked through SPANCO, one stage at a time.
+
+    The stage is a judgement the salesperson records — it is NOT derived from
+    what has been sold. The old pipeline computed it from three hard-coded
+    product rows (Health/Life/Wealth), which is why every lead was born
+    needing all three whether or not it did. What a lead actually needs now
+    lives in `interests`, picked per lead from the product catalog.
+    """
+
+    STAGE_SUSPECT = "suspect"
+    STAGE_PROSPECT = "prospect"
+    STAGE_APPROACH = "approach"
+    STAGE_NEGOTIATION = "negotiation"
+    STAGE_CONCLUSION = "conclusion"
+    STAGE_ORDER = "order"
     STAGE_CHOICES = [
-        (STAGE_PENDING, "Pending"),
-        (STAGE_HALF, "Half Sold"),
-        (STAGE_PROCESSED, "Processed"),
+        (STAGE_SUSPECT, "Suspect"),
+        (STAGE_PROSPECT, "Prospect"),
+        (STAGE_APPROACH, "Approach / Analysis"),
+        (STAGE_NEGOTIATION, "Negotiation"),
+        (STAGE_CONCLUSION, "Conclusion"),
+        (STAGE_ORDER, "Order"),
     ]
+    # The pipeline runs in this order; a lead's position is its index here.
+    STAGE_SEQUENCE = [s for s, _ in STAGE_CHOICES]
+
+    # What each step means, shown on the stepper and in the app so the method
+    # is taught by the screen rather than by a training deck.
+    STAGE_HELP = {
+        STAGE_SUSPECT: "Identified as a possible fit. Contact details only — nothing verified yet.",
+        STAGE_PROSPECT: "Qualified: there is a real need, the budget exists and this person can decide.",
+        STAGE_APPROACH: "Met or spoken to. Requirements analysed, our solution presented against them.",
+        STAGE_NEGOTIATION: "Working through terms, premium, cover and conditions.",
+        STAGE_CONCLUSION: "Agreed. Terms final, waiting on the signature / go-ahead.",
+        STAGE_ORDER: "Paperwork in, business booked. Convert to a client and keep the relationship.",
+    }
+
+    STAGE_COLORS = {
+        STAGE_SUSPECT: "#6B7280",
+        STAGE_PROSPECT: "#B45309",
+        STAGE_APPROACH: "#0369A1",
+        STAGE_NEGOTIATION: "#7C3AED",
+        STAGE_CONCLUSION: "#0F766E",
+        STAGE_ORDER: "#15803D",
+    }
 
     customer_name = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, blank=True)
@@ -27,7 +66,14 @@ class Lead(models.Model):
     income = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     expenses = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True)
+
+    # "Lost / parked" in SPANCO terms. Kept under the old column name so no
+    # historical row moves during the redesign.
     is_discarded = models.BooleanField(default=False, db_index=True)
+    lost_reason = models.CharField(
+        max_length=255, blank=True,
+        help_text="Why the lead was dropped — this is what makes weak stages visible.",
+    )
 
     assigned_to = models.ForeignKey(
         Employee,
@@ -43,7 +89,8 @@ class Lead(models.Model):
         related_name="created_leads",
     )
 
-    stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default=STAGE_PENDING, db_index=True)
+    stage = models.CharField(max_length=20, choices=STAGE_CHOICES, default=STAGE_SUSPECT, db_index=True)
+    stage_changed_at = models.DateTimeField(default=timezone.now, db_index=True)
     converted_client = models.ForeignKey(
         'Client',
         null=True,
@@ -61,28 +108,107 @@ class Lead(models.Model):
     def __str__(self):
         return f"{self.customer_name} ({self.assigned_to})"
 
-    def compute_stage(self):
-        statuses = list(self.progress_entries.values_list("status", flat=True))
-        if not statuses:
-            return self.STAGE_PENDING
+    @property
+    def stage_index(self):
+        """0-based position in SPANCO; -1 if the stage value is unknown."""
+        try:
+            return self.STAGE_SEQUENCE.index(self.stage)
+        except ValueError:
+            return -1
 
-        if all(s == LeadProductProgress.STATUS_PROCESSED for s in statuses):
-            return self.STAGE_PROCESSED
+    @property
+    def stage_color(self):
+        return self.STAGE_COLORS.get(self.stage, "#6B5D3F")
 
-        if any(s == LeadProductProgress.STATUS_PROCESSED for s in statuses):
-            return self.STAGE_HALF
+    @property
+    def stage_help(self):
+        return self.STAGE_HELP.get(self.stage, "")
 
-        if any(s == LeadProductProgress.STATUS_HALF for s in statuses):
-            return self.STAGE_HALF
+    @property
+    def next_stage(self):
+        """The stage after this one, or None at Order."""
+        i = self.stage_index
+        if i < 0 or i >= len(self.STAGE_SEQUENCE) - 1:
+            return None
+        return self.STAGE_SEQUENCE[i + 1]
 
-        return self.STAGE_PENDING
+    @property
+    def days_in_stage(self):
+        return (timezone.now() - self.stage_changed_at).days
 
-    def recompute_stage(self, save=True):
-        new_stage = self.compute_stage()
-        if save and new_stage != self.stage:
-            self.stage = new_stage
-            self.save(update_fields=["stage", "updated_at"])
-        return new_stage
+    @property
+    def is_won(self):
+        return self.stage == self.STAGE_ORDER and not self.is_discarded
+
+
+class LeadStageEvent(models.Model):
+    """One recorded SPANCO move — what makes the funnel measurable.
+
+    `to_stage` is a plain CharField, not a choice, because losing and
+    reopening a lead are logged here too ("lost" / back to a real stage).
+    """
+
+    LOST = "lost"
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="stage_events")
+    from_stage = models.CharField(max_length=20, blank=True)
+    to_stage = models.CharField(max_length=20)
+    note = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.lead_id}: {self.from_stage or '—'} → {self.to_stage}"
+
+    @staticmethod
+    def label_for(stage):
+        if stage == LeadStageEvent.LOST:
+            return "Lost"
+        return dict(Lead.STAGE_CHOICES).get(stage, stage or "—")
+
+    @property
+    def from_label(self):
+        return self.label_for(self.from_stage)
+
+    @property
+    def to_label(self):
+        return self.label_for(self.to_stage)
+
+
+class LeadInterest(models.Model):
+    """A product this lead actually needs, chosen per lead from the catalog.
+
+    Replaces the fixed Health/Life/Wealth target grid: a lead that only wants
+    a term plan carries one row, not three with two of them blank.
+    `product` is nullable only so pre-SPANCO rows whose product no longer
+    exists in the catalog survive the migration with their label in `note`.
+    """
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="interests")
+    product = models.ForeignKey(
+        "Product", on_delete=models.PROTECT, null=True, blank=True, related_name="lead_interests",
+    )
+    amount = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Indicative premium / SIP / cover being discussed. Optional.",
+    )
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("lead", "product")
+        ordering = ["product__display_order", "id"]
+
+    def __str__(self):
+        return f"{self.lead.customer_name} – {self.label}"
+
+    @property
+    def label(self):
+        return self.product.name if self.product_id else (self.note or "Other")
 
 
 class LeadRemark(models.Model):
@@ -133,59 +259,3 @@ class LeadFamilyMember(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.relation})"
-
-
-class LeadProductProgress(models.Model):
-    PRODUCT_HEALTH = "health"
-    PRODUCT_LIFE = "life"
-    PRODUCT_WEALTH = "wealth"
-    PRODUCT_CHOICES = [
-        (PRODUCT_HEALTH, "Health"),
-        (PRODUCT_LIFE, "Life"),
-        (PRODUCT_WEALTH, "Wealth"),
-    ]
-
-    STATUS_PENDING = "pending"
-    STATUS_HALF = "half_sold"
-    STATUS_PROCESSED = "processed"
-    STATUS_CHOICES = [
-        (STATUS_PENDING, "Pending"),
-        (STATUS_HALF, "Half Sold"),
-        (STATUS_PROCESSED, "Processed"),
-    ]
-
-    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="progress_entries")
-    product = models.CharField(max_length=20, choices=PRODUCT_CHOICES)
-    target_amount = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-    )
-    achieved_amount = models.DecimalField(
-        max_digits=14,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0)],
-    )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
-    remark = models.TextField(blank=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ("lead", "product")
-        ordering = ["product"]
-
-    def __str__(self):
-        return f"{self.lead.customer_name} - {self.get_product_display()}"
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        self.lead.recompute_stage(save=True)
-
-    def delete(self, *args, **kwargs):
-        lead = self.lead
-        super().delete(*args, **kwargs)
-        lead.recompute_stage(save=True)

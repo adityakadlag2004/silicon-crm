@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Pipeline Report{% endblock %}
+{% block page_title %}Pipeline Report{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <div>
+    <h2 class="ki-section-title" style="margin-bottom:0.25rem;">{% if scope == 'mine' %}My Pipeline{% else %}Team Pipeline{% endif %}</h2>
+    <div class="text-muted small">How far leads get through SPANCO, and which step loses them.</div>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    {% if can_see_team %}
+      <a class="ki-btn ki-btn-sm {% if scope == 'team' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?scope=team">Team</a>
+      <a class="ki-btn ki-btn-sm {% if scope == 'mine' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?scope=mine">Mine</a>
+    {% endif %}
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_management' %}"><i class="bi bi-arrow-left"></i> Back to Leads</a>
+  </div>
+</div>
+
+<div class="ki-card mb-3">
+  <div class="ki-card-label"><i class="bi bi-funnel"></i> Funnel</div>
+  <div class="p-3">
+    {% for s in stages %}
+      <div class="ki-funnel-row" style="--c:{{ s.color }};">
+        <div class="cap">
+          <span><strong>{{ s.label }}</strong> <span class="text-muted small">{{ s.help }}</span></span>
+          <span class="text-nowrap">
+            {{ s.reached }} reached
+            {% if s.step_pct != None %}<span class="text-muted">· {{ s.step_pct }}% of previous</span>{% endif %}
+          </span>
+        </div>
+        <div class="ki-funnel-bar"><span style="width: {{ s.reached_pct }}%;"></span></div>
+        <div class="small text-muted mt-1">
+          Standing here now: {{ s.standing }}{% if s.lost_here %} · lost at this step: <span class="text-danger">{{ s.lost_here }}</span>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if per_employee %}
+<div class="ki-card mb-3">
+  <div class="ki-card-label"><i class="bi bi-person-workspace"></i> By Employee</div>
+  <div class="ki-table-wrap">
+    <table class="ki-table mb-0">
+      <thead>
+        <tr><th>Employee</th><th>Leads</th><th>Ordered</th><th>Lost</th><th>Win %</th><th>Approved Sales</th></tr>
+      </thead>
+      <tbody>
+        {% for row in per_employee %}
+          <tr>
+            <td>{{ row.assigned_to__user__username }}</td>
+            <td>{{ row.total }}</td>
+            <td>{{ row.won }}</td>
+            <td>{{ row.lost }}</td>
+            <td>{{ row.win_pct }}%</td>
+            <td>Rs {{ row.total_sales|floatformat:0 }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-center text-muted">No data.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="ki-card h-100">
+      <div class="ki-card-label"><i class="bi bi-hourglass-split"></i> Stalled 14+ days</div>
+      <div class="ki-table-wrap">
+        <table class="ki-table mb-0">
+          <thead><tr><th>Lead</th><th>Stage</th><th>Waiting</th></tr></thead>
+          <tbody>
+            {% for lead in stalled %}
+              <tr>
+                <td><a href="{% url 'clients:lead_detail' lead.id %}">{{ lead.customer_name }}</a>
+                  <div class="text-muted small">{{ lead.assigned_to.user.username }}</div></td>
+                <td><span class="ki-tag" style="--c:{{ lead.stage_color }};">{{ lead.get_stage_display }}</span></td>
+                <td class="text-nowrap">{{ lead.days_in_stage }} days</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-center text-muted">Nothing is sitting still. Good.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="ki-card h-100">
+      <div class="ki-card-label"><i class="bi bi-basket"></i> What the pipeline wants</div>
+      <div class="ki-table-wrap">
+        <table class="ki-table mb-0">
+          <thead><tr><th>Product</th><th>Leads</th><th>Indicative value</th></tr></thead>
+          <tbody>
+            {% for p in demand %}
+              <tr>
+                <td>{{ p.name }}</td>
+                <td>{{ p.leads }}</td>
+                <td>{% if p.value %}Rs {{ p.value|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-center text-muted">No product requirements captured yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

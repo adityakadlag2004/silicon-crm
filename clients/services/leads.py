@@ -1,0 +1,145 @@
+"""SPANCO lead pipeline: stage moves, the funnel, conversion.
+
+One implementation, called by the web views, the app API and the reports —
+a stage may not be set by assigning `lead.stage` anywhere else, or the move
+goes unrecorded and the funnel starts lying.
+"""
+from django.db import transaction
+from django.db.models import Count, Q
+from django.utils import timezone
+
+from ..models import Client, Lead, LeadStageEvent
+
+VALID_STAGES = dict(Lead.STAGE_CHOICES)
+
+
+def set_stage(lead, stage, user=None, note=""):
+    """Move a lead to a SPANCO stage, logging the move. Returns the event.
+
+    Moving a lost lead back into the pipeline reopens it — that is what
+    picking a stage for it means.
+    """
+    if stage not in VALID_STAGES:
+        raise ValueError(f"Unknown SPANCO stage: {stage!r}")
+    if stage == lead.stage and not lead.is_discarded and not note:
+        return None
+
+    event = LeadStageEvent.objects.create(
+        lead=lead,
+        from_stage=LeadStageEvent.LOST if lead.is_discarded else lead.stage,
+        to_stage=stage,
+        note=note,
+        created_by=user if (user and user.is_authenticated) else None,
+    )
+    lead.stage = stage
+    lead.stage_changed_at = timezone.now()
+    lead.is_discarded = False
+    lead.lost_reason = ""
+    lead.save(update_fields=["stage", "stage_changed_at", "is_discarded", "lost_reason", "updated_at"])
+    return event
+
+
+def mark_lost(lead, user=None, reason=""):
+    """Park a lead. The stage it died at is kept — that is the weak point."""
+    if lead.is_discarded:
+        return None
+    event = LeadStageEvent.objects.create(
+        lead=lead,
+        from_stage=lead.stage,
+        to_stage=LeadStageEvent.LOST,
+        note=reason,
+        created_by=user if (user and user.is_authenticated) else None,
+    )
+    lead.is_discarded = True
+    lead.lost_reason = (reason or "")[:255]
+    lead.save(update_fields=["is_discarded", "lost_reason", "updated_at"])
+    return event
+
+
+def reopen(lead, user=None):
+    """Bring a lost lead back at the stage it was lost from."""
+    if not lead.is_discarded:
+        return None
+    return set_stage(lead, lead.stage, user=user, note="Reopened")
+
+
+def funnel(qs):
+    """Stage-by-stage funnel for a Lead queryset.
+
+    A lead standing at Negotiation has, by definition, passed Suspect through
+    Approach, so "reached" counts every lead at or beyond the stage — lost
+    ones included, since they did get that far before dying. That makes the
+    stage-to-stage conversion honest without replaying the event log.
+    """
+    rows = qs.values("stage").order_by().annotate(
+        total=Count("id"),
+        lost=Count("id", filter=Q(is_discarded=True)),
+    )
+    at = {r["stage"]: r["total"] for r in rows}
+    lost_at = {r["stage"]: r["lost"] for r in rows}
+    total = sum(at.values())
+
+    out = []
+    previous_reached = None
+    for index, (stage, label) in enumerate(Lead.STAGE_CHOICES):
+        reached = sum(at.get(s, 0) for s in Lead.STAGE_SEQUENCE[index:])
+        out.append({
+            "stage": stage,
+            "label": label,
+            "help": Lead.STAGE_HELP[stage],
+            "color": Lead.STAGE_COLORS[stage],
+            "standing": at.get(stage, 0),          # leads sitting here right now
+            "lost_here": lost_at.get(stage, 0),    # dropped at this step
+            "reached": reached,                    # got at least this far
+            "reached_pct": round(reached / total * 100, 1) if total else 0.0,
+            # Conversion from the previous step — the number that shows which
+            # step of the method the team is weakest at.
+            "step_pct": (
+                round(reached / previous_reached * 100, 1)
+                if previous_reached else None
+            ),
+        })
+        previous_reached = reached or None
+    return out
+
+
+def stage_counts(qs):
+    """{stage: leads standing there} for KPI tiles, in one query."""
+    rows = qs.values("stage").order_by().annotate(total=Count("id"))
+    counts = {s: 0 for s in Lead.STAGE_SEQUENCE}
+    for row in rows:
+        if row["stage"] in counts:
+            counts[row["stage"]] = row["total"]
+    return counts
+
+
+@transaction.atomic
+def convert_to_client(lead, user=None):
+    """Create the Client record for a booked lead (Order stage).
+
+    Nothing about cover or SIP is copied across: `signals.update_client_status`
+    recomputes those from the client's approved sales, so copying a lead's
+    indicative numbers would only plant figures that the first sale overwrites.
+    """
+    if lead.converted_client_id:
+        raise ValueError("This lead has already been converted.")
+    if lead.stage != Lead.STAGE_ORDER:
+        raise ValueError("Only leads at the Order stage can be converted to clients.")
+
+    client = Client.objects.create(
+        name=lead.customer_name,
+        phone=lead.phone or None,
+        email=lead.email or None,
+        mapped_to=lead.assigned_to,
+        status="Mapped" if lead.assigned_to else "Unmapped",
+    )
+    lead.converted_client = client
+    lead.save(update_fields=["converted_client", "updated_at"])
+    LeadStageEvent.objects.create(
+        lead=lead,
+        from_stage=lead.stage,
+        to_stage=lead.stage,
+        note=f"Converted to client #{client.id}",
+        created_by=user if (user and user.is_authenticated) else None,
+    )
+    return client

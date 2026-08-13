@@ -418,3 +418,55 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
   display: block; height: 100%; border-radius: 999px;
   background: var(--ki-primary); transition: width .3s ease;
 }
+
+/* ─── Stage stepper ──────────────────────────────────────────
+   Shared by the SPANCO lead pipeline and the claim workflow —
+   both are "a record walking a fixed set of steps". Scrolls
+   sideways inside itself on a phone rather than squeezing.   */
+.ki-steps { display: flex; gap: .4rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.ki-step {
+  display: flex; flex-direction: column; align-items: center; gap: .3rem;
+  flex: 1; min-width: 76px; position: relative; text-decoration: none;
+}
+.ki-step .dot {
+  width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; font-size: .8rem;
+  background: var(--ki-card-border); color: var(--ki-text-secondary);
+}
+.ki-step .lbl { font-size: .72rem; text-align: center; color: var(--ki-text-secondary); }
+.ki-step.done .dot { background: #15803D; color: #fff; }
+.ki-step.current .dot { background: var(--c, var(--ki-primary)); color: #fff; box-shadow: 0 0 0 4px var(--ki-primary-pale); }
+.ki-step.current .lbl { color: var(--ki-text-primary); font-weight: 600; }
+.ki-step-help { font-size: .78rem; color: var(--ki-text-secondary); margin-top: .6rem; }
+
+/* ─── Pipeline board ─────────────────────────────────────────
+   Fixed-width columns that scroll horizontally inside the
+   board, so six SPANCO stages never widen the page itself.   */
+.ki-board {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr);
+  gap: .75rem; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  padding-bottom: .6rem; max-width: 100%;
+}
+.ki-board-col {
+  background: var(--ki-card-bg); border: 1px solid var(--ki-card-border);
+  border-top: 3px solid var(--c, var(--ki-primary));
+  border-radius: var(--ki-radius); padding: .7rem; min-height: 120px;
+}
+.ki-board-head { display: flex; justify-content: space-between; align-items: baseline; gap: .4rem; }
+.ki-board-head .t { font-weight: 700; font-size: .85rem; color: var(--c, var(--ki-primary)); }
+.ki-board-head .n { font-size: .8rem; color: var(--ki-text-secondary); }
+.ki-board-col .hint { font-size: .7rem; color: var(--ki-text-light); margin: .25rem 0 .6rem; line-height: 1.35; }
+.ki-board-card {
+  display: block; text-decoration: none; background: var(--ki-bg, #fff);
+  border: 1px solid var(--ki-card-border); border-radius: var(--ki-radius-sm, 6px);
+  padding: .55rem .65rem; margin-bottom: .5rem; transition: var(--ki-transition);
+}
+.ki-board-card:hover { box-shadow: var(--ki-shadow); transform: translateY(-1px); }
+.ki-board-card .nm { font-weight: 600; font-size: .85rem; color: var(--ki-text-primary); }
+.ki-board-card .mt { font-size: .72rem; color: var(--ki-text-secondary); }
+
+/* ─── Funnel bars (pipeline report) ─── */
+.ki-funnel-row { margin-bottom: .9rem; }
+.ki-funnel-row .cap { display: flex; justify-content: space-between; gap: .5rem; font-size: .85rem; }
+.ki-funnel-bar { background: var(--ki-card-border); border-radius: 999px; height: 12px; overflow: hidden; margin-top: .3rem; }
+.ki-funnel-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--c, var(--ki-primary)); }

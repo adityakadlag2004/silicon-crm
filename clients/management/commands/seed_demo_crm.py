@@ -1,4 +1,5 @@
-"""Populate Households, Insurance, Claims and Meetings with demo data.
+"""Populate Households, Insurance, Claims, Meetings and the SPANCO lead
+pipeline with demo data.
 
 Manual tool — never in CRONJOBS. Companion to seed_demo_tasks_links, which
 covers the Tasks and Links modules.
@@ -7,6 +8,8 @@ Everything created here is tagged so it can be removed again exactly:
   * demo clients use ids from DEMO_CLIENT_ID_BASE upward
   * demo households use codes starting DEMO_PREFIX
   * demo policies use policy numbers starting DEMO_PREFIX
+  * demo leads use ids from DEMO_LEAD_ID_BASE upward (deleting one takes its
+    requirements, stage history, follow-ups and remarks with it)
 Nothing outside those ranges is ever touched, so running this against a
 database that already holds real records cannot damage them.
 
@@ -27,11 +30,18 @@ from clients.models import (
     Family,
     InsuranceClaim,
     InsurancePolicy,
+    Lead,
+    LeadFollowUp,
+    LeadInterest,
+    LeadRemark,
+    LeadStageEvent,
     Meeting,
+    Product,
 )
 
 DEMO_PREFIX = "DEMO-"
 DEMO_CLIENT_ID_BASE = 990_000
+DEMO_LEAD_ID_BASE = 990_000
 
 FAMILIES = [
     # (household, members [(name, lumpsum, pms, sip_monthly)])
@@ -60,6 +70,43 @@ FAMILIES = [
 INSURERS = ["ICICI Lombard", "HDFC Ergo", "Star Health", "LIC", "Bajaj Allianz"]
 HEALTH_PLANS = ["Arogya Supreme", "Optima Restore", "Family Health Optima"]
 LIFE_PLANS = ["Jeevan Anand", "Click 2 Protect", "Smart Term Plan"]
+
+# (name, stage, days sitting there, [product codes wanted], lost reason or "")
+# Deliberately uneven: a fat top of funnel, a few deals near the line, two
+# dead ones, and several parked long enough to show up as stalled.
+DEMO_LEADS = [
+    ("Rohit Deshmukh",  Lead.STAGE_SUSPECT,      2,  [], ""),
+    ("Sneha Kulkarni",  Lead.STAGE_SUSPECT,      5,  ["HEALTH_INS"], ""),
+    ("Imran Shaikh",    Lead.STAGE_SUSPECT,     21,  [], ""),
+    ("Farah Qureshi",   Lead.STAGE_SUSPECT,     34,  ["SIP"], ""),
+    ("Anand Jain",      Lead.STAGE_SUSPECT,      1,  [], ""),
+    ("Tejas Bhosale",   Lead.STAGE_PROSPECT,     4,  ["LIFE_INS"], ""),
+    ("Meera Iyer",      Lead.STAGE_PROSPECT,    17,  ["HEALTH_INS", "SIP"], ""),
+    ("Kabir Sethi",     Lead.STAGE_PROSPECT,     9,  ["SIP"], ""),
+    ("Nandini Rao",     Lead.STAGE_APPROACH,     6,  ["HEALTH_INS"], ""),
+    ("Vikram Chandra",  Lead.STAGE_APPROACH,    28,  ["LIFE_INS", "SIP"], ""),
+    ("Pooja Nair",      Lead.STAGE_NEGOTIATION,  3,  ["HEALTH_INS"], ""),
+    ("Sanjay Gupta",    Lead.STAGE_NEGOTIATION, 19,  ["LIFE_INS"], ""),
+    ("Ritu Malhotra",   Lead.STAGE_CONCLUSION,   2,  ["HEALTH_INS", "LIFE_INS"], ""),
+    ("Devendra Patil",  Lead.STAGE_ORDER,        1,  ["SIP"], ""),
+    ("Aisha Khan",      Lead.STAGE_ORDER,        8,  ["HEALTH_INS"], ""),
+    ("Gaurav Menon",    Lead.STAGE_NEGOTIATION, 40,  ["LIFE_INS"], "Premium too high, went with a bank plan"),
+    ("Leela Prasad",    Lead.STAGE_PROSPECT,    52,  [], "Not reachable after four attempts"),
+]
+
+# Amounts asked for, per product, so the pipeline report has a value column.
+DEMO_INTEREST_AMOUNTS = {
+    "HEALTH_INS": 25_000,
+    "LIFE_INS": 100_000,
+    "SIP": 15_000,
+}
+
+DEMO_REMARKS = [
+    "Spoke on call, wants a comparison of two insurers.",
+    "Asked us to reach out after the 10th — salary credit.",
+    "Referred by an existing client, warm.",
+    "Wants the spouse covered on the same policy.",
+]
 
 
 class Command(BaseCommand):
@@ -92,10 +139,12 @@ class Command(BaseCommand):
             policies = self._seed_policies(clients, emps)
             claims = self._seed_claims(policies, emps)
             meetings = self._seed_meetings(clients, emps)
+            leads = self._seed_leads(emps)
 
         self.stdout.write(self.style.SUCCESS(
             f"Seeded {len(families)} households, {len(clients)} clients, "
-            f"{len(policies)} policies, {len(claims)} claims, {len(meetings)} meetings."))
+            f"{len(policies)} policies, {len(claims)} claims, {len(meetings)} meetings, "
+            f"{len(leads)} leads."))
         self.stdout.write("Remove it again with:  manage.py seed_demo_crm --undo")
 
     # ── seeding ──────────────────────────────────────────────────────────
@@ -264,6 +313,92 @@ class Command(BaseCommand):
                 out.append(nxt)
         return out
 
+    def _seed_leads(self, emps):
+        """Leads spread across all six SPANCO stages, plus two lost ones.
+
+        Each lead is walked through the stages it has passed so the stage
+        history, the funnel's step-by-step conversion and the "stalled 14+
+        days" panel all have something real to show. Requirements are picked
+        per lead from the MAIN product catalog — never a fixed trio, and
+        never a sub-product.
+        """
+        if not emps:
+            self.stdout.write(self.style.WARNING(
+                "No active employees — skipping demo leads (a lead needs an owner)."))
+            return []
+
+        from clients.services import leads as lead_service
+
+        catalog = {
+            p.code: p for p in Product.objects.selectable().main()
+            .filter(code__in=DEMO_INTEREST_AMOUNTS)
+        }
+        now = timezone.now()
+        out = []
+
+        for n, (name, stage, days, product_codes, lost_reason) in enumerate(DEMO_LEADS):
+            lead, created = Lead.objects.get_or_create(
+                id=DEMO_LEAD_ID_BASE + n,
+                defaults={
+                    "customer_name": name,
+                    "phone": f"9{random.randint(100000000, 999999999)}",
+                    "email": f"{name.split()[0].lower()}@example.com",
+                    "income": random.choice([600_000, 900_000, 1_500_000, 2_400_000]),
+                    "assigned_to": emps[n % len(emps)],
+                    "notes": "Demo lead — safe to delete.",
+                },
+            )
+            if not created:
+                continue
+
+            # Walk the roadmap: a lead at Negotiation really did pass through
+            # Suspect, Prospect and Approach, and the history says so.
+            path = Lead.STAGE_SEQUENCE[:Lead.STAGE_SEQUENCE.index(stage) + 1]
+            for step, to_stage in enumerate(path):
+                if step == 0:
+                    # Entering the pipeline, written exactly as the real
+                    # create form writes it: no "from", so the timeline reads
+                    # "— → Suspect" and not "Suspect → Suspect".
+                    event = lead.stage_events.create(to_stage=to_stage, note="Lead created")
+                else:
+                    event = lead_service.set_stage(lead, to_stage, note=f"Moved to {to_stage}.")
+                # auto_now_add ignores assignment, so backdate after the fact —
+                # a timeline stamped all-today reads as fake. The last move
+                # lands on `days` ago, matching the stage clock set below.
+                if event:
+                    LeadStageEvent.objects.filter(pk=event.pk).update(
+                        created_at=now - timedelta(days=days + (len(path) - 1 - step) * 4),
+                    )
+
+            for code in product_codes:
+                product = catalog.get(code)
+                if product:
+                    LeadInterest.objects.get_or_create(
+                        lead=lead, product=product,
+                        defaults={"amount": DEMO_INTEREST_AMOUNTS[code]},
+                    )
+
+            LeadRemark.objects.create(lead=lead, text=DEMO_REMARKS[n % len(DEMO_REMARKS)])
+
+            # Every third live lead carries a follow-up; one in six is overdue.
+            if not lost_reason and n % 3 == 0:
+                overdue = n % 6 == 0
+                LeadFollowUp.objects.create(
+                    lead=lead, assigned_to=lead.assigned_to,
+                    scheduled_time=now + timedelta(days=-2 if overdue else 3, hours=n % 7),
+                    note="Call back with the quote.",
+                    # Past-dated demo rows must not set the reminder cron ringing.
+                    reminded=overdue,
+                )
+
+            if lost_reason:
+                lead_service.mark_lost(lead, reason=lost_reason)
+
+            Lead.objects.filter(pk=lead.pk).update(stage_changed_at=now - timedelta(days=days))
+            out.append(lead)
+
+        return out
+
     # ── undo ─────────────────────────────────────────────────────────────
 
     def _undo(self):
@@ -273,12 +408,15 @@ class Command(BaseCommand):
         clients = Client.objects.filter(id__gte=DEMO_CLIENT_ID_BASE)
         meetings = Meeting.objects.filter(client__in=clients)
         families = Family.objects.filter(code__startswith=DEMO_PREFIX)
+        leads = Lead.objects.filter(id__gte=DEMO_LEAD_ID_BASE)
 
         counts = (claims.count(), policies.count(), meetings.count(),
-                  clients.count(), families.count())
+                  clients.count(), families.count(), leads.count())
         claims.delete()
         policies.delete()
         meetings.delete()
+        # Requirements, stage history, follow-ups and remarks cascade off these.
+        leads.delete()
         # Clear the head FK first so deleting members doesn't trip on it.
         families.update(head=None)
         clients.delete()
@@ -286,4 +424,4 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS(
             "Removed demo data: %d claims, %d policies, %d meetings, "
-            "%d clients, %d households." % counts))
+            "%d clients, %d households, %d leads." % counts))

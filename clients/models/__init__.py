@@ -62,7 +62,8 @@ from .leads import (  # noqa: F401
     LeadRemark,
     LeadFollowUp,
     LeadFamilyMember,
-    LeadProductProgress,
+    LeadInterest,
+    LeadStageEvent,
 )
 from .engagement import (  # noqa: F401
     CalendarEvent,

@@ -60,11 +60,10 @@ def manage_campaigns(request):
     campaigns = (
         Campaign.objects.prefetch_related("products__slabs", "products__product_ref").all()
     )
-    product_options = Product.objects.filter(
-        is_active=True,
-        archived_at__isnull=True,
+    # Main products only: a campaign on a category covers its sub-products.
+    product_options = Product.objects.selectable().main().filter(
         domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
-    ).order_by("display_order", "name")
+    ).in_display_order()
 
     return render(
         request,
@@ -185,10 +184,8 @@ def add_campaign_product(request, campaign_id):
     campaign = get_object_or_404(Campaign, id=campaign_id)
     try:
         data = json.loads(request.body)
-        product = Product.objects.filter(
+        product = Product.objects.selectable().main().filter(
             pk=data.get("product_id"),
-            is_active=True,
-            archived_at__isnull=True,
             domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
         ).first()
         if not product:

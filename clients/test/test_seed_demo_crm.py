@@ -6,7 +6,8 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 
 from clients.models import (
-    Client, Employee, Family, InsuranceClaim, InsurancePolicy, Meeting,
+    Client, Employee, Family, InsuranceClaim, InsurancePolicy, Lead,
+    LeadInterest, LeadStageEvent, Meeting, Product,
 )
 
 
@@ -79,3 +80,64 @@ class SeedDemoCrmGuardTests(TestCase):
         call_command("seed_demo_crm", stdout=out)
         self.assertIn("--force", out.getvalue())
         self.assertFalse(Family.objects.filter(code__startswith="DEMO-").exists())
+
+
+@override_settings(DEBUG=True)
+class SeedDemoLeadsTests(TestCase):
+    """The demo pipeline has to be worth looking at: every SPANCO stage
+    occupied, a funnel that narrows, lost leads, and stalled ones."""
+
+    @classmethod
+    def setUpTestData(cls):
+        for name in ("seedlead_a", "seedlead_b"):
+            u = User.objects.create_user(name, password="pw")
+            Employee.objects.create(user=u, role="employee", salary=0, active=True)
+        cls.real_lead = Lead.objects.create(
+            customer_name="Real Lead",
+            assigned_to=Employee.objects.first(),
+        )
+
+    def _seed(self, *args):
+        call_command("seed_demo_crm", *args, stdout=StringIO())
+
+    def test_every_spanco_stage_is_occupied(self):
+        self._seed()
+        demo = Lead.objects.filter(id__gte=990_000)
+        occupied = set(demo.values_list("stage", flat=True))
+        self.assertEqual(occupied, set(Lead.STAGE_SEQUENCE))
+
+    def test_leads_carry_history_requirements_and_losses(self):
+        self._seed()
+        demo = Lead.objects.filter(id__gte=990_000)
+
+        # A lead at Negotiation walked the three stages before it.
+        walked = demo.filter(stage=Lead.STAGE_NEGOTIATION, is_discarded=False).first()
+        self.assertGreaterEqual(walked.stage_events.count(), 4)
+
+        self.assertTrue(demo.filter(is_discarded=True).exists())
+        self.assertTrue(
+            all(l.lost_reason for l in demo.filter(is_discarded=True)),
+            "a lost demo lead should say why",
+        )
+        self.assertTrue(LeadInterest.objects.filter(lead__in=demo).exists())
+        # Requirements are main products only, same rule as the rest of the app.
+        self.assertFalse(
+            LeadInterest.objects.filter(lead__in=demo, product__parent__isnull=False).exists()
+        )
+        self.assertTrue(any(l.days_in_stage >= 14 for l in demo if not l.is_discarded))
+
+    def test_undo_removes_demo_leads_and_spares_real_ones(self):
+        self._seed()
+        self._seed("--undo")
+        self.assertEqual(Lead.objects.filter(id__gte=990_000).count(), 0)
+        self.assertEqual(LeadInterest.objects.count(), 0)
+        self.assertEqual(LeadStageEvent.objects.count(), 0)
+        self.assertTrue(Lead.objects.filter(pk=self.real_lead.pk).exists())
+
+    def test_seeding_twice_does_not_duplicate_leads(self):
+        self._seed()
+        first = Lead.objects.filter(id__gte=990_000).count()
+        events = LeadStageEvent.objects.count()
+        self._seed()
+        self.assertEqual(Lead.objects.filter(id__gte=990_000).count(), first)
+        self.assertEqual(LeadStageEvent.objects.count(), events)

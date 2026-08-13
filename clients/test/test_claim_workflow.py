@@ -97,7 +97,7 @@ class ClaimWorkflowTests(TestCase):
         claim = self._claim()
         claims_service.add_note(claim, self.admin_user, "a note")
         html = self._tc().get(reverse("clients:claim_detail", args=[claim.id])).content.decode()
-        for frag in ("Update stage", "Documents", "Follow-ups", "Timeline", "claim-steps"):
+        for frag in ("Update stage", "Documents", "Follow-ups", "Timeline", "ki-steps"):
             self.assertIn(frag, html)
 
 

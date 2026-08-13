@@ -382,11 +382,11 @@ def manage_incentive_rules(request):
             )
         else:
             r.summary = f"{r.base_percent:.2f}% of every sale. No levels, no targets."
-    product_options = Product.objects.filter(
-        is_active=True,
-        archived_at__isnull=True,
+    # Rules are set per main product — `rule_sale_q` already folds a
+    # sub-product's sales into its category's rule.
+    product_options = Product.objects.selectable().main().filter(
         domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
-    ).order_by("display_order", "name")
+    ).in_display_order()
 
     return render(
         request,

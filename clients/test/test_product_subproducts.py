@@ -1,6 +1,7 @@
-"""Sub-products: a child Product carries its own margin, inherits its
-category's insurance behaviour, and shows as 'Category › Sub-product' in the
-business-analytics earnings breakdown."""
+"""Sub-products: a child Product carries its own margin and inherits its
+category's insurance behaviour, but it is a sale-entry detail only — every
+report and picker outside sale/renewal entry deals in main products, with the
+child's business (at the child's own rate) folded into its category."""
 from datetime import date
 from decimal import Decimal
 
@@ -43,12 +44,28 @@ class SubProductMarginTests(TestCase):
         )
 
     def test_child_margin_used_not_parent(self):
+        """Rolled up under the category, priced at the child's own rate."""
         self._sale(self.term, "100000")
         rows, _ = _month_margin_breakdown(2026, 7)
-        term_row = next(r for r in rows if r["product"] == "Life Insurance › Term Plan")
+
+        # No sub-product row anywhere — the report deals in main products.
+        self.assertEqual([r["product"] for r in rows if "›" in r["product"]], [])
+        life_row = next(r for r in rows if r["product"] == "Life Insurance")
         # 20% (child), not 5% (parent).
-        self.assertEqual(term_row["margin_percent"], Decimal("20.00"))
-        self.assertEqual(term_row["margin_amount"], Decimal("20000.00"))
+        self.assertEqual(life_row["margin_percent"], Decimal("20.00"))
+        self.assertEqual(life_row["margin_amount"], Decimal("20000.00"))
+
+    def test_category_row_blends_its_plans_rates(self):
+        """Parent sale at 5% + child sale at 20% = one row, blended honestly."""
+        self._sale(self.life, "100000")
+        self._sale(self.term, "100000")
+        rows, _ = _month_margin_breakdown(2026, 7)
+
+        life_rows = [r for r in rows if r["product"] == "Life Insurance"]
+        self.assertEqual(len(life_rows), 1)
+        self.assertEqual(life_rows[0]["revenue"], Decimal("200000"))
+        self.assertEqual(life_rows[0]["margin_amount"], Decimal("25000.00"))   # 5000 + 20000
+        self.assertEqual(life_rows[0]["margin_percent"], Decimal("12.50"))
 
     def test_child_is_insurance(self):
         s = self._sale(self.term, "50000")
@@ -108,3 +125,119 @@ class SubProductMarginTests(TestCase):
         form = AdminSaleForm(self._base_form_data(product="Standalone Widget", employee=self.emp.pk))
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.save(commit=False).product, "Standalone Widget")
+
+
+class MainProductsOnlyOutsideSaleEntryTests(TestCase):
+    """Sub-products are selectable when entering a sale or a renewal, and
+    nowhere else. Every other picker offers main products only, and the
+    business behind a sub-product counts towards its category."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("mainonly_admin", password="pw", is_superuser=True)
+        self.emp = Employee.objects.create(user=self.user, role="admin", salary=0, active=True)
+        self.client.force_login(self.user)
+
+        self.life, _ = Product.objects.get_or_create(
+            code="LIFE_INS", defaults={"name": "Life Insurance"},
+        )
+        Product.objects.filter(pk=self.life.pk).update(
+            domain=Product.DOMAIN_BOTH, is_active=True, margin_percent=Decimal("5.00"),
+        )
+        self.life.refresh_from_db()
+        self.plan = Product.objects.create(
+            name="Guaranteed Return Plan", code="GRP", parent=self.life,
+            domain=Product.DOMAIN_BOTH, is_active=True, margin_percent=Decimal("20.00"),
+        )
+
+    def test_lead_requirements_offer_main_products_only(self):
+        from clients.forms import LeadInterestFormSet
+
+        products = list(LeadInterestFormSet().forms[0].fields["product"].queryset)
+        self.assertIn(self.life, products)
+        self.assertNotIn(self.plan, products)
+
+    def test_app_lead_meta_offers_main_products_only(self):
+        names = [
+            p["name"] for p in
+            self.client.get(reverse("clients:app_lead_meta")).json()["products"]
+        ]
+        self.assertIn("Life Insurance", names)
+        self.assertNotIn("Guaranteed Return Plan", names)
+
+    def test_app_refuses_a_subproduct_as_a_lead_requirement(self):
+        import json as _json
+        from clients.models import Lead
+
+        lead = Lead.objects.create(customer_name="Sub Seeker", assigned_to=self.emp)
+        resp = self.client.post(
+            reverse("clients:app_lead_interest", args=[lead.id]),
+            data=_json.dumps({"product_id": self.plan.id}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(lead.interests.count(), 0)
+
+    def test_client_filters_and_campaign_and_rule_pickers_are_main_only(self):
+        for url_name, needle in (
+            ("clients:all_clients", f'name="product_{self.plan.id}_status"'),
+            ("clients:manage_campaigns", None),
+            ("clients:manage_incentive_rules", None),
+        ):
+            html = self.client.get(reverse(url_name)).content.decode()
+            self.assertIn("Life Insurance", html, url_name)
+            if needle:
+                self.assertNotIn(needle, html, url_name)
+                self.assertIn(f'name="product_{self.life.id}_status"', html, url_name)
+            else:
+                self.assertNotIn("Guaranteed Return Plan", html, url_name)
+
+    def test_sale_and_renewal_entry_still_offer_subproducts(self):
+        from clients.forms import RenewalForm, _subproduct_choices
+
+        self.assertIn(("Guaranteed Return Plan", "Guaranteed Return Plan"), _subproduct_choices())
+        self.assertIn(self.plan, list(RenewalForm().fields["product_ref"].queryset))
+
+        meta = self.client.get(reverse("clients:app_sale_meta")).json()
+        blob = str(meta)
+        self.assertIn("Guaranteed Return Plan", blob)          # app Add Sale keeps plans
+
+    def test_a_clients_plan_business_answers_the_category_filter(self):
+        """A client whose only life business is a plan still matches the
+        Life Insurance filter — the roll-up, not just the picker."""
+        holder = Client.objects.create(name="Plan Holder", phone="9000000009", mapped_to=self.emp)
+        Client.objects.create(name="Nobody", phone="9000000008", mapped_to=self.emp)
+        Sale.objects.create(
+            client=holder, employee=self.emp, product=self.plan.name, product_ref=self.plan,
+            amount=Decimal("100000"), status="approved", date=date(2026, 7, 10),
+            policy_date=date(2026, 7, 10), policy_number="GRP1",
+        )
+
+        html = self.client.get(
+            reverse("clients:all_clients"), {f"product_{self.life.id}_status": "yes"},
+        ).content.decode()
+        self.assertIn("Plan Holder", html)
+        self.assertNotIn("Nobody", html)
+
+    def test_a_category_campaign_covers_its_plans(self):
+        """A campaign is set on the main product, so a plan sale must earn it."""
+        from datetime import timedelta
+
+        from clients.models import Campaign, CampaignProduct
+
+        today = date(2026, 7, 10)
+        campaign = Campaign.objects.create(
+            name="Life Push", start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=5), is_active=True,
+        )
+        CampaignProduct.objects.create(
+            campaign=campaign, product_ref=self.life,
+            benefit_type=CampaignProduct.BENEFIT_UNIT, unit_amount=Decimal("500"),
+        )
+        client_row = Client.objects.create(name="Camp Client", phone="9000000007")
+        sale = Sale.objects.create(
+            client=client_row, employee=self.emp, product=self.plan.name, product_ref=self.plan,
+            amount=Decimal("100000"), status="approved", date=today,
+            policy_date=today, policy_number="GRP2",
+        )
+        self.assertIsNotNone(sale._active_campaign_product())
+        self.assertEqual(sale._active_campaign_product().campaign, campaign)

@@ -39,7 +39,7 @@ in the WebView.
 | 6 | Native Menu + logout | `/api/app/logout/` | **v3.1** |
 | 7 | Renewals (list + add) | `/api/app/renewals/…` | **v3.2** |
 | 8 | Notifications screen | `/api/app/notifications/…` | **v3.2** |
-| 9 | Leads pipeline (stages, progress, remarks, convert, create) | `/api/app/leads/…` | **v3.3** |
+| 9 | Leads pipeline — SPANCO stepper + one-tap "Move to «next stage»" with a note, stage filter chips with counts, per-lead product requirements off the catalog, remarks, stage history, convert, create (stages/labels/help all served, never hard-coded in the app) | `/api/app/leads/…` (`stage/`, `interest/`), `/api/app/lead-meta/` (stages + product catalog) | **v3.3**, SPANCO rebuild pending release |
 | 10 | Reports (trend chart, product mix, leaderboard) | `/api/app/reports/summary/` | **v3.3** |
 | 11 | Team management (roster, edit, activate/deactivate, reset password, add) | `/api/app/team/…` | **v3.6** |
 | 12 | Incentives & Campaigns builders (rules, slabs, campaigns, products) | `/api/app/incentives|campaigns/` + web AJAX writes | **v3.7** |

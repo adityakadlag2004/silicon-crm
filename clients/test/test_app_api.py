@@ -314,7 +314,9 @@ class AppLeadsReportsTests(TestCase):
         from clients.models import Lead
         lead = Lead.objects.get()
         self.assertEqual(lead.assigned_to, self.emp)          # spoof ignored
-        self.assertEqual(lead.progress_entries.count(), 3)    # seeded tracks
+        # No product rows are invented for a lead nobody has qualified yet.
+        self.assertEqual(lead.interests.count(), 0)
+        self.assertEqual(lead.stage, Lead.STAGE_SUSPECT)
 
     def test_leads_scoped_to_employee(self):
         from clients.models import Lead
@@ -327,28 +329,27 @@ class AppLeadsReportsTests(TestCase):
         data = self._http(self.admin_user).get(reverse("clients:app_leads")).json()
         self.assertEqual(len(data["results"]), 2)
 
-    def test_progress_updates_stage_and_convert(self):
+    def test_stage_moves_are_logged_and_convert_needs_order(self):
         from clients.models import Lead
         lead = Lead.objects.create(customer_name="Conv", phone="97000", assigned_to=self.emp)
-        for product in ("health", "life", "wealth"):
+        for stage in Lead.STAGE_SEQUENCE[1:]:
             resp = self._post(
                 self.emp_user,
-                reverse("clients:app_lead_progress", args=[lead.id]),
-                {"product": product, "status": "processed", "achieved_amount": "100000"},
+                reverse("clients:app_lead_stage", args=[lead.id]),
+                {"stage": stage, "note": f"moved to {stage}"},
             )
-            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.status_code, 200, resp.content)
         lead.refresh_from_db()
-        self.assertEqual(lead.stage, Lead.STAGE_PROCESSED)
+        self.assertEqual(lead.stage, Lead.STAGE_ORDER)
+        self.assertEqual(lead.stage_events.count(), len(Lead.STAGE_SEQUENCE) - 1)
 
         resp = self._post(self.emp_user, reverse("clients:app_lead_action", args=[lead.id]), {"action": "convert"})
         self.assertEqual(resp.status_code, 200, resp.content)
         lead.refresh_from_db()
-        client = lead.converted_client
-        self.assertIsNotNone(client)
-        self.assertTrue(client.health_status and client.life_status and client.sip_status)
-        self.assertEqual(client.mapped_to, self.emp)
+        self.assertIsNotNone(lead.converted_client)
+        self.assertEqual(lead.converted_client.mapped_to, self.emp)
 
-    def test_convert_requires_processed(self):
+    def test_convert_requires_order_stage(self):
         from clients.models import Lead
         lead = Lead.objects.create(customer_name="Early", assigned_to=self.emp)
         resp = self._post(self.emp_user, reverse("clients:app_lead_action", args=[lead.id]), {"action": "convert"})

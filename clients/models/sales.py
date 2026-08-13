@@ -236,9 +236,16 @@ class Sale(models.Model):
             campaign__end_date__gte=sale_date,
         )
         if self.product_ref_id:
-            qs = qs.filter(product_ref_id=self.product_ref_id)
-        else:
-            qs = qs.filter(product_ref__name=self._effective_product_label())
+            # Campaigns are run on main products, so one on "Life Insurance"
+            # must cover a Term Plan sale. A campaign named on the exact
+            # sub-product (legacy) still wins over its category's.
+            category_id = self.product_ref.category_id
+            rows = {
+                cp.product_ref_id: cp
+                for cp in qs.filter(product_ref_id__in={self.product_ref_id, category_id})
+            }
+            return rows.get(self.product_ref_id) or rows.get(category_id)
+        qs = qs.filter(product_ref__name=self._effective_product_label())
         return qs.first()
 
     def _compute_campaign_points(self, cp):

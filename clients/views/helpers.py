@@ -75,7 +75,7 @@ def product_totals(qs, cat_map):
 
 def _lead_queryset_for_request(request):
     qs = Lead.objects.select_related("assigned_to__user").prefetch_related(
-        "progress_entries",
+        "interests__product",
         "family_members",
     )
     emp = getattr(request.user, "employee", None)

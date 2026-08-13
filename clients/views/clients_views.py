@@ -41,7 +41,9 @@ def _badge_class_for_product(product):
 
 
 def _build_client_product_filters(request):
-    active_products = Product.objects.filter(is_active=True).order_by("display_order", "name")
+    # One filter per main product; a client's sub-product business counts
+    # towards its category (see _client_product_totals_map).
+    active_products = Product.objects.selectable().main().in_display_order()
     product_filters = []
 
     for product in active_products:
@@ -61,26 +63,37 @@ def _build_client_product_filters(request):
 
 
 def _client_product_totals_map(client_ids, product_ids):
+    """{(client, main product): total business}.
+
+    Sub-products fold into their category, so a client whose only life
+    business is a Term Plan still answers "yes" to the Life Insurance filter.
+    """
     totals_map = {}
     if not client_ids or not product_ids:
         return totals_map
 
+    roll_up = {pid: pid for pid in product_ids}
+    for child_id, parent_id in Product.objects.filter(
+        parent_id__in=product_ids
+    ).values_list("id", "parent_id"):
+        roll_up[child_id] = parent_id
+
     sale_rows = (
-        Sale.objects.filter(client_id__in=client_ids, product_ref_id__in=product_ids)
+        Sale.objects.filter(client_id__in=client_ids, product_ref_id__in=roll_up)
         .values("client_id", "product_ref_id")
         .annotate(total=Sum("amount"))
     )
     renewal_rows = (
-        Renewal.objects.filter(client_id__in=client_ids, product_ref_id__in=product_ids)
+        Renewal.objects.filter(client_id__in=client_ids, product_ref_id__in=roll_up)
         .values("client_id", "product_ref_id")
         .annotate(total=Sum("premium_amount"))
     )
 
     for row in sale_rows:
-        key = (row["client_id"], row["product_ref_id"])
+        key = (row["client_id"], roll_up[row["product_ref_id"]])
         totals_map[key] = totals_map.get(key, Decimal("0")) + (row["total"] or Decimal("0"))
     for row in renewal_rows:
-        key = (row["client_id"], row["product_ref_id"])
+        key = (row["client_id"], roll_up[row["product_ref_id"]])
         totals_map[key] = totals_map.get(key, Decimal("0")) + (row["total"] or Decimal("0"))
 
     return totals_map

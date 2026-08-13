@@ -4,7 +4,7 @@ from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django.forms import inlineformset_factory
-from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadProductProgress, FirmSettings, Renewal, Product, PlanPptRate
+from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadInterest, FirmSettings, Renewal, Product, PlanPptRate
 
 # Indian PAN: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).
 PAN_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]")
@@ -513,6 +513,9 @@ class EmployeeDeactivateForm(forms.Form):
 
 
 class LeadForm(forms.ModelForm):
+    """Lead basics. `stage` is offered on creation only — later moves go
+    through `services.leads.set_stage` so every step of SPANCO is recorded."""
+
     class Meta:
         model = Lead
         fields = [
@@ -533,12 +536,16 @@ class LeadForm(forms.ModelForm):
             "expenses": forms.NumberInput(attrs={"step": "0.01"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
         }
+        help_texts = {
+            "stage": "Where this lead already stands. Most new leads are Suspects.",
+        }
 
     def __init__(self, *args, **kwargs):
         user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         self.fields["assigned_to"].queryset = Employee.objects.filter(active=True)
-        self.fields["stage"].widget = forms.HiddenInput()
+        if self.instance.pk:
+            del self.fields["stage"]
 
         if user and hasattr(user, "employee") and getattr(user.employee, "role", "") == "employee":
             self.fields["assigned_to"].initial = user.employee
@@ -548,6 +555,8 @@ class LeadForm(forms.ModelForm):
             widget = field.widget
             if getattr(widget, "input_type", "") == "checkbox":
                 widget.attrs.setdefault("class", "form-check-input")
+            elif isinstance(widget, forms.Select):
+                widget.attrs.setdefault("class", "form-select")
             else:
                 widget.attrs.setdefault("class", "form-control")
 
@@ -562,13 +571,33 @@ class LeadFamilyMemberForm(forms.ModelForm):
         }
 
 
-class LeadProductProgressForm(forms.ModelForm):
+class LeadInterestForm(forms.ModelForm):
+    """One product this lead needs. Nothing is pre-filled — a lead that wants
+    only a term plan carries one row, not a Health/Life/SIP grid."""
+
     class Meta:
-        model = LeadProductProgress
-        fields = ["product", "target_amount", "achieved_amount", "status", "remark"]
-        widgets = {
-            "remark": forms.Textarea(attrs={"rows": 2}),
-        }
+        model = LeadInterest
+        fields = ["product", "amount", "note"]
+        labels = {"amount": "Indicative amount (₹)", "note": "What they asked for"}
+        widgets = {"amount": forms.NumberInput(attrs={"step": "0.01", "min": "0"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Main products only — a lead needs "Life Insurance", not a plan name;
+        # which plan is decided when the sale is entered.
+        self.fields["product"].queryset = Product.objects.selectable().main().in_display_order()
+        self.fields["product"].required = False
+        for name, field in self.fields.items():
+            css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
+            field.widget.attrs.setdefault("class", css)
+
+    def clean(self):
+        cleaned = super().clean()
+        # A row is either a real product interest or nothing at all; a bare
+        # amount with no product would be an untraceable number.
+        if not cleaned.get("product") and (cleaned.get("amount") or cleaned.get("note")):
+            raise forms.ValidationError("Pick a product for this requirement, or clear the row.")
+        return cleaned
 
 
 LeadFamilyMemberFormSet = inlineformset_factory(
@@ -579,11 +608,11 @@ LeadFamilyMemberFormSet = inlineformset_factory(
     can_delete=True,
 )
 
-LeadProductProgressFormSet = inlineformset_factory(
+LeadInterestFormSet = inlineformset_factory(
     Lead,
-    LeadProductProgress,
-    form=LeadProductProgressForm,
-    extra=3,
+    LeadInterest,
+    form=LeadInterestForm,
+    extra=1,
     can_delete=True,
 )
 

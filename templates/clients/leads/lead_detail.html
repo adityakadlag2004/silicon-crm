@@ -10,16 +10,16 @@
     <div class="ki-rec-head">
       <h2 class="ki-rec-title">{{ lead.customer_name }}</h2>
       <div class="ki-tags">
-        <span class="ki-tag" style="--c:{{ stage_color }};">{{ lead.get_stage_display }}</span>
+        <span class="ki-tag ki-tag-solid" style="--c:{{ lead.stage_color }};">{{ lead.get_stage_display }}</span>
         <span class="ki-tag" style="--c:var(--ki-text-secondary);">{{ lead.assigned_to.user.username }}</span>
-        {% if lead.is_discarded %}<span class="ki-tag" style="--c:#BE123C;">Discarded</span>{% endif %}
+        {% if lead.is_discarded %}<span class="ki-tag" style="--c:#BE123C;">Lost</span>{% endif %}
         {% if lead.converted_client %}<span class="ki-tag ki-tag-solid" style="--c:#15803D;">Converted</span>{% endif %}
       </div>
     </div>
     <div class="ki-rec-actions">
     {% if lead.converted_client %}
       <a class="ki-btn ki-btn-sm ki-btn-primary" href="{% url 'clients:edit_client' lead.converted_client.id %}"><i class="bi bi-person-check"></i> View Client #{{ lead.converted_client.id }}</a>
-    {% elif lead.stage == 'processed' and not lead.is_discarded %}
+    {% elif lead.is_won %}
       <form method="post" action="{% url 'clients:lead_convert_to_client' lead.id %}" class="d-inline" onsubmit="return confirm('Convert this lead to a client record?');">
         {% csrf_token %}
         <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary"><i class="bi bi-arrow-right-circle"></i> Convert to Client</button>
@@ -33,124 +33,181 @@
   <div class="ki-rec-summary">
     <div class="ki-sum-item"><span class="k">Phone</span><span class="v">{{ lead.phone|default:"—" }}</span></div>
     <div class="ki-sum-item"><span class="k">Email</span><span class="v">{{ lead.email|default:"—" }}</span></div>
-    <div class="ki-sum-item"><span class="k">Data Received</span><span class="v">{% if lead.data_received %}Yes{% else %}No{% endif %}</span></div>
+    <div class="ki-sum-item"><span class="k">In this stage</span><span class="v">{{ lead.days_in_stage }} days</span></div>
     <div class="ki-sum-item"><span class="k">Updated</span><span class="v">{{ lead.updated_at|date:"d M Y H:i" }}</span></div>
   </div>
 </div>
 
+{# ── SPANCO stepper ── #}
+<div class="ki-card mb-3">
+  <div class="p-3">
+    <div class="ki-steps">
+      {% for step in steps %}
+        <div class="ki-step {% if step.current %}current{% elif step.done %}done{% endif %}" style="--c:{{ step.color }};" title="{{ step.help }}">
+          <span class="dot">{% if step.done %}<i class="bi bi-check"></i>{% else %}{{ forloop.counter }}{% endif %}</span>
+          <span class="lbl">{{ step.label }}</span>
+        </div>
+      {% endfor %}
+    </div>
+    <div class="ki-step-help"><strong>{{ lead.get_stage_display }}:</strong> {{ lead.stage_help }}</div>
+    {% if lead.is_discarded %}
+      <div class="alert alert-danger small mt-3 mb-0">
+        Lost at <strong>{{ lead.get_stage_display }}</strong>{% if lead.lost_reason %} — {{ lead.lost_reason }}{% endif %}.
+        <form method="post" action="{% url 'clients:lead_undiscard' lead.id %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="ki-btn ki-btn-sm ki-btn-secondary ms-2">Reopen</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
 <div class="row g-3 mb-3">
-  <div class="col-md-6">
-    <div class="ki-card h-100">
-      <div class="ki-card-label"><i class="bi bi-camera"></i> Lead Snapshot</div>
+  <div class="col-lg-7">
+    {# ── Move the lead ── #}
+    <div class="ki-card mb-3">
+      <div class="ki-card-label"><i class="bi bi-arrow-right-circle"></i> Move this lead</div>
+      <form method="post" action="{% url 'clients:lead_set_stage' lead.id %}" class="p-3">
+        {% csrf_token %}
+        <div class="row g-2 align-items-end">
+          <div class="col-md-5">
+            <label class="form-label" for="stage-sel">Stage</label>
+            <select name="stage" id="stage-sel" class="form-select">
+              {% for value, label in stages %}
+                <option value="{{ value }}" {% if next_stage == value %}selected{% elif not next_stage and lead.stage == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label" for="stage-note">What happened? (optional)</label>
+            <input type="text" name="note" id="stage-note" class="form-control" placeholder="Met at office, wants family floater" />
+          </div>
+          <div class="col-md-2">
+            <button type="submit" class="ki-btn ki-btn-primary w-100">Save</button>
+          </div>
+        </div>
+      </form>
+      {% if not lead.is_discarded %}
+      <form method="post" action="{% url 'clients:lead_discard' lead.id %}" class="px-3 pb-3 d-flex gap-2 align-items-center flex-wrap" onsubmit="return confirm('Mark this lead lost?');">
+        {% csrf_token %}
+        <input type="text" name="reason" class="form-control form-control-sm" style="max-width:320px;" placeholder="Why is it lost? (helps spot weak stages)" aria-label="Reason lost" />
+        <button type="submit" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);">Mark lost</button>
+      </form>
+      {% endif %}
+    </div>
+
+    {# ── What this lead needs ── #}
+    <div class="ki-card mb-3">
+      <div class="ki-card-label d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-basket"></i> Requirements</span>
+        <a class="ki-btn ki-btn-sm ki-btn-primary" href="{% url 'clients:lead_update' lead.id %}"><i class="bi bi-plus"></i> Edit</a>
+      </div>
+      <div class="ki-table-wrap">
+        <table class="ki-table mb-0">
+          <thead><tr><th>Product</th><th>Indicative amount</th><th>Notes</th></tr></thead>
+          <tbody>
+            {% for interest in interests %}
+              <tr>
+                <td class="fw-semibold">{{ interest.label }}</td>
+                <td>{% if interest.amount %}Rs {{ interest.amount|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="small text-muted">{{ interest.note|default:"—" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-center text-muted small py-3">
+                Nothing captured yet — add only the products this lead actually needs.
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# ── Follow-ups ── #}
+    <div class="ki-card mb-3">
+      <div class="ki-card-label d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history"></i> Follow-ups</span>
+        <button class="ki-btn ki-btn-sm ki-btn-primary" data-bs-toggle="modal" data-bs-target="#addFollowupModal"><i class="bi bi-plus"></i> Add Follow-up</button>
+      </div>
+      <div class="ki-table-wrap">
+        <table class="ki-table mb-0">
+          <thead><tr><th>Scheduled</th><th>Note</th><th>Status</th><th style="width:60px;"></th></tr></thead>
+          <tbody>
+            {% for f in followups %}
+              <tr class="{% if f.is_overdue %}table-danger{% endif %}">
+                <td class="small text-nowrap">
+                  {{ f.scheduled_time|date:"d M Y, H:i" }}
+                  {% if f.is_overdue %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
+                </td>
+                <td class="small">{{ f.note|default:"-" }}</td>
+                <td>
+                  {% if f.status == 'done' %}
+                    <span class="badge bg-success">Done</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">Pending</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if f.status == 'pending' %}
+                    <form method="post" action="{% url 'clients:lead_followup_done' f.id %}" class="d-inline" hx-post="{% url 'clients:lead_followup_done' f.id %}" hx-swap="outerHTML" hx-target="closest tr">
+                      {% csrf_token %}
+                      <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary" aria-label="Mark follow-up done" title="Mark done"><i class="bi bi-check-lg"></i></button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center text-muted small py-3">No follow-ups yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="ki-card mb-3">
+      <div class="ki-card-label"><i class="bi bi-camera"></i> Snapshot</div>
       <div class="p-3">
-        <div class="mb-2"><strong>Phone:</strong> {{ lead.phone|default:"-" }}</div>
-        <div class="mb-2"><strong>Email:</strong> {{ lead.email|default:"-" }}</div>
-        <div class="mb-2"><strong>Data Received:</strong>
-          {% if lead.data_received %}Yes{% else %}No{% endif %}
+        <div class="mb-2"><strong>Data received:</strong> {% if lead.data_received %}Yes{% else %}No{% endif %}
           {% if lead.data_received_on %}<span class="text-muted">on {{ lead.data_received_on }}</span>{% endif %}
         </div>
-        <div class="mb-2"><strong>Income:</strong> Rs {{ lead.income|default:"-" }}</div>
-        <div class="mb-2"><strong>Expenses:</strong> Rs {{ lead.expenses|default:"-" }}</div>
-        <div class="mb-2"><strong>Notes:</strong><br><span class="text-muted">{{ lead.notes|default:"No notes yet." }}</span></div>
-        <div class="text-muted small">Updated {{ lead.updated_at|date:"Y-m-d H:i" }}</div>
+        <div class="mb-2"><strong>Income:</strong> Rs {{ lead.income|default:"—" }}</div>
+        <div class="mb-2"><strong>Expenses:</strong> Rs {{ lead.expenses|default:"—" }}</div>
+        <div class="mb-0"><strong>Notes:</strong><br><span class="text-muted">{{ lead.notes|default:"No notes yet." }}</span></div>
       </div>
     </div>
-  </div>
-  <div class="col-md-6">
-    <div class="ki-card h-100">
+
+    <div class="ki-card mb-3">
       <div class="ki-card-label"><i class="bi bi-people"></i> Family Members</div>
+      <ul class="list-group list-group-flush">
+        {% for member in lead.family_members.all %}
+          <li class="list-group-item">
+            <div class="fw-semibold">{{ member.name }}</div>
+            <div class="text-muted small">{{ member.relation|default:"" }}{% if member.date_of_birth %} &bull; DOB {{ member.date_of_birth }}{% endif %}</div>
+            {% if member.notes %}<div class="small">{{ member.notes }}</div>{% endif %}
+          </li>
+        {% empty %}
+          <li class="list-group-item text-muted">No family members captured.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="ki-card mb-3">
+      <div class="ki-card-label"><i class="bi bi-signpost-split"></i> Stage History</div>
       <div class="p-3">
-        <ul class="list-group list-group-flush">
-          {% for member in lead.family_members.all %}
-            <li class="list-group-item">
-              <div class="fw-semibold">{{ member.name }}</div>
-              <div class="text-muted small">{{ member.relation|default:"" }}{% if member.date_of_birth %} &bull; DOB {{ member.date_of_birth }}{% endif %}</div>
-              {% if member.notes %}<div class="small">{{ member.notes }}</div>{% endif %}
-            </li>
-          {% empty %}
-            <li class="list-group-item text-muted">No family members captured.</li>
-          {% endfor %}
-        </ul>
+        {% for e in stage_events %}
+          <div class="{% if not forloop.last %}mb-2 pb-2 border-bottom{% endif %}">
+            <div class="small"><strong>{{ e.from_label }} → {{ e.to_label }}</strong>{% if e.note %} — {{ e.note }}{% endif %}</div>
+            <div class="text-muted" style="font-size:0.75rem;">{{ e.created_by.username|default:"System" }} &bull; {{ e.created_at|date:"d M Y H:i" }}</div>
+          </div>
+        {% empty %}
+          <div class="text-muted small">No stage moves recorded yet.</div>
+        {% endfor %}
       </div>
     </div>
   </div>
 </div>
 
-<div class="ki-card mb-3">
-  <div class="ki-card-label"><i class="bi bi-graph-up-arrow"></i> Product Progress</div>
-  <div class="ki-table-wrap">
-    <table class="ki-table mb-0">
-      <thead>
-        <tr>
-          <th>Product</th>
-          <th>Status</th>
-          <th>Target</th>
-          <th>Achieved</th>
-          <th>Notes</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for progress in lead.progress_entries.all %}
-          <tr>
-            <td>{{ progress.get_product_display }}</td>
-            <td>{{ progress.get_status_display }}</td>
-            <td>{{ progress.target_amount|default:"-" }}</td>
-            <td>{{ progress.achieved_amount|default:"-" }}</td>
-            <td class="small text-muted">{{ progress.remark|default:"-" }}</td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="5" class="text-center text-muted">No progress added yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Follow-ups Section (full width) -->
-<div class="ki-card mb-3">
-  <div class="ki-card-label d-flex justify-content-between align-items-center">
-    <span><i class="bi bi-clock-history"></i> Follow-up History</span>
-    <button class="ki-btn ki-btn-sm ki-btn-primary" data-bs-toggle="modal" data-bs-target="#addFollowupModal"><i class="bi bi-plus"></i> Add Follow-up</button>
-  </div>
-  <div class="ki-table-wrap">
-    <table class="ki-table mb-0">
-      <thead>
-        <tr><th>Scheduled</th><th>Lead / Customer</th><th>Note</th><th>Status</th><th style="width:60px;"></th></tr>
-      </thead>
-      <tbody>
-        {% for f in followups %}
-          <tr class="{% if f.is_overdue %}table-danger{% endif %}">
-            <td class="small text-nowrap">
-              {{ f.scheduled_time|date:"d M Y, H:i" }}
-              {% if f.is_overdue %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
-            </td>
-            <td class="fw-semibold">{{ lead.customer_name }}</td>
-            <td class="small">{{ f.note|default:"-" }}</td>
-            <td>
-              {% if f.status == 'done' %}
-                <span class="badge bg-success">Done</span>
-              {% else %}
-                <span class="badge bg-warning text-dark">Pending</span>
-              {% endif %}
-            </td>
-            <td class="text-end">
-              {% if f.status == 'pending' %}
-                <form method="post" action="{% url 'clients:lead_followup_done' f.id %}" class="d-inline" hx-post="{% url 'clients:lead_followup_done' f.id %}" hx-swap="outerHTML" hx-target="closest tr">
-                  {% csrf_token %}
-                  <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary" title="Mark done"><i class="bi bi-check-lg"></i></button>
-                </form>
-              {% endif %}
-            </td>
-          </tr>
-        {% empty %}
-          <tr><td colspan="5" class="text-center text-muted small py-3">No follow-ups yet. Click "Add Follow-up" to create one.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- Remarks Section (full width) -->
 <div class="ki-card mb-3">
   <div class="ki-card-label d-flex justify-content-between align-items-center">
     <span><i class="bi bi-chat-left-text"></i> Remarks</span>
@@ -168,29 +225,28 @@
         </div>
       </div>
     {% empty %}
-      <div class="text-muted small text-center py-2">No remarks yet. Click "Add Remark" to add one.</div>
+      <div class="text-muted small text-center py-2">No remarks yet.</div>
     {% endfor %}
   </div>
 </div>
 
-<!-- Add Follow-up Modal -->
 <div class="modal fade" id="addFollowupModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="ki-modal-header">
         <h5 class="modal-title">Add Follow-up for {{ lead.customer_name }}</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form method="post" action="{% url 'clients:lead_add_followup' lead.id %}">
         {% csrf_token %}
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">When to follow up</label>
-            <input type="datetime-local" name="scheduled_time" class="form-control" required aria-label="When to follow up"/>
+            <label class="form-label" for="lf-when">When to follow up</label>
+            <input type="datetime-local" id="lf-when" name="scheduled_time" class="form-control" required />
           </div>
           <div class="mb-3">
-            <label class="form-label">Notes (optional)</label>
-            <textarea name="note" class="form-control" rows="2" aria-label="Notes (optional)"></textarea>
+            <label class="form-label" for="lf-note">Notes (optional)</label>
+            <textarea name="note" id="lf-note" class="form-control" rows="2"></textarea>
           </div>
         </div>
         <div class="modal-footer">
@@ -202,20 +258,19 @@
   </div>
 </div>
 
-<!-- Add Remark Modal -->
 <div class="modal fade" id="addRemarkModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="ki-modal-header">
         <h5 class="modal-title">Add Remark for {{ lead.customer_name }}</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form method="post" action="{% url 'clients:lead_add_remark' lead.id %}">
         {% csrf_token %}
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">Remark</label>
-            <textarea name="text" class="form-control" rows="3" required aria-label="Remark"></textarea>
+            <label class="form-label" for="lr-text">Remark</label>
+            <textarea name="text" id="lr-text" class="form-control" rows="3" required></textarea>
           </div>
         </div>
         <div class="modal-footer">

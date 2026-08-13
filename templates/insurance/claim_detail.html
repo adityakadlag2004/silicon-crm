@@ -24,17 +24,17 @@
 
 {# ── Stage stepper ── #}
 <div class="ki-card mb-3">
-  <div class="claim-steps">
+  <div class="ki-steps">
     {% for st in stages %}
       {% with reached=claim.status|claim_stage_reached:st %}
-      <div class="claim-step {% if claim.status == st %}current{% elif reached %}done{% endif %}">
+      <div class="ki-step {% if claim.status == st %}current{% elif reached %}done{% endif %}">
         <span class="dot">{% if reached and claim.status != st %}<i class="bi bi-check"></i>{% else %}{{ forloop.counter }}{% endif %}</span>
         <span class="lbl">{{ st|claim_status_label }}</span>
       </div>
       {% endwith %}
     {% endfor %}
     {% if claim.status == 'rejected' %}
-      <div class="claim-step current" style="--c:#BE123C;"><span class="dot"><i class="bi bi-x"></i></span><span class="lbl">Rejected</span></div>
+      <div class="ki-step current" style="--c:#BE123C;"><span class="dot"><i class="bi bi-x"></i></span><span class="lbl">Rejected</span></div>
     {% endif %}
   </div>
 </div>
@@ -183,14 +183,7 @@
 </div>
 
 <style>
-  .claim-steps { display:flex; gap:.4rem; overflow-x:auto; }
-  .claim-step { display:flex; flex-direction:column; align-items:center; gap:.3rem; flex:1; min-width:70px; position:relative; }
-  .claim-step .dot { width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:.8rem;
-    background:var(--ki-card-border); color:var(--ki-text-secondary); }
-  .claim-step .lbl { font-size:.72rem; text-align:center; color:var(--ki-text-secondary); }
-  .claim-step.done .dot { background:#15803D; color:#fff; }
-  .claim-step.current .dot { background:var(--c,var(--ki-primary)); color:#fff; box-shadow:0 0 0 4px var(--ki-primary-pale); }
-  .claim-step.current .lbl { color:var(--ki-text-primary); font-weight:600; }
+  /* stepper rules now live in ki-record.css as .ki-steps/.ki-step */
   .claim-reminder-inline { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
 </style>
 {% endblock %}

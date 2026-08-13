@@ -60,7 +60,9 @@ from ..services.targets import (
 
 
 def _ordered_product_names(extra_names=None):
-    names = list(Product.objects.order_by("display_order", "name").values_list("name", flat=True))
+    # Categories only: sales are folded into their parent by `category_name_map`
+    # before they are looked up here, so a sub-product column is always empty.
+    names = list(Product.objects.main().in_display_order().values_list("name", flat=True))
     seen = set(names)
     for item in (extra_names or []):
         cleaned = (item or "").strip()

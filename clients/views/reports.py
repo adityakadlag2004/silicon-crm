@@ -760,35 +760,51 @@ def _month_margin_breakdown(year, month):
     margin_percent and margin_amount.
     """
     approved = Sale.objects.filter(status="approved", date__year=year, date__month=month)
-    products = list(Product.objects.all().select_related("parent").order_by("display_order", "name"))
+    products = list(Product.objects.all().select_related("parent").in_display_order())
     # PPT-priced plans carry a per-sale FYC snapshot, so their margin is summed
     # from the sales, not resolved from a revenue band.
     ppt_ids = set(Product.objects.filter(ppt_rates__isnull=False).values_list("id", flat=True))
 
+    # One row per MAIN product. A plan's sale is its category's business — the
+    # margin is still valued at the plan's own rate (per-sale FYC snapshot), so
+    # rolling up blends the rates rather than losing them. Which plan earned
+    # what is read on Product Management, where the rates are set.
+    children = {}
+    for p in products:
+        if p.parent_id:
+            children.setdefault(p.parent_id, []).append(p)
+
     rows = []
     total_rev = Decimal("0")
     total_margin = Decimal("0")
-    matched_pks = []
 
-    for p in products:
-        # Sub-products show as "Category › Sub-product" so the margin is read at
-        # the level it was set; top-level products keep their plain name.
-        plabel = f"{p.parent.name} › {p.name}" if p.parent_id else p.name
+    for p in (x for x in products if not x.parent_id):
+        kids = children.get(p.pk, [])
+        plabel = p.name
         base = approved.filter(
-            Q(product_ref=p) | (Q(product_ref__isnull=True) & Q(product=p.name))
+            Q(product_ref=p)
+            | Q(product_ref__parent_id=p.pk)
+            | (Q(product_ref__isnull=True) & Q(product__in=[p.name] + [k.name for k in kids]))
         )
-        matched_pks.append(p.pk)
 
-        if p.id in ppt_ids:
+        if p.id in ppt_ids or any(k.id in ppt_ids for k in kids):
             # Each sale's frozen FYC snapshot values its own amount.
             rev = Decimal("0")
             amt = Decimal("0")
+            unrated = Decimal("0")
             for s_amount, s_pct in base.values_list("amount", "margin_percent_snapshot"):
-                rev += s_amount or Decimal("0")
+                s_amount = s_amount or Decimal("0")
+                rev += s_amount
                 if s_amount and s_pct:
                     amt += (s_amount * s_pct / Decimal("100"))
+                else:
+                    # A plan sold without a rate chart falls back to the
+                    # category's band rather than counting as zero margin.
+                    unrated += s_amount
             if rev <= 0:
                 continue
+            if unrated > 0:
+                amt += unrated * p.margin_for(unrated, "") / Decimal("100")
             amt = amt.quantize(Decimal("0.01"))
             pct = (amt / rev * Decimal("100")).quantize(Decimal("0.01")) if rev else Decimal("0.00")
             rows.append({"product": plabel, "policy": "", "revenue": rev,
@@ -806,6 +822,8 @@ def _month_margin_breakdown(year, month):
                 rev = rev.quantize(Decimal("0.01"))
                 if rev <= 0:
                     continue
+                # Health slabs are a band on the CATEGORY's monthly volume,
+                # so the category is the right level to resolve them at.
                 pct = p.margin_for(rev, code)
                 amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
                 rows.append({"product": plabel, "policy": label, "revenue": rev,
@@ -822,11 +840,24 @@ def _month_margin_breakdown(year, month):
                 total_rev += rev_unset
                 total_margin += amt
         else:
-            rev = base.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            # The row is the category's, but each plan's revenue is valued at
+            # its OWN rate before blending — rolling up must not quietly reprice
+            # a sub-product at its parent's margin.
+            members = {m.pk: m for m in [p] + kids}
+            by_name = {m.name: m for m in members.values()}
+            rev = Decimal("0")
+            amt = Decimal("0")
+            for r in base.values("product_ref", "product").order_by().annotate(t=Sum("amount")):
+                m_rev = r["t"] or Decimal("0")
+                if m_rev <= 0:
+                    continue
+                member = members.get(r["product_ref"]) or by_name.get((r["product"] or "").strip(), p)
+                rev += m_rev
+                amt += m_rev * member.margin_for(m_rev, "") / Decimal("100")
             if rev <= 0:
                 continue
-            pct = p.margin_for(rev, "")
-            amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
+            amt = amt.quantize(Decimal("0.01"))
+            pct = (amt / rev * Decimal("100")).quantize(Decimal("0.01")) if rev else Decimal("0.00")
             rows.append({"product": plabel, "policy": "", "revenue": rev,
                          "margin_percent": pct, "margin_amount": amt})
             total_rev += rev
@@ -870,18 +901,34 @@ def _month_renewal_breakdown(year, month):
     products = {p.pk: p for p in Product.objects.filter(
         pk__in=[r["product_ref"] for r in per_product]
     ).select_related("parent")}
+
+    # One row per main product; a sub-product's premium is still valued at its
+    # own renewal rate, so the row's % is the blend of the plans behind it.
+    by_category = {}
     for r in per_product:
         rev = r["total"] or Decimal("0")
         if rev <= 0:
             continue
         p = products.get(r["product_ref"])
         pct = p.renewal_margin_percent if p else Decimal("0.00")
-        amt = (rev * pct / Decimal("100")).quantize(Decimal("0.01"))
-        plabel = (f"{p.parent.name} › {p.name}" if p and p.parent_id else p.name) if p else "—"
-        rows.append({"product": plabel, "revenue": rev,
-                     "margin_percent": pct, "margin_amount": amt})
-        total_rev += rev
-        total_margin += amt
+        category = p.category if p else None
+        key = category.pk if category else 0
+        row = by_category.setdefault(key, {
+            "product": category.name if category else "—",
+            "revenue": Decimal("0"), "margin_amount": Decimal("0"),
+        })
+        row["revenue"] += rev
+        row["margin_amount"] += rev * pct / Decimal("100")
+
+    for row in by_category.values():
+        row["margin_amount"] = row["margin_amount"].quantize(Decimal("0.01"))
+        row["margin_percent"] = (
+            (row["margin_amount"] / row["revenue"] * Decimal("100")).quantize(Decimal("0.01"))
+            if row["revenue"] else Decimal("0.00")
+        )
+        rows.append(row)
+        total_rev += row["revenue"]
+        total_margin += row["margin_amount"]
 
     unmapped_rev = (
         qs.filter(product_ref__isnull=True).aggregate(t=Sum("premium_amount"))["t"]

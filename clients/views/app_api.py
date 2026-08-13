@@ -1150,16 +1150,18 @@ def app_notifications_read(request):
     })
 
 
-# ── Screen 9: Leads pipeline ─────────────────────────────────────────────────
+# ── Screen 9: Leads pipeline (SPANCO) ────────────────────────────────────────
 
-from ..models import Lead, LeadProductProgress, LeadRemark  # noqa: E402
 from django.db import transaction  # noqa: E402
+
+from ..models import Lead, LeadInterest, LeadRemark  # noqa: E402
+from ..services import leads as lead_service  # noqa: E402
 
 
 def _lead_qs(request):
     """Same scoping as the web pipeline: employees see only their own leads."""
     emp = _emp(request)
-    qs = Lead.objects.select_related("assigned_to__user").prefetch_related("progress_entries")
+    qs = Lead.objects.select_related("assigned_to__user").prefetch_related("interests__product")
     if emp and emp.role == "employee":
         qs = qs.filter(assigned_to=emp)
     return qs
@@ -1169,16 +1171,22 @@ def _can_assign_leads(request):
     return permissions.is_admin_or_manager(request.user)
 
 
+def _interest_summary(lead):
+    """"Health Insurance · SIP" — what this lead actually wants, or blank."""
+    return " · ".join(i.label for i in lead.interests.all()[:3])
+
+
 @login_required
 @require_GET
 def app_lead_meta(request):
     data = {
         "can_assign": _can_assign_leads(request),
-        "products": [
-            {"value": v, "label": l} for v, l in LeadProductProgress.PRODUCT_CHOICES
+        "stages": [
+            {"value": v, "label": l, "help": Lead.STAGE_HELP[v]} for v, l in Lead.STAGE_CHOICES
         ],
-        "statuses": [
-            {"value": v, "label": l} for v, l in LeadProductProgress.STATUS_CHOICES
+        "products": [
+            {"id": p.id, "name": p.name}
+            for p in Product.objects.selectable().main().in_display_order()
         ],
     }
     if _can_assign_leads(request):
@@ -1189,33 +1197,24 @@ def app_lead_meta(request):
     return JsonResponse(data)
 
 
-def _progress_summary(lead):
-    marks = {"pending": "·", "half_sold": "½", "processed": "✓"}
-    out = []
-    entries = {p.product: p.status for p in lead.progress_entries.all()}
-    for key, label in (("health", "H"), ("life", "L"), ("wealth", "W")):
-        out.append(f"{label}{marks.get(entries.get(key, 'pending'), '·')}")
-    return " ".join(out)
-
-
 @login_required
 @require_GET
 def app_leads(request):
     qs = _lead_qs(request)
 
-    counts = {
-        "pending": qs.filter(is_discarded=False, stage=Lead.STAGE_PENDING).count(),
-        "half_sold": qs.filter(is_discarded=False, stage=Lead.STAGE_HALF).count(),
-        "processed": qs.filter(is_discarded=False, stage=Lead.STAGE_PROCESSED).count(),
-        "discarded": qs.filter(is_discarded=True).count(),
-    }
+    live = qs.filter(is_discarded=False)
+    counts = {stage: 0 for stage, _ in Lead.STAGE_CHOICES}
+    for row in live.values("stage").order_by().annotate(total=Count("id")):
+        if row["stage"] in counts:
+            counts[row["stage"]] = row["total"]
+    counts["lost"] = qs.filter(is_discarded=True).count()
 
     stage = request.GET.get("stage", "")
-    if stage == "discarded":
+    if stage == "lost":
         qs = qs.filter(is_discarded=True)
     else:
-        qs = qs.filter(is_discarded=False)
-        if stage in (Lead.STAGE_PENDING, Lead.STAGE_HALF, Lead.STAGE_PROCESSED):
+        qs = live
+        if stage in dict(Lead.STAGE_CHOICES):
             qs = qs.filter(stage=stage)
 
     q = (request.GET.get("q") or "").strip()
@@ -1229,7 +1228,7 @@ def app_leads(request):
     except ValueError:
         page = 1
     start, end = (page - 1) * _PAGE, page * _PAGE
-    rows = list(qs.order_by("-updated_at")[start:end + 1])
+    rows = list(qs.order_by("-stage_changed_at", "-updated_at")[start:end + 1])
 
     return JsonResponse({
         "counts": counts,
@@ -1241,9 +1240,11 @@ def app_leads(request):
                 "name": l.customer_name,
                 "phone": l.phone or "",
                 "stage": l.stage,
+                "stage_label": l.get_stage_display(),
+                "days_in_stage": l.days_in_stage,
                 "is_discarded": l.is_discarded,
                 "converted": bool(l.converted_client_id),
-                "progress": _progress_summary(l),
+                "interests": _interest_summary(l),
                 "assigned_to": (
                     l.assigned_to.user.get_full_name() or l.assigned_to.user.username
                 ) if l.assigned_to_id and l.assigned_to.user_id else "",
@@ -1258,7 +1259,7 @@ def app_leads(request):
 def app_lead_detail(request, lead_id):
     lead = get_object_or_404(_lead_qs(request), pk=lead_id)
     remarks = lead.remarks.select_related("created_by").order_by("-created_at")[:15]
-    progress = {p.product: p for p in lead.progress_entries.all()}
+    events = lead.stage_events.select_related("created_by")[:15]
     return JsonResponse({
         "id": lead.id,
         "name": lead.customer_name,
@@ -1268,21 +1269,36 @@ def app_lead_detail(request, lead_id):
         "expenses": _money(lead.expenses) if lead.expenses is not None else None,
         "notes": lead.notes or "",
         "stage": lead.stage,
+        "stage_label": lead.get_stage_display(),
+        "stage_help": lead.stage_help,
+        "next_stage": lead.next_stage or "",
+        "days_in_stage": lead.days_in_stage,
         "is_discarded": lead.is_discarded,
+        "lost_reason": lead.lost_reason,
         "converted_client_id": lead.converted_client_id,
-        "can_convert": lead.stage == Lead.STAGE_PROCESSED and not lead.converted_client_id,
+        "can_convert": lead.stage == Lead.STAGE_ORDER and not lead.converted_client_id,
         "assigned_to": (
             lead.assigned_to.user.get_full_name() or lead.assigned_to.user.username
         ) if lead.assigned_to_id and lead.assigned_to.user_id else "",
-        "progress": [
+        "interests": [
             {
-                "product": key,
-                "label": label,
-                "status": progress[key].status if key in progress else "pending",
-                "target": _money(progress[key].target_amount) if key in progress and progress[key].target_amount is not None else None,
-                "achieved": _money(progress[key].achieved_amount) if key in progress and progress[key].achieved_amount is not None else None,
+                "id": i.id,
+                "product_id": i.product_id,
+                "label": i.label,
+                "amount": _money(i.amount) if i.amount is not None else None,
+                "note": i.note,
             }
-            for key, label in LeadProductProgress.PRODUCT_CHOICES
+            for i in lead.interests.all()
+        ],
+        "timeline": [
+            {
+                "from": e.from_label,
+                "to": e.to_label,
+                "note": e.note,
+                "by": e.created_by.username if e.created_by_id else "",
+                "at": timezone.localtime(e.created_at).strftime("%d %b, %I:%M %p"),
+            }
+            for e in events
         ],
         "remarks": [
             {
@@ -1314,6 +1330,10 @@ def app_lead_create(request):
     if assigned is None:
         return JsonResponse({"ok": False, "error": "No employee to assign the lead to."}, status=400)
 
+    stage = str(body.get("stage") or Lead.STAGE_SUSPECT)
+    if stage not in dict(Lead.STAGE_CHOICES):
+        stage = Lead.STAGE_SUSPECT
+
     def _opt_decimal(key):
         raw = body.get(key)
         if raw in (None, ""):
@@ -1323,52 +1343,78 @@ def app_lead_create(request):
         except InvalidOperation:
             return None
 
-    lead = Lead.objects.create(
-        customer_name=name[:255],
-        phone=str(body.get("phone") or "").strip()[:20],
-        email=str(body.get("email") or "").strip()[:254],
-        income=_opt_decimal("income"),
-        expenses=_opt_decimal("expenses"),
-        notes=str(body.get("notes") or "").strip(),
-        assigned_to=assigned,
-        created_by=request.user,
-    )
-    # Seed the three product tracks like the web form's default rows.
-    for product, _label in LeadProductProgress.PRODUCT_CHOICES:
-        LeadProductProgress.objects.create(lead=lead, product=product)
+    with transaction.atomic():
+        lead = Lead.objects.create(
+            customer_name=name[:255],
+            phone=str(body.get("phone") or "").strip()[:20],
+            email=str(body.get("email") or "").strip()[:254],
+            income=_opt_decimal("income"),
+            expenses=_opt_decimal("expenses"),
+            notes=str(body.get("notes") or "").strip(),
+            assigned_to=assigned,
+            created_by=request.user,
+            stage=stage,
+        )
+        lead.stage_events.create(to_stage=stage, note="Lead created", created_by=request.user)
+        # Products this lead needs — picked per lead, never seeded for them.
+        for pid in body.get("product_ids") or []:
+            product = Product.objects.selectable().main().filter(pk=pid).first()
+            if product:
+                LeadInterest.objects.get_or_create(lead=lead, product=product)
     return JsonResponse({"ok": True, "id": lead.id})
 
 
 @login_required
 @require_POST
-def app_lead_progress(request, lead_id):
+def app_lead_stage(request, lead_id):
+    """Move a lead along SPANCO."""
     lead = get_object_or_404(_lead_qs(request), pk=lead_id)
     try:
         body = json.loads(request.body.decode("utf-8"))
     except Exception:
         return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
 
-    product = body.get("product")
-    if product not in dict(LeadProductProgress.PRODUCT_CHOICES):
+    try:
+        lead_service.set_stage(
+            lead, str(body.get("stage") or ""), user=request.user,
+            note=str(body.get("note") or "").strip(),
+        )
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    return JsonResponse({"ok": True, "stage": lead.stage, "stage_label": lead.get_stage_display()})
+
+
+@login_required
+@require_POST
+def app_lead_interest(request, lead_id):
+    """Add or drop one product requirement on a lead."""
+    lead = get_object_or_404(_lead_qs(request), pk=lead_id)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+
+    if body.get("remove"):
+        lead.interests.filter(pk=body.get("remove")).delete()
+        return JsonResponse({"ok": True})
+
+    product = Product.objects.selectable().main().filter(pk=body.get("product_id")).first()
+    if not product:
         return JsonResponse({"ok": False, "error": "Unknown product."}, status=400)
-    status = body.get("status")
-    if status not in dict(LeadProductProgress.STATUS_CHOICES):
-        return JsonResponse({"ok": False, "error": "Unknown status."}, status=400)
 
-    defaults = {"status": status}
-    for field in ("target_amount", "achieved_amount"):
-        raw = body.get(field)
-        if raw not in (None, ""):
-            try:
-                defaults[field] = Decimal(str(raw))
-            except InvalidOperation:
-                return JsonResponse({"ok": False, "error": f"Invalid {field}."}, status=400)
+    amount = None
+    raw = body.get("amount")
+    if raw not in (None, ""):
+        try:
+            amount = Decimal(str(raw))
+        except InvalidOperation:
+            return JsonResponse({"ok": False, "error": "Invalid amount."}, status=400)
 
-    LeadProductProgress.objects.update_or_create(
-        lead=lead, product=product, defaults=defaults
+    interest, _created = LeadInterest.objects.update_or_create(
+        lead=lead, product=product,
+        defaults={"amount": amount, "note": str(body.get("note") or "").strip()[:255]},
     )
-    lead.refresh_from_db()
-    return JsonResponse({"ok": True, "stage": lead.stage})
+    return JsonResponse({"ok": True, "id": interest.id})
 
 
 @login_required
@@ -1390,46 +1436,20 @@ def app_lead_remark(request, lead_id):
 def app_lead_action(request, lead_id):
     lead = get_object_or_404(_lead_qs(request), pk=lead_id)
     try:
-        action = json.loads(request.body.decode("utf-8")).get("action")
+        body = json.loads(request.body.decode("utf-8"))
     except Exception:
-        action = None
+        body = {}
+    action = body.get("action")
 
     if action == "discard":
-        lead.is_discarded = True
-        lead.save(update_fields=["is_discarded", "updated_at"])
+        lead_service.mark_lost(lead, user=request.user, reason=str(body.get("reason") or "").strip())
     elif action == "undiscard":
-        lead.is_discarded = False
-        lead.save(update_fields=["is_discarded", "updated_at"])
+        lead_service.reopen(lead, user=request.user)
     elif action == "convert":
-        # Mirrors web lead_convert_to_client exactly.
-        if lead.converted_client_id:
-            return JsonResponse({"ok": False, "error": "Already converted."}, status=400)
-        if lead.stage != Lead.STAGE_PROCESSED:
-            return JsonResponse({"ok": False, "error": "Only processed leads can be converted."}, status=400)
-        progress_map = {p.product: p for p in lead.progress_entries.all()}
-        with transaction.atomic():
-            client = Client(
-                name=lead.customer_name,
-                phone=lead.phone or None,
-                email=lead.email or None,
-                mapped_to=lead.assigned_to,
-                status="Mapped" if lead.assigned_to else "Unmapped",
-            )
-            hp = progress_map.get("health")
-            lp = progress_map.get("life")
-            wp = progress_map.get("wealth")
-            if hp and hp.status == LeadProductProgress.STATUS_PROCESSED:
-                client.health_status = True
-                client.health_cover = hp.achieved_amount
-            if lp and lp.status == LeadProductProgress.STATUS_PROCESSED:
-                client.life_status = True
-                client.life_cover = lp.achieved_amount
-            if wp and wp.status == LeadProductProgress.STATUS_PROCESSED:
-                client.sip_status = True
-                client.sip_amount = wp.achieved_amount
-            client.save()
-            lead.converted_client = client
-            lead.save(update_fields=["converted_client", "updated_at"])
+        try:
+            client = lead_service.convert_to_client(lead, user=request.user)
+        except ValueError as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
         return JsonResponse({"ok": True, "client_id": client.id})
     else:
         return JsonResponse({"ok": False, "error": "Unknown action."}, status=400)
@@ -2106,10 +2126,9 @@ def app_incentives(request):
         })
     available = [
         {"id": p.id, "name": p.name}
-        for p in Product.objects.filter(
-            is_active=True, archived_at__isnull=True,
+        for p in Product.objects.selectable().main().filter(
             domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
-        ).order_by("display_order", "name")
+        ).in_display_order()
         if p.id not in used_product_ids and (p.name or "").strip().lower() not in used_names
     ]
     return JsonResponse({"rules": rules, "available_products": available})
@@ -2147,10 +2166,9 @@ def app_campaigns(request):
         })
     products = [
         {"id": p.id, "name": p.name}
-        for p in Product.objects.filter(
-            is_active=True, archived_at__isnull=True,
+        for p in Product.objects.selectable().main().filter(
             domain__in=[Product.DOMAIN_SALE, Product.DOMAIN_BOTH],
-        ).order_by("display_order", "name")
+        ).in_display_order()
     ]
     return JsonResponse({"campaigns": campaigns, "products": products})
 

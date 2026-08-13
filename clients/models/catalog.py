@@ -7,6 +7,28 @@ from django.db import models
 from django.utils import timezone
 
 
+class ProductQuerySet(models.QuerySet):
+    """Where the main-product rule lives.
+
+    Sub-products exist so a sale (or a renewal) can name the exact plan sold.
+    They are an entry-time detail and nothing else: every other picker, filter
+    and report in the system deals in top-level products, with a sub-product's
+    business folded into its category. Only the sale and renewal entry forms
+    (web + app) may offer `.selectable()` without `.main()`.
+    """
+
+    def main(self):
+        """Top-level products only — categories and standalone products."""
+        return self.filter(parent__isnull=True)
+
+    def selectable(self):
+        """Active and unarchived: what a picker is allowed to offer."""
+        return self.filter(is_active=True, archived_at__isnull=True)
+
+    def in_display_order(self):
+        return self.order_by("display_order", "name")
+
+
 class Product(models.Model):
     DOMAIN_SALE = "sale"
     DOMAIN_RENEWAL = "renewal"
@@ -65,12 +87,19 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = ProductQuerySet.as_manager()
+
     class Meta:
         ordering = ["display_order", "name"]
 
     def __str__(self):
         state = "Archived" if self.archived_at else "Active"
         return f"{self.name} ({state})"
+
+    @property
+    def category_id(self):
+        """The id business rolls up to — the parent's, or its own."""
+        return self.parent_id or self.pk
 
     def archive(self, reason=""):
         self.is_active = False

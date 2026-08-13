@@ -1,38 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Lead Management{% endblock %}
+{% load custom_filters %}
+{% block title %}Lead Pipeline{% endblock %}
 {% block page_title %}Leads{% endblock %}
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
   <div>
-    <h2 class="ki-section-title" style="margin-bottom:0.25rem;">Lead Management</h2>
-    <div class="text-muted small">All leads you can access with progress in one place.</div>
+    <h2 class="ki-section-title" style="margin-bottom:0.25rem;">Lead Pipeline</h2>
+    <div class="text-muted small">SPANCO — Suspect · Prospect · Approach · Negotiation · Conclusion · Order.</div>
   </div>
   <div class="d-flex gap-2 flex-wrap">
     <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:lead_create' %}"><i class="bi bi-plus-lg"></i> Add Lead</a>
-    {% if can_see_stats %}
-      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_progress_admin' %}">Team Progress</a>
-    {% endif %}
-    {% if show_my_progress %}
-      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_progress_employee' %}">My Progress</a>
-    {% endif %}
-    {% if can_bulk_import %}
-      <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_bulk_import' %}">Bulk Import</a>
-    {% endif %}
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_board' %}"><i class="bi bi-kanban"></i> Board</a>
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_pipeline_report' %}"><i class="bi bi-graph-up"></i> Pipeline Report</a>
+    <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_bulk_import' %}"><i class="bi bi-cloud-upload"></i> Bulk Import</a>
   </div>
 </div>
 
-<!-- Search + Filters -->
 <form method="get" class="mb-3">
   <input type="hidden" name="view" value="{{ view_mode }}" />
   <div class="row g-2 align-items-end">
     <div class="col-sm-3">
-      <label class="form-label small text-muted mb-0">Search</label>
-      <input type="search" name="q" value="{{ search_term }}" class="form-control form-control-sm" placeholder="Customer name" />
+      <label class="form-label small text-muted mb-0" for="lead-q">Search</label>
+      <input type="search" id="lead-q" name="q" value="{{ search_term }}" class="form-control form-control-sm" placeholder="Customer name" />
     </div>
     {% if employees %}
     <div class="col-sm-2">
-      <label class="form-label small text-muted mb-0">Assigned To</label>
-      <select name="assigned_to" class="form-select form-select-sm" aria-label="Assigned To">
+      <label class="form-label small text-muted mb-0" for="lead-emp">Assigned To</label>
+      <select name="assigned_to" id="lead-emp" class="form-select form-select-sm">
         <option value="">All employees</option>
         {% for e in employees %}
           <option value="{{ e.id }}" {% if assigned_to_filter == e.id|stringformat:"d" %}selected{% endif %}>{{ e.user.username }}</option>
@@ -41,29 +35,29 @@
     </div>
     {% endif %}
     <div class="col-sm-2">
-      <label class="form-label small text-muted mb-0">Stage</label>
-      <select name="stage" class="form-select form-select-sm" aria-label="Stage">
+      <label class="form-label small text-muted mb-0" for="lead-stage">SPANCO Stage</label>
+      <select name="stage" id="lead-stage" class="form-select form-select-sm">
         <option value="">All stages</option>
-        <option value="pending" {% if stage_filter == 'pending' %}selected{% endif %}>Pending</option>
-        <option value="half_sold" {% if stage_filter == 'half_sold' %}selected{% endif %}>Half Sold</option>
-        <option value="processed" {% if stage_filter == 'processed' %}selected{% endif %}>Processed</option>
+        {% for value, label in stages %}
+          <option value="{{ value }}" {% if stage_filter == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
       </select>
     </div>
     <div class="col-sm-1">
-      <label class="form-label small text-muted mb-0">Data Rcvd</label>
-      <select name="data_received" class="form-select form-select-sm" aria-label="Data Rcvd">
+      <label class="form-label small text-muted mb-0" for="lead-dr">Data</label>
+      <select name="data_received" id="lead-dr" class="form-select form-select-sm">
         <option value="">All</option>
         <option value="yes" {% if data_received_filter == 'yes' %}selected{% endif %}>Yes</option>
         <option value="no" {% if data_received_filter == 'no' %}selected{% endif %}>No</option>
       </select>
     </div>
     <div class="col-sm-2">
-      <label class="form-label small text-muted mb-0">From</label>
-      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" aria-label="From"/>
+      <label class="form-label small text-muted mb-0" for="lead-from">From</label>
+      <input type="date" id="lead-from" name="date_from" value="{{ date_from }}" class="form-control form-control-sm"/>
     </div>
     <div class="col-sm-2">
-      <label class="form-label small text-muted mb-0">To</label>
-      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" aria-label="To"/>
+      <label class="form-label small text-muted mb-0" for="lead-to">To</label>
+      <input type="date" id="lead-to" name="date_to" value="{{ date_to }}" class="form-control form-control-sm"/>
     </div>
   </div>
   <div class="mt-2 d-flex gap-2">
@@ -73,26 +67,23 @@
 </form>
 
 <div class="d-flex gap-2 mb-3 flex-wrap">
-  <a class="ki-btn ki-btn-sm {% if view_mode == 'current' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=current">Current ({{ tab_counts.current }})</a>
-  <a class="ki-btn ki-btn-sm {% if view_mode == 'completed' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=completed">Completed ({{ tab_counts.completed }})</a>
-  <a class="ki-btn ki-btn-sm {% if view_mode == 'discarded' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=discarded">Discarded ({{ tab_counts.discarded }})</a>
-  {% if show_my_tab %}
-    <a class="ki-btn ki-btn-sm {% if view_mode == 'my' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=my">My Leads ({{ tab_counts.my|default:0 }})</a>
+  <a class="ki-btn ki-btn-sm {% if view_mode == 'open' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=open">In Pipeline ({{ tab_counts.open }})</a>
+  <a class="ki-btn ki-btn-sm {% if view_mode == 'won' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=won">Ordered ({{ tab_counts.won }})</a>
+  <a class="ki-btn ki-btn-sm {% if view_mode == 'lost' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=lost">Lost ({{ tab_counts.lost }})</a>
+  {% if show_mine_tab %}
+    <a class="ki-btn ki-btn-sm {% if view_mode == 'mine' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=mine">My Leads ({{ tab_counts.mine }})</a>
   {% endif %}
 </div>
 
 <div class="ki-card ki-table-wrap mb-4">
-  <table class="ki-table">
+  <table class="ki-table ki-dtable">
     <thead>
       <tr>
         <th>Customer</th>
         <th>Assigned To</th>
-        <th>Stage</th>
-        <th>Data Received</th>
-        <th>Health</th>
-        <th>Life</th>
-        <th>Wealth</th>
-        <th>Updated</th>
+        <th>SPANCO Stage</th>
+        <th>Needs</th>
+        <th>Waiting</th>
         <th></th>
       </tr>
     </thead>
@@ -100,99 +91,45 @@
       {% for lead in leads %}
         <tr>
           <td>
-            <div class="fw-semibold">{{ lead.customer_name }}</div>
-            <div class="text-muted small">{{ lead.phone|default:"-" }}</div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="ki-mono" style="--c:{{ lead.customer_name|monocolor }};">{{ lead.customer_name|monogram }}</span>
+              <span>
+                <a class="fw-semibold" href="{% url 'clients:lead_detail' lead.id %}">{{ lead.customer_name }}</a>
+                <div class="text-muted small">{{ lead.phone|mask_phone|default:"—" }}</div>
+              </span>
+            </div>
           </td>
           <td>{{ lead.assigned_to.user.username }}</td>
-          <td><span class="badge bg-light text-dark border">{{ lead.get_stage_display }}</span></td>
           <td>
-            {% if lead.data_received %}
-              <span class="badge bg-success">Yes</span>
-              {% if lead.data_received_on %}<div class="small text-muted">{{ lead.data_received_on }}</div>{% endif %}
-            {% else %}
-              <span class="badge bg-secondary">No</span>
-            {% endif %}
+            <span class="ki-tag" style="--c:{{ lead.stage_color }};">{{ lead.get_stage_display }}</span>
+            {% if lead.is_discarded %}<span class="ki-tag" style="--c:#BE123C;">Lost</span>{% endif %}
+            {% if lead.converted_client %}<span class="ki-tag ki-tag-solid" style="--c:#15803D;">Client</span>{% endif %}
           </td>
-          {% with health=lead.progress_map.health %}
-            <td>
-              {% if health %}
-                <div class="fw-semibold">{{ health.get_status_display }}</div>
-                {% with target=health.target_amount|default_if_none:0 achieved=health.achieved_amount|default_if_none:0 %}
-                  {% if target %}
-                    {% widthratio achieved target 100 as health_completion %}
-                    <div class="small text-muted">Target ₹{{ target|floatformat:0 }} | Ach ₹{{ achieved|floatformat:0 }} | {{ health_completion }}%</div>
-                    <div class="progress" style="height:6px;">
-                      <div class="progress-bar bg-success" role="progressbar" style="width: {{ health_completion }}%;" aria-valuenow="{{ health_completion }}" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                  {% else %}
-                    <div class="small text-muted">Target - | Ach ₹{{ achieved|floatformat:0 }}</div>
-                    <div class="progress" style="height:6px;">
-                      <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                  {% endif %}
-                {% endwith %}
-              {% else %}<span class="text-muted">-</span>{% endif %}
-            </td>
-          {% endwith %}
-          {% with life=lead.progress_map.life %}
-            <td>
-              {% if life %}
-                <div class="fw-semibold">{{ life.get_status_display }}</div>
-                {% with target=life.target_amount|default_if_none:0 achieved=life.achieved_amount|default_if_none:0 %}
-                  {% if target %}
-                    {% widthratio achieved target 100 as life_completion %}
-                    <div class="small text-muted">Target ₹{{ target|floatformat:0 }} | Ach ₹{{ achieved|floatformat:0 }} | {{ life_completion }}%</div>
-                    <div class="progress" style="height:6px;">
-                      <div class="progress-bar bg-success" role="progressbar" style="width: {{ life_completion }}%;" aria-valuenow="{{ life_completion }}" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                  {% else %}
-                    <div class="small text-muted">Target - | Ach ₹{{ achieved|floatformat:0 }}</div>
-                    <div class="progress" style="height:6px;">
-                      <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                  {% endif %}
-                {% endwith %}
-              {% else %}<span class="text-muted">-</span>{% endif %}
-            </td>
-          {% endwith %}
-          {% with wealth=lead.progress_map.wealth %}
-            <td>
-              {% if wealth %}
-                <div class="fw-semibold">{{ wealth.get_status_display }}</div>
-                {% with target=wealth.target_amount|default_if_none:0 achieved=wealth.achieved_amount|default_if_none:0 %}
-                  {% if target %}
-                    {% widthratio achieved target 100 as wealth_completion %}
-                    <div class="small text-muted">Target ₹{{ target|floatformat:0 }} | Ach ₹{{ achieved|floatformat:0 }} | {{ wealth_completion }}%</div>
-                    <div class="progress" style="height:6px;">
-                      <div class="progress-bar bg-success" role="progressbar" style="width: {{ wealth_completion }}%;" aria-valuenow="{{ wealth_completion }}" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                  {% else %}
-                    <div class="small text-muted">Target - | Ach ₹{{ achieved|floatformat:0 }}</div>
-                    <div class="progress" style="height:6px;">
-                      <div class="progress-bar bg-secondary" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                    </div>
-                  {% endif %}
-                {% endwith %}
-              {% else %}<span class="text-muted">-</span>{% endif %}
-            </td>
-          {% endwith %}
-          <td class="small text-muted">{{ lead.updated_at|date:"Y-m-d H:i" }}</td>
+          <td class="small">
+            {% for interest in lead.interests.all %}
+              <div>{{ interest.label }}{% if interest.amount %} <span class="text-muted">₹{{ interest.amount|floatformat:0 }}</span>{% endif %}</div>
+            {% empty %}
+              <span class="text-muted">Not captured yet</span>
+            {% endfor %}
+          </td>
+          <td class="small text-muted text-nowrap">{{ lead.days_in_stage }}d in stage</td>
           <td class="text-end">
             <div class="dropdown">
-              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#x22EF;</button>
+              <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Lead actions">&#x22EF;</button>
               <ul class="dropdown-menu dropdown-menu-end">
                 <li><a class="dropdown-item" href="{% url 'clients:lead_detail' lead.id %}">Open lead</a></li>
-                <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#followupModal" data-lead-id="{{ lead.id }}" data-lead-name="{{ lead.customer_name }}">Add next follow-up</button></li>
-                <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#remarkModal" data-lead-id="{{ lead.id }}" data-lead-name="{{ lead.customer_name }}">Add remark</button></li>
-                {% if view_mode != 'completed' %}
+                {% if lead.next_stage and not lead.is_discarded %}
                 <li>
-                  <form method="post" action="{% url 'clients:lead_mark_complete' lead.id %}">
+                  <form method="post" action="{% url 'clients:lead_set_stage' lead.id %}">
                     {% csrf_token %}
-                    <button type="submit" class="dropdown-item">Mark completed</button>
+                    <input type="hidden" name="stage" value="{{ lead.next_stage }}" />
+                    <button type="submit" class="dropdown-item text-primary">Move to next stage</button>
                   </form>
                 </li>
                 {% endif %}
-                {% if lead.stage == 'processed' and not lead.converted_client %}
+                <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#followupModal" data-lead-id="{{ lead.id }}" data-lead-name="{{ lead.customer_name }}">Add next follow-up</button></li>
+                <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#remarkModal" data-lead-id="{{ lead.id }}" data-lead-name="{{ lead.customer_name }}">Add remark</button></li>
+                {% if lead.is_won and not lead.converted_client %}
                 <li>
                   <form method="post" action="{% url 'clients:lead_convert_to_client' lead.id %}" onsubmit="return confirm('Convert this lead to a client?');">
                     {% csrf_token %}
@@ -204,7 +141,7 @@
                 <li><a class="dropdown-item text-success" href="{% url 'clients:edit_client' lead.converted_client.id %}">View Client #{{ lead.converted_client.id }}</a></li>
                 {% endif %}
                 <li><hr class="dropdown-divider" /></li>
-                {% if view_mode == 'discarded' %}
+                {% if lead.is_discarded %}
                 <li>
                   <form method="post" action="{% url 'clients:lead_undiscard' lead.id %}">
                     {% csrf_token %}
@@ -213,9 +150,9 @@
                 </li>
                 {% else %}
                 <li>
-                  <form method="post" action="{% url 'clients:lead_discard' lead.id %}" onsubmit="return confirm('Discard this lead?');">
+                  <form method="post" action="{% url 'clients:lead_discard' lead.id %}" onsubmit="return confirm('Mark this lead lost?');">
                     {% csrf_token %}
-                    <button type="submit" class="dropdown-item text-danger">Discard lead</button>
+                    <button type="submit" class="dropdown-item text-danger">Mark lost</button>
                   </form>
                 </li>
                 {% endif %}
@@ -224,13 +161,12 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="9" class="text-center text-muted">No leads found.</td></tr>
+        <tr><td colspan="6" class="text-center text-muted">No leads here.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
 
-<!-- Pagination -->
 {% if page_obj.paginator.num_pages > 1 %}
 <nav aria-label="Lead pagination" class="mb-4">
   <ul class="pagination justify-content-center">
@@ -249,7 +185,6 @@
 </nav>
 {% endif %}
 
-<!-- Follow-up Modal -->
 <div class="modal fade" id="followupModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content" style="border-radius:var(--ki-radius-lg);overflow:hidden;">
@@ -261,12 +196,12 @@
         {% csrf_token %}
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">When to reach</label>
-            <input type="datetime-local" name="scheduled_time" class="form-control" required aria-label="When to reach"/>
+            <label class="form-label" for="fu-when">When to reach</label>
+            <input type="datetime-local" id="fu-when" name="scheduled_time" class="form-control" required />
           </div>
           <div class="mb-3">
-            <label class="form-label">Notes (optional)</label>
-            <textarea name="note" class="form-control" rows="2" aria-label="Notes (optional)"></textarea>
+            <label class="form-label" for="fu-note">Notes (optional)</label>
+            <textarea name="note" id="fu-note" class="form-control" rows="2"></textarea>
           </div>
           <div class="text-muted small" id="followupLeadLabel"></div>
         </div>
@@ -279,7 +214,6 @@
   </div>
 </div>
 
-<!-- Remark Modal -->
 <div class="modal fade" id="remarkModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content" style="border-radius:var(--ki-radius-lg);overflow:hidden;">
@@ -291,8 +225,8 @@
         {% csrf_token %}
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">Remark</label>
-            <textarea name="text" class="form-control" rows="3" required aria-label="Remark"></textarea>
+            <label class="form-label" for="rm-text">Remark</label>
+            <textarea name="text" id="rm-text" class="form-control" rows="3" required></textarea>
           </div>
           <div class="text-muted small" id="remarkLeadLabel"></div>
         </div>
@@ -306,68 +240,16 @@
 </div>
 
 <script>
-  const followupModal = document.getElementById('followupModal');
-  if (followupModal) {
-    followupModal.addEventListener('show.bs.modal', function (event) {
+  [['followupModal', 'followupForm', 'followupLeadLabel', '{% url "clients:lead_add_followup" 0 %}'],
+   ['remarkModal', 'remarkForm', 'remarkLeadLabel', '{% url "clients:lead_add_remark" 0 %}']]
+  .forEach(([modalId, formId, labelId, urlTemplate]) => {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    modal.addEventListener('show.bs.modal', (event) => {
       const button = event.relatedTarget;
-      const leadId = button.getAttribute('data-lead-id');
-      const leadName = button.getAttribute('data-lead-name');
-      const form = document.getElementById('followupForm');
-      form.action = `{% url 'clients:lead_add_followup' 0 %}`.replace('/0/', `/${leadId}/`);
-      document.getElementById('followupLeadLabel').textContent = `Lead: ${leadName}`;
+      document.getElementById(formId).action = urlTemplate.replace('/0/', `/${button.getAttribute('data-lead-id')}/`);
+      document.getElementById(labelId).textContent = `Lead: ${button.getAttribute('data-lead-name')}`;
     });
-  }
-
-  const remarkModal = document.getElementById('remarkModal');
-  if (remarkModal) {
-    remarkModal.addEventListener('show.bs.modal', function (event) {
-      const button = event.relatedTarget;
-      const leadId = button.getAttribute('data-lead-id');
-      const leadName = button.getAttribute('data-lead-name');
-      const form = document.getElementById('remarkForm');
-      form.action = `{% url 'clients:lead_add_remark' 0 %}`.replace('/0/', `/${leadId}/`);
-      document.getElementById('remarkLeadLabel').textContent = `Lead: ${leadName}`;
-    });
-  }
+  });
 </script>
-
-{% if progress_counts %}
-<div class="ki-grid-3">
-  <div class="ki-card">
-    <div class="ki-card-label" style="color:var(--ki-primary);">Stage Summary</div>
-    <div class="ki-stat-list">
-      <div class="d-flex justify-content-between"><span>Pending</span><span class="fw-semibold">{{ stage_counts.pending }}</span></div>
-      <div class="d-flex justify-content-between"><span>Half Sold</span><span class="fw-semibold">{{ stage_counts.half_sold }}</span></div>
-      <div class="d-flex justify-content-between"><span>Processed</span><span class="fw-semibold">{{ stage_counts.processed }}</span></div>
-    </div>
-  </div>
-  <div class="ki-card" style="grid-column:span 2;">
-    <div class="ki-card-label" style="color:var(--ki-primary);">Lead Completion Statistics</div>
-    <div class="ki-table-wrap">
-      <table class="ki-table">
-        <thead>
-            <tr>
-              <th>Product</th>
-              <th>Pending</th>
-              <th>Half Sold</th>
-              <th>Processed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for product, statuses in progress_counts.items %}
-              <tr>
-                <td class="fw-semibold text-capitalize">{{ product }}</td>
-                <td>{{ statuses.pending|default:0 }}</td>
-                <td>{{ statuses.half_sold|default:0 }}</td>
-                <td>{{ statuses.processed|default:0 }}</td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="4" class="text-center text-muted">No progress data.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-  </div>
-</div>
-{% endif %}
 {% endblock %}
