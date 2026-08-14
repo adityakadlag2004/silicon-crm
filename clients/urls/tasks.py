@@ -21,6 +21,7 @@ urlpatterns = [
     path("tasks/<int:pk>/status/", tasks.task_set_status, name="task_set_status"),
     path("tasks/<int:pk>/priority/", tasks.task_set_priority, name="task_set_priority"),
     path("tasks/<int:pk>/due/", tasks.task_set_due, name="task_set_due"),
+    path("tasks/<int:pk>/reschedule/", tasks.task_reschedule, name="task_reschedule"),
     path("tasks/<int:pk>/category/", tasks.task_set_category, name="task_set_category"),
     path("tasks/<int:pk>/subscriber/add/", tasks.task_add_subscriber, name="task_add_subscriber"),
     path("tasks/<int:pk>/subscriber/remove/", tasks.task_remove_subscriber, name="task_remove_subscriber"),

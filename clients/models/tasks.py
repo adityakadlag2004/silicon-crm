@@ -105,6 +105,13 @@ class Task(models.Model):
     # Delegated list can show them collapsed as "Mansi +4".
     assign_group = models.CharField(max_length=32, blank=True, db_index=True)
 
+    # A follow-up IS a task (services/followups.py) — there is no separate
+    # follow-up record. These point back at whatever the follow-up was raised
+    # on ("lead"/42), so that record's page can list its follow-ups and closing
+    # it can cancel them. Blank on an ordinary hand-made task.
+    source_kind = models.CharField(max_length=20, blank=True)
+    source_id = models.PositiveIntegerField(null=True, blank=True)
+
     # Soft delete → recycle bin.
     is_deleted = models.BooleanField(default=False, db_index=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -136,6 +143,7 @@ class Task(models.Model):
             models.Index(fields=["assigned_to", "status"], name="task_assignee_status_idx"),
             models.Index(fields=["status", "due_date"], name="task_status_due_idx"),
             models.Index(fields=["is_deleted"], name="task_deleted_idx"),
+            models.Index(fields=["source_kind", "source_id"], name="task_source_idx"),
         ]
 
     def __str__(self):

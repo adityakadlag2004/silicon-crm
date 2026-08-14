@@ -1,7 +1,7 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import Sum, Q
-from .models import Sale, Client, Notification, Employee, Product, AuditLog
+from .models import Sale, Client, Notification, Employee, Product, AuditLog, Lead, InsuranceClaim, Task
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -209,3 +209,15 @@ def _audit_log_client_delete(sender, instance, **kwargs):
             archive_client_folder(instance.drive_folder_id, instance.name, instance.pk)
         except Exception:
             pass  # Drive lifecycle should never block a CRM deletion
+
+
+@receiver(post_delete, sender=Lead)
+@receiver(post_delete, sender=InsuranceClaim)
+def _delete_followup_tasks(sender, instance, **kwargs):
+    """A follow-up is a Task pointed at a record by source_kind/source_id, not
+    a child row, so nothing cascades when that record is deleted. Without this
+    a deleted lead leaves its follow-ups behind to ring on someone's phone."""
+    from .services import followups
+
+    kind = followups.LEAD if sender is Lead else followups.CLAIM
+    Task.objects.filter(source_kind=kind, source_id=instance.pk).delete()

@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from django.utils import timezone
 
-from ..models import ClaimActivity, ClaimDocument, ClaimReminder, InsuranceClaim
+from ..models import ClaimActivity, ClaimDocument, InsuranceClaim
+from . import followups
 
 # Which date field each stage stamps when the claim reaches it.
 _STAGE_DATE = {
@@ -98,24 +99,19 @@ def upload_document(claim, uploaded_file, actor, *, kind="other"):
 def create_reminder(claim, actor, scheduled_at, note="", employee=None):
     """Schedule a follow-up on a claim.
 
-    It surfaces on the common calendar and fires a mobile push at its time via
-    the send_followup_reminders cron — the same pipeline as call/lead
-    follow-ups, so nothing new has to be maintained.
+    A follow-up is a Task (services/followups.py), so this one rings on the
+    phone at its due minute like every other task and shows on the common
+    calendar as one. It used to be a ClaimReminder row whose only reminder was
+    a tray notification nobody saw.
     """
-    employee = employee or claim.handled_by or getattr(actor, "employee", None)
-    reminder = ClaimReminder.objects.create(
-        claim=claim, employee=employee, scheduled_at=scheduled_at,
-        note=(note or "").strip()[:255], created_by=actor)
+    task = followups.schedule(followups.CLAIM, claim, scheduled_at,
+                              note=note, actor=actor, owner=employee)
     log(claim, actor, ClaimActivity.REMINDER_SET,
         f"{timezone.localtime(scheduled_at):%d %b %Y %H:%M}"
-        + (f" — {reminder.note}" if reminder.note else ""))
-    return reminder
+        + (f" — {note.strip()}" if (note or "").strip() else ""))
+    return task
 
 
-def complete_reminder(reminder, actor):
-    reminder.status = ClaimReminder.STATUS_DONE
-    reminder.completed_at = timezone.now()
-    reminder.save(update_fields=["status", "completed_at"])
-    log(reminder.claim, actor, ClaimActivity.REMINDER_DONE,
-        reminder.note or "Follow-up done")
-    return reminder
+def reminders(claim):
+    """This claim's follow-ups, newest deadline first."""
+    return followups.for_source(followups.CLAIM, claim.pk)

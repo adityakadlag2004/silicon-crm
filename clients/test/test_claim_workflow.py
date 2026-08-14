@@ -7,10 +7,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from clients.models import (
-    Client, ClaimActivity, ClaimReminder, Employee, InsuranceClaim,
-    InsurancePolicy, Notification,
+    Client, ClaimActivity, Employee, InsuranceClaim,
+    InsurancePolicy, Task,
 )
 from clients.services import claims as claims_service
+from clients.services import followups
 
 
 class ClaimWorkflowTests(TestCase):
@@ -73,10 +74,12 @@ class ClaimWorkflowTests(TestCase):
         })
         claim.refresh_from_db()
         self.assertEqual(claim.status, InsuranceClaim.STATUS_SUBMITTED)
-        # A reminder was scheduled from the same form.
-        rem = ClaimReminder.objects.filter(claim=claim).first()
-        self.assertIsNotNone(rem)
-        self.assertEqual(rem.note, "Chase the insurer")
+        # A reminder was scheduled from the same form — as a task.
+        task = followups.for_source(followups.CLAIM, claim.pk).first()
+        self.assertIsNotNone(task)
+        self.assertIn("Chase the insurer", task.description)
+        self.assertEqual(task.title, "Claim follow-up — Vishal Bose")
+        self.assertEqual(task.due_date, date(2026, 8, 1))
 
     def test_add_note_appears_in_timeline(self):
         claim = self._claim()
@@ -89,9 +92,10 @@ class ClaimWorkflowTests(TestCase):
         rem = claims_service.create_reminder(
             claim, self.admin_user, timezone.now() + timezone.timedelta(days=1), note="x")
         tc = self._tc()
-        tc.post(reverse("clients:claim_reminder_done", args=[rem.id]))
+        # A follow-up closes where every other task closes.
+        tc.post(reverse("clients:task_set_status", args=[rem.id]))
         rem.refresh_from_db()
-        self.assertEqual(rem.status, ClaimReminder.STATUS_DONE)
+        self.assertEqual(rem.status, Task.STATUS_COMPLETED)
 
     def test_claim_detail_renders_workspace(self):
         claim = self._claim()
@@ -113,28 +117,32 @@ class ClaimReminderPipelineTests(TestCase):
         cls.claim = InsuranceClaim.objects.create(
             policy=cls.policy, claim_type="Claim", handled_by=cls.emp)
 
-    def test_due_reminder_pushes_a_notification(self):
+    def test_due_reminder_rings_through_the_task_pipeline(self):
+        """It used to be a tray notification from send_followup_reminders.
+        A claim follow-up is a task, so tasks_ring_due rings it like an alarm."""
         from io import StringIO
         from django.core.management import call_command
-        past = timezone.now() - timezone.timedelta(minutes=5)
-        ClaimReminder.objects.create(claim=self.claim, employee=self.emp,
-                                     scheduled_at=past, note="Chase insurer")
-        call_command("send_followup_reminders", stdout=StringIO())
-        note = Notification.objects.filter(recipient=self.admin_user).first()
-        self.assertIsNotNone(note)
-        self.assertIn("Claim follow-up", note.title)
-        # Fires exactly once.
-        ClaimReminder.objects.get().refresh_from_db()
-        self.assertTrue(ClaimReminder.objects.get().reminded)
 
-    def test_reminder_appears_on_the_calendar_feed(self):
+        due = timezone.localtime().replace(second=0, microsecond=0)
+        task = claims_service.create_reminder(
+            self.claim, self.admin_user, due, note="Chase insurer")
+
+        call_command("tasks_ring_due", stdout=StringIO())
+        task.refresh_from_db()
+        self.assertIsNotNone(task.due_alarm_sent_at)
+
+        # And the old pipeline no longer knows anything about claims.
+        out = StringIO()
+        call_command("send_followup_reminders", stdout=out)
+        self.assertNotIn("Claim", out.getvalue())
+
+    def test_reminder_appears_on_the_calendar_feed_as_a_task(self):
         from clients.services import calendar_feed
         soon = timezone.now() + timezone.timedelta(days=2)
-        ClaimReminder.objects.create(claim=self.claim, employee=self.emp,
-                                     scheduled_at=soon, note="Follow up")
+        claims_service.create_reminder(self.claim, self.admin_user, soon, note="Follow up")
         items = calendar_feed.feed_items(
             self.emp, start=timezone.now(), end=timezone.now() + timezone.timedelta(days=5),
-            sources=["claim_reminder"])
+            sources=["task"])
         self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["source"], "claim_reminder")
+        self.assertEqual(items[0]["source"], "task")
         self.assertIn("Rahul Sharma", items[0]["title"])

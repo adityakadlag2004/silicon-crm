@@ -31,12 +31,12 @@ from clients.models import (
     InsuranceClaim,
     InsurancePolicy,
     Lead,
-    LeadFollowUp,
     LeadInterest,
     LeadRemark,
     LeadStageEvent,
     Meeting,
     Product,
+    Task,
 )
 
 DEMO_PREFIX = "DEMO-"
@@ -327,6 +327,7 @@ class Command(BaseCommand):
                 "No active employees — skipping demo leads (a lead needs an owner)."))
             return []
 
+        from clients.services import followups
         from clients.services import leads as lead_service
 
         catalog = {
@@ -381,15 +382,17 @@ class Command(BaseCommand):
             LeadRemark.objects.create(lead=lead, text=DEMO_REMARKS[n % len(DEMO_REMARKS)])
 
             # Every third live lead carries a follow-up; one in six is overdue.
+            # A follow-up is a Task — services/followups.py owns that.
             if not lost_reason and n % 3 == 0:
                 overdue = n % 6 == 0
-                LeadFollowUp.objects.create(
-                    lead=lead, assigned_to=lead.assigned_to,
-                    scheduled_time=now + timedelta(days=-2 if overdue else 3, hours=n % 7),
+                task = followups.schedule(
+                    followups.LEAD, lead,
+                    now + timedelta(days=-2 if overdue else 3, hours=n % 7),
                     note="Call back with the quote.",
-                    # Past-dated demo rows must not set the reminder cron ringing.
-                    reminded=overdue,
                 )
+                # Past-dated demo rows must not set the ring cron going.
+                if overdue:
+                    Task.objects.filter(pk=task.pk).update(due_alarm_sent_at=now)
 
             if lost_reason:
                 lead_service.mark_lost(lead, reason=lost_reason)

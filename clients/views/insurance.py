@@ -156,7 +156,8 @@ def claim_detail(request, claim_id):
     ctx_extra = {
         "activities": claim.activities.select_related("actor")[:100],
         "documents": claim.documents.select_related("uploaded_by"),
-        "reminders": claim.reminders.select_related("employee__user").order_by("status", "scheduled_at"),
+        "reminders": claims_service.reminders(claim),
+        "open_task_statuses": Task.OPEN_STATUSES,
         "doc_kinds": ClaimDocument.KIND_CHOICES,
         "statuses": InsuranceClaim.STATUS_CHOICES,
         # ordered stage list for the stepper; rejected shown separately
@@ -277,7 +278,7 @@ from django.shortcuts import redirect
 from django.views.decorators.http import require_POST
 
 from ..forms import ClaimForm
-from ..models import ClaimDocument, ClaimReminder
+from ..models import ClaimDocument, Task
 from ..services import claims as claims_service
 
 
@@ -389,12 +390,8 @@ def claim_add_reminder(request, claim_id):
     return redirect("clients:claim_detail", claim_id=claim.pk)
 
 
-@login_required
-@require_POST
-def claim_reminder_done(request, reminder_id):
-    reminder = get_object_or_404(ClaimReminder, pk=reminder_id)
-    claims_service.complete_reminder(reminder, request.user)
-    return redirect("clients:claim_detail", claim_id=reminder.claim_id)
+# Closing a claim follow-up is a task action now (clients:task_set_status) —
+# a follow-up IS a task, so it closes wherever every other task does.
 
 
 @login_required

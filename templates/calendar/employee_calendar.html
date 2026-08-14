@@ -87,16 +87,12 @@
       <label class="form-check-label badge bg-secondary text-white" for="src_manual">My Events</label>
     </div>
     <div class="form-check form-check-inline">
-      <input class="form-check-input src-filter" type="checkbox" id="src_lead" value="lead_followup" checked>
-      <label class="form-check-label badge" style="background:#ede9fe; color:#5b21b6;" for="src_lead">Lead Follow-ups</label>
-    </div>
-    <div class="form-check form-check-inline">
       <input class="form-check-input src-filter" type="checkbox" id="src_call" value="call_followup" checked>
       <label class="form-check-label badge bg-success text-white" for="src_call">Call Follow-ups</label>
     </div>
     <div class="form-check form-check-inline">
       <input class="form-check-input src-filter" type="checkbox" id="src_task" value="task" checked>
-      <label class="form-check-label badge bg-dark text-white" for="src_task">Tasks</label>
+      <label class="form-check-label badge bg-dark text-white" for="src_task">Tasks &amp; Follow-ups</label>
     </div>
     <div class="form-check form-check-inline">
       <input class="form-check-input src-filter" type="checkbox" id="src_bday" value="birthday" checked>
@@ -249,7 +245,6 @@ document.addEventListener('DOMContentLoaded', function() {
     eventDidMount: function(info) {
       const colorMap = {
         call_followup: {bg: '#28a745', fg: '#fff'},
-        lead_followup: {bg: '#7c3aed', fg: '#fff'},
         meeting: {bg: '#2563eb', fg: '#fff'},
         reminder: {bg: '#fd7e14', fg: '#fff'},
         task: {bg: '#6c757d', fg: '#fff'},

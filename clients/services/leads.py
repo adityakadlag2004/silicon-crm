@@ -9,6 +9,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from ..models import Client, Lead, LeadStageEvent
+from . import followups
 
 VALID_STAGES = dict(Lead.STAGE_CHOICES)
 
@@ -53,6 +54,8 @@ def mark_lost(lead, user=None, reason=""):
     lead.is_discarded = True
     lead.lost_reason = (reason or "")[:255]
     lead.save(update_fields=["is_discarded", "lost_reason", "updated_at"])
+    followups.cancel_open(followups.LEAD, lead.pk, actor=user,
+                         reason="Lead marked lost — follow-up cancelled.")
     return event
 
 
@@ -142,4 +145,8 @@ def convert_to_client(lead, user=None):
         note=f"Converted to client #{client.id}",
         created_by=user if (user and user.is_authenticated) else None,
     )
+    # The lead is won — chasing it is finished, so its open follow-ups close
+    # rather than ringing a phone about work nobody will do.
+    followups.cancel_open(followups.LEAD, lead.pk, actor=user,
+                         reason=f"Lead converted to client #{client.id}.")
     return client

@@ -245,11 +245,42 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - `ClaimDocument` stores files in the **client's** Drive folder (reuses
   `get_or_create_client_folder`), served through a proxy like task
   attachments.
-- `ClaimReminder` = a dated follow-up. It surfaces on the common calendar
-  (`claim_reminder` feed source) and fires a **mobile push** at its time via
-  the existing `send_followup_reminders` cron (a plain Notification mirrors to
-  FCM). No new cron — it rides the every-minute one already in CRONJOBS. Every
-  stage update / note can attach a follow-up in the same submit.
+- A claim follow-up is a **Task** (see "Follow-ups are tasks" below) — the
+  `ClaimReminder` model was deleted, migration 0123. Every stage update / note
+  can still attach one in the same submit.
+
+## Follow-ups are tasks
+
+- A dated follow-up on **any** record is a `Task` and nothing else —
+  `services/followups.py` is the only way to make one. There is no
+  `LeadFollowUp`, no `ClaimReminder`; both models were migrated into Task and
+  dropped (0121 schema → 0122 data → 0123 drop; keep them separate, the
+  index build must not share a transaction with the bulk row write).
+- **Why:** a lead follow-up got a plain tray notification nobody saw, while a
+  task rings the phone like an alarm clock. Folding them in buys the whole task
+  pipeline free — `tasks_ring_due` at the exact due minute, the Android app's
+  local AlarmManager copy (rings offline), `tasks_mark_overdue`, and one row on
+  the common calendar. Two rows for one commitment was the thing to avoid:
+  close the task, leave the follow-up pending, and the calendar nags forever.
+- `Task.source_kind` / `source_id` point back at the record ("lead"/42). Not an
+  FK, so **nothing cascades** — `signals._delete_followup_tasks` removes them
+  when the lead/claim is deleted, or a dead record's follow-up keeps ringing.
+- `created_by` is the **system** user (`followups.system_user()`, inactive +
+  unusable password): that is what marks a task as generated rather than typed.
+  `assigned_to` is whoever OWNS the record — the lead's employee, the claim's
+  handler — falling back to whoever scheduled it. An admin scheduling on
+  someone else's lead must ring *that* phone.
+- Priority is **medium** on purpose: high/critical re-ring every four hours
+  until acknowledged, and twenty follow-ups a day at that volume is a storm
+  people learn to swipe away. They land in a "Follow-up" `TaskCategory` so the
+  real task list stays readable.
+- The chase ends by itself: `cancel_open()` runs when a lead is marked lost or
+  converted. A won lead that keeps ringing is worse than no reminder.
+- Closing and rescheduling are **task** actions (`task_set_status` — a bare
+  POST means done — and `task_reschedule`, the calendar drag endpoint). Both
+  clear `due_alarm_sent_at`; a task rescheduled without clearing it never rings
+  again, which is why the web `task_set_due` used to go silent.
+- `clients.test.test_followup_tasks` pins all of this.
 
 ## Lead pipeline (SPANCO)
 
@@ -318,11 +349,12 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - `/api/app/followups/` serves pending + `done_today` + the overdue count that
   badges the Calls tab (also on `/api/app/me/` so the badge is right at launch).
   `push-overdue/` reschedules every overdue row at once.
-- **Lead follow-ups share the screen.** `LeadFollowUp` rows come through the
-  same endpoint marked `kind: "lead"`, and `app_followup_action` routes by that
-  field — staff had two call lists, one of them web-only. Row ids collide
-  between the two models, so anything keyed by id must key on `kind + id`.
-  LeadFollowUp has no dismissed state, so Dismiss closes it as done.
+- **Call follow-ups are the only thing on this screen.** Lead follow-ups used
+  to be merged in as `kind: "lead"`; they are Tasks now and are worked on the
+  Tasks screen, so the endpoint serves call rows only and `kind: "lead"`
+  answers 410 for pre-v4.32 apps. Call follow-ups deliberately stayed out of
+  the task model: the post-call popup creates them automatically on every
+  unanswered call, and one task per missed dial would bury the task list.
 - **Outcomes are reported by `services/calls.outcome_breakdown()`** — one
   implementation feeding both the web Call Analytics page and
   `app_call_analytics`, the way the call counts should have been from the start.

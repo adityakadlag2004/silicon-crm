@@ -24,16 +24,17 @@ from .. import permissions
 from ..models import (
     Employee,
     Lead,
-    LeadFollowUp,
     LeadRemark,
     Product,
     Sale,
+    Task,
 )
 from ..forms import (
     LeadForm,
     LeadFamilyMemberFormSet,
     LeadInterestFormSet,
 )
+from ..services import followups
 from ..services import leads as lead_service
 from .helpers import _lead_queryset_for_request, name_words_q
 
@@ -262,10 +263,6 @@ def lead_pipeline_report(request):
 @login_required
 def lead_detail(request, lead_id):
     lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
-    followups = lead.followups.select_related("assigned_to__user").order_by("-scheduled_time")
-    now_ts = timezone.now()
-    for f in followups:
-        f.is_overdue = f.status == "pending" and f.scheduled_time < now_ts
 
     # The stepper: every SPANCO step with where this lead has got to.
     current = lead.stage_index
@@ -292,7 +289,8 @@ def lead_detail(request, lead_id):
         "next_stage": lead.next_stage,
         "next_stage_label": dict(Lead.STAGE_CHOICES).get(lead.next_stage, ""),
         "interests": lead.interests.select_related("product"),
-        "followups": followups,
+        "followups": followups.for_source(followups.LEAD, lead.pk),
+        "open_task_statuses": Task.OPEN_STATUSES,
         "remarks": lead.remarks.select_related("created_by").order_by("-created_at"),
         "stage_events": lead.stage_events.select_related("created_by")[:50],
     })
@@ -368,14 +366,8 @@ def lead_add_followup(request, lead_id):
         messages.error(request, "Invalid date/time format.")
         return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
 
-    LeadFollowUp.objects.create(
-        lead=lead,
-        assigned_to=lead.assigned_to,
-        scheduled_time=when_dt,
-        note=note,
-        created_by=request.user,
-    )
-    messages.success(request, "Follow-up added.")
+    followups.schedule(followups.LEAD, lead, when_dt, note=note, actor=request.user)
+    messages.success(request, "Follow-up added — it will ring on the phone as a task.")
     return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
 
 
@@ -392,42 +384,9 @@ def lead_add_remark(request, lead_id):
     return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
 
 
-@login_required
-@require_POST
-def lead_followup_done(request, followup_id):
-    emp = getattr(request.user, "employee", None)
-    qs = LeadFollowUp.objects.select_related("lead")
-    if emp and getattr(emp, "role", "") == "employee":
-        qs = qs.filter(assigned_to=emp)
-    followup = get_object_or_404(qs, pk=followup_id)
-    followup.status = "done"
-    followup.save(update_fields=["status"])
-    if request.headers.get("HX-Request"):
-        return HttpResponse('<div class="text-success small fw-bold">Done &#10003;</div>')
-    messages.success(request, "Follow-up marked as done.")
-    return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
-
-
-@login_required
-@require_POST
-def lead_followup_reschedule(request, followup_id):
-    """Move a follow-up to a different date (drag-and-drop)."""
-    emp = getattr(request.user, "employee", None)
-    qs = LeadFollowUp.objects.select_related("lead")
-    if emp and getattr(emp, "role", "") == "employee":
-        qs = qs.filter(assigned_to=emp)
-    followup = get_object_or_404(qs, pk=followup_id)
-
-    try:
-        data = json.loads(request.body)
-        new_date = datetime.strptime(data.get("date"), "%Y-%m-%d").date()
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return JsonResponse({"error": "Invalid date."}, status=400)
-
-    old_time = followup.scheduled_time.time()
-    followup.scheduled_time = timezone.make_aware(datetime.combine(new_date, old_time))
-    followup.save(update_fields=["scheduled_time"])
-    return JsonResponse({"ok": True, "new_date": new_date.isoformat(), "new_time": old_time.strftime("%H:%M")})
+# Marking a follow-up done and rescheduling one are task actions now
+# (clients:task_set_status / clients:task_reschedule) — a follow-up IS a task,
+# so it is closed wherever every other task is closed.
 
 
 @login_required

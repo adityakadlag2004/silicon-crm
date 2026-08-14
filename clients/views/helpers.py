@@ -16,7 +16,6 @@ from django.db.models import Sum, Q
 
 from ..models import (
     Lead,
-    LeadFollowUp,
     Employee,
     ManagerAccessConfig,
     Product,

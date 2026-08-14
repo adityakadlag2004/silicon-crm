@@ -534,100 +534,47 @@ class PopupContextTests(_CallSetup):
         self.assertEqual(other.status, CallFollowUp.STATUS_PENDING)
 
 
-class LeadFollowupsOnCallsScreenTests(_CallSetup):
-    """Lead follow-ups were a second call list, visible only on the web."""
+class LeadFollowupsLeftTheCallsScreenTests(_CallSetup):
+    """Lead follow-ups are Tasks now, worked on the Tasks screen. The Calls
+    screen carries call follow-ups and nothing else — it used to merge in a
+    second model whose row ids collided with these."""
 
     def setUp(self):
         super().setUp()
-        from clients.models import Lead, LeadFollowUp
+        from clients.models import Lead
+        from clients.services import followups
 
         self.lead = Lead.objects.create(
             customer_name="Prospect", phone="9123456780", assigned_to=self.emp
         )
-        self.lead_fu = LeadFollowUp.objects.create(
-            lead=self.lead, assigned_to=self.emp,
-            scheduled_time=timezone.now() + timedelta(hours=2), note="send brochure",
+        self.task = followups.schedule(
+            followups.LEAD, self.lead, timezone.now() + timedelta(hours=2),
+            note="send brochure",
         )
 
-    def _rows(self):
-        return self.employee.get(reverse("clients:app_followups")).json()["pending"]
-
-    def test_lead_followups_appear_in_the_same_list(self):
+    def test_only_call_rows_are_served(self):
         CallFollowUp.objects.create(
             employee=self.emp, phone="1", scheduled_at=timezone.now() + timedelta(hours=1)
         )
-        rows = self._rows()
-        self.assertEqual([r["kind"] for r in rows], ["call", "lead"])  # merged, time-ordered
-        lead_row = rows[1]
-        self.assertEqual(lead_row["client"], "Prospect")
-        self.assertEqual(lead_row["phone"], "9123456780")
-        self.assertEqual(lead_row["note"], "send brochure")
+        rows = self.employee.get(reverse("clients:app_followups")).json()["pending"]
+        self.assertEqual([r["kind"] for r in rows], ["call"])
 
-    def test_discarded_leads_stay_out(self):
-        self.lead.is_discarded = True
-        self.lead.save(update_fields=["is_discarded"])
-        self.assertEqual(self._rows(), [])
-
-    def test_done_and_reschedule_route_to_the_lead_model(self):
-        target = (timezone.localtime() + timedelta(days=1)).replace(
-            hour=11, minute=0, second=0, microsecond=0
-        )
-        self.employee.post(
-            reverse("clients:app_followup_action", args=[self.lead_fu.id]),
-            data=json.dumps({"action": "reschedule", "kind": "lead",
-                             "at": target.strftime("%Y-%m-%dT%H:%M")}),
-            content_type="application/json",
-        )
-        self.lead_fu.refresh_from_db()
-        self.assertEqual(timezone.localtime(self.lead_fu.scheduled_time), target)
-
-        self.employee.post(
-            reverse("clients:app_followup_action", args=[self.lead_fu.id]),
+    def test_old_apps_asking_for_a_lead_action_are_told_to_update(self):
+        resp = self.employee.post(
+            reverse("clients:app_followup_action", args=[self.task.id]),
             data=json.dumps({"action": "done", "kind": "lead"}),
             content_type="application/json",
         )
-        self.lead_fu.refresh_from_db()
-        self.assertEqual(self.lead_fu.status, "done")
+        self.assertEqual(resp.status_code, 410)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, self.task.STATUS_PENDING)
 
-    def test_cannot_touch_someone_elses_lead_followup(self):
-        from clients.models import LeadFollowUp
-
-        theirs = LeadFollowUp.objects.create(
-            lead=self.lead, assigned_to=self.admin_emp, scheduled_time=timezone.now()
-        )
-        resp = self.employee.post(
-            reverse("clients:app_followup_action", args=[theirs.id]),
-            data=json.dumps({"action": "done", "kind": "lead"}),
-            content_type="application/json",
-        )
-        self.assertEqual(resp.status_code, 403)
-
-    def test_move_all_moves_lead_rows_too(self):
-        self.lead_fu.scheduled_time = timezone.now() - timedelta(hours=1)
-        self.lead_fu.save(update_fields=["scheduled_time"])
-        CallFollowUp.objects.create(
-            employee=self.emp, phone="1", scheduled_at=timezone.now() - timedelta(hours=1)
-        )
-        target = (timezone.localtime() + timedelta(days=1)).replace(
-            hour=10, minute=0, second=0, microsecond=0
-        )
-        resp = self.employee.post(
-            reverse("clients:app_followups_push_overdue"),
-            data=json.dumps({"at": target.strftime("%Y-%m-%dT%H:%M")}),
-            content_type="application/json",
-        )
-        self.assertEqual(resp.json()["moved"], 2)
-        self.lead_fu.refresh_from_db()
-        self.assertEqual(timezone.localtime(self.lead_fu.scheduled_time), target)
-
-    def test_badge_counts_both_lists(self):
-        self.lead_fu.scheduled_time = timezone.now() - timedelta(minutes=1)
-        self.lead_fu.save(update_fields=["scheduled_time"])
+    def test_badge_counts_calls_only(self):
         CallFollowUp.objects.create(
             employee=self.emp, phone="1", scheduled_at=timezone.now() - timedelta(minutes=1)
         )
         self.assertEqual(
-            self.employee.get(reverse("clients:app_me")).json()["overdue_followups"], 2
+            self.employee.get(reverse("clients:app_me")).json()["overdue_followups"], 1
         )
 
 

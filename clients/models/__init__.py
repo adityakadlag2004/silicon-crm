@@ -31,7 +31,6 @@ from .clients import (  # noqa: F401
 from .insurance import (  # noqa: F401
     ClaimActivity,
     ClaimDocument,
-    ClaimReminder,
     InsuranceClaim,
     InsurancePolicy,
     Meeting,
@@ -60,7 +59,6 @@ from .sales import (  # noqa: F401
 from .leads import (  # noqa: F401
     Lead,
     LeadRemark,
-    LeadFollowUp,
     LeadFamilyMember,
     LeadInterest,
     LeadStageEvent,

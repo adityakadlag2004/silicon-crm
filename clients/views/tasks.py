@@ -615,7 +615,9 @@ def task_set_status(request, pk):
     guard = _guard_edit(request, task)
     if guard:
         return guard
-    new = request.POST.get("status")
+    # A bare POST means "done" — that is the one-tap tick on the calendar
+    # widget and on a lead/claim page, where there is no status to pick.
+    new = request.POST.get("status") or Task.STATUS_COMPLETED
     # "Pending" past the deadline is really Overdue — a reopen/reset must
     # never hide a blown due date.
     if new == Task.STATUS_PENDING and task.due_at and task.due_at < timezone.now():
@@ -675,16 +677,61 @@ def task_set_due(request, pk):
         return guard
     task.due_date = parse_date_param(request.POST.get("due_date"))
     task.due_time = _parse_time(request.POST.get("due_time"))
+    # A new deadline has not been rung yet. Without this the task keeps the
+    # flag from the deadline it used to have and tasks_ring_due never rings it
+    # again — a rescheduled task that goes silent is worse than no reminder.
+    task.due_alarm_sent_at = None
+    task.reminded_day_before = False
+    task.reminded_same_day = False
     # Reopen if a past-due overdue task got a fresh future date.
     if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
         task.status = Task.STATUS_PENDING
-    task.save(update_fields=["due_date", "due_time", "status", "updated_at"])
+    task.save(update_fields=["due_date", "due_time", "status", "due_alarm_sent_at",
+                             "reminded_day_before", "reminded_same_day", "updated_at"])
     apply_to_group(task, request.user, {"due_date": task.due_date, "due_time": task.due_time})
     log_activity(task, request.user, TaskActivity.DUE_CHANGED,
                  f"Due {task.due_date or '—'} {task.due_time or ''}".strip())
     notify_task(task, request.user, "Task due date changed",
                 f"“{task.title}” is now due {task.due_date or '—'}.", event="due_changed")
     return _back(request, task)
+
+
+@login_required
+@require_POST
+def task_reschedule(request, pk):
+    """Drag-and-drop a task to another day on the calendar widget (JSON).
+
+    Keeps the time of day — a 10:00 follow-up dragged to tomorrow is still a
+    10:00 follow-up. This is the endpoint lead follow-ups used to have, now
+    serving every task, since a follow-up is one.
+    """
+    import json
+
+    task = _visible_task_or_404(request, pk)
+    guard = _guard_edit(request, task)
+    if guard:
+        return guard
+    try:
+        new_date = datetime.strptime(json.loads(request.body).get("date"), "%Y-%m-%d").date()
+    except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+        return JsonResponse({"error": "Invalid date."}, status=400)
+
+    task.due_date = new_date
+    task.due_alarm_sent_at = None
+    task.reminded_day_before = False
+    task.reminded_same_day = False
+    if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
+        task.status = Task.STATUS_PENDING
+    task.save(update_fields=["due_date", "status", "due_alarm_sent_at",
+                             "reminded_day_before", "reminded_same_day", "updated_at"])
+    apply_to_group(task, request.user, {"due_date": task.due_date, "due_time": task.due_time})
+    log_activity(task, request.user, TaskActivity.DUE_CHANGED,
+                 f"Moved to {new_date:%d %b %Y}.")
+    return JsonResponse({
+        "ok": True,
+        "new_date": new_date.isoformat(),
+        "new_time": task.due_time.strftime("%H:%M") if task.due_time else "",
+    })
 
 
 @login_required

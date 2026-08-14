@@ -13,7 +13,6 @@ urlpatterns = [
     path("claims/<int:claim_id>/status/", insurance.claim_update_status, name="claim_update_status"),
     path("claims/<int:claim_id>/note/", insurance.claim_add_note, name="claim_add_note"),
     path("claims/<int:claim_id>/reminder/", insurance.claim_add_reminder, name="claim_add_reminder"),
-    path("claims/reminder/<int:reminder_id>/done/", insurance.claim_reminder_done, name="claim_reminder_done"),
     path("claims/<int:claim_id>/document/upload/", insurance.claim_upload_document, name="claim_upload_document"),
     path("claims/document/<int:doc_id>/download/", insurance.claim_document_download, name="claim_document_download"),
     path("claims/document/<int:doc_id>/delete/", insurance.claim_delete_document, name="claim_delete_document"),

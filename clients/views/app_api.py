@@ -20,7 +20,6 @@ from ..models import (
     CallFollowUp,
     Client,
     Employee,
-    LeadFollowUp,
     Notification,
     Product,
     Renewal,
@@ -63,17 +62,12 @@ def app_me(request):
             recipient=request.user, is_read=False
         ).count(),
         # Drives the Calls tab badge, so a due call is visible without
-        # opening the screen. Counts both lists the screen shows.
-        "overdue_followups": (
-            CallFollowUp.objects.filter(
-                employee=emp, status=CallFollowUp.STATUS_PENDING,
-                scheduled_at__lte=timezone.now(),
-            ).count()
-            + LeadFollowUp.objects.filter(
-                assigned_to=emp, status="pending", lead__is_discarded=False,
-                scheduled_time__lte=timezone.now(),
-            ).count()
-        ) if emp else 0,
+        # opening the screen. Call follow-ups only — a lead or claim follow-up
+        # is a Task now and badges the Tasks tab.
+        "overdue_followups": CallFollowUp.objects.filter(
+            employee=emp, status=CallFollowUp.STATUS_PENDING,
+            scheduled_at__lte=timezone.now(),
+        ).count() if emp else 0,
     })
 
 
@@ -557,41 +551,6 @@ def _fu_row(fu, now, last_calls=None):
     }
 
 
-def _lead_fu_rows(emp, now):
-    """Pending lead follow-ups, shaped like call follow-ups.
-
-    Staff had two call lists — this one lived only on the web Leads screen,
-    so a lead call scheduled there never reached the phone. Same row shape,
-    marked `kind: "lead"`; the actions route by that.
-    """
-    from ..models import LeadFollowUp
-
-    if emp is None:
-        return []
-    rows = []
-    for f in LeadFollowUp.objects.filter(
-        assigned_to=emp, status="pending", lead__is_discarded=False
-    ).select_related("lead").order_by("scheduled_time")[:200]:
-        rows.append({
-            "id": f.id,
-            "kind": "lead",
-            "phone": f.lead.phone or "",
-            "client": f.lead.customer_name,
-            "client_id": f.lead.converted_client_id,
-            "scheduled_at": timezone.localtime(f.scheduled_time).strftime("%d %b, %I:%M %p"),
-            "scheduled_at_ms": int(f.scheduled_time.timestamp() * 1000),
-            "overdue": f.scheduled_time <= now,
-            "note": (f.note or "")[:255],
-            "status": f.status,
-            "outcome": "",
-            "outcome_label": "",
-            "attempts": 1,
-            "last_call": "",
-            "lead_id": f.lead_id,
-        })
-    return rows
-
-
 def _fu_digits(phone):
     """Last 10 digits — the same key views/calls.py matches numbers on."""
     digits = "".join(ch for ch in (phone or "") if ch.isdigit())
@@ -679,8 +638,7 @@ def app_followups(request):
         completed_at__date=timezone.localdate(),
     ).select_related("client").order_by("-completed_at")[:50]
     last_calls = _last_call_map(emp, pending)
-    rows = [_fu_row(f, now, last_calls) for f in pending] + _lead_fu_rows(emp, now)
-    rows.sort(key=lambda r: r["scheduled_at_ms"])
+    rows = [_fu_row(f, now, last_calls) for f in pending]
     return JsonResponse({
         "pending": rows,
         "done_today": [_fu_row(f, now) for f in done],
@@ -751,7 +709,11 @@ def app_followup_action(request, followup_id):
     action = body.get("action")
 
     if body.get("kind") == "lead":
-        return _lead_followup_action(request, emp, followup_id, action, body)
+        # Pre-v4.32 apps still send these. Lead follow-ups are Tasks now and
+        # are worked on the Tasks screen; say so rather than 404.
+        return JsonResponse(
+            {"ok": False, "error": "Lead follow-ups are tasks now — update the app."},
+            status=410)
 
     fu = get_object_or_404(CallFollowUp, pk=followup_id)
     if not (_is_admin(request) or (emp and fu.employee_id == emp.id)):
@@ -792,42 +754,6 @@ def app_followup_action(request, followup_id):
     return JsonResponse({"ok": True})
 
 
-def _lead_followup_action(request, emp, followup_id, action, body):
-    """Same three verbs on a lead follow-up.
-
-    LeadFollowUp only has pending/done, so "dismiss" closes it the same way
-    "done" does — there is nowhere else for it to go, and leaving it pending
-    is what the Dismiss button exists to avoid.
-    """
-    from ..models import LeadFollowUp
-
-    fu = get_object_or_404(LeadFollowUp, pk=followup_id)
-    if not (_is_admin(request) or (emp and fu.assigned_to_id == emp.id)):
-        return JsonResponse({"ok": False, "error": "Not your follow-up."}, status=403)
-
-    if action in ("done", "dismiss"):
-        fu.status = "done"
-        fu.save(update_fields=["status"])
-    elif action == "note":
-        fu.note = str(body.get("note") or "").strip()[:255]
-        fu.save(update_fields=["note"])
-    elif action in ("snooze", "reschedule"):
-        if action == "reschedule":
-            from .calls import parse_custom_at
-
-            scheduled, err = parse_custom_at(body.get("at"))
-            if err:
-                return JsonResponse({"ok": False, "error": err}, status=400)
-        else:
-            scheduled = timezone.now() + timedelta(hours=1)
-        fu.scheduled_time = scheduled
-        fu.reminded = False
-        fu.save(update_fields=["scheduled_time", "reminded"])
-    else:
-        return JsonResponse({"ok": False, "error": "Unknown action."}, status=400)
-    return JsonResponse({"ok": True})
-
-
 @login_required
 @require_POST
 def app_followups_push_overdue(request):
@@ -849,16 +775,10 @@ def app_followups_push_overdue(request):
     scheduled, err = parse_custom_at(body.get("at"))
     if err:
         return JsonResponse({"ok": False, "error": err}, status=400)
-    from ..models import LeadFollowUp
-
     now = timezone.now()
     moved = CallFollowUp.objects.filter(
         employee=emp, status=CallFollowUp.STATUS_PENDING, scheduled_at__lte=now
     ).update(scheduled_at=scheduled, reminded=False)
-    # Lead follow-ups share the screen, so "Move all" moves them too.
-    moved += LeadFollowUp.objects.filter(
-        assigned_to=emp, status="pending", scheduled_time__lte=now
-    ).update(scheduled_time=scheduled, reminded=False)
     return JsonResponse({"ok": True, "moved": moved, "message": f"Moved {moved} follow-ups"})
 
 

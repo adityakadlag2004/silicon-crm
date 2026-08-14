@@ -9,9 +9,10 @@ shape so all calendar surfaces show the same things:
 Sources:
   event          CalendarEvent — manual events created on the calendar
   birthday       Client birthdays (clients mapped to the employee)
-  lead_followup  LeadFollowUp   — pending follow-ups from the Lead Pipeline
   call_followup  CallFollowUp   — pending follow-ups from call tracking
-  task           Task           — open tasks with a due date
+  task           Task           — open tasks with a due date, which is also
+                                  every lead/claim follow-up (a follow-up is a
+                                  Task — see services/followups.py)
   insurance_renewal  Sale       — annual policy renewal, on the policy-date
                                   anniversary (Health/Life insurance)
 
@@ -31,19 +32,16 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import CalendarEvent, CallFollowUp, ClaimReminder, Client, LeadFollowUp, Sale, Task
+from ..models import CalendarEvent, CallFollowUp, Client, Sale, Task
 
-ALL_SOURCES = ("event", "birthday", "lead_followup", "call_followup", "task",
-               "insurance_renewal", "claim_reminder")
+ALL_SOURCES = ("event", "birthday", "call_followup", "task", "insurance_renewal")
 
 SOURCE_LABELS = {
     "event": "Event",
     "birthday": "Birthday",
-    "lead_followup": "Lead",
     "call_followup": "Call",
     "task": "Task",
     "insurance_renewal": "Renewal",
-    "claim_reminder": "Claim",
 }
 
 
@@ -110,30 +108,6 @@ def _birthdays(employee, start, end):
     return items
 
 
-def _lead_followups(employee, start, end, employee_id=None):
-    qs = LeadFollowUp.objects.filter(status="pending").select_related("lead", "assigned_to__user")
-    if employee is not None:
-        qs = qs.filter(assigned_to=employee)
-    elif employee_id:
-        qs = qs.filter(assigned_to_id=employee_id)
-    if start:
-        qs = qs.filter(scheduled_time__gte=start)
-    if end:
-        qs = qs.filter(scheduled_time__lte=end)
-    return [
-        _item(
-            f"lead-{f.id}", "lead_followup",
-            f.lead.customer_name, f.scheduled_time,
-            note=f.note,
-            url=reverse("clients:lead_detail", args=[f.lead_id]),
-            done_url=reverse("clients:lead_followup_done", args=[f.id]),
-            draggable=True,
-            assigned_to=f.assigned_to.user.username if f.assigned_to and f.assigned_to.user_id else "",
-        )
-        for f in qs
-    ]
-
-
 def _call_followups(employee, start, end, employee_id=None):
     qs = CallFollowUp.objects.filter(status=CallFollowUp.STATUS_PENDING).select_related(
         "client", "employee__user")
@@ -163,7 +137,7 @@ def _tasks(employee, start, end):
         status__in=Task.OPEN_STATUSES,
         due_date__isnull=False,
         assigned_to=employee,
-    )
+    ).select_related("assigned_to__user")
     if start:
         qs = qs.filter(due_date__gte=start.date())
     if end:
@@ -176,6 +150,10 @@ def _tasks(employee, start, end):
             f"task-{t.id}", "task", t.title, due_dt,
             note=t.description[:120] if t.description else "",
             url=reverse("clients:task_detail", args=[t.id]),
+            done_url=reverse("clients:task_set_status", args=[t.id]),
+            draggable=True,
+            assigned_to=(t.assigned_to.user.username
+                         if t.assigned_to and t.assigned_to.user_id else ""),
         ))
     return items
 
@@ -230,29 +208,6 @@ def _insurance_renewals(employee, start, end):
     return items
 
 
-def _claim_reminders(employee, start, end):
-    """Pending claim follow-ups for this employee, on their due date/time."""
-    qs = ClaimReminder.objects.filter(
-        status=ClaimReminder.STATUS_PENDING,
-    ).select_related("claim__policy__client")
-    if employee is not None:
-        qs = qs.filter(employee=employee)
-    if start:
-        qs = qs.filter(scheduled_at__gte=start)
-    if end:
-        qs = qs.filter(scheduled_at__lte=end)
-    items = []
-    for r in qs:
-        client = r.claim.policy.client
-        items.append(_item(
-            f"claimrem-{r.id}", "claim_reminder",
-            f"Claim follow-up: {client.name}", r.scheduled_at,
-            note=r.note or f"Claim on {r.claim.policy.policy_number}",
-            url=reverse("clients:claim_detail", args=[r.claim_id]),
-        ))
-    return items
-
-
 def feed_items(employee, *, start=None, end=None, sources=None,
                team_followups=False, employee_id=None):
     """Collect unified calendar items.
@@ -274,16 +229,12 @@ def feed_items(employee, *, start=None, end=None, sources=None,
         items += _events(employee, start, end)
     if "birthday" in sources:
         items += _birthdays(employee, b_start, b_end)
-    if "lead_followup" in sources:
-        items += _lead_followups(fu_employee, start, end, employee_id=employee_id)
     if "call_followup" in sources:
         items += _call_followups(fu_employee, start, end, employee_id=employee_id)
     if "task" in sources:
         items += _tasks(employee, start, end)
     if "insurance_renewal" in sources:
         items += _insurance_renewals(employee, b_start, b_end)
-    if "claim_reminder" in sources:
-        items += _claim_reminders(employee, start, end)
 
     now_ts = timezone.now()
     for it in items:

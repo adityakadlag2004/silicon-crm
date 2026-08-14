@@ -130,25 +130,20 @@
       </div>
       <div class="ki-table-wrap">
         <table class="ki-table mb-0">
-          <thead><tr><th>Scheduled</th><th>Note</th><th>Status</th><th style="width:60px;"></th></tr></thead>
+          <thead><tr><th>Scheduled</th><th>Details</th><th>Assigned to</th><th>Status</th><th style="width:60px;"></th></tr></thead>
           <tbody>
             {% for f in followups %}
               <tr class="{% if f.is_overdue %}table-danger{% endif %}">
                 <td class="small text-nowrap">
-                  {{ f.scheduled_time|date:"d M Y, H:i" }}
+                  <a href="{% url 'clients:task_detail' f.id %}">{{ f.due_date|date:"d M Y" }}{% if f.due_time %}, {{ f.due_time|time:"H:i" }}{% endif %}</a>
                   {% if f.is_overdue %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
                 </td>
-                <td class="small">{{ f.note|default:"-" }}</td>
-                <td>
-                  {% if f.status == 'done' %}
-                    <span class="badge bg-success">Done</span>
-                  {% else %}
-                    <span class="badge bg-warning text-dark">Pending</span>
-                  {% endif %}
-                </td>
+                <td class="small">{{ f.description|linebreaksbr|default:"-" }}</td>
+                <td class="small">{{ f.assigned_to.user.username|default:"—" }}</td>
+                <td><span class="badge bg-{% if f.status == 'completed' %}success{% elif f.status == 'cancelled' %}secondary{% elif f.status == 'overdue' %}danger{% else %}warning text-dark{% endif %}">{{ f.get_status_display }}</span></td>
                 <td class="text-end">
-                  {% if f.status == 'pending' %}
-                    <form method="post" action="{% url 'clients:lead_followup_done' f.id %}" class="d-inline" hx-post="{% url 'clients:lead_followup_done' f.id %}" hx-swap="outerHTML" hx-target="closest tr">
+                  {% if f.status in open_task_statuses %}
+                    <form method="post" action="{% url 'clients:task_set_status' f.id %}" class="d-inline">
                       {% csrf_token %}
                       <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary" aria-label="Mark follow-up done" title="Mark done"><i class="bi bi-check-lg"></i></button>
                     </form>
@@ -156,10 +151,13 @@
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="4" class="text-center text-muted small py-3">No follow-ups yet.</td></tr>
+              <tr><td colspan="5" class="text-center text-muted small py-3">No follow-ups yet.</td></tr>
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      <div class="text-muted small mt-2 px-2">
+        <i class="bi bi-alarm"></i> A follow-up is a task: it rings on the phone at its due time.
       </div>
     </div>
   </div>
