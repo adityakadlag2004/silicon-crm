@@ -35,6 +35,13 @@ class SubmitGuardTests(TestCase):
         html = self.http.get(reverse("clients:all_sales")).content.decode()
         self.assertIn("'get').toLowerCase() !== 'post'", html)
 
+    def test_fetch_driven_posts_are_deduped_too(self):
+        # Screens that post with fetch() (calendar events, bulk import, quick-add
+        # client) never fire a submit event, so they need their own guard.
+        html = self.http.get(reverse("clients:add_client")).content.decode()
+        self.assertIn("window.fetch = function", html)
+        self.assertIn("inflight", html)
+
 
 class SearchableSelectTests(TestCase):
     @classmethod

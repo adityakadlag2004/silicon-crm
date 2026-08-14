@@ -18,7 +18,9 @@ object ApiClient {
     sealed class Result {
         data class Ok(val json: JSONObject) : Result()
         object NotLoggedIn : Result()
-        data class Error(val message: String) : Result()
+        /** [body] is the server's JSON refusal when it sent one — callers that
+         * need more than the sentence (e.g. the duplicate-sale check) read it. */
+        data class Error(val message: String, val body: JSONObject? = null) : Result()
     }
 
     /** True when a session cookie is *present*. It may still be rejected by the
@@ -175,12 +177,15 @@ object ApiClient {
                 }
                 301, 302, 401 -> Result.NotLoggedIn
                 else -> {
-                    val msg = try {
+                    // Keep the parsed body: a refusal can carry more than a
+                    // sentence (the duplicate-sale check answers with the sale
+                    // it matched, and the screen offers to add it anyway).
+                    val payload = try {
                         JSONObject(conn.errorStream?.bufferedReader()?.readText() ?: "")
-                            .optString("error", "Server error ($code)")
                     } catch (_: Exception) {
-                        ""
+                        null
                     }
+                    val msg = payload?.optString("error", "Server error ($code)") ?: ""
                     // A 403 with no JSON error is Django's CSRF/permission wall,
                     // not something the user can act on — treat it as a dead
                     // session (GET already did) so the app re-authenticates
@@ -188,7 +193,7 @@ object ApiClient {
                     // that DID carry an error message is a real permission
                     // refusal ("Only the assignee can acknowledge") — show it.
                     if (code == 403 && msg.isEmpty()) Result.NotLoggedIn
-                    else Result.Error(msg.ifEmpty { "Server error ($code)" })
+                    else Result.Error(msg.ifEmpty { "Server error ($code)" }, payload)
                 }
             }
         } catch (e: Exception) {

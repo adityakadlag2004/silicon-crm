@@ -58,6 +58,32 @@ def _sale_product_meta(show_margin=False):
     return meta
 
 
+def _duplicate_confirm(request, sale):
+    """Render the "this sale is already on the books" confirmation, or None.
+
+    Shared by both web sale forms. The posted fields are carried across as
+    hidden inputs so confirming re-submits exactly what was typed — no form
+    template has to be able to rebuild its own state (the client picker
+    couldn't).
+    """
+    if request.POST.get("confirm_duplicate"):
+        return None
+    dup = sales_service.find_duplicate(sale)
+    if dup is None:
+        return None
+    carried = [(k, v) for k, vs in request.POST.lists() for v in vs
+               if k not in ("csrfmiddlewaretoken", "confirm_duplicate")]
+    return render(request, "sales/confirm_duplicate.html", {
+        "crumbs": [{"label": "Sales", "url": reverse("clients:all_sales")},
+                   {"label": "Duplicate check"}],
+        "duplicate": dup,
+        "sale": sale,
+        "window_days": sales_service.DUPLICATE_WINDOW_DAYS,
+        "post_data": carried,
+        "action": request.path,
+    })
+
+
 @login_required
 def add_sale(request):
     is_admin_user = permissions.is_admin(request.user)
@@ -118,6 +144,12 @@ def add_sale(request):
                                 **product_meta,
                         },
                     )
+
+            # Same client + product + amount within two months = almost always
+            # the same sale entered twice. Ask once; a confirmed one goes in.
+            confirm = _duplicate_confirm(request, sale)
+            if confirm is not None:
+                return confirm
 
             sales_service.finalize_new_sale(sale, request.user, auto_approve=is_admin_user)
             success_with_drive_link(request, "Sale added.", sale.client,
@@ -301,6 +333,9 @@ def admin_add_sale(request):
             if not sale.employee_id:
                 form.add_error("employee", "Please select an employee for this sale.")
             else:
+                confirm = _duplicate_confirm(request, sale)
+                if confirm is not None:
+                    return confirm
                 sales_service.finalize_new_sale(sale, request.user, auto_approve=True)
                 success_with_drive_link(request, "Sale added.", sale.client,
                                         insurance=sale.is_insurance)

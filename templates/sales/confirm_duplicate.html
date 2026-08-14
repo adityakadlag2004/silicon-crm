@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Duplicate Sale?{% endblock %}
+{% block page_title %}Duplicate Sale?{% endblock %}
+
+{% block content %}
+<div class="ki-card" style="max-width:720px;">
+  <h2 class="ki-section-title" style="color:var(--ki-warning,#B45309);">
+    <i class="bi bi-exclamation-triangle"></i> This sale looks like one already added
+  </h2>
+
+  <p class="mb-3">
+    A sale with the <strong>same client, product and amount</strong> is already on the books
+    within {{ window_days }} days of this date. Check it before adding a second one.
+  </p>
+
+  <div class="ki-rec-summary" style="margin:0 0 1rem;">
+    <div class="ki-sum-item"><span class="k">Client</span><span class="v">{{ duplicate.client.name }}</span></div>
+    <div class="ki-sum-item"><span class="k">Product</span><span class="v">{{ duplicate.product }}</span></div>
+    <div class="ki-sum-item"><span class="k">Amount</span><span class="v">₹{{ duplicate.amount|floatformat:0 }}</span></div>
+    <div class="ki-sum-item"><span class="k">Already booked on</span><span class="v">{{ duplicate.date }}</span></div>
+    <div class="ki-sum-item"><span class="k">Entered for</span><span class="v">{{ duplicate.employee.user.username }}</span></div>
+    <div class="ki-sum-item"><span class="k">Status</span><span class="v">{{ duplicate.status|title }}</span></div>
+    <div class="ki-sum-item"><span class="k">Sale #</span><span class="v">{{ duplicate.id }}</span></div>
+  </div>
+
+  <p class="text-muted" style="font-size:.9rem;">
+    You are about to add: <strong>{{ sale.product }}</strong> · ₹{{ sale.amount|floatformat:0 }}
+    {% if sale.date %}dated {{ sale.date }}{% endif %}.
+    Only continue if the client genuinely bought this twice.
+  </p>
+
+  <form method="post" action="{{ action }}" class="d-flex gap-2 flex-wrap mt-3">
+    {% csrf_token %}
+    {% for key, value in post_data %}
+      <input type="hidden" name="{{ key }}" value="{{ value }}">
+    {% endfor %}
+    <a href="{% url 'clients:all_sales' %}" class="ki-btn ki-btn-secondary">
+      <i class="bi bi-x-lg"></i> No — don't add it
+    </a>
+    <a href="{% url 'clients:edit_sale' duplicate.id %}" class="ki-btn ki-btn-secondary">
+      <i class="bi bi-pencil"></i> Open the existing sale
+    </a>
+    <button type="submit" name="confirm_duplicate" value="1" class="ki-btn ki-btn-primary"
+            data-busy-text="Adding">
+      <i class="bi bi-check-lg"></i> Yes — add it as a second sale
+    </button>
+  </form>
+</div>
+{% endblock %}

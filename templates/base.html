@@ -886,6 +886,38 @@
         });
       })();
 
+      // ── One in-flight POST per request ───────────────────────────────────
+      // The submit guard above only sees real form submits. Screens that post
+      // with fetch() (calendar events, bulk lead import, quick-add client,
+      // category creates) would still double-fire on a double click, so an
+      // identical POST — same URL, same body — that is ALREADY in flight is
+      // handed the first one's response instead of being sent again. Requests
+      // that have finished are not affected: this collapses the double click,
+      // nothing else.
+      (function () {
+        var inflight = new Map();
+        var rawFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+          var method = ((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+          var url = typeof input === 'string' ? input : (input && input.url) || '';
+          var body = init && init.body;
+          var comparable = typeof body === 'string' || body instanceof URLSearchParams;
+          if (method !== 'POST' || !comparable) return rawFetch(input, init);
+          var key = url + '|' + String(body);
+          if (inflight.has(key)) {
+            console.warn('[ki] duplicate POST collapsed while the first was in flight:', url);
+            return inflight.get(key).then(function (r) { return r.clone(); });
+          }
+          // Every caller gets a clone; the original response is never read, so
+          // a clone taken later is still valid.
+          var shared = rawFetch(input, init);
+          inflight.set(key, shared);
+          shared.then(function () { inflight.delete(key); },
+                      function () { inflight.delete(key); });
+          return shared.then(function (r) { return r.clone(); });
+        };
+      })();
+
       // ── Progress bars ────────────────────────────────────────────────────
       // `.ki-progress > [data-progress]` fills to its percentage. This used to
       // live only in the employee dashboard's script, so bars on every other

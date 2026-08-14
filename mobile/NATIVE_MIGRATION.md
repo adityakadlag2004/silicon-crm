@@ -32,7 +32,7 @@ in the WebView.
 | # | Screen | API | Status |
 |---|--------|-----|--------|
 | 1 | Shell + Dashboard (role-aware) | `/api/app/dashboard/` | **v3.0** |
-| 2 | Add Sale (client search, product picker) | `/api/app/sale-meta/`, `/api/app/sales/create/` | **v3.1** |
+| 2 | Add Sale (client search, product picker; v4.32: "Already added?" dialog when the server matches an identical sale — same client/product/amount within 60 days — with Add anyway) | `/api/app/sale-meta/`, `/api/app/sales/create/` (409 + `duplicate`, `confirm_duplicate`) | **v3.1** |
 | 3 | My/All Clients list + Client profile | `/api/app/clients/…` | **v3.1** |
 | 4 | Call Follow-ups (native list + actions; v4.16: pick an exact date/time instead of the fixed +1h snooze, and a ＋ FAB to add a follow-up without a call; v4.17: pick the number from device contacts; v4.27: search + Due now/Today/Tomorrow/Later grouping with bulk "Move all", one-tap Later chips, swipe right = done / left = dismiss, outcome on Done, attempt count + last call per card, editable notes, WhatsApp, tap opens the client, overdue badge on the Calls tab; v4.28: lead follow-ups merged into the same list (`kind`), outcome asked on the ringing alarm screen, popup shows the number's history + "Not interested — stop chasing", outcome report on Call Analytics) | `/api/app/followups/…` (`reschedule`/`note` actions, `kind`, `done_today`, `outcomes`, `push-overdue/`), `/api/calls/followup/` (`custom_at`), `/api/calls/context/`, `/api/calls/close/` | **v3.1** |
 | 5 | Sales list + Approve (admin) | `/api/app/sales/…` | **v3.1** |

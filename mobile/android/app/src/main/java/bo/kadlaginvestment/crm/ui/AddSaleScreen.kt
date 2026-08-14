@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -22,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,6 +82,8 @@ fun AddSaleScreen(
 
     var submitting by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<Pair<Boolean, String>?>(null) } // success? to text
+    // Set when the server matched this against a sale already on the books.
+    var duplicateWarning by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         when (val r = ApiClient.get("/clients/api/app/sale-meta/")) {
@@ -351,43 +355,67 @@ fun AddSaleScreen(
             )
         }
 
-        Button(
-            onClick = {
-                message = null
-                submitting = true
-                scope.launch {
-                    // The sub-product is the product sold when one is required.
-                    val effectiveProductId = selectedSubproduct?.optInt("id")
-                        ?: selectedProduct?.optInt("id") ?: 0
-                    val body = JSONObject()
-                        .put("client_id", selectedClient?.first ?: 0)
-                        .put("product_id", effectiveProductId)
-                        .put("ppt", selectedPpt ?: "")
-                        .put("amount", amount)
-                        .put("cover_amount", coverAmount)
-                        .put("policy_type", policyType)
-                        .put("policy_date", policyDate)
-                        .put("policy_number", policyNumber)
-                        .put("policy_years", policyYears)
-                        .put("emi_months", emiMonths)
-                    if (selectedEmployee != null) body.put("employee_id", selectedEmployee!!.first)
-                    when (val r = ApiClient.post("/clients/api/app/sales/create/", body)) {
-                        is ApiClient.Result.Ok -> {
-                            val approved = r.json.optString("status") == "approved"
-                            message = true to if (approved) "Sale added and approved ✓" else "Sale added — pending approval ✓"
-                            selectedClient = null; clientQuery = ""
-                            selectedProduct = null; selectedSubproduct = null; selectedPpt = null
-                            amount = ""; coverAmount = ""; policyType = ""
-                            policyDate = ""; policyNumber = ""
-                            policyYears = 1; emiMonths = 0
-                            selectedEmployee = null
-                        }
-                        is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-                        is ApiClient.Result.Error -> message = false to r.message
-                    }
-                    submitting = false
+        // Posted twice at most: plainly, then again with confirm_duplicate if
+        // the server matched an identical sale and the user says it's real.
+        suspend fun submit(confirmDuplicate: Boolean) {
+            message = null
+            submitting = true
+            // The sub-product is the product sold when one is required.
+            val effectiveProductId = selectedSubproduct?.optInt("id")
+                ?: selectedProduct?.optInt("id") ?: 0
+            val body = JSONObject()
+                .put("client_id", selectedClient?.first ?: 0)
+                .put("product_id", effectiveProductId)
+                .put("ppt", selectedPpt ?: "")
+                .put("amount", amount)
+                .put("cover_amount", coverAmount)
+                .put("policy_type", policyType)
+                .put("policy_date", policyDate)
+                .put("policy_number", policyNumber)
+                .put("policy_years", policyYears)
+                .put("emi_months", emiMonths)
+            if (confirmDuplicate) body.put("confirm_duplicate", true)
+            if (selectedEmployee != null) body.put("employee_id", selectedEmployee!!.first)
+            when (val r = ApiClient.post("/clients/api/app/sales/create/", body)) {
+                is ApiClient.Result.Ok -> {
+                    val approved = r.json.optString("status") == "approved"
+                    message = true to if (approved) "Sale added and approved ✓" else "Sale added — pending approval ✓"
+                    selectedClient = null; clientQuery = ""
+                    selectedProduct = null; selectedSubproduct = null; selectedPpt = null
+                    amount = ""; coverAmount = ""; policyType = ""
+                    policyDate = ""; policyNumber = ""
+                    policyYears = 1; emiMonths = 0
+                    selectedEmployee = null
                 }
-            },
+                is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                is ApiClient.Result.Error ->
+                    if (r.body?.optBoolean("duplicate") == true) duplicateWarning = r.message
+                    else message = false to r.message
+            }
+            submitting = false
+        }
+
+        duplicateWarning?.let { warning ->
+            AlertDialog(
+                onDismissRequest = { duplicateWarning = null },
+                title = { Text("Already added?", fontSize = rsp(18), fontWeight = FontWeight.Bold) },
+                text = { Text(warning, fontSize = rsp(14)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        duplicateWarning = null
+                        scope.launch { submit(confirmDuplicate = true) }
+                    }) { Text("Add anyway", fontSize = rsp(14)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { duplicateWarning = null }) {
+                        Text("Cancel", fontSize = rsp(14))
+                    }
+                },
+            )
+        }
+
+        Button(
+            onClick = { scope.launch { submit(confirmDuplicate = false) } },
             enabled = !submitting && selectedClient != null && selectedProduct != null &&
                 amount.isNotBlank() &&
                 // A product with sub-products requires one to be chosen.

@@ -424,6 +424,30 @@ def app_sale_create(request):
         policy_date=policy_date, policy_number=policy_number,
         policy_years=policy_years, emi_months=emi_months,
     )
+
+    # Same client + product + amount inside the window is nearly always the
+    # same sale entered twice. The app asks, then re-posts with the flag —
+    # a real second sale still goes through.
+    if not body.get("confirm_duplicate"):
+        dup = sales_service.find_duplicate(sale)
+        if dup is not None:
+            return JsonResponse({
+                "ok": False,
+                "duplicate": True,
+                "existing": {
+                    "id": dup.id,
+                    "date": dup.date.isoformat() if dup.date else "",
+                    "product": dup.product,
+                    "amount": str(dup.amount),
+                    "employee": (dup.employee.user.username if dup.employee_id and dup.employee.user_id else ""),
+                    "status": dup.status,
+                },
+                "error": (
+                    f"{dup.client.name} already has a {dup.product} sale of ₹{dup.amount:,.0f} "
+                    f"on {dup.date}. Add it again only if it is a genuine second sale."
+                ),
+            }, status=409)
+
     sales_service.finalize_new_sale(sale, request.user, auto_approve=is_admin)
     return JsonResponse({"ok": True, "id": sale.id, "status": sale.status})
 

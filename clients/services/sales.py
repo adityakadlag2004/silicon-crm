@@ -9,9 +9,47 @@ Points themselves are computed by ``Sale.compute_points()`` (invoked from
 including the sibling-recompute that keeps slab/campaign payouts consistent
 after any status change.
 """
+from datetime import timedelta
+
 from django.utils import timezone
 
 from ..models import Product, Sale
+
+# How far either side of the entered date we look for the same sale again.
+# Two months: long enough to catch "I forgot I booked this last month",
+# short enough that a genuine yearly repeat on the same plan is never flagged.
+DUPLICATE_WINDOW_DAYS = 60
+
+
+def find_duplicate(sale, *, window_days=DUPLICATE_WINDOW_DAYS):
+    """The same sale already on the books near this date, or None.
+
+    Same client + same product + same amount is how a sale gets entered twice:
+    someone forgets they already booked it. The **date is not part of the
+    match** — the second entry is usually keyed on a different day — so the
+    search is bounded to a window around the new sale's date instead.
+
+    Rejected sales don't count: re-entering one after a correction is exactly
+    what should happen. Callers decide what to do with the hit; nothing here
+    blocks a save, because a genuine second identical sale does happen.
+    """
+    if not (sale.client_id and sale.product and sale.amount is not None):
+        return None
+    on = sale.date or timezone.localdate()
+    qs = (
+        Sale.objects.filter(
+            client_id=sale.client_id,
+            product=sale.product,
+            amount=sale.amount,
+            date__gte=on - timedelta(days=window_days),
+            date__lte=on + timedelta(days=window_days),
+        )
+        .exclude(status=Sale.STATUS_REJECTED)
+        .select_related("client", "employee__user")
+    )
+    if sale.pk:
+        qs = qs.exclude(pk=sale.pk)
+    return qs.order_by("-date", "-created_at").first()
 
 
 def recompute_sibling_sales(sale):
