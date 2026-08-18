@@ -294,6 +294,22 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   again, which is why the web `task_set_due` used to go silent.
 - `clients.test.test_followup_tasks` pins all of this.
 
+## "Don't ring" (Task.silent)
+
+- A task assigned after hours can be marked **silent** (tick on the web assign
+  modal, chip on the app's Assign screen). It is still assigned and still
+  notifies — only the alarm-clock ring is suppressed. Unticked = unchanged.
+- **Three ring paths, all of them check it:** the assignment/comment
+  `task_alarm` push (`services.tasks.create_notification(..., ring=)`, passed
+  `ring=not task.silent` by `notify_task`), the due-time ring (`tasks_ring_due`
+  writes a plain `Notification` instead, still stamping `due_alarm_sent_at`),
+  and the app's **on-device exact alarm** — armed from `due_at_ms` and rings
+  offline with no server in the loop, so the task row withholds that field for
+  a silent task. Miss that third one and the phone still goes off.
+- Shared across a multi-assignee group (`GROUP_SHARED_FIELDS`).
+  `RecurringTaskRule` has no such flag yet — a nightly recurring task still
+  rings each instance.
+
 ## The agenda (dashboard) and the common calendar
 
 - **Every source must be team-scopable, or folding a model into Task silently
