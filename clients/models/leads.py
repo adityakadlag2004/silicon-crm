@@ -5,6 +5,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
+from ..utils.phone_utils import clean_phone
 from .hr import Employee
 
 
@@ -109,6 +110,14 @@ class Lead(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        # Lead phones are clean today, but lead_bulk_import is the same CSV
+        # path that wrote "9423440791.0" into 2,168 client rows. One line here
+        # is cheaper than the next migration.
+        if self.phone:
+            self.phone = clean_phone(self.phone)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.customer_name} ({self.assigned_to})"

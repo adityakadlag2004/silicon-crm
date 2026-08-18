@@ -371,6 +371,33 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - The stepper CSS is `.ki-steps` / `.ki-step` in `ki-record.css`, shared with
   the claim workflow.
 
+## Phone numbers are a matching key
+
+- **Normalised on the model, never in the form.** `Client.save()` and
+  `Lead.save()` run `utils.phone_utils.clean_phone`, the same reasoning as
+  `Sale.policy_number`: the web form, the app API, imports and seeds all write
+  phones, and only the model covers every path.
+- **Why it exists:** a spreadsheet import stored 2,168 of 2,937 client numbers
+  as `"9423440791.0"`. That is worse than an unmatchable string — every matcher
+  strips non-digits and takes the last ten, turning it into `4234407910`, a
+  *different* number. It did not fail to match, it matched the wrong person:
+  174 clients shared a mis-derived key, silently feeding duplicate detection
+  and the KYC grouping. `manage.py fix_phone_floats` is the one-off repair
+  (dry run by default, `--apply` writes, idempotent).
+- **One normaliser: `phone_utils.digits10`.** `views/calls._normalize_digits`
+  and `app_api._fu_digits` are aliases of it. Never hand-roll
+  `re.sub(r"\D", ...)[-10:]` again — that is the exact line that read the
+  float rows wrong.
+- **A follow-up's client link is a snapshot, so names resolve at display time.**
+  `services/calls.caller_names()` batches the lookup (one query per table,
+  never per row) and covers the two gaps the stored FK cannot: the number
+  belongs to a **lead**, and a client added *after* the call was logged. Used
+  by the agenda feed, the post-call popup and `_fu_row` — which is where the
+  app's ringing alarm gets its name (`FollowupAlarmScheduler.syncFromPending`
+  reads `client` and falls back to the raw number), so fixing the payload fixed
+  every phone in the field with no APK release.
+- `clients.test.test_phone_normalisation` pins all of this.
+
 ## Call follow-ups (the app's Calls tab)
 
 - One number = one pending reminder. A new follow-up for a number retires the
@@ -544,7 +571,8 @@ signal there is, since the app is self-hosted with no Play Console.
 
 - (none currently — `monthly_snapshot` + `MonthlyIncentive` deleted 2026-07-16;
   the admin incentive report always computes live from `Sale` now)
-- Manual tools (intentionally not in CRONJOBS): `prod_readiness_check`,
+- Manual tools (intentionally not in CRONJOBS): `fix_phone_floats`,
+  `prod_readiness_check`,
   `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`,
   `seed_incentive_structure`, `clear_unreleased_ladder_bonus`.
   `clear_unreleased_ladder_bonus` is the one-off that took the FY prize back off

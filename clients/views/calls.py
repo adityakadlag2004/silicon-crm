@@ -7,7 +7,6 @@ a per-minute cron (send_followup_reminders) pushes the reminder, and tapping
 the notification dials the number.
 """
 import json
-import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.contrib import messages
@@ -20,6 +19,8 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .. import permissions
 from ..models import CallFollowUp, CallLogEntry, CallTrackingSettings, Client, Employee
+from ..services import calls as calls_service
+from ..utils.phone_utils import digits10
 
 
 def _user_emp(request):
@@ -30,10 +31,10 @@ def _is_admin(request):
     return permissions.is_admin(request.user)
 
 
-def _normalize_digits(phone):
-    """Last 10 digits — good enough to match Indian numbers with/without +91/0."""
-    digits = re.sub(r"\D", "", phone or "")
-    return digits[-10:] if len(digits) >= 10 else digits
+# One implementation, in phone_utils, because it also has to strip the Excel
+# float tail ("9423440791.0"), which this used to read as 4234407910 — a
+# different number, not a failed match.
+_normalize_digits = digits10
 
 
 def _match_client(phone):
@@ -350,6 +351,7 @@ def call_context(request):
         return JsonResponse({"line": "", "pending_id": 0})
 
     client = _match_client(phone)
+    caller = calls_service.caller_names([phone]).get(digits, (None, None, None))
     pending = next(
         (
             f for f in CallFollowUp.objects.filter(
@@ -371,6 +373,9 @@ def call_context(request):
     bits = []
     if client:
         bits.append(client.name)
+    elif caller[0]:
+        # A lead, not a client — still someone whose name the caller wants.
+        bits.append(f"{caller[0]} (lead)")
     if pending and pending.attempts > 1:
         bits.append(f"attempt {pending.attempts}")
     if prior > 1:

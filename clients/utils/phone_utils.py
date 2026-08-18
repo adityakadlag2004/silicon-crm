@@ -25,6 +25,35 @@ import re
 _DIGITS = re.compile(r"\d+")
 
 
+def clean_phone(raw):
+    """The stored form of a phone number: trimmed, Excel float tail removed.
+
+    A spreadsheet import wrote phone numbers as floats, so 2,168 client rows
+    carried "9423440791.0". That is not merely an unmatchable string — every
+    matcher in this app strips non-digits and takes the last ten, which turns
+    it into 4234407910, a *different* number. So it does not fail to match, it
+    matches the wrong person.
+
+    Normalising here, called from the model's save(), is the only thing that
+    covers the web form, the app API, imports and seeds alike — the same
+    reasoning as Sale.policy_number.
+    """
+    s = str(raw or "").strip()
+    # "9423440791.0" — a float that lost its fractional part on the way in.
+    if s.endswith(".0") and s[:-2].isdigit():
+        s = s[:-2]
+    return s
+
+
+def digits10(raw):
+    """Last ten digits — matches Indian numbers with or without +91 / 0.
+
+    Cleans first, so a not-yet-migrated ".0" row can never shift the window.
+    """
+    digits = re.sub(r"\D", "", clean_phone(raw))
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
 def normalize_phone(raw, default_region='IN'):
     """Normalize a raw phone string.
 
@@ -32,7 +61,7 @@ def normalize_phone(raw, default_region='IN'):
     """
     if not raw:
         return None, None
-    s = str(raw).strip()
+    s = clean_phone(raw)
     if _HAS_PN:
         try:
             pn = phonenumbers.parse(s, default_region)

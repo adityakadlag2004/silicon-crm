@@ -33,6 +33,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from ..models import CalendarEvent, CallFollowUp, Client, Lead, Sale, Task
+from ..utils.phone_utils import digits10
+from . import calls as calls_service
 
 ALL_SOURCES = ("event", "birthday", "call_followup", "task", "insurance_renewal")
 
@@ -124,16 +126,32 @@ def _call_followups(employee, start, end, employee_id=None):
         qs = qs.filter(scheduled_at__gte=start)
     if end:
         qs = qs.filter(scheduled_at__lte=end)
-    return [
-        _item(
+    rows = list(qs)
+
+    # A follow-up links its client once, when the call is logged. Anything that
+    # was a lead, or became a client afterwards, stayed a bare phone number on
+    # the agenda forever. Resolve the unlinked ones now, in one batch.
+    unlinked = [f.phone for f in rows if not f.client_id]
+    names = calls_service.caller_names(unlinked) if unlinked else {}
+
+    items = []
+    for f in rows:
+        if f.client_id:
+            who, url = f.client.name, reverse("clients:client_profile", args=[f.client_id])
+        else:
+            name, kind, rec_id = names.get(digits10(f.phone), (None, None, None))
+            who = name or f.phone
+            url = (reverse("clients:client_profile", args=[rec_id]) if kind == "client"
+                   else reverse("clients:lead_detail", args=[rec_id]) if kind == "lead"
+                   else reverse("clients:my_call_followups"))
+        items.append(_item(
             f"call-{f.id}", "call_followup",
-            f"Call {f.client.name if f.client_id else f.phone}", f.scheduled_at,
+            f"Call {who}", f.scheduled_at,
             note=f.note,
-            url=reverse("clients:my_call_followups"),
+            url=url,
             assigned_to=f.employee.user.username if f.employee.user_id else "",
-        )
-        for f in qs
-    ]
+        ))
+    return items
 
 
 # A lead/claim follow-up is a Task, so the badge has to say which — otherwise

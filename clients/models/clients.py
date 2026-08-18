@@ -9,6 +9,7 @@ from django.db import models
 from django.db import transaction
 from django.db.models import Max
 from django.utils import timezone
+from ..utils.phone_utils import clean_phone
 from .hr import Employee
 
 
@@ -80,6 +81,14 @@ class Client(models.Model):
         # Normalize lumsum investment to 0 if missing
         if self.lumsum_investment is None:
             self.lumsum_investment = Decimal("0.00")
+
+        # The phone number is a matching key (call ↔ client, duplicate
+        # detection, KYC grouping, wa.me links), so normalise it here rather
+        # than in each form/API/import that can set it — a spreadsheet import
+        # once stored 2,168 numbers as "9423440791.0", which every matcher
+        # then read as 4234407910. Same reasoning as Sale.policy_number.
+        if self.phone:
+            self.phone = clean_phone(self.phone)
 
         if self.id is None:
             # Auto-generate sequential id. Max()+1 alone races under concurrency,

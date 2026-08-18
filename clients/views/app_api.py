@@ -26,7 +26,9 @@ from ..models import (
     Sale,
 )
 from ..services import incentives as _incentives
+from ..services import calls as calls_service
 from ..services import sales as sales_service
+from ..utils.phone_utils import digits10
 from .helpers import get_manager_access, name_words_q
 from .reports import business_overview_data
 
@@ -529,12 +531,20 @@ def app_client_detail(request, client_id):
 
 # ── Screen 4: Call follow-ups ────────────────────────────────────────────────
 
-def _fu_row(fu, now, last_calls=None):
+def _fu_row(fu, now, last_calls=None, names=None):
+    # The ringing alarm shows `client` and falls back to the raw number
+    # (FollowupAlarmScheduler.syncFromPending). A follow-up links its client
+    # once, at creation, so anything that was a lead — or became a client
+    # afterwards — rang as a bare phone number forever. Resolving here fixes
+    # the whole fleet without an app release.
+    who = fu.client.name if fu.client_id else ""
+    if not who and names:
+        who = (names.get(_fu_digits(fu.phone)) or ("", "", None))[0]
     return {
         "id": fu.id,
         "kind": "call",
         "phone": fu.phone,
-        "client": fu.client.name if fu.client_id else "",
+        "client": who,
         "client_id": fu.client_id,
         "scheduled_at": timezone.localtime(fu.scheduled_at).strftime("%d %b, %I:%M %p"),
         # Epoch millis so the app can schedule an exact on-device alarm.
@@ -551,10 +561,9 @@ def _fu_row(fu, now, last_calls=None):
     }
 
 
-def _fu_digits(phone):
-    """Last 10 digits — the same key views/calls.py matches numbers on."""
-    digits = "".join(ch for ch in (phone or "") if ch.isdigit())
-    return digits[-10:] if len(digits) >= 10 else digits
+# The same key every other matcher uses. It has to strip the Excel float tail
+# too ("9423440791.0"), which naive digit-stripping read as 4234407910.
+_fu_digits = digits10
 
 
 def _last_call_map(emp, followups):
@@ -638,10 +647,13 @@ def app_followups(request):
         completed_at__date=timezone.localdate(),
     ).select_related("client").order_by("-completed_at")[:50]
     last_calls = _last_call_map(emp, pending)
-    rows = [_fu_row(f, now, last_calls) for f in pending]
+    names = calls_service.caller_names([f.phone for f in pending if not f.client_id])
+    rows = [_fu_row(f, now, last_calls, names) for f in pending]
+    done = list(done)
+    done_names = calls_service.caller_names([f.phone for f in done if not f.client_id])
     return JsonResponse({
         "pending": rows,
-        "done_today": [_fu_row(f, now) for f in done],
+        "done_today": [_fu_row(f, now, names=done_names) for f in done],
         "overdue": sum(1 for r in rows if r["overdue"]),
         "stats": _today_call_stats(emp),
         "outcomes": [
@@ -671,9 +683,10 @@ def app_today(request):
         status__in=[Task.STATUS_PENDING, Task.STATUS_IN_PROGRESS, Task.STATUS_OVERDUE],
     ).select_related("category", "assigned_to__user", "client").order_by("due_date", "due_time")[:100] if emp else []
 
-    followups = CallFollowUp.objects.filter(
+    followups = list(CallFollowUp.objects.filter(
         employee=emp, status=CallFollowUp.STATUS_PENDING, scheduled_at__lte=end_of_day,
-    ).select_related("client").order_by("scheduled_at")[:100] if emp else []
+    ).select_related("client").order_by("scheduled_at")[:100]) if emp else []
+    fu_names = calls_service.caller_names([f.phone for f in followups if not f.client_id])
 
     renewals = Renewal.objects.filter(
         employee=emp, renewal_date__lte=today, renewal_date__gte=today - timedelta(days=30),
@@ -682,7 +695,7 @@ def app_today(request):
     return JsonResponse({
         "date": today.isoformat(),
         "tasks": [_task_row(t) for t in tasks],
-        "followups": [_fu_row(f, now) for f in followups],
+        "followups": [_fu_row(f, now, names=fu_names) for f in followups],
         "renewals": [
             {
                 "id": r.pk,
@@ -1996,8 +2009,8 @@ def app_client_create(request):
     except _VErr as e:
         return JsonResponse({"ok": False, "error": e.messages[0]}, status=400)
 
-    digits = "".join(ch for ch in phone if ch.isdigit())
-    if Client.objects.filter(phone__endswith=digits[-10:]).exists() and len(digits) >= 10:
+    digits = digits10(phone)
+    if len(digits) >= 10 and Client.objects.filter(phone__endswith=digits).exists():
         return JsonResponse({"ok": False, "error": "A client with this phone number already exists."}, status=400)
 
     mapped_to = emp
