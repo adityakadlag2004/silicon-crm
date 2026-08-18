@@ -95,6 +95,10 @@
       <label class="form-check-label badge bg-dark text-white" for="src_task">Tasks &amp; Follow-ups</label>
     </div>
     <div class="form-check form-check-inline">
+      <input class="form-check-input src-filter" type="checkbox" id="src_renewal" value="insurance_renewal" checked>
+      <label class="form-check-label badge" style="background:#B45309; color:#fff;" for="src_renewal">Policy Renewals</label>
+    </div>
+    <div class="form-check form-check-inline">
       <input class="form-check-input src-filter" type="checkbox" id="src_bday" value="birthday" checked>
       <label class="form-check-label badge" style="background:#ff9ccf; color:#641e16;" for="src_bday">Birthday</label>
     </div>
@@ -248,14 +252,16 @@ document.addEventListener('DOMContentLoaded', function() {
         meeting: {bg: '#2563eb', fg: '#fff'},
         reminder: {bg: '#fd7e14', fg: '#fff'},
         task: {bg: '#6c757d', fg: '#fff'},
+        insurance_renewal: {bg: '#B45309', fg: '#fff'},
         birthday: {bg: '#ff9ccf', fg: '#641e16'}
       };
       const type = info.event.extendedProps.type;
       const status = info.event.extendedProps.status;
       const cfg = colorMap[type] || colorMap['task'];
-      info.el.style.backgroundColor = cfg.bg;
-      info.el.style.borderColor = cfg.bg;
-      info.el.style.color = cfg.fg;
+      const stageColor = info.event.extendedProps.stage_color;
+      info.el.style.backgroundColor = stageColor || cfg.bg;
+      info.el.style.borderColor = stageColor || cfg.bg;
+      info.el.style.color = stageColor ? '#fff' : cfg.fg;
       // expose event id on the element so right-click handlers can access it
       try { if (info.event && info.event.id) info.el.setAttribute('data-event-id', info.event.id); } catch (e) {}
       if (type === 'birthday' && info.el.querySelector('.fc-event-title')) {

@@ -79,31 +79,31 @@
     </div>
   </div>
 
-  <!-- Stats Grid -->
+  <!-- Stats Grid — lifetime with the firm -->
   <div class="detail-stats">
     <div class="detail-stat">
-      <div class="detail-stat-value" style="color:var(--ki-primary);">{{ total_sales }}</div>
-      <div class="detail-stat-label">Total Sales</div>
+      <div class="detail-stat-value" style="color:var(--ki-primary);">₹{{ perf.business.sales_all|inr }}</div>
+      <div class="detail-stat-label">Sales booked</div>
     </div>
     <div class="detail-stat">
-      <div class="detail-stat-value" style="color:#059669;">{{ approved_sales }}</div>
-      <div class="detail-stat-label">Approved</div>
+      <div class="detail-stat-value" style="color:#0369A1;">₹{{ perf.business.renewal_all|inr }}</div>
+      <div class="detail-stat-label">Renewal premium</div>
     </div>
     <div class="detail-stat">
-      <div class="detail-stat-value" style="color:#d97706;">{{ pending_sales }}</div>
-      <div class="detail-stat-label">Pending</div>
+      <div class="detail-stat-value" style="color:#7c3aed;">₹{{ perf.earnings.total|inr }}</div>
+      <div class="detail-stat-label">Points earned</div>
     </div>
     <div class="detail-stat">
-      <div class="detail-stat-value" style="color:#7c3aed;">{{ total_points|floatformat:0 }}</div>
-      <div class="detail-stat-label">Total Points</div>
+      <div class="detail-stat-value" style="color:#059669;">₹{{ perf.clients.transacted|inr }}</div>
+      <div class="detail-stat-label">Transacted w/ clients</div>
     </div>
     <div class="detail-stat">
-      <div class="detail-stat-value" style="color:var(--ki-primary);">₹{{ total_amount|floatformat:0 }}</div>
-      <div class="detail-stat-label">Total Amount</div>
+      <div class="detail-stat-value" style="color:#B45309;">{{ perf.business.sales_count }}</div>
+      <div class="detail-stat-label">Sales · {{ perf.business.pending_count }} pending</div>
     </div>
     <div class="detail-stat">
-      <div class="detail-stat-value" style="color:#059669;">{{ client_count }}</div>
-      <div class="detail-stat-label">Clients</div>
+      <div class="detail-stat-value" style="color:#059669;">{{ perf.clients.count }}</div>
+      <div class="detail-stat-label">Clients mapped</div>
     </div>
   </div>
   <div class="ki-rec-summary">
@@ -180,22 +180,163 @@
 </div>
 
 
-<!-- This Month -->
-<div class="ki-card mb-3">
-  <h5 class="section-title"><i class="bi bi-calendar-month"></i> This Month</h5>
-  <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
-    <div>
-      <span class="text-muted" style="font-size:.82rem;">Sales</span>
-      <div style="font-size:1.3rem;font-weight:700;color:var(--ki-primary);">{{ month_sales }}</div>
+{% comment %}
+Performance, start to end: this month against target, the financial year's
+business by product, what the points actually add up to, the pipeline they
+are working, and what they do with their days.
+{% endcomment %}
+<div class="ki-rec-layout mb-3">
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;">
+      <i class="bi bi-speedometer2"></i> {{ perf.month_label }} — against target
+    </h3>
+    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:.9rem;">
+      <div>
+        <span class="text-muted" style="font-size:.82rem;">Sales</span>
+        <div style="font-size:1.3rem;font-weight:700;color:#059669;">₹{{ perf.business.sales_month|inr }}</div>
+      </div>
+      <div>
+        <span class="text-muted" style="font-size:.82rem;">Renewals</span>
+        <div style="font-size:1.3rem;font-weight:700;color:#0369A1;">₹{{ perf.business.renewal_month|inr }}</div>
+      </div>
+      <div>
+        <span class="text-muted" style="font-size:.82rem;">Points</span>
+        <div style="font-size:1.3rem;font-weight:700;color:#7c3aed;">₹{{ perf.earnings.month_points|inr }}</div>
+      </div>
+      <div>
+        <span class="text-muted" style="font-size:.82rem;">Target</span>
+        <div style="font-size:1.3rem;font-weight:700;color:#B45309;">
+          {% if perf.target.monthly %}₹{{ perf.target.monthly|inr }}{% else %}Not set{% endif %}
+        </div>
+      </div>
     </div>
-    <div>
-      <span class="text-muted" style="font-size:.82rem;">Amount</span>
-      <div style="font-size:1.3rem;font-weight:700;color:#059669;">₹{{ month_amount|floatformat:0 }}</div>
+    {% if perf.target.pct is not None %}
+      <div class="progress" style="height:10px;" role="progressbar"
+           aria-label="Target attainment" aria-valuenow="{{ perf.target.pct }}" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar" style="width:{% if perf.target.pct > 100 %}100{% else %}{{ perf.target.pct }}{% endif %}%;background:{% if perf.target.pct >= 100 %}#059669{% else %}#d97706{% endif %};"></div>
+      </div>
+      <div class="text-muted" style="font-size:.82rem;margin-top:.35rem;">{{ perf.target.pct }}% of this month's target</div>
+    {% else %}
+      <div class="text-muted" style="font-size:.82rem;">
+        No monthly target set — <a href="{% url 'clients:team_edit' emp.id %}">set one</a> to track attainment.
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-coin"></i> Points earned (₹)</h3>
+    <div class="ki-fields">
+      <div class="ki-field"><span class="k">From sales</span><span class="v">₹{{ perf.earnings.sale_points|inr }}</span></div>
+      <div class="ki-field"><span class="k">Multiyear accruals</span><span class="v">₹{{ perf.earnings.accrued_points|inr }}</span></div>
+      <div class="ki-field"><span class="k">Ladder payouts</span><span class="v">₹{{ perf.earnings.bonus_payouts|inr }}</span></div>
+      <div class="ki-field"><span class="k"><strong>Total</strong></span><span class="v"><strong>₹{{ perf.earnings.total|inr }}</strong></span></div>
     </div>
-    <div>
-      <span class="text-muted" style="font-size:.82rem;">Points</span>
-      <div style="font-size:1.3rem;font-weight:700;color:#d97706;">{{ month_points|floatformat:0 }}</div>
+    {% if perf.earnings.pending_accruals %}
+      <div class="text-muted" style="font-size:.82rem;margin-top:.6rem;">
+        {{ perf.earnings.pending_accruals|length }} multiyear year{{ perf.earnings.pending_accruals|length|pluralize }} still to land.
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- FY business by product + 12-month trend -->
+<div class="ki-rec-layout mb-3">
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;">
+      <i class="bi bi-bar-chart"></i> {{ perf.fy_label }} business — ₹{{ perf.business.total_fy|inr }}
+    </h3>
+    <div class="ki-table-wrap">
+      <table class="ki-table">
+        <thead><tr><th>Product</th><th>Sales</th><th>Amount</th></tr></thead>
+        <tbody>
+          {% for row in perf.mix %}
+          <tr>
+            <td>{{ row.product|default:"—" }}</td>
+            <td>{{ row.count }}</td>
+            <td>₹{{ row.amount|inr }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" class="text-muted">No approved sales this financial year.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
+  </div>
+
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-graph-up"></i> Last 12 months</h3>
+    {% for t in perf.trend %}
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.3rem;">
+      <span class="k" style="min-width:64px;font-size:.78rem;">{{ t.month|date:"M Y" }}</span>
+      <div style="flex:1;background:#f1f5f9;border-radius:4px;height:12px;overflow:hidden;">
+        <div style="width:{{ t.pct }}%;height:100%;background:var(--ki-primary);"></div>
+      </div>
+      <span class="k" style="min-width:78px;text-align:right;font-size:.78rem;">₹{{ t.total|inr }}</span>
+    </div>
+    {% endfor %}
+    <div class="text-muted" style="font-size:.78rem;margin-top:.5rem;">Sales + renewal premium, by month.</div>
+  </div>
+</div>
+
+<!-- Pipeline + activity -->
+<div class="ki-rec-layout mb-3">
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;">
+      <i class="bi bi-funnel"></i> Pipeline — {{ perf.pipeline.win_pct }}% win rate
+    </h3>
+    <div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-bottom:.8rem;">
+      <div><span class="text-muted" style="font-size:.8rem;">Open</span><div style="font-size:1.2rem;font-weight:700;">{{ perf.pipeline.open }}</div></div>
+      <div><span class="text-muted" style="font-size:.8rem;">Won</span><div style="font-size:1.2rem;font-weight:700;color:#15803D;">{{ perf.pipeline.won }}</div></div>
+      <div><span class="text-muted" style="font-size:.8rem;">Lost</span><div style="font-size:1.2rem;font-weight:700;color:#BE123C;">{{ perf.pipeline.lost }}</div></div>
+    </div>
+    {% for st in perf.pipeline.funnel %}
+    <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.3rem;">
+      <span class="k" style="min-width:96px;font-size:.78rem;">{{ st.label }}</span>
+      <div style="flex:1;background:#f1f5f9;border-radius:4px;height:12px;overflow:hidden;">
+        <div style="width:{{ st.reached_pct }}%;height:100%;background:{{ st.color }};"></div>
+      </div>
+      <span class="k" style="min-width:60px;text-align:right;font-size:.78rem;">{{ st.reached }} reached</span>
+    </div>
+    {% endfor %}
+    {% if perf.pipeline.needs_attention %}
+    <div style="margin-top:.8rem;">
+      <div class="k" style="font-size:.8rem;margin-bottom:.3rem;">Needs chasing ({{ perf.pipeline.needs_attention_total }})</div>
+      {% for r in perf.pipeline.needs_attention %}
+        <div style="display:flex;align-items:center;gap:.4rem;padding:.2rem 0;">
+          <span class="ki-tag" style="--c:{{ r.stage_color }};">{{ r.stage_label }}</span>
+          <a href="{% url 'clients:lead_detail' r.lead.id %}" class="name-link">{{ r.lead.customer_name }}</a>
+          <span class="k" style="margin-left:auto;font-size:.78rem;">{% if r.no_followup %}nothing scheduled{% else %}{{ r.days_in_stage }}d stalled{% endif %}</span>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="ki-card">
+    <h3 class="ki-section-title" style="margin-top:0;"><i class="bi bi-activity"></i> Activity — {{ perf.month_label }}</h3>
+    <div class="ki-fields">
+      <div class="ki-field"><span class="k">Open tasks</span><span class="v">{{ perf.activity.tasks_open }}{% if perf.activity.tasks_overdue %} <span class="ki-tag" style="--c:#BE123C;">{{ perf.activity.tasks_overdue }} overdue</span>{% endif %}</span></div>
+      <div class="ki-field"><span class="k">Tasks completed</span><span class="v">{{ perf.activity.tasks_done_month }}</span></div>
+      <div class="ki-field"><span class="k">Call follow-ups closed</span><span class="v">{{ perf.activity.calls_month_total }}</span></div>
+    </div>
+    {% if perf.activity.calls_month_total %}
+    <div style="margin-top:.7rem;">
+      {% for row in perf.activity.calls_month %}
+        {% if row.count %}
+        <div class="ki-field"><span class="k">{{ row.label }}</span><span class="v">{{ row.count }}</span></div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if perf.clients.top %}
+    <h3 class="ki-section-title" style="margin-top:1rem;"><i class="bi bi-people"></i> Top clients</h3>
+    {% for c in perf.clients.top %}
+    <div style="display:flex;align-items:center;gap:.5rem;padding:.25rem 0;">
+      <a href="{% url 'clients:client_profile' c.id %}" class="name-link">{{ c.name }}</a>
+      <span class="k" style="margin-left:auto;">₹{{ c.transacted|inr }}</span>
+    </div>
+    {% endfor %}
+    {% endif %}
   </div>
 </div>
 
@@ -241,6 +382,31 @@
   </div>
   {% else %}
   <p class="text-muted mb-0">No sales recorded yet.</p>
+  {% endif %}
+</div>
+
+<!-- Recent Renewals -->
+<div class="ki-card mt-3">
+  <h5 class="section-title"><i class="bi bi-arrow-repeat"></i> Recent Renewals</h5>
+  {% if recent_renewals %}
+  <div class="ki-table-wrap">
+    <table class="ki-table">
+      <thead><tr><th>Collected</th><th>Client</th><th>Product</th><th>Frequency</th><th>Premium</th></tr></thead>
+      <tbody>
+        {% for r in recent_renewals %}
+        <tr>
+          <td>{{ r.premium_collected_on|date:"d M Y" }}</td>
+          <td>{{ r.client.name }}</td>
+          <td>{{ r.product_name|default:r.get_product_type_display }}</td>
+          <td>{{ r.get_frequency_display }}</td>
+          <td>₹{{ r.premium_amount|inr }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted mb-0">No renewals recorded yet.</p>
   {% endif %}
 </div>
 

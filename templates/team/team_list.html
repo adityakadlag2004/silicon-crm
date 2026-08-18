@@ -20,6 +20,7 @@
 </style>
 {% endblock %}
 {% block content %}
+{% load custom_filters %}
 
 <!-- Summary Stats -->
 <div class="ki-grid-4 mb-4">
@@ -61,6 +62,31 @@
   </div>
 </div>
 
+{% comment %}
+Active and inactive people are separate lists. The page opens on Active; an
+ex-employee only shows when you ask for one.
+{% endcomment %}
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item">
+    <a class="nav-link {% if status_filter == 'active' %}active{% endif %}"
+       href="?status=active{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if role_filter %}&amp;role={{ role_filter }}{% endif %}">
+      Active <span class="badge bg-success">{{ active_count }}</span>
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if status_filter == 'inactive' %}active{% endif %}"
+       href="?status=inactive{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if role_filter %}&amp;role={{ role_filter }}{% endif %}">
+      Inactive <span class="badge bg-secondary">{{ inactive_count }}</span>
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if status_filter == 'all' %}active{% endif %}"
+       href="?status=all{% if q %}&amp;q={{ q|urlencode }}{% endif %}{% if role_filter %}&amp;role={{ role_filter }}{% endif %}">
+      All <span class="badge bg-light text-dark">{{ total }}</span>
+    </a>
+  </li>
+</ul>
+
 <!-- Toolbar -->
 <div class="ki-card mb-3">
   <div class="d-flex flex-wrap align-items-center gap-2 justify-content-between">
@@ -75,14 +101,10 @@
         <option value="manager" {% if role_filter == "manager" %}selected{% endif %}>Manager</option>
         <option value="employee" {% if role_filter == "employee" %}selected{% endif %}>Employee</option>
       </select>
-      <select name="status" class="form-select" style="max-width:140px;">
-        <option value="">All Status</option>
-        <option value="active" {% if status_filter == "active" %}selected{% endif %}>Active</option>
-        <option value="inactive" {% if status_filter == "inactive" %}selected{% endif %}>Inactive</option>
-      </select>
+      <input type="hidden" name="status" value="{{ status_filter }}">
       <button class="ki-btn ki-btn-primary" type="submit"><i class="bi bi-funnel"></i> Filter</button>
-      {% if q or role_filter or status_filter %}
-        <a href="{% url 'clients:team_list' %}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Clear</a>
+      {% if q or role_filter %}
+        <a href="?status={{ status_filter }}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Clear</a>
       {% endif %}
     </form>
     <button class="ki-btn ki-btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
@@ -122,20 +144,31 @@
     </div>
 
     <!-- Quick Stats -->
+    {% with st=stats|get_item:emp.id %}
     <div class="d-flex gap-3 mt-3 pt-3" style="border-top:1px solid var(--ki-border);">
       <div class="text-center" style="flex:1;">
         <div style="font-size:1.1rem;font-weight:700;color:var(--ki-primary);">{{ emp.client_count|default:"0" }}</div>
         <div style="font-size:.72rem;color:#94a3b8;">Clients</div>
       </div>
       <div class="text-center" style="flex:1;">
-        <div style="font-size:1.1rem;font-weight:700;color:#059669;">{{ emp.total_sales|default:"0" }}</div>
-        <div style="font-size:.72rem;color:#94a3b8;">Sales</div>
+        <div style="font-size:1.1rem;font-weight:700;color:#059669;">₹{{ st.month_sales|default_if_none:0|inr }}</div>
+        <div style="font-size:.72rem;color:#94a3b8;">This month</div>
       </div>
       <div class="text-center" style="flex:1;">
-        <div style="font-size:1.1rem;font-weight:700;color:#d97706;">{{ emp.total_points|floatformat:0|default:"0" }}</div>
-        <div style="font-size:.72rem;color:#94a3b8;">Points</div>
+        {% if st.pct is not None %}
+          <div style="font-size:1.1rem;font-weight:700;color:{% if st.pct >= 100 %}#059669{% else %}#d97706{% endif %};">{{ st.pct }}%</div>
+          <div style="font-size:.72rem;color:#94a3b8;">of target</div>
+        {% else %}
+          <div style="font-size:1.1rem;font-weight:700;color:#94a3b8;">—</div>
+          <div style="font-size:.72rem;color:#94a3b8;">No target</div>
+        {% endif %}
+      </div>
+      <div class="text-center" style="flex:1;">
+        <div style="font-size:1.1rem;font-weight:700;color:{% if st.overdue_tasks %}#dc2626{% else %}#64748b{% endif %};">{{ st.open_tasks|default:"0" }}</div>
+        <div style="font-size:.72rem;color:#94a3b8;">Open tasks{% if st.overdue_tasks %} · {{ st.overdue_tasks }} late{% endif %}</div>
       </div>
     </div>
+    {% endwith %}
 
     <!-- Actions -->
     <div class="d-flex gap-1 mt-3">

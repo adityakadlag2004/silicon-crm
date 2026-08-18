@@ -11,7 +11,7 @@ Production: **bo.kadlaginvestment.com** (DigitalOcean droplet `ubuntu@139.59.28.
 | `clients/models/` | Models split by domain (`hr.py`, `sales.py`, `leads.py`, `insurance.py`, …), all re-exported in `__init__.py` — always import via `clients.models` |
 | `clients/views/` | One module per domain (`tasks.py`, `sales.py`, `messaging.py`, `app_*.py` = mobile JSON APIs) |
 | `clients/urls/` | URL patterns split by domain, assembled in `__init__.py` under the single `clients` namespace |
-| `clients/services/` | Business logic shared by web + app views (`sales.py`, `targets.py`, `tasks.py`, `calendar_feed.py`, `push.py`, `rta_feed.py`, `google_drive.py`) |
+| `clients/services/` | Business logic shared by web + app views (`sales.py`, `targets.py`, `tasks.py`, `calendar_feed.py`, `employee_performance.py`, `push.py`, `rta_feed.py`, `google_drive.py`) |
 | `clients/management/commands/` | Cron jobs — every command here must be in `CRONJOBS` (config/settings.py) or documented as a manual tool |
 | `clients/test/` | All tests (`manage.py test clients`) |
 | `config/settings.py` | Settings incl. `CRONJOBS`; env read from `.env` (template: `.env.example`) |
@@ -107,6 +107,18 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - After adding an insurance sale/renewal, the success message links to the
   client's Drive folder to upload the policy (created on first click) — a
   link, never a forced redirect, so daily bulk entry isn't interrupted.
+
+## Renewals list
+
+- The page **opens on this month's collection** — that figure is reported every
+  day and nobody should type two dates for it. Period chips (This Month / Last
+  Month / This FY / All) set the window; typing a date is what "Custom" means,
+  and a *search* no longer clears the month the way it used to.
+- **Each date bound works alone.** Both `renewal_date` and
+  `premium_collected_on` filter with separate `__gte` / `__lte` clauses; the old
+  `if start and end` pair meant a lone "Payment Start" filtered nothing at all
+  (the same bug sales had, fixed in 7ce020a).
+- `clients.test.test_renewals_period` pins the chips and the bounds.
 
 ## Multiyear health policies + EMI
 
@@ -282,6 +294,32 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   again, which is why the web `task_set_due` used to go silent.
 - `clients.test.test_followup_tasks` pins all of this.
 
+## The agenda (dashboard) and the common calendar
+
+- **Every source must be team-scopable, or folding a model into Task silently
+  hides it from admins.** `feed_items(team_followups=True)` widens the sources
+  an admin dashboard shows to the whole team, optionally narrowed with
+  `employee_id`. `_tasks()` honours it exactly like `_call_followups()` does —
+  it did not when lead follow-ups became Tasks, so from 2026-08-14 an admin saw
+  all employees' calls and only their own tasks, i.e. no pipeline at all.
+- **A follow-up is a Task, so the badge has to say which kind.** They share the
+  `task` source (one filter chip, one reminder pipeline) but carry a
+  `source_label` of Lead / Claim / Task from `Task.source_kind`, and a lead
+  follow-up carries the lead's SPANCO `stage` as well. `Lead.STAGE_HOT`
+  (Approach / Negotiation / Conclusion) is the live-pipeline band: those items
+  wear the stage colour, get an accent bar, and sort first *within their day*.
+- **Adding a source means three edits, not one**: the feed, the agenda's
+  `.agenda-source-<name>` badge rule, and the calendar page's `.src-filter`
+  checkbox + colour map. `insurance_renewal` had only the first, so it was
+  unstyled on the agenda and — because the page always sends a `sources` list
+  built from its checkboxes — completely unreachable on the calendar.
+- **The agenda cannot show a lead nobody has dated**, which is exactly the lead
+  that is dying. `services/leads.needs_attention()` is the answer and is
+  deliberately *not* part of the feed: live-pipeline leads with no open
+  follow-up task, or stalled 14+ days, rendered by
+  `dashboards/_pipeline_attention.html` on both dashboards.
+- `clients.test.test_agenda_pipeline` pins all of this.
+
 ## Lead pipeline (SPANCO)
 
 - Leads move through six stages — **Suspect → Prospect → Approach →
@@ -399,6 +437,19 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   anything that slipped past unmarked. Admins are never asked to celebrate
   themselves.
 - Recognition is the point: `people.celebrate()` notifies the employee.
+- **Active and inactive people are two lists, not one list with a badge.** The
+  team list opens on Active; Inactive and All are tabs, and a search stays
+  inside the tab it was typed in.
+- `services/employee_performance.py` is the whole record with the firm —
+  business (sales + renewal premium, FY and lifetime), earnings, target vs
+  actual, the SPANCO funnel and win rate, task/call activity, client value and a
+  12-month trend. `snapshot(emp)` feeds the detail page, `list_stats(employees)`
+  the list cards in four queries (never a per-row lookup).
+- **"Points earned" is never `Sale.points` alone.** It is sales points +
+  `incentives.accrued_points` (multiyear years that land without a sale) +
+  `BonusPayout` (the FY ladder prize, handed over as cash). Showing only the
+  first understates what somebody earned. `clients.test.test_team_performance`
+  pins it.
 
 ## Android UI rules
 

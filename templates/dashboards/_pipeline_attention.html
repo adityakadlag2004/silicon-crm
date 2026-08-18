@@ -1,0 +1,47 @@
+{% comment %}
+Live-pipeline leads nobody is chasing. Deliberately NOT part of the agenda:
+a calendar only shows what somebody dated, and these are the leads with
+nothing dated at all — no calendar change can surface them.
+Needs: pipeline_rows, pipeline_total (services.leads.needs_attention).
+{% endcomment %}
+{% if pipeline_rows %}
+<div class="ki-card mb-3">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.75rem;">
+    <h3 class="ki-section-title" style="margin:0;">
+      <i class="bi bi-fire" style="color:#BE123C;"></i> Pipeline needs you
+      <span class="text-muted" style="font-size:.78rem;font-weight:400;">Approach · Negotiation · Conclusion with nothing scheduled</span>
+    </h3>
+    <a href="{% url 'clients:lead_pipeline_report' %}" class="ki-btn ki-btn-sm ki-btn-secondary">
+      Pipeline report <i class="bi bi-arrow-right"></i>
+    </a>
+  </div>
+  <div class="ki-table-wrap">
+    <table class="ki-table">
+      <thead>
+        <tr><th>Lead</th><th>Stage</th><th>Owner</th><th>Sitting</th><th>Why</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in pipeline_rows %}
+        <tr>
+          <td><a href="{% url 'clients:lead_detail' r.lead.id %}">{{ r.lead.customer_name }}</a></td>
+          <td><span class="ki-tag" style="--c:{{ r.stage_color }};">{{ r.stage_label }}</span></td>
+          <td>{{ r.owner|default:"—" }}</td>
+          <td>{% if r.days_in_stage is not None %}{{ r.days_in_stage }}d{% else %}—{% endif %}</td>
+          <td>
+            {% if r.no_followup %}<span class="ki-tag" style="--c:#BE123C;">No follow-up</span>{% endif %}
+            {% if r.stalled %}<span class="ki-tag" style="--c:#B45309;">Stalled</span>{% endif %}
+          </td>
+          <td><a href="{% url 'clients:lead_detail' r.lead.id %}" class="ki-btn ki-btn-sm ki-btn-primary">Schedule</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if pipeline_total > pipeline_rows|length %}
+    <div class="text-muted" style="font-size:.82rem;margin-top:.6rem;">
+      Showing {{ pipeline_rows|length }} of {{ pipeline_total }} —
+      <a href="{% url 'clients:lead_management' %}">see all leads</a>.
+    </div>
+  {% endif %}
+</div>
+{% endif %}

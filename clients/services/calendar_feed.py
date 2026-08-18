@@ -32,7 +32,7 @@ from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import CalendarEvent, CallFollowUp, Client, Sale, Task
+from ..models import CalendarEvent, CallFollowUp, Client, Lead, Sale, Task
 
 ALL_SOURCES = ("event", "birthday", "call_followup", "task", "insurance_renewal")
 
@@ -46,11 +46,16 @@ SOURCE_LABELS = {
 
 
 def _item(key, source, title, start, *, end=None, note="", status="pending",
-          url="", done_url=None, draggable=False, assigned_to="", event_type=None):
+          url="", done_url=None, draggable=False, assigned_to="", event_type=None,
+          source_label=None, stage=None):
     return {
         "key": key,
         "source": source,
-        "source_label": SOURCE_LABELS[source],
+        # A lead/claim follow-up IS a task, so it shares the "task" source (and
+        # its filter chip) but says which kind of commitment it is on the badge.
+        "source_label": source_label or SOURCE_LABELS[source],
+        # SPANCO stage, for lead follow-ups only — the agenda tints and ranks by it
+        "stage": stage,
         "title": title,
         "start": start,
         "end": end,
@@ -131,17 +136,42 @@ def _call_followups(employee, start, end, employee_id=None):
     ]
 
 
-def _tasks(employee, start, end):
+# A lead/claim follow-up is a Task, so the badge has to say which — otherwise
+# every commitment on the agenda reads "Task" and the pipeline is invisible.
+TASK_KIND_LABELS = {"lead": "Lead", "claim": "Claim"}
+
+
+def _tasks(employee, start, end, employee_id=None):
+    """Open dated tasks — which is also every lead and claim follow-up.
+
+    Scoped exactly like `_call_followups`: an employee sees their own, an admin
+    dashboard (employee=None) sees the whole team's, optionally narrowed to one
+    person. Before follow-ups became tasks, lead follow-ups honoured team scope
+    on their own; hard-scoping this to one employee is what made the admin
+    agenda stop showing the pipeline.
+    """
     qs = Task.objects.filter(
         is_deleted=False,
         status__in=Task.OPEN_STATUSES,
         due_date__isnull=False,
-        assigned_to=employee,
     ).select_related("assigned_to__user")
+    if employee is not None:
+        qs = qs.filter(assigned_to=employee)
+    elif employee_id:
+        qs = qs.filter(assigned_to_id=employee_id)
     if start:
         qs = qs.filter(due_date__gte=start.date())
     if end:
         qs = qs.filter(due_date__lte=end.date())
+    qs = list(qs)
+
+    # One extra query for every lead behind a follow-up, so the agenda can tint
+    # and rank by SPANCO stage — a Negotiation chase is not a stationery order.
+    lead_ids = {t.source_id for t in qs if t.source_kind == "lead" and t.source_id}
+    lead_stages = dict(
+        Lead.objects.filter(id__in=lead_ids, is_discarded=False).values_list("id", "stage")
+    ) if lead_ids else {}
+
     items = []
     for t in qs:
         # date-only tasks are "due by end of day"
@@ -154,6 +184,8 @@ def _tasks(employee, start, end):
             draggable=True,
             assigned_to=(t.assigned_to.user.username
                          if t.assigned_to and t.assigned_to.user_id else ""),
+            source_label=TASK_KIND_LABELS.get(t.source_kind),
+            stage=lead_stages.get(t.source_id) if t.source_kind == "lead" else None,
         ))
     return items
 
@@ -212,10 +244,11 @@ def feed_items(employee, *, start=None, end=None, sources=None,
                team_followups=False, employee_id=None):
     """Collect unified calendar items.
 
-    employee        scope for personal sources (events, birthdays, tasks) and —
-                    unless team_followups — for lead/call follow-ups too.
-    team_followups  admin dashboards: include *all* employees' lead/call
-                    follow-ups (optionally narrowed to employee_id).
+    employee        scope for personal sources (events, birthdays, renewals)
+                    and — unless team_followups — for tasks and calls too.
+    team_followups  admin dashboards: include *all* employees' tasks (every
+                    lead/claim follow-up is one) and call follow-ups,
+                    optionally narrowed to employee_id.
     """
     sources = [s for s in (sources or ALL_SOURCES) if s in ALL_SOURCES]
     # birthdays must have a bounded range to expand years into
@@ -232,7 +265,7 @@ def feed_items(employee, *, start=None, end=None, sources=None,
     if "call_followup" in sources:
         items += _call_followups(fu_employee, start, end, employee_id=employee_id)
     if "task" in sources:
-        items += _tasks(employee, start, end)
+        items += _tasks(fu_employee, start, end, employee_id=employee_id)
     if "insurance_renewal" in sources:
         items += _insurance_renewals(employee, b_start, b_end)
 
@@ -244,7 +277,13 @@ def feed_items(employee, *, start=None, end=None, sources=None,
             and it["status"] in ("pending", "missed")
             and it["start"] < now_ts
         )
-    items.sort(key=lambda it: it["start"])
+    # Within a day, a live-pipeline follow-up sorts above the rest: the whole
+    # point of the stage is to say which chase moves money.
+    items.sort(key=lambda it: (
+        timezone.localdate(it["start"]),
+        0 if it["stage"] in Lead.STAGE_HOT else 1,
+        it["start"],
+    ))
     return items
 
 
@@ -272,6 +311,7 @@ def to_fullcalendar(items):
                 "status": it["status"],
                 "source": it["source"],
                 "source_label": it["source_label"],
+                "stage_color": Lead.STAGE_COLORS.get(it["stage"], ""),
                 "url": "" if is_manual else it["url"],
                 "assigned_to": it["assigned_to"],
             },
@@ -288,6 +328,10 @@ def to_agenda_json(items):
             "key": it["key"],
             "source": it["source"],
             "source_label": it["source_label"],
+            "stage": it["stage"] or "",
+            "stage_label": dict(Lead.STAGE_CHOICES).get(it["stage"], ""),
+            "stage_color": Lead.STAGE_COLORS.get(it["stage"], ""),
+            "hot": it["stage"] in Lead.STAGE_HOT,
             "title": it["title"],
             "date": local.strftime("%Y-%m-%d"),
             "time": local.strftime("%H:%M"),

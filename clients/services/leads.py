@@ -4,11 +4,13 @@ One implementation, called by the web views, the app API and the reports —
 a stage may not be set by assigning `lead.stage` anywhere else, or the move
 goes unrecorded and the funnel starts lying.
 """
+from datetime import timedelta
+
 from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from ..models import Client, Lead, LeadStageEvent
+from ..models import Client, Lead, LeadStageEvent, Task
 from . import followups
 
 VALID_STAGES = dict(Lead.STAGE_CHOICES)
@@ -150,3 +152,51 @@ def convert_to_client(lead, user=None):
     followups.cancel_open(followups.LEAD, lead.pk, actor=user,
                          reason=f"Lead converted to client #{client.id}.")
     return client
+
+
+def needs_attention(qs, *, stale_days=14, limit=12):
+    """Live-pipeline leads nobody is currently chasing.
+
+    A calendar can only show what somebody dated, so the deals quietly dying
+    are precisely the ones with nothing on it. Two ways that happens, and both
+    look identical on the agenda — as nothing at all:
+
+      no_followup   at Approach/Negotiation/Conclusion with no open follow-up
+                    task against the lead
+      stalled       hasn't changed stage in `stale_days`
+
+    Returns rows ready to render: the lead, its stage colour, who owns it, and
+    how long it has sat there.
+    """
+    live = qs.filter(is_discarded=False, stage__in=Lead.STAGE_HOT).select_related(
+        "assigned_to__user")
+
+    chased = set(
+        Task.objects.filter(
+            is_deleted=False, source_kind="lead", status__in=Task.OPEN_STATUSES,
+        ).values_list("source_id", flat=True)
+    )
+    cutoff = timezone.now() - timedelta(days=stale_days)
+
+    rows = []
+    for lead in live.order_by("stage_changed_at"):
+        unchased = lead.id not in chased
+        stalled = bool(lead.stage_changed_at and lead.stage_changed_at < cutoff)
+        if not (unchased or stalled):
+            continue
+        days = ((timezone.now() - lead.stage_changed_at).days
+                if lead.stage_changed_at else None)
+        rows.append({
+            "lead": lead,
+            "stage_label": VALID_STAGES.get(lead.stage, lead.stage),
+            "stage_color": Lead.STAGE_COLORS.get(lead.stage, "#6B7280"),
+            "owner": (lead.assigned_to.user.username
+                      if lead.assigned_to and lead.assigned_to.user_id else ""),
+            "days_in_stage": days,
+            "no_followup": unchased,
+            "stalled": stalled,
+        })
+    # Nothing scheduled is worse than slow, so those float to the top; within
+    # each group the lead that has sat longest goes first.
+    rows.sort(key=lambda r: (not r["no_followup"], -(r["days_in_stage"] or 0)))
+    return rows[:limit], len(rows)

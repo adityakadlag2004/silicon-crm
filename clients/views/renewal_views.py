@@ -151,6 +151,31 @@ def add_renewal(request, client_id=None):
 	return render(request, "renewals/add_renewal.html", context)
 
 
+# The renewals desk works in months; a financial year is the only other window
+# anybody asks for. Anything else is a custom date range.
+PERIOD_LABELS = {
+	"month": "This Month",
+	"last_month": "Last Month",
+	"fy": "This FY",
+	"all": "All Time",
+}
+
+
+def _period_range(period, today):
+	"""(payment_start, payment_end) as ISO strings for a named period."""
+	if period == "last_month":
+		last = today.replace(day=1) - timedelta(days=1)
+		return (last.replace(day=1).isoformat(),
+		        last.replace(day=calendar.monthrange(last.year, last.month)[1]).isoformat())
+	if period == "fy":
+		fy_start_year = today.year if today.month >= 4 else today.year - 1
+		return (date(fy_start_year, 4, 1).isoformat(), date(fy_start_year + 1, 3, 31).isoformat())
+	if period == "all":
+		return "", ""
+	return (today.replace(day=1).isoformat(),
+	        today.replace(day=calendar.monthrange(today.year, today.month)[1]).isoformat())
+
+
 @login_required
 def all_renewals(request):
 	renewals_qs = Renewal.objects.select_related("client", "employee__user", "created_by").all().order_by(
@@ -177,14 +202,17 @@ def all_renewals(request):
 	payment_start = (request.GET.get("payment_start") or "").strip()
 	payment_end = (request.GET.get("payment_end") or "").strip()
 
-	# Default to the current month's renewal business when no filters are applied.
+	# The page opens on this month's renewal business — that is the figure the
+	# desk reports every day, and nobody should have to type two dates for it.
+	# A search no longer clears it: only typing an explicit date does, and that
+	# is what "Custom" means.
 	today = date.today()
-	any_filter = bool(
-		q or product_ref or frequency or employee or start_date or end_date or payment_start or payment_end
-	)
-	if not any_filter:
-		payment_start = today.replace(day=1).isoformat()
-		payment_end = today.replace(day=calendar.monthrange(today.year, today.month)[1]).isoformat()
+	period = (request.GET.get("period") or "").strip()
+	if start_date or end_date or payment_start or payment_end:
+		period = "custom"
+	else:
+		period = period if period in PERIOD_LABELS else "month"
+		payment_start, payment_end = _period_range(period, today)
 
 	if q:
 		renewals_qs = renewals_qs.filter(
@@ -209,11 +237,15 @@ def all_renewals(request):
 			| Q(employee__user__last_name__icontains=employee)
 		)
 	renewal_from, renewal_to = parse_date_param(start_date), parse_date_param(end_date)
-	if renewal_from and renewal_to:
-		renewals_qs = renewals_qs.filter(renewal_date__range=[renewal_from, renewal_to])
+	if renewal_from:
+		renewals_qs = renewals_qs.filter(renewal_date__gte=renewal_from)
+	if renewal_to:
+		renewals_qs = renewals_qs.filter(renewal_date__lte=renewal_to)
 	payment_from, payment_to = parse_date_param(payment_start), parse_date_param(payment_end)
-	if payment_from and payment_to:
-		renewals_qs = renewals_qs.filter(premium_collected_on__range=[payment_from, payment_to])
+	if payment_from:
+		renewals_qs = renewals_qs.filter(premium_collected_on__gte=payment_from)
+	if payment_to:
+		renewals_qs = renewals_qs.filter(premium_collected_on__lte=payment_to)
 
 	today_qs = scoped_qs.filter(premium_collected_on=today)
 	today_submission_total = today_qs.aggregate(total=Sum("premium_amount"))["total"] or 0
@@ -235,6 +267,13 @@ def all_renewals(request):
 	qdict = request.GET.copy()
 	qdict.pop("page", None)
 	qstring = qdict.urlencode()
+
+	# Query string the period chips carry: everything except the page and the
+	# date window they are about to set.
+	pdict = request.GET.copy()
+	for key in ("page", "period", "start_date", "end_date", "payment_start", "payment_end"):
+		pdict.pop(key, None)
+	period_qstring = pdict.urlencode()
 
 	today = timezone.localdate()
 
@@ -292,6 +331,9 @@ def all_renewals(request):
 		"filtered_total_premium": filtered_total_premium,
 		"filter_payment_start": payment_start,
 		"filter_payment_end": payment_end,
+		"period": period,
+		"period_options": list(PERIOD_LABELS.items()),
+		"period_qstring": period_qstring,
 		"product_options": Product.objects.filter(parent__isnull=True, domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
 	}
 	return render(request, "renewals/all_renewals.html", context)

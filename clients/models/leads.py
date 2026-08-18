@@ -49,6 +49,11 @@ class Lead(models.Model):
         STAGE_ORDER: "Paperwork in, business booked. Convert to a client and keep the relationship.",
     }
 
+    # The middle of the pipeline: qualified, in play, and the stages where
+    # attention actually changes the outcome. Suspect/Prospect are not worth
+    # chasing yet and Order is already booked — these three are the day's work.
+    STAGE_HOT = [STAGE_APPROACH, STAGE_NEGOTIATION, STAGE_CONCLUSION]
+
     STAGE_COLORS = {
         STAGE_SUSPECT: "#6B7280",
         STAGE_PROSPECT: "#B45309",

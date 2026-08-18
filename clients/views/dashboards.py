@@ -21,6 +21,7 @@ from .. import permissions
 from ..templatetags.custom_filters import inr
 from ..models import (
     Client,
+    Lead,
     Sale,
     Product,
     ProductMarginSlab,
@@ -43,7 +44,8 @@ from ..forms import (
     FirmSettingsForm,
 )
 from ..services import incentives as incentives_service
-from .helpers import get_manager_access, category_name_map
+from ..services import leads as lead_service
+from .helpers import get_manager_access, category_name_map, _lead_queryset_for_request
 
 
 def _kyc_missing_count(user):
@@ -303,6 +305,7 @@ def admin_dashboard(request):
     # The agenda widget (one common calendar) loads its items client-side
     # from dashboard_agenda_json; only the employee filter needs context.
     all_employees = Employee.objects.filter(active=True).select_related("user").order_by("user__username")
+    pipeline_rows, pipeline_total = lead_service.needs_attention(_lead_queryset_for_request(request))
 
     all_sales_qs = Sale.objects.all()
     monthly_sales_qs = Sale.objects.filter(status=Sale.STATUS_APPROVED, created_at__year=year, created_at__month=month)
@@ -626,6 +629,10 @@ def admin_dashboard(request):
         "today_date": today_date,
         "is_admin_dashboard": True,
         "all_employees": all_employees,
+        # Live-pipeline leads with nothing scheduled — the deals the agenda
+        # cannot show, because nobody dated them.
+        "pipeline_rows": pipeline_rows,
+        "pipeline_total": pipeline_total,
         "month_start": month_start,
         "month_end": month_end,
         "kyc_missing_count": _kyc_missing_count(request.user),
@@ -761,6 +768,10 @@ def employee_dashboard(request):
     now_ts = timezone.now()
     today_date = now_ts.date()
     # Agenda widget items come from dashboard_agenda_json (one common calendar).
+    # The pipeline panel is separate on purpose: it lists the leads with
+    # *nothing* dated, which is exactly what a calendar cannot show.
+    pipeline_rows, pipeline_total = lead_service.needs_attention(
+        Lead.objects.select_related("assigned_to__user").filter(assigned_to=emp))
 
     cat_map = _category_name_map()
     products = _rollup_product_names(
@@ -1118,6 +1129,8 @@ def employee_dashboard(request):
     }
 
     context = {
+        "pipeline_rows": pipeline_rows,
+        "pipeline_total": pipeline_total,
         "total_sales": total_sales,
         "emp_overview": emp_overview,
         "total_points": total_points,

@@ -125,8 +125,11 @@ def dashboard_agenda_json(request):
         start = None
         end = timezone.make_aware(datetime.combine(week_start + timedelta(days=7), time.min))
 
+    sources_param = request.GET.get("sources")
+    sources = [s for s in sources_param.split(",") if s] if sources_param else None
+
     items = calendar_feed.feed_items(
-        emp, start=start, end=end,
+        emp, start=start, end=end, sources=sources,
         team_followups=is_admin, employee_id=employee_id,
     )
     if filter_mode == "overdue":

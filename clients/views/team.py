@@ -20,10 +20,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import permissions
-from ..models import AuditLog, Client, Sale, Employee, EmployeeMilestone, ManagerAccessConfig
+from ..models import (AuditLog, Client, Sale, Employee, EmployeeMilestone,
+                      ManagerAccessConfig, Renewal)
+from ..templatetags.custom_filters import inr
 from ..forms import (EmployeeAdminForm, EmployeeCreateForm, EmployeeDeactivateForm,
                      MyLoginIdForm, MyPasswordForm, MyProfileForm)
-from ..services import people
+from ..services import employee_performance, people
 from .helpers import parse_date_param
 
 
@@ -53,7 +55,9 @@ def team_list(request):
 
     q = (request.GET.get("q") or "").strip()
     role_filter = request.GET.get("role", "")
-    status_filter = request.GET.get("status", "")
+    # Active and inactive people are two different lists, not one list with a
+    # badge: an ex-employee in the grid is noise on every scan of the team.
+    status_filter = request.GET.get("status") or "active"
 
     employees = Employee.objects.select_related("user").annotate(
         client_count=Count("client", distinct=True),
@@ -75,6 +79,7 @@ def team_list(request):
         employees = employees.filter(active=True)
     elif status_filter == "inactive":
         employees = employees.filter(active=False)
+    employees = list(employees)
 
     # Summary stats
     total = Employee.objects.count()
@@ -98,6 +103,8 @@ def team_list(request):
              "url": reverse("clients:people_hub")},
         ],
         "employees": employees,
+        # Headline numbers per card, four queries for the whole grid.
+        "stats": employee_performance.list_stats(employees),
         "q": q,
         "role_filter": role_filter,
         "status_filter": status_filter,
@@ -156,66 +163,38 @@ def team_detail(request, employee_id):
 
     emp = get_object_or_404(Employee.objects.select_related("user"), id=employee_id)
 
-    # Stats
-    from calendar import monthrange
-    from datetime import date
+    # The whole record with the firm — business, earnings, targets, pipeline,
+    # activity, clients and a 12-month trend. One service, so this page and any
+    # future one can never disagree about what somebody produced.
+    perf = employee_performance.snapshot(emp)
+    business, earnings = perf["business"], perf["earnings"]
 
-    from ..services import incentives as incentives_service
-    today = date.today()
-
-    total_sales = Sale.objects.filter(employee=emp).count()
-    approved_sales = Sale.objects.filter(employee=emp, status="approved").count()
-    pending_sales = Sale.objects.filter(employee=emp, status="pending").count()
-    total_points = Sale.objects.filter(employee=emp, status="approved").aggregate(
-        total=Sum("points")
-    )["total"] or 0
-    total_amount = Sale.objects.filter(employee=emp, status="approved").aggregate(
-        total=Sum("amount")
-    )["total"] or 0
-    client_count = Client.objects.filter(mapped_to=emp).count()
-
-    # This month stats
-    month_sales = Sale.objects.filter(
-        employee=emp, date__year=today.year, date__month=today.month
-    ).count()
-    month_amount = Sale.objects.filter(
-        employee=emp, date__year=today.year, date__month=today.month, status="approved"
-    ).aggregate(total=Sum("amount"))["total"] or 0
-    month_points = (Sale.objects.filter(
-        employee=emp, date__year=today.year, date__month=today.month, status="approved"
-    ).aggregate(total=Sum("points"))["total"] or 0)
-    # Multiyear health later years pay without a sale row behind them.
-    month_points += incentives_service.accrued_points(
-        emp, date(today.year, today.month, 1),
-        date(today.year, today.month, monthrange(today.year, today.month)[1]))
-    total_points += incentives_service.accrued_points(emp, date(2000, 1, 1), today)
-
-    # Recent sales
     recent_sales = Sale.objects.filter(employee=emp).select_related("client").order_by("-date", "-created_at")[:10]
+    recent_renewals = Renewal.objects.filter(employee=emp).select_related("client").order_by(
+        "-premium_collected_on", "-id")[:10]
 
     context = {
+        "perf": perf,
+        "recent_renewals": recent_renewals,
         "crumbs": [{"label": "Team", "url": reverse("clients:team_list")},
                    {"label": emp.full_name}],
         "kpis": [
             {"label": "With the firm", "value": emp.tenure_display, "color": "#4338CA"},
+            {"label": f"Business · {perf['fy_label']}", "color": "#15803D",
+             "value": f"\u20b9{inr(business['total_fy'])}",
+             "sub": f"\u20b9{inr(business['sales_fy'])} sales + \u20b9{inr(business['renewal_fy'])} renewals"},
+            {"label": "Points earned", "color": "#7C3AED",
+             "value": f"\u20b9{inr(earnings['total'])}",
+             "sub": "sales + multiyear accruals + ladder payouts"},
+            {"label": "Clients", "value": perf["clients"]["count"], "color": "#7E22CE",
+             "sub": f"\u20b9{inr(perf['clients']['transacted'])} transacted"},
             {"label": "Profile", "value": f"{emp.profile_completeness}%",
              "color": "#15803D" if emp.profile_is_complete else "#B45309"},
-            {"label": "Clients", "value": Client.objects.filter(mapped_to=emp).count(),
-             "color": "#7E22CE"},
         ],
         "milestones": emp.milestones.order_by("-occurs_on")[:8],
         "missing_admin": emp.missing_fields(include_admin=True),
         "reportees": emp.reportees.filter(active=True).select_related("user"),
         "emp": emp,
-        "total_sales": total_sales,
-        "approved_sales": approved_sales,
-        "pending_sales": pending_sales,
-        "total_points": total_points,
-        "total_amount": total_amount,
-        "client_count": client_count,
-        "month_sales": month_sales,
-        "month_amount": month_amount,
-        "month_points": month_points,
         "recent_sales": recent_sales,
     }
     return render(request, "team/team_detail.html", context)

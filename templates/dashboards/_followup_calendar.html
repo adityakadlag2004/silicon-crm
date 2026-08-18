@@ -27,6 +27,19 @@
     </a>
   </div>
 
+  {% comment %}
+  Source chips — the feed already takes a `sources` list; these just pass it
+  through, so "show me only the calls" is one click instead of reading badges.
+  {% endcomment %}
+  <div class="d-flex flex-wrap gap-1 align-items-center mb-3" id="agendaSourceChips">
+    <span class="text-muted" style="font-size:.75rem;font-weight:600;">Show:</span>
+    <button type="button" class="agenda-chip active" data-source="call_followup" aria-pressed="true"><span class="dot" style="background:#166534;"></span> Calls</button>
+    <button type="button" class="agenda-chip active" data-source="task" aria-pressed="true"><span class="dot" style="background:#334155;"></span> Tasks &amp; follow-ups</button>
+    <button type="button" class="agenda-chip active" data-source="insurance_renewal" aria-pressed="true"><span class="dot" style="background:#B45309;"></span> Renewals</button>
+    <button type="button" class="agenda-chip active" data-source="event" aria-pressed="true"><span class="dot" style="background:#1e40af;"></span> Events</button>
+    <button type="button" class="agenda-chip active" data-source="birthday" aria-pressed="true"><span class="dot" style="background:#9d174d;"></span> Birthdays</button>
+  </div>
+
   <!-- Grid rendered client-side from the unified agenda feed -->
   <div class="followup-week-grid" id="followupWeekGrid">
     <div class="text-muted text-center py-3">Loading agenda…</div>
@@ -117,10 +130,29 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.agenda-source-call_followup  { background: #dcfce7; color: #166534; }
-.agenda-source-event          { background: #dbeafe; color: #1e40af; }
-.agenda-source-task           { background: #f1f5f9; color: #334155; }
-.agenda-source-birthday       { background: #ffe4ef; color: #9d174d; }
+.agenda-source-call_followup     { background: #dcfce7; color: #166534; }
+.agenda-source-event             { background: #dbeafe; color: #1e40af; }
+.agenda-source-task              { background: #f1f5f9; color: #334155; }
+.agenda-source-birthday          { background: #ffe4ef; color: #9d174d; }
+.agenda-source-insurance_renewal { background: #fef3c7; color: #92400e; }
+.agenda-source-claim             { background: #ede9fe; color: #5b21b6; }
+/* A lead follow-up wears its SPANCO stage colour (set inline per item). */
+.agenda-source-lead              { background: #6B7280; color: #fff; }
+
+/* Live-pipeline follow-ups (Approach/Negotiation/Conclusion) carry an accent
+   bar, so the deals that move money read first in a column of chores. */
+.followup-item.agenda-hot { border-left: 3px solid var(--hot, #7C3AED); }
+
+.agenda-chip {
+  display: inline-flex; align-items: center; gap: .3rem;
+  border: 1px solid #cbd5e0; background: #fff; color: #64748b;
+  border-radius: 999px; padding: .12rem .55rem;
+  font-size: .72rem; font-weight: 600; line-height: 1.5;
+  cursor: pointer;
+}
+.agenda-chip .dot { width: 7px; height: 7px; border-radius: 50%; opacity: .35; }
+.agenda-chip.active { background: #f8fafc; border-color: #94a3b8; color: #1e293b; }
+.agenda-chip.active .dot { opacity: 1; }
 
 @media (max-width: 768px) {
   .followup-week-grid .row {
@@ -166,10 +198,32 @@
     empFilter.addEventListener('change', loadAgenda);
   }
 
+  const sourceChips = widget.querySelectorAll('.agenda-chip');
+  sourceChips.forEach(chip => {
+    chip.addEventListener('click', function() {
+      const on = !this.classList.contains('active');
+      this.classList.toggle('active', on);
+      this.setAttribute('aria-pressed', String(on));
+      loadAgenda();
+    });
+  });
+
+  function activeSources() {
+    return Array.from(sourceChips).filter(c => c.classList.contains('active'))
+      .map(c => c.dataset.source);
+  }
+
   function loadAgenda() {
     let url = `${apiUrl}?filter=${currentFilter}`;
     if (empFilter && empFilter.value) {
       url += `&employee_id=${empFilter.value}`;
+    }
+    const sources = activeSources();
+    // All chips on = no filter; all off = nothing to show, and an empty
+    // `sources` param would be read as "no filter" and show everything.
+    if (sources.length === 0) { renderGrid([]); return; }
+    if (sources.length < sourceChips.length) {
+      url += `&sources=${sources.join(',')}`;
     }
     fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
       .then(r => r.json())
@@ -248,10 +302,20 @@
   function renderAgendaItem(f) {
     const overdueClass = f.is_overdue ? 'followup-overdue' : '';
     const draggableAttr = f.draggable ? `draggable="true" data-followup-id="${f.followup_id}"` : '';
-    let html = `<div class="followup-item ${overdueClass}" data-key="${f.key}" ${draggableAttr}>`;
+    // A lead/claim follow-up shares the "task" source but says which it is;
+    // key the badge colour off the label so all three read differently.
+    const kind = (f.source_label || '').toLowerCase();
+    const badgeClass = (kind === 'lead' || kind === 'claim') ? `agenda-source-${kind}` : `agenda-source-${f.source}`;
+    const badgeStyle = f.stage_color ? ` style="background:${f.stage_color};color:#fff;"` : '';
+    const hotClass = f.hot ? ' agenda-hot' : '';
+    const hotStyle = f.hot ? ` style="--hot:${f.stage_color || '#7C3AED'};"` : '';
+    let html = `<div class="followup-item ${overdueClass}${hotClass}"${hotStyle} data-key="${f.key}" ${draggableAttr}>`;
     html += `<a href="${f.url}" class="followup-item-link">`;
-    html += `<div class="d-flex align-items-center gap-1">`;
-    html += `<span class="agenda-source-badge agenda-source-${f.source}">${f.source_label}</span>`;
+    html += `<div class="d-flex align-items-center gap-1 flex-wrap">`;
+    html += `<span class="agenda-source-badge ${badgeClass}"${badgeStyle}>${escHtml(f.source_label)}</span>`;
+    if (f.stage_label) {
+      html += `<span class="agenda-source-badge" style="background:transparent;border:1px solid ${f.stage_color};color:${f.stage_color};">${escHtml(f.stage_label)}</span>`;
+    }
     html += `<span class="fw-semibold small text-truncate">${escHtml(f.title)}</span>`;
     html += `</div>`;
     html += `<div class="text-muted" style="font-size:0.75rem;">${f.time}`;

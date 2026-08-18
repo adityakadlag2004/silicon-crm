@@ -42,6 +42,20 @@ panel breaks it out with counts and today's collection.
 </div>
 
 <div class="ki-card mb-4">
+  {% comment %}
+  Period chips set the payment-date window in one click. The page defaults to
+  This Month, so the day's renewal business is on screen without typing dates.
+  {% endcomment %}
+  <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+    <span class="text-muted" style="font-size:.8rem;font-weight:600;">Period:</span>
+    {% for key, label in period_options %}
+      <a href="?{{ period_qstring }}{% if period_qstring %}&amp;{% endif %}period={{ key }}"
+         class="ki-btn ki-btn-sm {% if period == key %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">{{ label }}</a>
+    {% endfor %}
+    {% if period == "custom" %}
+      <span class="ki-tag" style="--c:#B45309;">Custom dates</span>
+    {% endif %}
+  </div>
   <form method="get" class="ki-filter-bar" style="flex-wrap:wrap;gap:1rem;align-items:flex-end;">
     <div style="min-width:220px;">
       <label class="form-label">Search</label>
