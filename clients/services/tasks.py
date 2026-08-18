@@ -57,7 +57,7 @@ def group_siblings(task):
 GROUP_SHARED_FIELDS = (
     "title", "description", "category", "priority", "due_date", "due_time",
     "client", "repeat_rule", "reminded_day_before", "reminded_same_day",
-    "due_alarm_sent_at",
+    "due_alarm_sent_at", "silent",
 )
 
 
@@ -148,7 +148,7 @@ def sync_group_assignees(task, employee_ids, actor):
             title=task.title, description=task.description, category=task.category,
             priority=task.priority, created_by=task.created_by, assigned_to=emp,
             due_date=task.due_date, due_time=task.due_time, client=task.client,
-            assign_group=group,
+            assign_group=group, silent=task.silent,
         )
         for title, order in checklist:
             TaskChecklistItem.objects.create(task=new, title=title, order=order)
@@ -236,17 +236,21 @@ def user_wants(user, event):
 RINGING_EVENTS = {"assigned", "comment_added"}
 
 
-def create_notification(user, title, body, link="", event=None):
+def create_notification(user, title, body, link="", event=None, ring=True):
     """Create a Notification for `user` unless their prefs mute `event`.
 
     Returns the Notification, or None when muted / no user. Creating a
     Notification auto-mirrors an FCM push via signals.push_on_notification —
     except for RINGING_EVENTS, which suppress the plain mirror and send a
     data-only `task_alarm` push that the app turns into a ringing alert.
+
+    `ring=False` (a task marked `silent`) keeps the plain mirror: the task
+    still lands and the tray notification still pops, the phone just doesn't
+    go off like an alarm at 11pm.
     """
     if not user or not user_wants(user, event):
         return None
-    if event in RINGING_EVENTS:
+    if event in RINGING_EVENTS and ring:
         notification = Notification(recipient=user, title=title, body=body, link=link)
         notification._skip_push = True  # the ringing push below replaces the mirror
         notification.save()
@@ -301,7 +305,7 @@ def notify_task(task, actor, title, body, event=None, exclude_users=None):
     for user in recipients:
         if user.pk in excluded:
             continue
-        if create_notification(user, title, body, link, event):
+        if create_notification(user, title, body, link, event, ring=not task.silent):
             sent += 1
     return sent
 
@@ -333,7 +337,7 @@ def notify_mentions(task, actor, text):
         create_notification(
             user, "You were mentioned",
             f"{actor.username} mentioned you on “{task.title}”.",
-            link, event="comment_added",
+            link, event="comment_added", ring=not task.silent,
         )
     return mentioned
 

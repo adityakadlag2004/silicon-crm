@@ -140,7 +140,12 @@ def _task_row(task):
         "client_id": task.client_id,
         "due_date": task.due_date.isoformat() if task.due_date else None,
         "due_time": task.due_time.strftime("%H:%M") if task.due_time else None,
-        "due_at_ms": _due_at_ms(task),
+        # A "don't ring" task withholds due_at_ms: TaskAlarmScheduler arms an
+        # on-device exact alarm from it, and that copy rings offline with no
+        # server in the loop, so suppressing it here is the only way to keep
+        # the phone quiet.
+        "due_at_ms": None if task.silent else _due_at_ms(task),
+        "silent": task.silent,
         "acknowledged": task.acknowledged_at is not None,
         "repeat_rule": task.repeat_rule or "",
         "checklist_percent": task.checklist_percent,
@@ -514,7 +519,7 @@ def app_task_create(request):
             title=title[:255], description=description, category=category,
             priority=priority, created_by=request.user, assigned_to=assignee,
             due_date=due_date, due_time=due_time, client=client,
-            assign_group=group,
+            assign_group=group, silent=bool(body.get("silent")),
         )
         for i, ct in enumerate(checklist):
             TaskChecklistItem.objects.create(task=task, title=ct.strip()[:255], order=i)
@@ -712,6 +717,8 @@ def app_task_action(request, pk):
                     rule.save(update_fields=["frequency", "is_active"])
                 elif freq in dict(RecurringTaskRule.FREQ_CHOICES):
                     build_recurrence(task, freq, request.user)
+        if "silent" in body:
+            task.silent = bool(body["silent"])
         # Replace subscribers if a list is supplied.
         if isinstance(body.get("subscribers"), list):
             task.subscribers.all().delete()

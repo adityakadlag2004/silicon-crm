@@ -100,6 +100,10 @@ fun AssignTaskSheet(
         val checklist = remember { mutableStateListOf<String>() }
         var repeat by remember { mutableStateOf(editTask?.optString("repeat_rule") ?: "") }
         var client by remember { mutableStateOf<Opt?>(null) }
+        // "Don't ring": assign after hours without the phone going off like an
+        // alarm. The server withholds due_at_ms for these, so the on-device
+        // alarm never gets armed either.
+        var silent by remember { mutableStateOf(editTask?.optBoolean("silent") ?: false) }
         val templates = remember { mutableStateListOf<JSONObject>() }
         var openMenu by remember { mutableStateOf("") }
         var submitting by remember { mutableStateOf(false) }
@@ -191,6 +195,7 @@ fun AssignTaskSheet(
                 body.put("subscribers", JSONArray(subscribers.map { it.id }))
                 body.put("checklist", JSONArray(checklist.filter { it.isNotBlank() }))
                 body.put("repeat_rule", repeat)
+                body.put("silent", silent)
 
                 val r = if (isEdit) {
                     body.put("action", "edit")
@@ -268,6 +273,10 @@ fun AssignTaskSheet(
                         active = subscribers.isNotEmpty()) { openMenu = if (openMenu == "inloop") "" else "inloop" }
                     MultiMenu(openMenu == "inloop", users, subscribers) { openMenu = "" }
                 }
+                // Don't ring — quiet notification only (out of office hours)
+                SelectorChip(Icons.Filled.Notifications,
+                    if (silent) "Won\u2019t ring" else "Rings the phone",
+                    active = silent) { silent = !silent }
                 // Client the task is about (optional; searchable)
                 SelectorChip(null, client?.name ?: "Client", active = client != null) {
                     openMenu = if (openMenu == "client") "" else "client"

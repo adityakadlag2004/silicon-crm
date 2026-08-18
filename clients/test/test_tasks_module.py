@@ -782,3 +782,72 @@ class TaskGroupEditDeleteTests(TestCase):
         data = self._client(self.boss).get(
             reverse("clients:app_task_detail", args=[tasks[0].pk])).json()
         self.assertEqual(len(data["assignee_ids"]), 3)
+
+
+class TaskSilentTests(TestCase):
+    """"Don't ring": a task assigned out of office hours still lands and still
+    notifies — it just never rings the phone like an alarm."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username="s_admin", password="pw")
+        Employee.objects.create(user=cls.admin, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="s_emp", password="pw")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee",
+                                          salary=0, active=True)
+
+    def _client(self, user):
+        c = Client()
+        c.force_login(user)
+        return c
+
+    def _create(self, silent):
+        data = {"title": "Late night job", "priority": "high",
+                "assigned_to": self.emp.id,
+                "due_date": timezone.localdate().isoformat(), "due_time": "22:30"}
+        if silent:
+            data["silent"] = "1"
+        self._client(self.admin).post(reverse("clients:task_create"), data, follow=True)
+        return Task.objects.latest("id")
+
+    def test_assignment_does_not_ring_but_still_notifies(self):
+        from unittest import mock
+        with mock.patch("clients.services.push.send_data_push_to_user") as ring:
+            task = self._create(silent=True)
+            ring.assert_not_called()
+        self.assertTrue(task.silent)
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.emp_user, title="New task assigned").exists())
+
+    def test_unticked_still_rings(self):
+        from unittest import mock
+        with mock.patch("clients.services.push.send_data_push_to_user") as ring:
+            task = self._create(silent=False)
+            self.assertTrue(ring.called)
+        self.assertFalse(task.silent)
+
+    def test_due_time_ring_is_a_plain_notification(self):
+        from unittest import mock
+        now = timezone.localtime().replace(hour=22, minute=30, second=0, microsecond=0)
+        task = Task.objects.create(title="Quiet deadline", created_by=self.admin,
+                                   assigned_to=self.emp, due_date=now.date(),
+                                   due_time=now.time(), silent=True)
+        with mock.patch("django.utils.timezone.localtime", return_value=now), \
+                mock.patch("clients.management.commands.tasks_ring_due"
+                           ".send_data_push_to_user") as ring:
+            call_command("tasks_ring_due")
+            ring.assert_not_called()
+        task.refresh_from_db()
+        self.assertIsNotNone(task.due_alarm_sent_at)  # not re-tried tomorrow
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.emp_user, title__icontains="due now").exists())
+
+    def test_app_row_withholds_due_at_ms_so_the_device_alarm_never_arms(self):
+        task = Task.objects.create(title="Quiet", created_by=self.admin,
+                                   assigned_to=self.emp,
+                                   due_date=timezone.localdate(),
+                                   due_time=timezone.localtime().time(), silent=True)
+        rows = self._client(self.emp_user).get(reverse("clients:app_tasks")).json()["tasks"]
+        row = next(r for r in rows if r["id"] == task.pk)
+        self.assertIsNone(row["due_at_ms"])
+        self.assertTrue(row["silent"])

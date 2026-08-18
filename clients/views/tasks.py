@@ -545,7 +545,7 @@ def task_create(request):
                 title=title[:255], description=description, category=category,
                 priority=priority, created_by=request.user, assigned_to=assignee,
                 due_date=due_date, due_time=due_time, repeat_rule=repeat_rule,
-                assign_group=group,
+                assign_group=group, silent=bool(request.POST.get("silent")),
             )
             for i, ct in enumerate(checklist_titles):
                 TaskChecklistItem.objects.create(task=task, title=ct[:255], order=i)

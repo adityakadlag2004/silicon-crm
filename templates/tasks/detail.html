@@ -34,6 +34,7 @@
               <span class="tk-pri tk-pri-{{ task.priority }}">{{ task.get_priority_display }}</span>
               <span class="tk-st tk-st-{{ task.status }}">{{ task.get_status_display }}</span>
               {% if task.repeat_rule %}<span class="ki-tag" style="--c:#7E22CE;">Repeats {{ task.repeat_rule }}</span>{% endif %}
+              {% if task.silent %}<span class="ki-tag" style="--c:#64748B;"><i class="bi bi-bell-slash"></i> Doesn't ring</span>{% endif %}
             </div>
           </div>
         </div>

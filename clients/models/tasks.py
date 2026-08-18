@@ -100,6 +100,16 @@ class Task(models.Model):
     # Exact due-time ring dispatched by tasks_ring_due (cleared on due change).
     due_alarm_sent_at = models.DateTimeField(null=True, blank=True)
 
+    # "Don't ring": assign the task after hours without the phone going off
+    # like an alarm clock. The assignee still gets the task and a plain tray
+    # notification — only the ringing is suppressed, on every path (the
+    # assignment/comment push, the due-time ring, and the app's on-device
+    # alarm, which is starved by withholding due_at_ms).
+    silent = models.BooleanField(
+        default=False,
+        help_text="Notify quietly — no ringing alarm on the phone.",
+    )
+
     # One assignment to several people = one Task row per person (each tracks
     # its own status/acknowledgement) sharing an assign_group, so the creator's
     # Delegated list can show them collapsed as "Mansi +4".

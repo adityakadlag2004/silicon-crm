@@ -28,8 +28,16 @@ ACTIVE = [Task.STATUS_PENDING, Task.STATUS_IN_PROGRESS, Task.STATUS_OVERDUE]
 
 
 def _ring(user, title, body, task, kind="task_alarm"):
-    """One ringing push + a silent in-app Notification row."""
+    """One ringing push + a silent in-app Notification row.
+
+    A task marked ``silent`` ("don't ring") gets the ordinary Notification
+    instead — signals.push_on_notification mirrors it as a plain tray push, so
+    the assignee still hears about the deadline without an alarm going off.
+    """
     link = f"/clients/tasks/{task.pk}/"
+    if task.silent:
+        Notification.objects.create(recipient=user, title=title, body=body, link=link)
+        return
     notification = Notification(recipient=user, title=title, body=body, link=link)
     notification._skip_push = True  # the ringing push below replaces the mirror
     notification.save()
