@@ -12,7 +12,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.utils.timezone import now
-from django.db.models import Sum, Q
+from django.db.models import Count, Sum, Q
 
 from ..models import (
     Lead,
@@ -55,6 +55,30 @@ def category_name_map():
     return dict(
         Product.objects.filter(parent__isnull=False).values_list("name", "parent__name")
     )
+
+
+def product_mix(qs):
+    """[{name, amount, count}] for a Sale queryset, one row per MAIN product.
+
+    Sub-product rows ("Term Plan") fold into their parent ("Life Insurance") —
+    every report outside sale entry deals in main products only.
+    """
+    cat_map = category_name_map()
+    out = {}
+    # Prefer the FK's parent; fall back to the name map for legacy rows that
+    # carry only the product string.
+    for r in qs.values("product", "product_ref__parent__name").annotate(
+        t=Sum("amount"), n=Count("id")
+    ):
+        name = (
+            r["product_ref__parent__name"]
+            or cat_map.get(r["product"], r["product"])
+            or "Other"
+        )
+        row = out.setdefault(name, {"name": name, "amount": Decimal("0"), "count": 0})
+        row["amount"] += r["t"] or Decimal("0")
+        row["count"] += r["n"]
+    return sorted(out.values(), key=lambda r: r["amount"], reverse=True)
 
 
 def product_totals(qs, cat_map):

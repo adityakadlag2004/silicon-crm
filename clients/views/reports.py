@@ -25,7 +25,7 @@ from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
     Renewal,
 )
-from .helpers import get_manager_access, _last_n_months, category_name_map, product_totals
+from .helpers import get_manager_access, _last_n_months, category_name_map, product_mix, product_totals
 
 
 # ── Business Overview: period-grouped trend with product bifurcation ──────────
@@ -150,13 +150,7 @@ def business_overview_data(base, period="month", columns=6, today=None, with_lea
     # Latest period drives the "by product" mix and the leaderboard.
     cur_start, cur_end, cur_label, cur_sublabel = ranges[-1]
     cur_qs = base.filter(date__gte=cur_start, date__lt=cur_end)
-    mix = {}
-    for r in cur_qs.values("product").annotate(t=Sum("amount"), n=Count("id")):
-        name = cat_map.get(r["product"], r["product"]) or "Other"
-        row = mix.setdefault(name, {"name": name, "amount": Decimal("0"), "count": 0})
-        row["amount"] += r["t"] or Decimal("0")
-        row["count"] += r["n"]
-    products = sorted(mix.values(), key=lambda r: r["amount"], reverse=True)
+    products = product_mix(cur_qs)
 
     data = {
         "period": period,

@@ -29,7 +29,7 @@ from ..services import incentives as _incentives
 from ..services import calls as calls_service
 from ..services import sales as sales_service
 from ..utils.phone_utils import digits10
-from .helpers import get_manager_access, name_words_q
+from .helpers import get_manager_access, name_words_q, product_mix
 from .reports import business_overview_data
 
 
@@ -135,23 +135,12 @@ def app_dashboard(request):
         ]
 
         # Month-to-date business per product CATEGORY (1st of month → today).
-        # Sub-products fold into their parent so the board shows one row per
-        # category, not dozens of sub-product rows.
         month_start = today.replace(day=1)
-        sub_to_cat = dict(
-            Product.objects.filter(parent__isnull=False).values_list("name", "parent__name")
-        )
-        mtd_buckets = {}
-        for r in Sale.objects.filter(
-            status=Sale.STATUS_APPROVED, date__gte=month_start, date__lte=today
-        ).values("product").annotate(t=Sum("amount"), n=Count("id")):
-            name = sub_to_cat.get(r["product"], r["product"]) or "Other"
-            b = mtd_buckets.setdefault(name, {"name": name, "amount": Decimal("0"), "count": 0})
-            b["amount"] += r["t"] or Decimal("0")
-            b["count"] += r["n"]
         data["product_mtd"] = [
             {"name": b["name"], "amount": _money(b["amount"]), "count": b["count"]}
-            for b in sorted(mtd_buckets.values(), key=lambda x: x["amount"], reverse=True)
+            for b in product_mix(Sale.objects.filter(
+                status=Sale.STATUS_APPROVED, date__gte=month_start, date__lte=today,
+            ))
         ]
 
         # Team call activity today (within the office-hours window)
@@ -191,11 +180,11 @@ def app_dashboard(request):
         # Own month-to-date business per product
         month_start = today.replace(day=1)
         data["product_mtd"] = [
-            {"name": r["product"] or "Other", "amount": _money(r["t"]), "count": r["n"]}
-            for r in Sale.objects.filter(
+            {"name": b["name"], "amount": _money(b["amount"]), "count": b["count"]}
+            for b in product_mix(Sale.objects.filter(
                 employee=emp, status=Sale.STATUS_APPROVED,
                 date__gte=month_start, date__lte=today,
-            ).values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
+            ))
         ]
 
         # Live campaigns the employee can earn extra on
@@ -2311,8 +2300,8 @@ def app_report_monthly(request):
         approved = approved.filter(employee=emp)
 
     products = [
-        {"name": r["product"] or "Other", "amount": _money(r["t"]), "count": r["n"]}
-        for r in approved.values("product").annotate(t=Sum("amount"), n=Count("id")).order_by("-t")
+        {"name": b["name"], "amount": _money(b["amount"]), "count": b["count"]}
+        for b in product_mix(approved)
     ]
     tot = approved.aggregate(amount=Sum("amount"), points=Sum("points"), n=Count("id"))
     data = {

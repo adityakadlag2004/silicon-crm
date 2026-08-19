@@ -8,6 +8,7 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from clients.models import Client, Employee, Product, Sale
 from clients.forms import (
@@ -254,3 +255,45 @@ class MainProductsOnlyOutsideSaleEntryTests(TestCase):
         )
         self.assertIsNotNone(sale._active_campaign_product())
         self.assertEqual(sale._active_campaign_product().campaign, campaign)
+
+
+class AppReportsRollUpTests(TestCase):
+    """The app's Monthly Report (and the dashboard's month-to-date strip) print
+    one row per main product — a plan's business belongs to its category."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("approll_admin", password="pw", is_superuser=True)
+        self.emp = Employee.objects.create(user=self.user, role="admin", salary=0, active=True)
+        self.client.force_login(self.user)
+
+        self.life, _ = Product.objects.get_or_create(code="LIFE_INS", defaults={"name": "Life Insurance"})
+        Product.objects.filter(pk=self.life.pk).update(is_active=True, domain=Product.DOMAIN_BOTH)
+        self.life.refresh_from_db()
+        self.plan = Product.objects.create(
+            name="Term Plan", code="TERMP", parent=self.life,
+            domain=Product.DOMAIN_BOTH, is_active=True,
+        )
+        holder = Client.objects.create(name="Roll Up", phone="9000000007", mapped_to=self.emp)
+        today = timezone.localdate()
+        for i, ref in enumerate((self.plan, self.life)):
+            Sale.objects.create(
+                client=holder, employee=self.emp, product=ref.name, product_ref=ref,
+                amount=Decimal("50000"), status="approved", date=today,
+                policy_date=today, policy_number=f"RU{i}",
+            )
+
+    def test_monthly_report_folds_plans_into_their_category(self):
+        today = timezone.localdate()
+        rows = self.client.get(
+            reverse("clients:app_report_monthly"), {"month": today.month, "year": today.year},
+        ).json()["products"]
+        names = [r["name"] for r in rows]
+        self.assertIn("Life Insurance", names)
+        self.assertNotIn("Term Plan", names)
+        life = next(r for r in rows if r["name"] == "Life Insurance")
+        self.assertEqual(life["amount"], 100000.0)
+        self.assertEqual(life["count"], 2)
+
+    def test_dashboard_month_to_date_folds_them_too(self):
+        rows = self.client.get(reverse("clients:app_dashboard")).json()["product_mtd"]
+        self.assertNotIn("Term Plan", [r["name"] for r in rows])
