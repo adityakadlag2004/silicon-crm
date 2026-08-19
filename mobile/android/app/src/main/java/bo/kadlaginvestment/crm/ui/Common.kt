@@ -2,11 +2,19 @@ package bo.kadlaginvestment.crm.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -17,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -84,9 +93,11 @@ fun ErrorBox(message: String, modifier: Modifier = Modifier, onRetry: () -> Unit
 
 @Composable
 fun StatusPill(status: String) {
+    // Amber is "in flight", so a live policy must not wear it — an Active
+    // policy showing the same colour as a pending sale reads as a problem.
     val (bg, label) = when (status) {
-        "approved", "done" -> StatusGreen to status.replaceFirstChar { it.uppercase() }
-        "rejected", "dismissed" -> StatusRed to status.replaceFirstChar { it.uppercase() }
+        "approved", "done", "active", "settled" -> StatusGreen to status.replaceFirstChar { it.uppercase() }
+        "rejected", "dismissed", "lapsed", "cancelled" -> StatusRed to status.replaceFirstChar { it.uppercase() }
         else -> StatusAmber to status.replaceFirstChar { it.uppercase() }
     }
     Box(
@@ -149,5 +160,57 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
             .padding(horizontal = 14.dp, vertical = 7.dp)
     ) {
         Text(text, color = fg, fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
+    }
+}
+
+
+/**
+ * A workflow's steps with the record's position on them — the phone version
+ * of the web `.ki-steps` stepper, shared by the SPANCO pipeline and the claim
+ * workflow the way `.ki-steps` is shared on the web.
+ *
+ * Display only: moves go through the button below it, so every change carries
+ * a note and one code path. Labels are shortened to their first part
+ * ("Approach / Analysis" → "Approach"); the full one shows beneath.
+ */
+@Composable
+fun Stepper(labels: List<String>, currentIndex: Int) {
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(rdp(4)),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val done = index < currentIndex
+            val isCurrent = index == currentIndex
+            val dotColor = when {
+                done -> StatusGreen
+                isCurrent -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.widthIn(min = rdp(58)),
+            ) {
+                Box(
+                    Modifier.size(rdp(28)).clip(CircleShape).background(dotColor),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (done) "\u2713" else "${index + 1}",
+                        fontSize = rsp(12),
+                        fontWeight = FontWeight.Bold,
+                        color = if (done || isCurrent) MaterialTheme.colorScheme.onPrimary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    label.substringBefore("/").trim(),
+                    fontSize = rsp(10),
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isCurrent) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

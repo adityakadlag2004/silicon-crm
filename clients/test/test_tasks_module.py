@@ -426,24 +426,6 @@ class TaskV414Tests(TestCase):
             data=_json.dumps({"name": "X", "title": "Y"}), content_type="application/json")
         self.assertEqual(resp.status_code, 403)
 
-    # ── today feed ──
-    def test_today_endpoint_combines_tasks_followups_renewals(self):
-        from clients.models import CallFollowUp, Client as ClientModel, Renewal
-        today = timezone.localdate()
-        self._task(title="Due today", due_date=today, due_time=None, priority="low")
-        cust = ClientModel.objects.create(id=990002, name="Verma", phone="9876500002")
-        CallFollowUp.objects.create(employee=self.emp, phone="9876500002", client=cust,
-                                    scheduled_at=timezone.now())
-        Renewal.objects.create(client=cust, product_type="health", product_name="Care",
-                               renewal_date=today, frequency="yearly", employee=self.emp,
-                               premium_amount=5000)
-        data = self._client(self.emp_user).get(reverse("clients:app_today")).json()
-        self.assertEqual(len(data["tasks"]), 1)
-        self.assertEqual(data["tasks"][0]["title"], "Due today")
-        self.assertEqual(len(data["followups"]), 1)
-        self.assertEqual(len(data["renewals"]), 1)
-        self.assertEqual(data["renewals"][0]["client"], "Verma")
-
     # ── scorecard timeliness ──
     def test_scorecard_reports_on_time_vs_late(self):
         today = timezone.localdate()

@@ -1,7 +1,7 @@
 """Native Android app JSON API (session-cookie auth) + APK download."""
 from django.urls import path
 
-from ..views import app_api, app_settings_api, app_tasks_api
+from ..views import app_api, app_insurance_api, app_settings_api, app_tasks_api
 
 urlpatterns = [
     path("api/app/tasks/", app_tasks_api.app_tasks, name="app_tasks"),
@@ -26,7 +26,6 @@ urlpatterns = [
     path("api/app/clients/", app_api.app_clients, name="app_clients"),
     path("api/app/clients/create/", app_api.app_client_create, name="app_client_create"),
     path("api/app/clients/<int:client_id>/", app_api.app_client_detail, name="app_client_detail"),
-    path("api/app/today/", app_api.app_today, name="app_today"),
     path("api/app/followups/", app_api.app_followups, name="app_followups"),
     path("api/app/followups/<int:followup_id>/action/", app_api.app_followup_action, name="app_followup_action"),
     path("api/app/followups/push-overdue/", app_api.app_followups_push_overdue, name="app_followups_push_overdue"),
@@ -36,6 +35,15 @@ urlpatterns = [
     path("api/app/renewals/create/", app_api.app_renewal_create, name="app_renewal_create"),
     path("api/app/notifications/", app_api.app_notifications, name="app_notifications"),
     path("api/app/notifications/read/", app_api.app_notifications_read, name="app_notifications_read"),
+    path("api/app/insurance-meta/", app_insurance_api.app_insurance_meta, name="app_insurance_meta"),
+    path("api/app/policies/", app_insurance_api.app_policies, name="app_policies"),
+    path("api/app/policies/<int:policy_id>/", app_insurance_api.app_policy_detail, name="app_policy_detail"),
+    path("api/app/claims/", app_insurance_api.app_claims, name="app_claims"),
+    path("api/app/claims/create/", app_insurance_api.app_claim_create, name="app_claim_create"),
+    path("api/app/claims/<int:claim_id>/", app_insurance_api.app_claim_detail, name="app_claim_detail"),
+    path("api/app/claims/<int:claim_id>/update/", app_insurance_api.app_claim_update, name="app_claim_update"),
+    path("api/app/claims/<int:claim_id>/document/", app_insurance_api.app_claim_document_upload,
+         name="app_claim_document_upload"),
     path("api/app/lead-meta/", app_api.app_lead_meta, name="app_lead_meta"),
     path("api/app/leads/", app_api.app_leads, name="app_leads"),
     path("api/app/leads/create/", app_api.app_lead_create, name="app_lead_create"),

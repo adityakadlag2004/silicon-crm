@@ -3,8 +3,6 @@ package bo.kadlaginvestment.crm.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -61,9 +59,6 @@ import bo.kadlaginvestment.crm.net.ApiClient
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-/** Server caps uploads too; this just avoids wasting the user's data first. */
-private const val MAX_ATTACHMENT_BYTES = 25L * 1024 * 1024
-
 @Composable
 fun TaskDetailScreen(
     taskId: Int,
@@ -114,49 +109,18 @@ fun TaskDetailScreen(
         }
     }
 
-    // Attach a file/photo from the phone: system picker → multipart upload to
-    // the same endpoint the web uses (session cookie + CSRF).
+    // Attach a file/photo from the phone — camera or picker, multipart to the
+    // same endpoint the web uses (session cookie + CSRF). `ui/Attach.kt` owns
+    // both halves; claim documents upload through exactly the same code.
     var uploading by remember { mutableStateOf(false) }
-    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    val attacher = rememberAttacher { uri ->
         uploading = true
         Thread {
-            var ok = false
-            var why = ""
-            try {
-                val cr = context.contentResolver
-                var name = "attachment"
-                var size = -1L
-                cr.query(uri, null, null, null, null)?.use { cur ->
-                    val i = cur.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    val s = cur.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                    if (cur.moveToFirst()) {
-                        if (i >= 0) name = cur.getString(i) ?: name
-                        if (s >= 0 && !cur.isNull(s)) size = cur.getLong(s)
-                    }
-                }
-                // Guard before spending the user's data on a doomed upload.
-                if (size > MAX_ATTACHMENT_BYTES) {
-                    why = "File is too large (max ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB)"
-                } else {
-                    cr.openInputStream(uri)?.use { stream ->
-                        val body = bo.kadlaginvestment.crm.BackendClient.postMultipart(
-                            "/clients/tasks/$taskId/attachment/upload/",
-                            "attachments", name, cr.getType(uri) ?: "", stream,
-                        )
-                        ok = body != null
-                        if (!ok) why = "Upload failed — check your connection"
-                    } ?: run { why = "Could not read that file" }
-                }
-            } catch (e: Exception) {
-                why = e.message ?: "Upload failed"
-            } finally {
-                uploading = false
-                // A silent catch used to make a failed upload look identical to
-                // a successful one: the list just reloaded with nothing new.
-                AppMessage.show(if (ok) "Attachment uploaded" else why.ifEmpty { "Upload failed" })
-                reloadKey++
-            }
+            val why = uploadUri(context, uri, "/clients/tasks/$taskId/attachment/upload/",
+                                field = "attachments")
+            uploading = false
+            AppMessage.show(why ?: "Attachment uploaded")
+            reloadKey++
         }.start()
     }
 
@@ -388,10 +352,14 @@ fun TaskDetailScreen(
             if ((atts?.length() ?: 0) > 0 || canEdit) {
                 SectionTitle("Attachments")
                 if (canEdit) {
-                    OutlinedButton(
-                        onClick = { if (!uploading) pickFile.launch("*/*") },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (uploading) "Uploading…" else "📎 Attach file / photo", fontSize = rsp(13)) }
+                    ActionRow {
+                        OutlinedButton(onClick = { if (!uploading) attacher.takePhoto() }) {
+                            Text(if (uploading) "Uploading…" else "Take photo", fontSize = rsp(13))
+                        }
+                        OutlinedButton(onClick = { if (!uploading) attacher.pickFile() }) {
+                            Text("Choose file", fontSize = rsp(13))
+                        }
+                    }
                 }
             }
             if ((atts?.length() ?: 0) > 0) {

@@ -64,12 +64,17 @@ import org.json.JSONObject
 @Composable
 fun LeadsScreen(
     modifier: Modifier = Modifier,
+    initialLeadId: Int? = null,
+    initialStage: String = "",
     onBack: (() -> Unit)? = null,
     onSessionExpired: () -> Unit,
 ) {
     if (onBack != null) BackHandler(onBack = onBack)
 
-    var selectedLeadId by remember { mutableStateOf<Int?>(null) }
+    // Opening straight onto a lead is how the dashboard's "needs you" list
+    // hands over. Keyed on the id so a second hand-over lands on that lead
+    // rather than being swallowed by the remembered state.
+    var selectedLeadId by remember(initialLeadId) { mutableStateOf(initialLeadId) }
     var creating by remember { mutableStateOf(false) }
     var listReload by remember { mutableIntStateOf(0) }
     var meta by remember { mutableStateOf<JSONObject?>(null) }
@@ -108,6 +113,7 @@ fun LeadsScreen(
         else -> LeadList(
             meta = m,
             modifier = modifier,
+            initialStage = initialStage,
             onBack = onBack,
             reloadKey = listReload,
             onOpen = { selectedLeadId = it },
@@ -138,13 +144,14 @@ private fun JSONObject.productList(): List<Pair<Int, String>> {
 private fun LeadList(
     meta: JSONObject,
     modifier: Modifier,
+    initialStage: String,
     onBack: (() -> Unit)?,
     reloadKey: Int,
     onOpen: (Int) -> Unit,
     onCreate: () -> Unit,
     onSessionExpired: () -> Unit,
 ) {
-    var stage by remember { mutableStateOf("") }
+    var stage by remember(initialStage) { mutableStateOf(initialStage) }
     var q by remember { mutableStateOf("") }
     var rows by remember { mutableStateOf(listOf<JSONObject>()) }
     var counts by remember { mutableStateOf<JSONObject?>(null) }
@@ -277,55 +284,6 @@ private fun LeadList(
     }
 }
 
-/** The six SPANCO steps with the lead's position on them — the phone version
- * of the web `.ki-steps` stepper. Display only: moves go through the Move
- * button below it, so every change carries a note and one code path.
- *
- * Labels are shortened to their first word ("Approach / Analysis" →
- * "Approach"); the full label and its meaning show under the stepper. */
-@Composable
-private fun SpancoStepper(stages: List<Triple<String, String, String>>, current: String) {
-    val currentIndex = stages.indexOfFirst { it.first == current }
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(rdp(4)),
-    ) {
-        stages.forEachIndexed { index, (_, label, _) ->
-            val done = index < currentIndex
-            val isCurrent = index == currentIndex
-            val dotColor = when {
-                done -> StatusGreen
-                isCurrent -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.surfaceVariant
-            }
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.widthIn(min = rdp(58)),
-            ) {
-                Box(
-                    Modifier.size(rdp(28)).clip(CircleShape).background(dotColor),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        if (done) "✓" else "${index + 1}",
-                        fontSize = rsp(12),
-                        fontWeight = FontWeight.Bold,
-                        color = if (done || isCurrent) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    label.substringBefore("/").trim(),
-                    fontSize = rsp(10),
-                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isCurrent) MaterialTheme.colorScheme.onSurface
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun LeadStagePill(stageLabel: String, lost: Boolean, converted: Boolean) {
     val (color, label) = when {
@@ -364,11 +322,25 @@ private fun LeadDetail(
         }
     }
 
-    fun post(path: String, body: JSONObject, then: () -> Unit = { data = null; reloadKey++ }) {
+    /** `queue` parks the write offline when there is no signal. Only pass it
+     * for a write a replay cannot duplicate — a stage move is deduped server
+     * side (`services.leads.set_stage`); a remark or an interest is not. */
+    fun post(
+        path: String,
+        body: JSONObject,
+        queue: android.content.Context? = null,
+        then: () -> Unit = { data = null; reloadKey++ },
+    ) {
         scope.launch {
             actionError = null
-            when (val r = ApiClient.post(path, body)) {
-                is ApiClient.Result.Ok -> then()
+            when (val r = ApiClient.post(path, body, queue)) {
+                is ApiClient.Result.Ok ->
+                    // Parked offline: say so and leave the screen alone. The
+                    // reload `then` does would only fail on the same dead
+                    // network and swap the lead for an error box.
+                    if (r.json.optBoolean("queued")) {
+                        AppMessage.show("No signal — saved on the phone, it will sync.")
+                    } else then()
                 is ApiClient.Result.NotLoggedIn -> onSessionExpired()
                 is ApiClient.Result.Error -> actionError = r.message
             }
@@ -427,7 +399,7 @@ private fun LeadDetail(
         }
 
         SectionTitle("SPANCO stage")
-        SpancoStepper(stages, currentStage)
+        Stepper(stages.map { it.second }, stages.indexOfFirst { it.first == currentStage })
         Text(
             "${d.optString("stage_label")} · ${d.optInt("days_in_stage")} days here",
             fontSize = rsp(13), fontWeight = FontWeight.SemiBold,
@@ -446,9 +418,12 @@ private fun LeadDetail(
         fun move(stage: String) {
             val note = stageNote
             stageNote = ""
+            // The one write that happens standing in a client's living room,
+            // where the signal is worst.
             post(
                 "/clients/api/app/leads/$leadId/stage/",
                 JSONObject().put("stage", stage).put("note", note),
+                queue = context,
             )
         }
 

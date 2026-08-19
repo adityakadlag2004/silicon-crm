@@ -487,6 +487,14 @@ class ShellActivity : ComponentActivity() {
                             TasksActivity.open(this, id)
                         }
                         link.contains("/calls/followups") -> { overlay = null; selected = 3 }
+                        // Native leads pipeline; a lead id in the link opens
+                        // that lead's detail (the id rides in the overlay
+                        // string so nothing new has to be saved on rotation).
+                        link.contains("/leads") -> {
+                            val arg = Regex("/leads/(\\d+)/").find(link)?.groupValues?.get(1)
+                                ?: Regex("stage=([a-z_]+)").find(link)?.groupValues?.get(1)
+                            overlay = if (arg != null) "leads:$arg" else "leads"
+                        }
                         link.startsWith("/") -> openWeb(link)
                     }
                 }
@@ -566,11 +574,32 @@ class ShellActivity : ComponentActivity() {
                             onSessionExpired = goLogin,
                             onOpenWeb = routeLink,
                         )
-                        overlay == "leads" -> LeadsScreen(
-                            modifier = m,
-                            onBack = { overlay = null },
-                            onSessionExpired = goLogin,
-                        )
+                        overlay?.startsWith("leads") == true -> {
+                            // "leads", "leads:<id>" (open that lead) or
+                            // "leads:<stage>" (open the list on that stage).
+                            val arg = overlay!!.substringAfter(':', "")
+                            LeadsScreen(
+                                modifier = m,
+                                initialLeadId = arg.toIntOrNull(),
+                                initialStage = if (arg.toIntOrNull() == null) arg else "",
+                                onBack = { overlay = null },
+                                onSessionExpired = goLogin,
+                            )
+                        }
+                        // Policies and claims are two doors into one screen
+                        // stack: a claim opened from its policy behaves the
+                        // same as one opened from the claim list.
+                        overlay == "policies" || overlay == "claims" ->
+                            bo.kadlaginvestment.crm.ui.InsuranceScreen(
+                                modifier = m,
+                                start = overlay!!,
+                                onBack = { overlay = null },
+                                onSessionExpired = goLogin,
+                                // Documents stream out of Drive through the web
+                                // proxy, so they open in the WebView — routeLink
+                                // would try to read them as a claim link.
+                                onOpenWeb = openWeb,
+                            )
                         overlay == "reports" -> ReportsHub(
                             modifier = m,
                             onBack = { overlay = null },
@@ -610,11 +639,6 @@ class ShellActivity : ComponentActivity() {
                             onBack = { overlay = null },
                             onSessionExpired = goLogin,
                             onOpenWeb = openWeb,
-                        )
-                        overlay == "today" -> bo.kadlaginvestment.crm.ui.TodayScreen(
-                            modifier = m,
-                            onBack = { overlay = null },
-                            onSessionExpired = goLogin,
                         )
                         selected == 0 -> DashboardScreen(m, onSessionExpired = goLogin, onOpenWeb = routeLink)
                         selected == 2 -> AddSaleScreen(m, onSessionExpired = goLogin)

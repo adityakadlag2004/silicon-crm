@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -21,6 +23,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -174,6 +178,40 @@ private fun Dashboard(
             }
         }
 
+        // ── SPANCO pipeline ──
+        // Where the leads stand, and the live ones nobody has dated — the two
+        // things the web dashboards lead with. Tasks and call follow-ups are
+        // deliberately absent: they have their own screens.
+        val pipeline = d.optJSONObject("pipeline")
+        if (pipeline != null) {
+            item { PipelineStages(pipeline, onOpenWeb) }
+
+            val hot = pipeline.optJSONArray("hot")
+            val hotShown = hot?.length() ?: 0
+            val hotTotal = pipeline.optInt("hot_total")
+            item { SectionHeader(if (hotTotal > 0) "🔥 Needs you ($hotTotal)" else "🔥 Needs you") }
+            if (hotShown == 0) {
+                item {
+                    Text(
+                        if (pipeline.optInt("live") == 0) "No live leads yet — add one from Menu → Leads."
+                        else "Every live lead has a follow-up booked. Nothing is drifting. ✅",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13),
+                    )
+                }
+            } else {
+                items((0 until hotShown).map { hot!!.getJSONObject(it) }) { l ->
+                    HotLeadCard(l) { onOpenWeb("/clients/leads/${l.optInt("id")}/") }
+                }
+                if (hotTotal > hotShown) {
+                    item {
+                        TextButton(onClick = { onOpenWeb("/clients/leads/") }) {
+                            Text("See all $hotTotal →", fontSize = rsp(13))
+                        }
+                    }
+                }
+            }
+        }
+
         if (isAdmin) {
             // ── Team calls today ──
             val tc = d.optJSONObject("team_calls_today")
@@ -284,6 +322,107 @@ private fun Dashboard(
         }
 
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+/** Stage-by-stage standing, each chip a way into that slice of the list. */
+@Composable
+private fun PipelineStages(p: JSONObject, onOpenWeb: (String) -> Unit) {
+    val stages = p.optJSONArray("stages") ?: return
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(rdp(14))) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Pipeline · ${p.optInt("live")} live", fontSize = rsp(15), fontWeight = FontWeight.Bold)
+                TextButton(onClick = { onOpenWeb("/clients/leads/") }) {
+                    Text("All leads →", fontSize = rsp(13))
+                }
+            }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(rdp(8)),
+            ) {
+                for (i in 0 until stages.length()) {
+                    val st = stages.getJSONObject(i)
+                    StageChip(st) { onOpenWeb("/clients/leads/?stage=${st.optString("stage")}") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StageChip(st: JSONObject, onClick: () -> Unit) {
+    // Approach/Negotiation/Conclusion is the live band — the deals that are
+    // actually in play, so they carry the brand colour and the rest stay quiet.
+    val hot = st.optBoolean("hot")
+    val count = st.optInt("count")
+    val tint = if (hot && count > 0) BrandGoldDark else MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        Modifier
+            .clickable(onClick = onClick)
+            .background(
+                if (hot && count > 0) BrandGold.copy(alpha = 0.14f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                RoundedCornerShape(12.dp),
+            )
+            .padding(horizontal = rdp(12), vertical = rdp(8)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("$count", fontSize = rsp(17), fontWeight = FontWeight.Bold, color = tint)
+        Text(
+            st.optString("label").substringBefore(" /"),
+            fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** A live lead with nothing scheduled on it. Tapping opens the lead. */
+@Composable
+private fun HotLeadCard(l: JSONObject, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = rdp(14), vertical = rdp(11)),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(l.optString("name"), fontSize = rsp(14), fontWeight = FontWeight.SemiBold)
+                val owner = l.optString("owner")
+                Text(
+                    "${l.optString("stage_label")} · ${l.optInt("days_in_stage")}d here" +
+                        if (owner.isNotBlank()) " · $owner" else "",
+                    fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                if (l.optBoolean("no_followup")) ReasonTag("No follow-up", StatusRed)
+                if (l.optBoolean("stalled")) ReasonTag("Stalled", StatusAmber)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReasonTag(text: String, color: Color) {
+    Box(
+        Modifier
+            .background(color.copy(alpha = 0.14f), RoundedCornerShape(8.dp))
+            .padding(horizontal = rdp(8), vertical = rdp(2))
+    ) {
+        Text(text, fontSize = rsp(10), color = color, fontWeight = FontWeight.SemiBold)
     }
 }
 

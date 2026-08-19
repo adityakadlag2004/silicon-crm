@@ -24,8 +24,15 @@ def set_stage(lead, stage, user=None, note=""):
     """
     if stage not in VALID_STAGES:
         raise ValueError(f"Unknown SPANCO stage: {stage!r}")
-    if stage == lead.stage and not lead.is_discarded and not note:
-        return None
+    if stage == lead.stage and not lead.is_discarded:
+        # The lead is already here. With no note that is plainly a no-op; with
+        # one it is still a duplicate if the last event said exactly the same
+        # thing — which is what a double-submitted form and a replayed offline
+        # write both look like. The offline outbox replays writes, so the guard
+        # has to live here rather than in one caller.
+        last = lead.stage_events.first()
+        if not note or (last and last.to_stage == stage and (last.note or "") == note):
+            return None
 
     event = LeadStageEvent.objects.create(
         lead=lead,

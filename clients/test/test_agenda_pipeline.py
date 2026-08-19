@@ -252,3 +252,49 @@ class NeedsAttentionTests(TestCase):
         html = client.get(reverse("clients:admin_dashboard"), follow=True).content.decode()
         self.assertNotIn("Pipeline needs you", html,
                          "an empty panel is noise on every dashboard load")
+
+
+class AppDashboardPipelineTests(TestCase):
+    """The app home screen carries the same pipeline the web dashboards do.
+
+    It had neither the standing nor the leads nobody has dated, so the phone —
+    which is where the selling actually happens — showed no pipeline at all.
+    """
+
+    def setUp(self):
+        self.emp = _mk_employee("ag_app_emp")
+        self.other = _mk_employee("ag_app_other")
+        self.client = TestClient()
+
+    def _get(self, user):
+        self.client.force_login(user)
+        return self.client.get("/clients/api/app/dashboard/").json()["pipeline"]
+
+    def test_standing_and_unchased_leads_are_served(self):
+        lead = Lead.objects.create(customer_name="Unchased", assigned_to=self.emp,
+                                   stage=Lead.STAGE_NEGOTIATION)
+        Lead.objects.create(customer_name="Early", assigned_to=self.emp,
+                            stage=Lead.STAGE_SUSPECT)
+        p = self._get(self.emp.user)
+        counts = {s["stage"]: s["count"] for s in p["stages"]}
+        self.assertEqual(counts[Lead.STAGE_NEGOTIATION], 1)
+        self.assertEqual(counts[Lead.STAGE_SUSPECT], 1)
+        self.assertEqual(p["live"], 2)
+        self.assertEqual(p["hot_total"], 1, "only the live-band lead needs chasing")
+        self.assertEqual(p["hot"][0]["id"], lead.pk)
+        self.assertTrue(p["hot"][0]["no_followup"])
+
+    def test_an_employee_sees_only_their_own_leads(self):
+        Lead.objects.create(customer_name="Not mine", assigned_to=self.other,
+                            stage=Lead.STAGE_NEGOTIATION)
+        p = self._get(self.emp.user)
+        self.assertEqual(p["live"], 0)
+        self.assertEqual(p["hot"], [])
+
+    def test_a_scheduled_followup_clears_the_lead(self):
+        lead = Lead.objects.create(customer_name="Chased", assigned_to=self.emp,
+                                   stage=Lead.STAGE_APPROACH)
+        followups.schedule(followups.LEAD, lead, timezone.now() + timedelta(days=1))
+        p = self._get(self.emp.user)
+        self.assertEqual(p["hot_total"], 0)
+        self.assertEqual(p["live"], 1, "it is still in the pipeline, just handled")

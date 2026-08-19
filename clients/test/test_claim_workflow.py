@@ -1,5 +1,6 @@
 """Claim workflow: raise, advance stages, notes, documents, reminders."""
-from datetime import date
+import json as _json
+from datetime import date, timedelta
 
 from django.contrib.auth.models import User
 from django.test import Client as TC, TestCase
@@ -146,3 +147,109 @@ class ClaimReminderPipelineTests(TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["source"], "task")
         self.assertIn("Rahul Sharma", items[0]["title"])
+
+
+class AppInsuranceApiTests(TestCase):
+    """The app's Insurance module — the same workflow, from the phone.
+
+    A claim is intimated over the phone and its papers are photographed on the
+    spot, so every write here must land through `services/claims.py` and leave
+    the same trail the web screens do.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("app_ins", password="pw")
+        cls.emp = Employee.objects.create(user=cls.user, role="employee", salary=0, active=True)
+        cls.cust = Client.objects.create(id=7200, name="Nikhil Rao", phone="9876500042")
+        cls.policy = InsurancePolicy.objects.create(
+            client=cls.cust, policy_number="APP123", insurer="Star Health",
+            insurance_type=InsurancePolicy.TYPE_HEALTH, sum_insured=500000,
+            start_date=date(2026, 1, 1), end_date=date(2026, 12, 31))
+
+    def _tc(self):
+        tc = TC(); tc.force_login(self.user); return tc
+
+    def test_policies_list_carries_counts_and_search(self):
+        data = self._tc().get(reverse("clients:app_policies")).json()
+        self.assertEqual(data["counts"]["total"], 1)
+        self.assertEqual(data["results"][0]["number"], "APP123")
+        self.assertEqual(data["results"][0]["client"], "Nikhil Rao")
+        hit = self._tc().get(reverse("clients:app_policies") + "?q=star").json()
+        self.assertEqual(len(hit["results"]), 1)
+        miss = self._tc().get(reverse("clients:app_policies") + "?q=zzz").json()
+        self.assertEqual(miss["results"], [])
+
+    def test_raising_a_claim_logs_it_and_defaults_the_handler(self):
+        resp = self._tc().post(
+            reverse("clients:app_claim_create"),
+            data=_json.dumps({
+                "policy_id": self.policy.id, "claim_type": "Hospitalisation",
+                "claim_mode": "reimbursement", "claimed_amount": "120000",
+                "note": "Admitted last night.",
+            }),
+            content_type="application/json")
+        self.assertEqual(resp.status_code, 200)
+        claim = InsuranceClaim.objects.get(pk=resp.json()["id"])
+        self.assertEqual(claim.handled_by, self.emp)
+        self.assertEqual(claim.intimation_date, timezone.localdate())
+        self.assertEqual(claim.claimed_amount, 120000)
+        self.assertTrue(claim.activities.filter(action=ClaimActivity.CREATED).exists())
+        self.assertTrue(claim.activities.filter(action=ClaimActivity.NOTE).exists())
+
+    def _claim(self):
+        return InsuranceClaim.objects.create(
+            policy=self.policy, claim_type="Hospitalisation", handled_by=self.emp,
+            status=InsuranceClaim.STATUS_INTIMATED, claimed_amount=120000)
+
+    def test_update_advances_the_stage_and_stamps_the_date(self):
+        claim = self._claim()
+        self._tc().post(
+            reverse("clients:app_claim_update", args=[claim.pk]),
+            data=_json.dumps({"status": InsuranceClaim.STATUS_SUBMITTED,
+                              "note": "Papers couriered."}),
+            content_type="application/json")
+        claim.refresh_from_db()
+        self.assertEqual(claim.status, InsuranceClaim.STATUS_SUBMITTED)
+        self.assertEqual(claim.submission_date, timezone.localdate())
+
+    def test_settling_from_the_app_records_the_amount(self):
+        claim = self._claim()
+        self._tc().post(
+            reverse("clients:app_claim_update", args=[claim.pk]),
+            data=_json.dumps({"status": InsuranceClaim.STATUS_SETTLED,
+                              "settled_amount": "95000"}),
+            content_type="application/json")
+        claim.refresh_from_db()
+        self.assertEqual(float(claim.settled_amount), 95000.0)
+        self.assertEqual(float(claim.shortfall), 25000.0)
+
+    def test_a_followup_from_the_app_is_a_task(self):
+        claim = self._claim()
+        when = timezone.localtime() + timedelta(days=2)
+        self._tc().post(
+            reverse("clients:app_claim_update", args=[claim.pk]),
+            data=_json.dumps({"note": "Chase the TPA.",
+                              "reminder_at": when.strftime("%Y-%m-%dT%H:%M"),
+                              "reminder_note": "Ask for the query letter"}),
+            content_type="application/json")
+        task = Task.objects.get(source_kind=followups.CLAIM, source_id=claim.pk)
+        self.assertEqual(task.due_date, when.date())
+        self.assertEqual(task.assigned_to, self.emp)
+
+    def test_claim_detail_serves_the_timeline_and_the_reminders(self):
+        claim = self._claim()
+        claims_service.add_note(claim, self.user, "Called the hospital desk.")
+        data = self._tc().get(reverse("clients:app_claim_detail", args=[claim.pk])).json()
+        self.assertEqual(data["client"], "Nikhil Rao")
+        self.assertEqual(data["policy_number"], "APP123")
+        self.assertTrue(data["is_open"])
+        self.assertIn("Called the hospital desk.",
+                      [a["detail"] for a in data["activities"]])
+
+    def test_open_filter_leaves_settled_claims_out(self):
+        claim = self._claim()
+        claims_service.advance_stage(claim, InsuranceClaim.STATUS_SETTLED, self.user)
+        data = self._tc().get(reverse("clients:app_claims") + "?status=open").json()
+        self.assertEqual(data["results"], [])
+        self.assertEqual(data["counts"]["settled"], 1)

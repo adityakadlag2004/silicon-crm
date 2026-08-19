@@ -221,6 +221,42 @@ def app_dashboard(request):
                 })
         data["active_campaigns"] = active_campaigns
 
+    # ── SPANCO pipeline ──
+    # The two things both web dashboards lead with and the app had neither of:
+    # where the pipeline stands, and the live leads nobody has dated. Tasks and
+    # call follow-ups stay off this screen on purpose — they have their own.
+    # `_lead_qs` scopes it (an employee sees only their own); the interests
+    # prefetch is dropped, nothing here renders it.
+    lead_qs = _lead_qs(request).prefetch_related(None)
+    standing = lead_service.stage_counts(lead_qs.filter(is_discarded=False))
+    hot_rows, hot_total = lead_service.needs_attention(lead_qs, limit=6)
+    data["pipeline"] = {
+        "stages": [
+            {
+                "stage": stage,
+                "label": label,
+                "count": standing.get(stage, 0),
+                "hot": stage in Lead.STAGE_HOT,
+            }
+            for stage, label in Lead.STAGE_CHOICES
+        ],
+        "live": sum(standing.values()),
+        "hot_total": hot_total,
+        "hot": [
+            {
+                "id": r["lead"].id,
+                "name": r["lead"].customer_name,
+                "stage": r["lead"].stage,
+                "stage_label": r["stage_label"],
+                "owner": r["owner"],
+                "days_in_stage": r["days_in_stage"],
+                "no_followup": r["no_followup"],
+                "stalled": r["stalled"],
+            }
+            for r in hot_rows
+        ],
+    }
+
     return JsonResponse(data)
 
 
@@ -658,55 +694,6 @@ def app_followups(request):
         "stats": _today_call_stats(emp),
         "outcomes": [
             {"key": k, "label": v} for k, v in CallFollowUp.OUTCOME_CHOICES
-        ],
-    })
-
-
-@login_required
-@require_GET
-def app_today(request):
-    """One agenda for the signed-in employee: today's (and overdue) tasks,
-    pending call follow-ups due by tonight, and renewals that have come due.
-    Powers the app's "Today" screen — the one place to start the day from."""
-    from ..models import Renewal, Task
-    from .app_tasks_api import _task_row
-
-    emp = _emp(request)
-    today = timezone.localdate()
-    now = timezone.now()
-    end_of_day = timezone.make_aware(
-        timezone.datetime.combine(today, timezone.datetime.max.time())
-    )
-
-    tasks = Task.objects.filter(
-        is_deleted=False, assigned_to=emp, due_date__lte=today,
-        status__in=[Task.STATUS_PENDING, Task.STATUS_IN_PROGRESS, Task.STATUS_OVERDUE],
-    ).select_related("category", "assigned_to__user", "client").order_by("due_date", "due_time")[:100] if emp else []
-
-    followups = list(CallFollowUp.objects.filter(
-        employee=emp, status=CallFollowUp.STATUS_PENDING, scheduled_at__lte=end_of_day,
-    ).select_related("client").order_by("scheduled_at")[:100]) if emp else []
-    fu_names = calls_service.caller_names([f.phone for f in followups if not f.client_id])
-
-    renewals = Renewal.objects.filter(
-        employee=emp, renewal_date__lte=today, renewal_date__gte=today - timedelta(days=30),
-    ).select_related("client").order_by("renewal_date")[:50] if emp else []
-
-    return JsonResponse({
-        "date": today.isoformat(),
-        "tasks": [_task_row(t) for t in tasks],
-        "followups": [_fu_row(f, now, names=fu_names) for f in followups],
-        "renewals": [
-            {
-                "id": r.pk,
-                "client": r.client.name if r.client_id else "",
-                "client_phone": r.client.phone if r.client_id else "",
-                "product": r.product_ref.name if r.product_ref_id else (r.product_name or r.product_type),
-                "renewal_date": r.renewal_date.isoformat(),
-                "premium": float(r.premium_amount or 0),
-                "overdue": r.renewal_date < today,
-            }
-            for r in renewals
         ],
     })
 

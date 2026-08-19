@@ -78,6 +78,21 @@ class SpancoStageTests(TestCase):
         lead.refresh_from_db()
         self.assertEqual(lead.stage, Lead.STAGE_SUSPECT)
 
+    def test_a_replayed_move_does_not_log_a_second_event(self):
+        """The offline outbox replays writes, and a double-tapped form
+        submits twice. Neither may leave two identical events on the lead."""
+        lead = self._lead()
+        body = {"stage": Lead.STAGE_APPROACH, "note": "Met at his office."}
+        lead_service.set_stage(lead, body["stage"], user=self.user, note=body["note"])
+        lead_service.set_stage(lead, body["stage"], user=self.user, note=body["note"])
+        self.assertEqual(lead.stage_events.filter(to_stage=Lead.STAGE_APPROACH).count(), 1)
+
+    def test_the_same_stage_with_a_new_note_is_still_recorded(self):
+        lead = self._lead()
+        lead_service.set_stage(lead, Lead.STAGE_APPROACH, user=self.user, note="First visit")
+        lead_service.set_stage(lead, Lead.STAGE_APPROACH, user=self.user, note="Second visit")
+        self.assertEqual(lead.stage_events.filter(to_stage=Lead.STAGE_APPROACH).count(), 2)
+
 
 class SpancoFunnelTests(TestCase):
     @classmethod

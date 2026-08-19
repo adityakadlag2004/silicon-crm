@@ -260,6 +260,16 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - A claim follow-up is a **Task** (see "Follow-ups are tasks" below) — the
   `ClaimReminder` model was deleted, migration 0123. Every stage update / note
   can still attach one in the same submit.
+- **The app works claims too** (`views/app_insurance_api.py` → `ui/InsuranceScreen.kt`,
+  Menu → Insurance). Policies and claims are two doors into one screen stack.
+  Every write goes through `services/claims.py`, so web and phone leave the same
+  trail; the stage list, modes and document kinds are served by
+  `/api/app/insurance-meta/` rather than hard-coded in the app. Documents upload
+  as multipart to `/api/app/claims/<id>/document/?kind=…` — `kind` rides in the
+  query string because the device's multipart helper sends the file field and
+  nothing else — and are read back through the existing web proxy in the WebView.
+  This is the module that most needed a phone: a claim is intimated over the
+  phone and its papers are photographed on the spot.
 
 ## Follow-ups are tasks
 
@@ -386,6 +396,13 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   per-employee win rates, leads stalled 14+ days, what the pipeline wants).
 - The stepper CSS is `.ki-steps` / `.ki-step` in `ki-record.css`, shared with
   the claim workflow.
+- **The app home screen carries the pipeline too** — `app_dashboard` serves a
+  `pipeline` block (stage standing + `needs_attention` rows, scoped by
+  `_lead_qs`), rendered above the sales sections. Tasks and call follow-ups are
+  deliberately kept off it: they own the Tasks and Calls tabs, and a third copy
+  is what people learn to ignore. A chip or a card routes through `routeLink`
+  (`/clients/leads/?stage=x`, `/clients/leads/<id>/`) into the native
+  `LeadsScreen` via the overlay string `leads:<id|stage>`.
 
 ## Phone numbers are a matching key
 
@@ -509,6 +526,9 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `ui/Refresh.kt` (`RefreshableBox`, `ErrorStrip`), `ui/Load.kt`
   (`rememberLoader` — cache-first fetch), `ui/Common.kt` (`AppMessage`,
   `EmptyState`, `StatusPill`, `rupees`), `ui/Session.kt` (role + unread badge).
+- The Menu is **grouped** (`MenuEntry.group`: Work / Insurance / Reports /
+  Admin / This phone), not one flat run in the order screens happened to ship.
+  A new screen picks a group; it does not get appended to the end.
 - **Never** a bare glyph as a button (`Text("↻", clickable)`): no ripple, no
   role, ~28dp target, and TalkBack reads the character. Use `IconButton` with
   a `contentDescription`.
@@ -523,7 +543,19 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   because those fields set `KeyboardType.Decimal`, so it never rewrites.
 - Every `ApiClient.post` call site must handle `Result.Error`. Writes that are
   safe to replay pass `offlineQueue = context` so they survive no signal
-  (`net/Outbox.kt`); creating a sale or client deliberately does not.
+  (`net/Outbox.kt`); creating a sale or client deliberately does not. A **lead
+  stage move** queues — it is the write that happens in a client's living room —
+  and `services.leads.set_stage` drops a replay that repeats the last event, so
+  the queue can never log the same move twice. A queued write shows a message
+  and does **not** reload the screen: the reload would fail on the same dead
+  network and swap the record for an error box.
+- **Attaching a file is `ui/Attach.kt`, never re-rolled**: `rememberAttacher`
+  gives a camera button and a picker button, `uploadUri` does the multipart
+  upload and *returns the failure* instead of swallowing it. The camera writes
+  through the FileProvider the manifest already declares; no CAMERA permission
+  is declared and none should be — adding one would make Android demand a
+  runtime grant this flow does not need. Task attachments and claim documents
+  share it.
 - Screens read data through `rememberLoader` (last-good response from
   `net/Cache.kt` paints first) and refresh by pull, not by a glyph.
 - Navigation/tab state is `rememberSaveable`, or rotation dumps the user home.
