@@ -1534,6 +1534,14 @@ def app_report_summary(request):
         ],
     }
     if firm_wide:
+        # Who can be picked. The Employee Performance screen opens on this list,
+        # and it is deliberately not /api/app/team/ (admins only) — a manager
+        # with employee_performance access can read this report.
+        resp["employees"] = [
+            {"id": e.id, "name": e.user.get_full_name() or e.user.username}
+            for e in Employee.objects.filter(active=True, user__isnull=False)
+            .select_related("user").order_by("user__first_name", "user__username")
+        ]
         resp["leaderboard"] = [
             {
                 "employee_id": e["employee_id"],

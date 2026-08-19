@@ -55,6 +55,14 @@ fun ReportsHub(
     when (sub) {
         "overview" -> { BackHandler { sub = null }; ReportsScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired, onOpenWeb = onOpenWeb); return }
         "monthly" -> { BackHandler { sub = null }; MonthlyReportScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired); return }
+        "employee" -> {
+            BackHandler { sub = null }
+            ReportsScreen(
+                modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired,
+                onOpenWeb = onOpenWeb, employeeMode = true,
+            )
+            return
+        }
     }
 
     val isManagerPlus = Session.isManagerPlus
@@ -65,6 +73,7 @@ fun ReportsHub(
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
             item { ReportCard("📊", "Business Overview", "Trend by product, mix & leaderboard — 6M to 5Y") { sub = "overview" } }
             if (isManagerPlus) {
+                item { ReportCard("👤", "Employee Performance", "One member's months, product-wise") { sub = "employee" } }
                 item { ReportCard("🧾", "Monthly Report", "Product-wise + employee-wise for a month") { sub = "monthly" } }
                 item { Spacer(Modifier.height(4.dp)); Text("Detailed tools (open on web)", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
                 item { ReportCard("💹", "Business Analytics", "Revenue vs expenses, margins", web = true) { onOpenWeb("/clients/reports/business-analytics/") } }

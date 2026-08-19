@@ -843,6 +843,17 @@ class AppReportsTests(TestCase):
         self.assertEqual(latest["select"], 0)
         self.assertNotEqual(data["current_start"], latest["current_start"])
 
+    def test_summary_lists_employees_to_pick_from(self):
+        """The Employee Performance screen opens on this list, so it must carry
+        everyone active — including whoever sold nothing in the window."""
+        idle = Employee.objects.create(
+            user=User.objects.create_user("idle_seller"), role="employee", salary=0, active=True,
+        )
+        data = self._http(self.admin_user).get(reverse("clients:app_report_summary")).json()
+        ids = {e["id"] for e in data["employees"]}
+        self.assertIn(self.emp.id, ids)
+        self.assertIn(idle.id, ids)          # no sales, still pickable
+
     def test_summary_employee_sees_own_and_cannot_drill(self):
         data = self._http(self.emp_user).get(
             reverse("clients:app_report_summary"), {"employee_id": 999999},

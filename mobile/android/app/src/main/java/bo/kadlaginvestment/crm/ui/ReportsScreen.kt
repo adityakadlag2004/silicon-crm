@@ -81,6 +81,7 @@ fun ReportsScreen(
     onBack: () -> Unit,
     onSessionExpired: () -> Unit,
     onOpenWeb: (String) -> Unit = {},
+    employeeMode: Boolean = false,
 ) {
     BackHandler(onBack = onBack)
 
@@ -101,6 +102,7 @@ fun ReportsScreen(
         ScreenHeader(
             when {
                 employeeId != null -> d?.optString("scope_name").orEmpty().ifEmpty { "Performance" }
+                employeeMode -> "Employee Performance"
                 d?.optBoolean("firm_wide") == true -> "Business Overview"
                 else -> "My Performance"
             },
@@ -113,6 +115,13 @@ fun ReportsScreen(
         if (d == null) {
             if (loader.error != null) ErrorBox(loader.error!!, Modifier.fillMaxSize()) { loader.reload() }
             else LoadingBox(Modifier.fillMaxSize())
+            return@Column
+        }
+
+        // Employee Performance opens on "whose?" — the same report, one person
+        // at a time, product-wise across the months.
+        if (employeeMode && employeeId == null) {
+            EmployeePicker(d.optJSONArray("employees")) { employeeId = it }
             return@Column
         }
 
@@ -173,7 +182,12 @@ fun ReportsScreen(
                             onClick = { employeeId = null },
                             label = { Text(d.optString("scope_name"), fontSize = rsp(13)) },
                             trailingIcon = {
-                                Icon(Icons.Filled.Close, contentDescription = "Show the whole team again")
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription =
+                                        if (employeeMode) "Pick a different employee"
+                                        else "Show the whole team again",
+                                )
                             },
                         )
                     }
@@ -252,6 +266,43 @@ fun ReportsScreen(
                 Spacer(Modifier.height(20.dp))
             }
         }
+    }
+}
+
+/** Who to report on. Every active employee, not only those with sales in the
+ * window — "nothing this quarter" is itself the answer you came for. */
+@Composable
+private fun EmployeePicker(employees: JSONArray?, onPick: (Int) -> Unit) {
+    if (employees == null || employees.length() == 0) {
+        EmptyState("👥", "No employees", "Nobody to report on yet.")
+        return
+    }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            "Whose performance?",
+            fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        for (i in 0 until employees.length()) {
+            val e = employees.getJSONObject(i)
+            val name = e.optString("name")
+            Card(
+                modifier = Modifier.fillMaxWidth()
+                    .clickable(onClickLabel = "Show $name") { onPick(e.optInt("id")) },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(name, fontSize = rsp(15), fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    Text("›", fontSize = rsp(15), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
 
