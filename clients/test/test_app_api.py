@@ -819,21 +819,37 @@ class AppReportsTests(TestCase):
         self.assertEqual(data["total_amount"], 5000.0)   # own only
         self.assertNotIn("employees", data)
 
-    def test_past_trend_12_months_and_scope(self):
-        data = self._http(self.admin_user).get(reverse("clients:app_report_past")).json()
+    def test_summary_drills_down_to_one_employee(self):
+        """The leaderboard row carries an id, and passing it back retells the
+        whole report for that person — what the old Past Performance screen did
+        with a dropdown."""
+        url = reverse("clients:app_report_summary")
+        data = self._http(self.admin_user).get(url, {"period": "month", "columns": 12}).json()
         self.assertEqual(len(data["trend"]), 12)
-        self.assertEqual(data["total_amount"], 14000.0)
         self.assertTrue(data["firm_wide"])
-        # employee drill-down
-        data = self._http(self.admin_user).get(
-            reverse("clients:app_report_past"), {"employee_id": self.emp.id}
-        ).json()
-        self.assertEqual(data["total_amount"], 5000.0)
+        self.assertEqual(data["scope_name"], "Whole firm")
+        row = next(e for e in data["leaderboard"] if e["employee_id"] == self.emp.id)
 
-    def test_past_employee_sees_own(self):
-        data = self._http(self.emp_user).get(reverse("clients:app_report_past")).json()
+        one = self._http(self.admin_user).get(url, {"employee_id": row["employee_id"]}).json()
+        self.assertEqual(one["employee_id"], self.emp.id)
+        self.assertEqual(sum(t["amount"] for t in one["trend"]), 5000.0)
+
+    def test_summary_select_moves_the_mix_off_the_latest_period(self):
+        url = reverse("clients:app_report_summary")
+        data = self._http(self.admin_user).get(url, {"select": 1}).json()
+        self.assertEqual(data["select"], 1)
+        self.assertLess(data["current_start"], data["current_end"])
+        latest = self._http(self.admin_user).get(url).json()
+        self.assertEqual(latest["select"], 0)
+        self.assertNotEqual(data["current_start"], latest["current_start"])
+
+    def test_summary_employee_sees_own_and_cannot_drill(self):
+        data = self._http(self.emp_user).get(
+            reverse("clients:app_report_summary"), {"employee_id": 999999},
+        ).json()
         self.assertFalse(data["firm_wide"])
-        self.assertEqual(data["total_amount"], 5000.0)
+        self.assertIsNone(data["employee_id"])
+        self.assertNotIn("leaderboard", data)
 
 
 class AppEmployeeGamificationTests(TestCase):

@@ -53,9 +53,8 @@ fun ReportsHub(
     LaunchedEffect(Unit) { if (!Session.load()) onSessionExpired() }
 
     when (sub) {
-        "overview" -> { BackHandler { sub = null }; ReportsScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired) ; return }
+        "overview" -> { BackHandler { sub = null }; ReportsScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired, onOpenWeb = onOpenWeb); return }
         "monthly" -> { BackHandler { sub = null }; MonthlyReportScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired); return }
-        "past" -> { BackHandler { sub = null }; PastPerformanceScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired); return }
     }
 
     val isManagerPlus = Session.isManagerPlus
@@ -64,8 +63,7 @@ fun ReportsHub(
         ScreenHeader("Reports", onBack = onBack)
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
-            item { ReportCard("📊", "Business Overview", "Business trend by product, mix & leaderboard") { sub = "overview" } }
-            item { ReportCard("📆", "Past Performance", "Month-by-month business over the last year") { sub = "past" } }
+            item { ReportCard("📊", "Business Overview", "Trend by product, mix & leaderboard — 6M to 5Y") { sub = "overview" } }
             if (isManagerPlus) {
                 item { ReportCard("🧾", "Monthly Report", "Product-wise + employee-wise for a month") { sub = "monthly" } }
                 item { Spacer(Modifier.height(4.dp)); Text("Detailed tools (open on web)", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
@@ -201,81 +199,6 @@ private fun MonthlyReportScreen(
                             Text("%.0f pts".format(e.optDouble("points", 0.0)), fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
-                }
-            }
-            item { Spacer(Modifier.height(16.dp)) }
-        }
-    }
-}
-
-// ── Past performance ─────────────────────────────────────────────────────────
-
-@Composable
-private fun PastPerformanceScreen(
-    modifier: Modifier,
-    onBack: () -> Unit,
-    onSessionExpired: () -> Unit,
-) {
-    var employee by remember { mutableStateOf<Pair<Int, String>?>(null) }  // null = firm/own
-    var empMenu by remember { mutableStateOf(false) }
-    var data by remember { mutableStateOf<JSONObject?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var reloadKey by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(employee, reloadKey) {
-        data = null
-        val q = employee?.let { "employee_id=${it.first}" } ?: ""
-        when (val r = ApiClient.get("/clients/api/app/reports/past/?$q")) {
-            is ApiClient.Result.Ok -> data = r.json
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> error = r.message
-        }
-    }
-
-    if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
-
-    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
-        ReportHeader("Past Performance", onBack)
-        val d = data
-
-        if (d?.optBoolean("firm_wide") == true) {
-            Box(Modifier.padding(bottom = 8.dp)) {
-                OutlinedButton(onClick = { empMenu = true }) { Text(employee?.second ?: "Whole firm") }
-                DropdownMenu(expanded = empMenu, onDismissRequest = { empMenu = false }) {
-                    DropdownMenuItem(text = { Text("Whole firm") }, onClick = { employee = null; empMenu = false })
-                    val es = d.optJSONArray("employees")
-                    for (i in 0 until (es?.length() ?: 0)) {
-                        val e = es!!.getJSONObject(i)
-                        DropdownMenuItem(text = { Text(e.optString("name")) }, onClick = { employee = e.getInt("id") to e.optString("name"); empMenu = false })
-                    }
-                }
-            }
-        }
-
-        if (d == null) { LoadingBox(); return }
-
-        val trend = d.optJSONArray("trend")
-        val rows = (0 until (trend?.length() ?: 0)).map { trend!!.getJSONObject(it) }
-
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HeroStat("12-mo business", rupees(d.optDouble("total_amount", 0.0)), Modifier.weight(1f))
-                    HeroStat("12-mo points", "%.0f".format(d.optDouble("total_points", 0.0)), Modifier.weight(1f))
-                }
-            }
-            item { SectionTitle("Monthly business — ${d.optString("scope_name")}") }
-            items(rows.reversed()) { t ->  // newest first
-                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${t.optString("label")} ${t.optInt("year")}", fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "${rupees(t.optDouble("amount", 0.0))}  ·  %.0f pts".format(t.optDouble("points", 0.0)),
-                            fontSize = rsp(13), fontWeight = FontWeight.Bold,
-                        )
-                    }
-                    Spacer(Modifier.height(3.dp))
-                    BarLine((t.optDouble("percent", 0.0) / 100.0).toFloat())
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }

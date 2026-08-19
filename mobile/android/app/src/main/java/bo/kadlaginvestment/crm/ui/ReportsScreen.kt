@@ -1,7 +1,6 @@
 package bo.kadlaginvestment.crm.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,17 +15,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -34,238 +31,321 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import bo.kadlaginvestment.crm.net.ApiClient
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Palette shared with the web Business Overview (clients/views/reports.py). */
-private val OverviewColors = listOf(
-    Color(0xFFE5B740), Color(0xFF3B82F6), Color(0xFF10B981), Color(0xFFEF4444),
-    Color(0xFF8B5CF6), Color(0xFFF97316), Color(0xFF14B8A6), Color(0xFFEC4899),
+/** Four colours, not eight: three named products plus "Other". A legend you
+ * have to scroll sideways is a legend nobody reads. */
+private val SeriesColors = listOf(
+    Color(0xFFE5B740), Color(0xFF3B82F6), Color(0xFF10B981), Color(0xFF94A3B8),
 )
+private const val NAMED_SERIES = 3
 
-private val PERIOD_OPTIONS = listOf(
-    "month" to "Month", "quarter" to "Quarter", "half" to "Half-yr", "year" to "Year",
+/** One control instead of two. "6 cols" was developer vocabulary; a range is
+ * what people actually ask for. */
+private data class Range(val label: String, val period: String, val columns: Int)
+
+private val RANGES = listOf(
+    Range("6M", "month", 6),
+    Range("1Y", "month", 12),
+    Range("3Y", "quarter", 12),
+    Range("5Y", "year", 5),
 )
-private val COLUMN_OPTIONS = listOf(3, 6, 9, 12, 18, 24)
 
 private fun JSONArray?.toDoubles(): List<Double> =
     (0 until (this?.length() ?: 0)).map { this!!.optDouble(it, 0.0) }
 
-/** Native Business Overview: period-grouped business trend split by product
- * (stacked bars), product mix for the latest period, and (admins/managers)
- * the employee leaderboard with the same product bifurcation. */
+/**
+ * Business Overview: what the period earned, how it splits by product, and who
+ * brought it in.
+ *
+ * Three things it does that the old screen didn't: it leads with the number
+ * (nobody should decode a bar to learn this month's business), a tap on a bar
+ * retells the page for that period, and a tap on a person retells it for them
+ * — which is the whole of what the separate "Past Performance" screen was.
+ */
 @Composable
 fun ReportsScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit,
     onSessionExpired: () -> Unit,
+    onOpenWeb: (String) -> Unit = {},
 ) {
     BackHandler(onBack = onBack)
 
-    var period by remember { mutableStateOf("month") }
-    var columns by remember { mutableIntStateOf(6) }
-    var data by remember { mutableStateOf<JSONObject?>(null) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(false) }
-    var reloadKey by remember { mutableIntStateOf(0) }
+    var rangeIdx by rememberSaveable { mutableIntStateOf(0) }
+    var select by rememberSaveable { mutableIntStateOf(0) }   // 0 = latest column
+    var employeeId by rememberSaveable { mutableStateOf<Int?>(null) }
 
-    LaunchedEffect(period, columns, reloadKey) {
-        loading = true
-        error = null
-        when (val r = ApiClient.get("/clients/api/app/reports/summary/?period=$period&columns=$columns")) {
-            is ApiClient.Result.Ok -> data = r.json
-            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-            is ApiClient.Result.Error -> error = r.message
-        }
-        loading = false
+    val range = RANGES[rangeIdx]
+    val path = buildString {
+        append("/clients/api/app/reports/summary/")
+        append("?period=${range.period}&columns=${range.columns}&select=$select")
+        employeeId?.let { append("&employee_id=$it") }
     }
+    val loader = rememberLoader(path, onSessionExpired = onSessionExpired)
+    val d = loader.data
 
-    if (error != null && data == null) { ErrorBox(error!!, modifier) { reloadKey++ }; return }
-    val d = data ?: run { LoadingBox(modifier); return }
-
-    val trend = d.optJSONArray("trend")
-    val rows = (0 until (trend?.length() ?: 0)).map { trend!!.getJSONObject(it) }
-    val bucketsArr = d.optJSONArray("buckets")
-    val buckets = (0 until (bucketsArr?.length() ?: 0)).map { bucketsArr!!.getString(it) }
-    val products = d.optJSONArray("products")
-    val leaderboard = d.optJSONArray("leaderboard")
-    val curLabel = listOf(d.optString("current_label"), d.optString("current_sublabel"))
-        .filter { it.isNotEmpty() }.joinToString(" ")
-
-    Column(
-        modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    Column(modifier.fillMaxSize()) {
         ScreenHeader(
-            if (d.optBoolean("firm_wide")) "Business Overview" else "My Performance",
+            when {
+                employeeId != null -> d?.optString("scope_name").orEmpty().ifEmpty { "Performance" }
+                d?.optBoolean("firm_wide") == true -> "Business Overview"
+                else -> "My Performance"
+            },
             onBack = onBack,
+            modifier = Modifier.padding(horizontal = 8.dp),
         )
+        RefreshingBar(loader.refreshing)
+        ErrorStrip(loader.error.takeIf { d != null })
 
-        // ── Period + column controls ──
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PERIOD_OPTIONS.forEach { (key, label) ->
-                FilterChip(
-                    selected = period == key,
-                    onClick = { period = key },
-                    label = { Text(label, fontSize = rsp(13)) },
+        if (d == null) {
+            if (loader.error != null) ErrorBox(loader.error!!, Modifier.fillMaxSize()) { loader.reload() }
+            else LoadingBox(Modifier.fillMaxSize())
+            return@Column
+        }
+
+        val rows = d.optJSONArray("trend").let { t ->
+            (0 until (t?.length() ?: 0)).map { t!!.getJSONObject(it) }
+        }
+        val bucketsArr = d.optJSONArray("buckets")
+        val buckets = (0 until (bucketsArr?.length() ?: 0)).map { bucketsArr!!.getString(it) }
+
+        // Colour slots: the three biggest products over the whole window keep a
+        // colour, everything else shares "Other". Stable while you browse
+        // periods, so a colour never changes meaning under your finger.
+        val bucketTotals = DoubleArray(buckets.size)
+        rows.forEach { r ->
+            r.optJSONArray("by_product").toDoubles().forEachIndexed { i, v ->
+                if (i < bucketTotals.size) bucketTotals[i] += v
+            }
+        }
+        val named = bucketTotals.indices.sortedByDescending { bucketTotals[it] }
+            .filter { bucketTotals[it] > 0 }.take(NAMED_SERIES)
+        val slotOf = { idx: Int -> named.indexOf(idx).let { if (it >= 0) it else NAMED_SERIES } }
+        val hasOther = bucketTotals.indices.any { it !in named && bucketTotals[it] > 0 }
+        val legend = named.map { buckets[it] } + if (hasOther) listOf("Other") else emptyList()
+        val seriesOf = { r: JSONObject ->
+            val out = DoubleArray(NAMED_SERIES + 1)
+            r.optJSONArray("by_product").toDoubles().forEachIndexed { i, v -> out[slotOf(i)] += v }
+            out.toList()
+        }
+
+        val selIdx = (rows.size - 1 - select).coerceIn(0, (rows.size - 1).coerceAtLeast(0))
+        val cur = rows.getOrNull(selIdx)
+        val prev = rows.getOrNull(selIdx - 1)
+        val curLabel = listOf(d.optString("current_label"), d.optString("current_sublabel"))
+            .filter { it.isNotEmpty() }.joinToString(" ")
+
+        RefreshableBox(refreshing = loader.refreshing, onRefresh = { loader.reload() }) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // ── Range + active drill-down ──
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RANGES.forEachIndexed { i, r ->
+                        FilterChip(
+                            selected = rangeIdx == i,
+                            onClick = { rangeIdx = i; select = 0 },
+                            label = { Text(r.label, fontSize = rsp(13)) },
+                        )
+                    }
+                    if (employeeId != null) {
+                        FilterChip(
+                            selected = true,
+                            onClick = { employeeId = null },
+                            label = { Text(d.optString("scope_name"), fontSize = rsp(13)) },
+                            trailingIcon = {
+                                Icon(Icons.Filled.Close, contentDescription = "Show the whole team again")
+                            },
+                        )
+                    }
+                }
+
+                // ── The number, first ──
+                HeroRow(
+                    amount = cur?.optDouble("amount", 0.0) ?: 0.0,
+                    count = cur?.optInt("count") ?: 0,
+                    previous = prev?.optDouble("amount", 0.0),
+                    label = curLabel,
                 )
-            }
-            var colMenu by remember { mutableStateOf(false) }
-            Box {
-                AssistChip(onClick = { colMenu = true }, label = { Text("$columns cols ▾", fontSize = rsp(13)) })
-                DropdownMenu(expanded = colMenu, onDismissRequest = { colMenu = false }) {
-                    COLUMN_OPTIONS.forEach { n ->
-                        DropdownMenuItem(text = { Text("$n columns") }, onClick = { columns = n; colMenu = false })
-                    }
-                }
-            }
-        }
 
-        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-
-        // ── Product-split trend ──
-        SectionTitle("Approved business · by product")
-        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-            Column(Modifier.padding(16.dp)) {
-                BucketLegend(buckets)
-                Spacer(Modifier.height(10.dp))
-                StackedBars(rows, buckets)
-            }
-        }
-
-        // ── Latest-period product mix ──
-        SectionTitle(if (curLabel.isEmpty()) "By product" else "$curLabel · by product")
-        if (products == null || products.length() == 0) {
-            Text("No approved sales in this period yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
-        } else {
-            val maxAmt = (0 until products.length()).maxOf { products.getJSONObject(it).optDouble("amount", 0.0) }
-            for (i in 0 until products.length()) {
-                val p = products.getJSONObject(i)
-                val color = buckets.indexOf(p.optString("name")).let { if (it >= 0) OverviewColors[it % OverviewColors.size] else MaterialTheme.colorScheme.primary }
+                // ── Trend ──
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                    Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(p.optString("name"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
-                            Text(
-                                "${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}",
-                                fontSize = rsp(13), fontWeight = FontWeight.Bold,
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        HBar(fraction = if (maxAmt > 0) (p.optDouble("amount", 0.0) / maxAmt).toFloat() else 0f, color = color)
+                    Column(Modifier.padding(14.dp)) {
+                        SeriesLegend(legend)
+                        Spacer(Modifier.height(10.dp))
+                        StackedBars(
+                            rows = rows,
+                            seriesOf = seriesOf,
+                            selectedIndex = selIdx,
+                            onSelect = { i -> select = rows.size - 1 - i },
+                        )
                     }
                 }
-            }
-        }
 
-        // ── Leaderboard with product bifurcation ──
-        if (leaderboard != null && leaderboard.length() > 0) {
-            SectionTitle(if (curLabel.isEmpty()) "Employee leaderboard" else "Leaderboard · $curLabel")
-            for (i in 0 until leaderboard.length()) {
-                val e = leaderboard.getJSONObject(i)
-                val byProduct = e.optJSONArray("by_product").toDoubles()
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    "${i + 1}",
-                                    fontSize = rsp(13), fontWeight = FontWeight.Bold,
-                                    color = if (i == 0) BrandGoldDark else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(end = 10.dp),
+                // ── The selected period, by product ──
+                val products = d.optJSONArray("products")
+                SectionTitle(if (curLabel.isEmpty()) "By product" else "$curLabel · by product")
+                if (products == null || products.length() == 0) {
+                    Text(
+                        "No approved sales in this period.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13),
+                    )
+                } else {
+                    val total = (0 until products.length())
+                        .sumOf { products.getJSONObject(it).optDouble("amount", 0.0) }
+                    for (i in 0 until products.length()) {
+                        val p = products.getJSONObject(i)
+                        val name = p.optString("name")
+                        val amt = p.optDouble("amount", 0.0)
+                        ProductRow(
+                            name = name,
+                            amount = amt,
+                            count = p.optInt("count"),
+                            share = if (total > 0) (amt / total).toFloat() else 0f,
+                            color = SeriesColors[slotOf(buckets.indexOf(name))],
+                            onClick = {
+                                onOpenWeb(
+                                    "/clients/sales/?product=" +
+                                        java.net.URLEncoder.encode(name, "UTF-8") +
+                                        "&start_date=${d.optString("current_start")}" +
+                                        "&end_date=${d.optString("current_end")}"
                                 )
-                                Text(e.optString("name"), fontSize = rsp(14), fontWeight = FontWeight.Medium)
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(rupees(e.optDouble("amount", 0.0)), fontSize = rsp(14), fontWeight = FontWeight.Bold)
-                                Text(
-                                    "%.1f pts".format(e.optDouble("points", 0.0)),
-                                    fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        if (byProduct.sum() > 0) {
-                            Spacer(Modifier.height(8.dp))
-                            StackedLine(byProduct, Modifier.fillMaxWidth())
-                        }
+                            },
+                        )
                     }
                 }
+
+                // ── Who brought it in ──
+                val leaderboard = d.optJSONArray("leaderboard")
+                if (leaderboard != null && leaderboard.length() > 0 && employeeId == null) {
+                    SectionTitle("Leaderboard · ${curLabel.ifEmpty { "this period" }}")
+                    for (i in 0 until leaderboard.length()) {
+                        val e = leaderboard.getJSONObject(i)
+                        LeaderRow(
+                            rank = i + 1,
+                            row = e,
+                            series = seriesOf(e),
+                            onClick = { employeeId = e.optInt("employee_id").takeIf { it > 0 } },
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(20.dp))
             }
         }
-
-        Spacer(Modifier.height(20.dp))
     }
 }
 
-/** Colored dot + name for each product bucket, wrapping horizontally. */
+/** Amount, sales count and the change against the period before it. */
 @Composable
-private fun BucketLegend(buckets: List<String>) {
+private fun HeroRow(amount: Double, count: Int, previous: Double?, label: String) {
+    val delta = if (previous != null && previous > 0) (amount - previous) / previous * 100 else null
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Text(
+                label.ifEmpty { "This period" },
+                fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(rupees(amount), fontSize = rsp(26), fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$count ${if (count == 1) "sale" else "sales"}",
+                    fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (delta != null) {
+                    Text(
+                        "  ·  ${if (delta >= 0) "▲" else "▼"} ${"%.0f".format(kotlin.math.abs(delta))}% vs previous",
+                        fontSize = rsp(12), fontWeight = FontWeight.SemiBold,
+                        color = if (delta >= 0) StatusGreen else StatusRed,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Colour key — at most four entries, so it fits on one line. */
+@Composable
+private fun SeriesLegend(names: List<String>) {
     Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        buckets.forEachIndexed { i, name ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        names.forEachIndexed { i, name ->
+            Row(Modifier.weight(1f, fill = false), verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.width(11.dp).height(11.dp)
+                    Modifier.width(10.dp).height(10.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(OverviewColors[i % OverviewColors.size]),
+                        .background(SeriesColors[i % SeriesColors.size]),
                 )
                 Spacer(Modifier.width(5.dp))
-                Text(name, fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    name, fontSize = rsp(11), maxLines = 1,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
 }
 
-/** Full-width stacked bars: one column per period, sharing the screen width
- * evenly (columns re-flow as the count changes), each split into product
- * segments (bottom-up, index-aligned to [buckets]) with a divider and, where
- * there is room, the compartment's amount. */
+/**
+ * One column per period, each split by product, tap to select. Columns keep a
+ * readable width and the chart scrolls sideways instead of shrinking to
+ * 12dp-wide slivers when you ask for three years.
+ */
 @Composable
 private fun StackedBars(
     rows: List<JSONObject>,
-    buckets: List<String>,
-    plotHeight: Dp = 160.dp,
+    seriesOf: (JSONObject) -> List<Double>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    plotHeight: Dp = 150.dp,
 ) {
     if (rows.isEmpty()) {
         Text("No data.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
         return
     }
+    val scroll = rememberScrollState()
+    LaunchedEffect(rows.size) { scroll.scrollTo(scroll.maxValue) }   // open on the latest
     val maxAmount = rows.maxOf { it.optDouble("amount", 0.0) }
-    val dividerColor = MaterialTheme.colorScheme.surface
-    val showSegLabels = rows.size <= 8
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        rows.forEach { r ->
+    val divider = MaterialTheme.colorScheme.surface
+    val selectedTint = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+
+    Row(Modifier.fillMaxWidth().horizontalScroll(scroll)) {
+        rows.forEachIndexed { i, r ->
             val amount = r.optDouble("amount", 0.0)
-            val byProduct = r.optJSONArray("by_product").toDoubles()
-            val barHeight = if (maxAmount > 0) plotHeight * (amount / maxAmount).toFloat() else 0.dp
+            val label = r.optString("label")
+            val selected = i == selectedIndex
             Column(
-                Modifier.weight(1f),
+                Modifier
+                    .width(rdp(46))
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (selected) selectedTint else Color.Transparent)
+                    .clickable(onClickLabel = "Show $label") { onSelect(i) }
+                    .semantics { contentDescription = "$label: ${compactRupees(amount)}" }
+                    .padding(vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
@@ -275,46 +355,35 @@ private fun StackedBars(
                 )
                 Spacer(Modifier.height(4.dp))
                 Box(
-                    Modifier.fillMaxWidth(0.66f).widthIn(max = 52.dp).height(plotHeight),
+                    Modifier.width(rdp(26)).height(plotHeight),
                     contentAlignment = Alignment.BottomCenter,
                 ) {
+                    val barHeight = if (maxAmount > 0) plotHeight * (amount / maxAmount).toFloat() else 0.dp
                     Column(
                         Modifier.fillMaxWidth().height(barHeight)
-                            .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)),
+                            .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp)),
                     ) {
-                        // Highest bucket index on top, bucket 0 at the bottom,
-                        // with a thin divider line between each compartment.
-                        val visible = byProduct.indices.reversed().filter { byProduct[it] > 0 }
+                        val series = seriesOf(r)
+                        val visible = series.indices.reversed().filter { series[it] > 0 }
                         if (visible.isNotEmpty() && amount > 0) {
                             visible.forEachIndexed { pos, idx ->
-                                if (pos > 0) {
-                                    Box(Modifier.fillMaxWidth().height(2.dp).background(dividerColor))
-                                }
-                                val segH = barHeight * (byProduct[idx] / amount).toFloat()
+                                if (pos > 0) Box(Modifier.fillMaxWidth().height(2.dp).background(divider))
                                 Box(
-                                    Modifier.fillMaxWidth().height(segH)
-                                        .background(OverviewColors[idx % OverviewColors.size]),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (showSegLabels && segH >= 18.dp) {
-                                        Text(
-                                            compactRupees(byProduct[idx]),
-                                            color = Color.White, fontSize = rsp(8),
-                                            fontWeight = FontWeight.Bold, maxLines = 1,
-                                        )
-                                    }
-                                }
+                                    Modifier.fillMaxWidth()
+                                        .height(barHeight * (series[idx] / amount).toFloat())
+                                        .background(SeriesColors[idx % SeriesColors.size]),
+                                )
                             }
                         } else if (amount > 0) {
-                            // No product split from the server (e.g. backend not
-                            // yet updated) — still show a solid column so the
-                            // trend is never invisible.
-                            Box(Modifier.fillMaxSize().background(OverviewColors[0]))
+                            Box(Modifier.fillMaxSize().background(SeriesColors[0]))
                         }
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(r.optString("label"), fontSize = rsp(10), fontWeight = FontWeight.SemiBold, maxLines = 1)
+                Text(
+                    label, fontSize = rsp(10), maxLines = 1,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                )
                 val sub = r.optString("sublabel")
                 if (sub.isNotEmpty()) {
                     Text(sub, fontSize = rsp(9), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -324,35 +393,88 @@ private fun StackedBars(
     }
 }
 
-/** Thin horizontal stacked bar summarizing a product split (leaderboard row). */
+/** A product's business in the selected period — tap opens the sales behind it. */
 @Composable
-private fun StackedLine(values: List<Double>, modifier: Modifier = Modifier) {
-    if (values.sum() <= 0) return
-    Row(modifier.height(7.dp).clip(RoundedCornerShape(4.dp))) {
-        values.forEachIndexed { i, v ->
-            if (v > 0) {
-                Box(
-                    Modifier.fillMaxHeight().weight(v.toFloat())
-                        .background(OverviewColors[i % OverviewColors.size]),
-                )
+private fun ProductRow(
+    name: String,
+    amount: Double,
+    count: Int,
+    share: Float,
+    color: Color,
+    onClick: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+            .clickable(onClickLabel = "Open $name sales") { onClick() },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(name, fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
+                Text(rupees(amount), fontSize = rsp(13), fontWeight = FontWeight.Bold)
             }
+            Spacer(Modifier.height(6.dp))
+            Box(
+                Modifier.fillMaxWidth().height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
+                Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).fillMaxHeight().background(color))
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "${"%.0f".format(share * 100)}% of the period · $count ${if (count == 1) "sale" else "sales"}",
+                fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
 
+/** A leaderboard row — tap retells the whole report for that person. */
 @Composable
-private fun HBar(fraction: Float, color: Color = MaterialTheme.colorScheme.primary) {
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant
-    Canvas(Modifier.fillMaxWidth().height(8.dp)) {
-        drawRoundRect(
-            color = trackColor, size = size,
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f),
-        )
-        drawRoundRect(
-            color = color,
-            size = Size(size.width * fraction.coerceIn(0f, 1f), size.height),
-            cornerRadius = androidx.compose.ui.geometry.CornerRadius(6f, 6f),
-        )
+private fun LeaderRow(rank: Int, row: JSONObject, series: List<Double>, onClick: () -> Unit) {
+    val name = row.optString("name")
+    Card(
+        modifier = Modifier.fillMaxWidth()
+            .clickable(onClickLabel = "Show only $name") { onClick() },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "$rank", fontSize = rsp(13), fontWeight = FontWeight.Bold,
+                        color = if (rank == 1) BrandGoldDark else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 10.dp),
+                    )
+                    Text(name, fontSize = rsp(14), fontWeight = FontWeight.Medium)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(rupees(row.optDouble("amount", 0.0)), fontSize = rsp(14), fontWeight = FontWeight.Bold)
+                    Text(
+                        "%.0f pts".format(row.optDouble("points", 0.0)),
+                        fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (series.sum() > 0) {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth().height(7.dp).clip(RoundedCornerShape(4.dp))) {
+                    series.forEachIndexed { i, v ->
+                        if (v > 0) {
+                            Box(
+                                Modifier.fillMaxHeight().weight(v.toFloat())
+                                    .background(SeriesColors[i % SeriesColors.size]),
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

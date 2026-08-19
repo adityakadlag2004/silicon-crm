@@ -1,6 +1,6 @@
 """Reports views: past performance, monthly business report."""
 import json
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from calendar import month_name
 from urllib.parse import urlencode
@@ -83,10 +83,14 @@ def _period_ranges(period, columns, today):
     return ranges
 
 
-def business_overview_data(base, period="month", columns=6, today=None, with_leaderboard=False):
+def business_overview_data(base, period="month", columns=6, today=None,
+                           with_leaderboard=False, select=0):
     """Compute the period-grouped, product-split business trend.
 
-    `base` is an already-scoped approved-Sale queryset. Money values are
+    `base` is an already-scoped approved-Sale queryset. `select` picks which
+    column the mix + leaderboard describe (0 = the latest, 1 = the one before
+    it), so a tap on a bar can retell the rest of the page for that period.
+    Money values are
     Decimals (callers format/serialize). `buckets` names the product columns,
     aligned index-for-index with each row's `by_product` list; an "Other"
     bucket is appended only if unmapped-product sales exist in the window.
@@ -147,8 +151,13 @@ def business_overview_data(base, period="month", columns=6, today=None, with_lea
         else:
             row.pop("_other")
 
-    # Latest period drives the "by product" mix and the leaderboard.
-    cur_start, cur_end, cur_label, cur_sublabel = ranges[-1]
+    # The selected period (latest by default) drives the mix + leaderboard.
+    try:
+        select = int(select)
+    except (TypeError, ValueError):
+        select = 0
+    select = min(max(select, 0), len(ranges) - 1)
+    cur_start, cur_end, cur_label, cur_sublabel = ranges[-1 - select]
     cur_qs = base.filter(date__gte=cur_start, date__lt=cur_end)
     products = product_mix(cur_qs)
 
@@ -159,6 +168,10 @@ def business_overview_data(base, period="month", columns=6, today=None, with_lea
         "trend": trend,
         "current_label": cur_label,
         "current_sublabel": cur_sublabel,
+        "select": select,
+        # Inclusive bounds, so a drill-down link can hand them to the sales list.
+        "current_start": cur_start.isoformat(),
+        "current_end": (cur_end - timedelta(days=1)).isoformat(),
         "products": products,
     }
 
@@ -173,6 +186,7 @@ def business_overview_data(base, period="month", columns=6, today=None, with_lea
             row = emp_rows.get(eid)
             if row is None:
                 row = {
+                    "employee_id": eid,
                     "name": r["employee__user__first_name"] or r["employee__user__username"],
                     "amount": Decimal("0"), "points": Decimal("0"),
                     "by_product": [Decimal("0")] * len(buckets),

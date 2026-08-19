@@ -55,7 +55,6 @@ urlpatterns = [
     path("api/app/leads/<int:lead_id>/action/", app_api.app_lead_action, name="app_lead_action"),
     path("api/app/reports/summary/", app_api.app_report_summary, name="app_report_summary"),
     path("api/app/reports/monthly/", app_api.app_report_monthly, name="app_report_monthly"),
-    path("api/app/reports/past/", app_api.app_report_past, name="app_report_past"),
     path("api/app/device-status/", app_api.app_device_status, name="app_device_status"),
     path("api/app/crash/", app_api.app_crash, name="app_crash"),
     path("api/app/calls/analytics/", app_api.app_call_analytics, name="app_call_analytics"),
