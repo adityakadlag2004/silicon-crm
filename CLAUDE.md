@@ -403,8 +403,15 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - The stepper CSS is `.ki-steps` / `.ki-step` in `ki-record.css`, shared with
   the claim workflow.
 - **The app home screen carries the pipeline too** — `app_dashboard` serves a
-  `pipeline` block (stage standing + `needs_attention` rows, scoped by
-  `_lead_qs`), rendered above the sales sections. Tasks and call follow-ups are
+  `pipeline` block (stage standing + `services.leads.board()`, scoped by
+  `_lead_qs`), rendered above the sales sections. `board()` is one page per
+  stage **from Approach on** — Suspect and Prospect are the top of the funnel
+  and belong on the list screen, not on a dashboard asking what to do today —
+  and every lead carries its own follow-up (next due date, or a red tag when
+  there is none) so chased and unchased sit in one place. The phone swipes
+  through the pages; the stage chips are both the indicator and the jump-to.
+  `needs_attention` still feeds the **web** dashboards, which show only the
+  drifting ones. Tasks and call follow-ups are
   deliberately kept off it: they own the Tasks and Calls tabs, and a third copy
   is what people learn to ignore. A chip or a card routes through `routeLink`
   (`/clients/leads/?stage=x`, `/clients/leads/<id>/`) into the native
