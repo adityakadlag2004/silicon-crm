@@ -50,6 +50,7 @@ urlpatterns = [
     path("api/app/leads/<int:lead_id>/", app_api.app_lead_detail, name="app_lead_detail"),
     path("api/app/leads/<int:lead_id>/stage/", app_api.app_lead_stage, name="app_lead_stage"),
     path("api/app/leads/<int:lead_id>/interest/", app_api.app_lead_interest, name="app_lead_interest"),
+    path("api/app/leads/<int:lead_id>/followup/", app_api.app_lead_followup, name="app_lead_followup"),
     path("api/app/leads/<int:lead_id>/remark/", app_api.app_lead_remark, name="app_lead_remark"),
     path("api/app/leads/<int:lead_id>/action/", app_api.app_lead_action, name="app_lead_action"),
     path("api/app/reports/summary/", app_api.app_report_summary, name="app_report_summary"),

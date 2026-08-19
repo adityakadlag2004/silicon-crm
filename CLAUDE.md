@@ -302,6 +302,12 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   POST means done — and `task_reschedule`, the calendar drag endpoint). Both
   clear `due_alarm_sent_at`; a task rescheduled without clearing it never rings
   again, which is why the web `task_set_due` used to go silent.
+- The **app can see and schedule them too** — `app_lead_detail` serves
+  `followups` and `/api/app/leads/<id>/followup/` schedules one through the
+  same `followups.schedule`. It carried neither until 2026-08-19, so a lead
+  with three calls booked read as "nothing scheduled" on the one screen you
+  would go to to book one. A row taps through to `TasksActivity`: closing and
+  rescheduling are task actions and must not be re-implemented per record.
 - `clients.test.test_followup_tasks` pins all of this.
 
 ## "Don't ring" (Task.silent)

@@ -92,6 +92,29 @@ fun DateField(
     )
 }
 
+/** Date + time, picked never typed. ISO "yyyy-MM-ddTHH:mm" or "". */
+@Composable
+fun DateTimeField(label: String, value: String, onPick: (String) -> Unit) {
+    val context = LocalContext.current
+    OutlinedTextField(
+        value = if (value.isBlank()) "" else "${fmtDate(value.take(10))} ${value.takeLast(5)}",
+        onValueChange = {},
+        readOnly = true,
+        label = { Text(label) },
+        placeholder = { Text("Tap to pick") },
+        enabled = false,
+        modifier = Modifier.fillMaxWidth().clickable(
+            role = Role.Button,
+        ) { pickDateTime(context, value, minNow = true, onPicked = onPick) },
+        colors = OutlinedTextFieldDefaults.colors(
+            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+            disabledBorderColor = MaterialTheme.colorScheme.outline,
+            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+    )
+}
+
 /** Platform date picker seeded with `iso` (or today). Hands back ISO. */
 fun pickDate(
     context: Context,

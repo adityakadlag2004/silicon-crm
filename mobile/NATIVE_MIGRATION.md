@@ -51,6 +51,7 @@ in the WebView.
 | 13 | ~~Lead Records / Sheets screen~~ — **removed v4.15** (module deleted server-side; SheetsScreen + menu entry gone from app) | — | removed |
 | 21 | **Insurance module** — policy tracker (search, status/expiring chips, detail with claims + renewal history) and the full claim workflow (raise, stepper, stage moves with a note, follow-up in the same submit, documents by camera or picker, timeline). Stages/modes/document kinds are served, not hard-coded | `/api/app/insurance-meta/`, `/api/app/policies/…`, `/api/app/claims/…` | **v4.33.0** |
 | 22 | Home screen carries the SPANCO pipeline (stage standing + the live leads nobody has dated); Today screen **deleted** — tasks, calls and renewals each have their own home and it was the third copy; Menu grouped into sections; lead stage moves survive no signal (`Outbox` + server-side replay dedupe) | `/api/app/dashboard/` (`pipeline`), `/api/app/today/` **removed** | **v4.33.0** |
+| 23 | Lead detail shows its follow-ups and can schedule one (it had neither, so a chased lead read as unchased); a row opens the task in the Tasks module | `/api/app/leads/<id>/` (`followups`), `/api/app/leads/<id>/followup/` | **v4.34.0** |
 | — | Business Links (My Apps tab) | opens web `/clients/links/` for now; native screens later | |
 | — | Financial planner | stays WebView (calc engine is fine there) | |
 

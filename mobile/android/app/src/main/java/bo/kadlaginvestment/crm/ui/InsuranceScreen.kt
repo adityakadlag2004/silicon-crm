@@ -890,28 +890,5 @@ private fun FieldGrid(fields: List<Pair<String, String>>) {
     }
 }
 
-/** Date + time, picked never typed. ISO "yyyy-MM-ddTHH:mm" or "". */
-@Composable
-private fun DateTimeField(label: String, value: String, onPick: (String) -> Unit) {
-    val context = LocalContext.current
-    OutlinedTextField(
-        value = if (value.isBlank()) "" else "${fmtDate(value.take(10))} ${value.takeLast(5)}",
-        onValueChange = {},
-        readOnly = true,
-        label = { Text(label) },
-        placeholder = { Text("Tap to pick") },
-        enabled = false,
-        modifier = Modifier.fillMaxWidth().clickable(
-            role = androidx.compose.ui.semantics.Role.Button,
-        ) { pickDateTime(context, value, minNow = true, onPicked = onPick) },
-        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-            disabledTextColor = MaterialTheme.colorScheme.onSurface,
-            disabledBorderColor = MaterialTheme.colorScheme.outline,
-            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
-    )
-}
-
 private fun fmtDateOr(iso: String?): String =
     if (iso.isNullOrBlank() || iso == "null") "—" else fmtDate(iso)

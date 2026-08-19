@@ -5,7 +5,7 @@ session cookie + X-CSRFToken header. One endpoint set is added here per
 converted screen.
 """
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import login_required
@@ -1098,7 +1098,8 @@ def app_notifications_read(request):
 
 from django.db import transaction  # noqa: E402
 
-from ..models import Lead, LeadInterest, LeadRemark  # noqa: E402
+from ..models import Lead, LeadInterest, LeadRemark, Task  # noqa: E402
+from ..services import followups as followups_service  # noqa: E402
 from ..services import leads as lead_service  # noqa: E402
 
 
@@ -1252,7 +1253,70 @@ def app_lead_detail(request, lead_id):
             }
             for r in remarks
         ],
+        # A follow-up is a Task, so these are tasks — the phone showed none of
+        # them, which read as "nobody has scheduled anything" on the one screen
+        # where you would go to schedule it.
+        "followups": [
+            {
+                "id": t.pk,
+                "note": _followup_note(t),
+                "due": t.due_date.isoformat() if t.due_date else None,
+                "due_time": t.due_time.strftime("%H:%M") if t.due_time else "",
+                "status": t.status,
+                "status_label": t.get_status_display(),
+                "open": t.status in Task.OPEN_STATUSES,
+                "assigned_to": (
+                    t.assigned_to.user.get_full_name() or t.assigned_to.user.username
+                ) if t.assigned_to_id and t.assigned_to.user_id else "",
+            }
+            for t in followups_service.for_source(followups_service.LEAD, lead.pk)[:20]
+        ],
     })
+
+
+def _followup_note(task):
+    """What the follow-up is about, in one line.
+
+    `followups._describe` puts the note first and the context lines after it,
+    so the first line is the note — unless there wasn't one, in which case it
+    is the first context line and there is nothing worth repeating.
+    """
+    first = (task.description or "").split("\n")[0].strip()
+    return "" if first.startswith(("SPANCO stage:", "Phone:", "/clients/")) else first
+
+
+@login_required
+@require_POST
+def app_lead_followup(request, lead_id):
+    """Schedule a follow-up on a lead from the phone.
+
+    Same one line of work the web form does — `followups.schedule` owns it, so
+    this rings, lands on the calendar and shows on the Tasks screen exactly
+    like every other follow-up.
+    """
+    lead = get_object_or_404(_lead_qs(request), pk=lead_id)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        body = {}
+
+    raw = (body.get("when") or "").strip()
+    when = None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+        try:
+            when = datetime.strptime(raw, fmt)
+            break
+        except ValueError:
+            continue
+    if when is None:
+        return JsonResponse({"ok": False, "error": "Pick a follow-up date and time."},
+                            status=400)
+
+    task = followups_service.schedule(
+        followups_service.LEAD, lead,
+        timezone.make_aware(when, timezone.get_current_timezone()),
+        note=(body.get("note") or "").strip(), actor=request.user)
+    return JsonResponse({"ok": True, "id": task.pk})
 
 
 @login_required

@@ -310,6 +310,8 @@ private fun LeadDetail(
     var actionError by remember { mutableStateOf<String?>(null) }
     var remarkText by remember { mutableStateOf("") }
     var stageNote by remember { mutableStateOf("") }
+    var followupAt by remember { mutableStateOf("") }
+    var followupNote by remember { mutableStateOf("") }
     var correcting by remember { mutableStateOf(false) }
     var productMenuOpen by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableIntStateOf(0) }
@@ -515,6 +517,72 @@ private fun LeadDetail(
                 }
             }
         }
+
+        // ── Follow-ups ──
+        // A follow-up IS a task, so these rows are tasks and tapping one opens
+        // it in the Tasks module — closing and rescheduling live there, and a
+        // second copy of those buttons here would be a second code path.
+        val followups = d.optJSONArray("followups")
+        SectionTitle("Follow-ups (${followups?.length() ?: 0})")
+        if ((followups?.length() ?: 0) == 0) {
+            Text(
+                "Nothing scheduled — this lead is not being chased.",
+                fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        for (i in 0 until (followups?.length() ?: 0)) {
+            val f = followups!!.getJSONObject(i)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = rdp(44))
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button) {
+                        bo.kadlaginvestment.crm.TasksActivity.open(context, f.optInt("id"))
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        f.optString("note").ifBlank { "Follow-up" },
+                        fontSize = rsp(13),
+                    )
+                    Text(
+                        listOf(
+                            fmtDate(f.optString("due")),
+                            f.optString("due_time"),
+                            f.optString("assigned_to"),
+                        ).filter { it.isNotBlank() }.joinToString(" · "),
+                        fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    f.optString("status_label"),
+                    fontSize = rsp(11), fontWeight = FontWeight.SemiBold,
+                    color = if (f.optBoolean("open")) StatusAmber else StatusGreen,
+                )
+            }
+        }
+
+        DateTimeField("Follow up on", followupAt) { followupAt = it }
+        OutlinedTextField(
+            value = followupNote,
+            onValueChange = { followupNote = it },
+            label = { Text("What is the follow-up for?") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            onClick = {
+                val at = followupAt
+                val note = followupNote
+                followupAt = ""; followupNote = ""
+                post(
+                    "/clients/api/app/leads/$leadId/followup/",
+                    JSONObject().put("when", at).put("note", note),
+                )
+            },
+            enabled = followupAt.isNotBlank(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = rdp(52)),
+        ) { Text("Schedule follow-up", fontSize = rsp(15)) }
 
         SectionTitle("Remarks")
         OutlinedTextField(

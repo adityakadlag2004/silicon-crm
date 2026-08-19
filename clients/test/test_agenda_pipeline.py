@@ -12,6 +12,7 @@ Three separate defects are pinned here:
 
 Run: .venv/bin/python manage.py test clients.test.test_agenda_pipeline
 """
+import json
 from datetime import timedelta
 
 from django.contrib.auth.models import User
@@ -298,3 +299,64 @@ class AppDashboardPipelineTests(TestCase):
         p = self._get(self.emp.user)
         self.assertEqual(p["hot_total"], 0)
         self.assertEqual(p["live"], 1, "it is still in the pipeline, just handled")
+
+
+class AppLeadFollowupTests(TestCase):
+    """The phone can see and schedule a lead's follow-ups.
+
+    It could do neither: `app_lead_detail` carried no follow-ups at all, so a
+    lead somebody had already scheduled three calls on read as "nothing here"
+    on the one screen you would go to to schedule one.
+    """
+
+    def setUp(self):
+        self.emp = _mk_employee("ag_fu_emp")
+        self.lead = Lead.objects.create(customer_name="Tushar", assigned_to=self.emp,
+                                        stage=Lead.STAGE_NEGOTIATION, phone="9876500011")
+        self.client = TestClient()
+        self.client.force_login(self.emp.user)
+
+    def test_detail_lists_the_leads_followups(self):
+        followups.schedule(followups.LEAD, self.lead, timezone.now() + timedelta(days=1),
+                           note="Ring after the board meeting")
+        data = self.client.get(f"/clients/api/app/leads/{self.lead.pk}/").json()
+        self.assertEqual(len(data["followups"]), 1)
+        row = data["followups"][0]
+        self.assertEqual(row["note"], "Ring after the board meeting")
+        self.assertTrue(row["open"])
+
+    def test_a_followup_with_no_note_does_not_echo_the_context_lines(self):
+        followups.schedule(followups.LEAD, self.lead, timezone.now() + timedelta(days=1))
+        data = self.client.get(f"/clients/api/app/leads/{self.lead.pk}/").json()
+        self.assertEqual(data["followups"][0]["note"], "")
+
+    def test_scheduling_from_the_app_makes_a_task_that_rings(self):
+        when = timezone.localtime() + timedelta(days=2)
+        resp = self.client.post(
+            f"/clients/api/app/leads/{self.lead.pk}/followup/",
+            data=json.dumps({"when": when.strftime("%Y-%m-%dT%H:%M"),
+                             "note": "Take the proposal"}),
+            content_type="application/json")
+        self.assertEqual(resp.status_code, 200)
+        task = Task.objects.get(source_kind=followups.LEAD, source_id=self.lead.pk)
+        self.assertEqual(task.due_date, when.date())
+        self.assertEqual(task.assigned_to, self.emp,
+                         "it must ring the phone of whoever owns the lead")
+
+    def test_scheduling_takes_the_lead_off_the_needs_you_list(self):
+        rows, total = lead_service.needs_attention(Lead.objects.all())
+        self.assertEqual(total, 1, "unchased to start with")
+        self.client.post(
+            f"/clients/api/app/leads/{self.lead.pk}/followup/",
+            data=json.dumps({
+                "when": (timezone.localtime() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")}),
+            content_type="application/json")
+        _, total = lead_service.needs_attention(Lead.objects.all())
+        self.assertEqual(total, 0)
+
+    def test_a_date_is_required(self):
+        resp = self.client.post(
+            f"/clients/api/app/leads/{self.lead.pk}/followup/",
+            data=json.dumps({"note": "someday"}), content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(Task.objects.filter(source_kind=followups.LEAD).exists())
