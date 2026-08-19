@@ -7,7 +7,7 @@ goes unrecorded and the funnel starts lying.
 from datetime import timedelta
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Min, Q
 from django.utils import timezone
 
 from ..models import Client, Lead, LeadStageEvent, Task
@@ -207,3 +207,74 @@ def needs_attention(qs, *, stale_days=14, limit=12):
     # each group the lead that has sat longest goes first.
     rows.sort(key=lambda r: (not r["no_followup"], -(r["days_in_stage"] or 0)))
     return rows[:limit], len(rows)
+
+
+# Everything from Approach onwards: a lead that has been qualified and worked
+# is a lead somebody has to act on. Suspect and Prospect are the top of the
+# funnel and belong on the list screen, not on a dashboard that is asking
+# "what do I do today?".
+BOARD_STAGES = Lead.STAGE_SEQUENCE[Lead.STAGE_SEQUENCE.index(Lead.STAGE_APPROACH):]
+
+
+def board(qs, *, stages=None, per_stage=8, stale_days=14):
+    """One page per stage, each carrying that stage's live leads.
+
+    `needs_attention` answers "who is drifting"; this answers "show me the
+    book" — every worked lead, with whether it is being chased on the card
+    rather than as a separate list. Two lists of the same leads on one screen
+    is what the phone had, and it made the chased ones invisible.
+
+    Three queries whatever the size of the pipeline: the leads, the open
+    follow-up tasks (count + next due date per lead), and nothing per row.
+    """
+    from ..models import Task
+
+    stages = stages or BOARD_STAGES
+    live = list(
+        qs.filter(is_discarded=False, stage__in=stages)
+        .select_related("assigned_to__user")
+        .order_by("stage_changed_at")
+    )
+
+    chase = {
+        row["source_id"]: row
+        for row in Task.objects.filter(
+            is_deleted=False, source_kind="lead",
+            source_id__in=[lead.id for lead in live],
+            status__in=Task.OPEN_STATUSES,
+        ).values("source_id").order_by().annotate(n=Count("id"), next_due=Min("due_date"))
+    }
+
+    now = timezone.now()
+    cutoff = now - timedelta(days=stale_days)
+    pages = []
+    for stage in stages:
+        rows = []
+        for lead in live:
+            if lead.stage != stage:
+                continue
+            open_chase = chase.get(lead.id)
+            rows.append({
+                "lead": lead,
+                "owner": (lead.assigned_to.user.get_full_name()
+                          or lead.assigned_to.user.username)
+                if lead.assigned_to and lead.assigned_to.user_id else "",
+                "days_in_stage": ((now - lead.stage_changed_at).days
+                                  if lead.stage_changed_at else None),
+                "followups": open_chase["n"] if open_chase else 0,
+                "next_followup": open_chase["next_due"] if open_chase else None,
+                "stalled": bool(lead.stage_changed_at and lead.stage_changed_at < cutoff),
+            })
+        # Unchased first — they are the reason to look at this screen — then
+        # the one that has sat longest.
+        rows.sort(key=lambda r: (r["followups"] > 0, -(r["days_in_stage"] or 0)))
+        pages.append({
+            "stage": stage,
+            "label": VALID_STAGES.get(stage, stage),
+            "help": Lead.STAGE_HELP.get(stage, ""),
+            "count": len(rows),
+            "unchased": sum(1 for r in rows if not r["followups"]),
+            "rows": rows[:per_stage],
+            "has_more": len(rows) > per_stage,
+        })
+    return pages

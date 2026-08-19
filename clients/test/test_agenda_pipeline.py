@@ -260,6 +260,8 @@ class AppDashboardPipelineTests(TestCase):
 
     It had neither the standing nor the leads nobody has dated, so the phone —
     which is where the selling actually happens — showed no pipeline at all.
+    The board is the working set: one page per stage from Approach on, each
+    lead wearing its own follow-up rather than being split across two lists.
     """
 
     def setUp(self):
@@ -271,7 +273,10 @@ class AppDashboardPipelineTests(TestCase):
         self.client.force_login(user)
         return self.client.get("/clients/api/app/dashboard/").json()["pipeline"]
 
-    def test_standing_and_unchased_leads_are_served(self):
+    def _page(self, pipeline, stage):
+        return next(p for p in pipeline["board"] if p["stage"] == stage)
+
+    def test_standing_and_the_board_are_served(self):
         lead = Lead.objects.create(customer_name="Unchased", assigned_to=self.emp,
                                    stage=Lead.STAGE_NEGOTIATION)
         Lead.objects.create(customer_name="Early", assigned_to=self.emp,
@@ -281,24 +286,65 @@ class AppDashboardPipelineTests(TestCase):
         self.assertEqual(counts[Lead.STAGE_NEGOTIATION], 1)
         self.assertEqual(counts[Lead.STAGE_SUSPECT], 1)
         self.assertEqual(p["live"], 2)
-        self.assertEqual(p["hot_total"], 1, "only the live-band lead needs chasing")
-        self.assertEqual(p["hot"][0]["id"], lead.pk)
-        self.assertTrue(p["hot"][0]["no_followup"])
+
+        page = self._page(p, Lead.STAGE_NEGOTIATION)
+        self.assertEqual(page["count"], 1)
+        self.assertEqual(page["unchased"], 1)
+        self.assertEqual(page["leads"][0]["id"], lead.pk)
+        self.assertEqual(page["leads"][0]["followups"], 0)
+
+    def test_the_board_starts_at_approach(self):
+        """Suspect and Prospect are the top of the funnel — they belong on the
+        list screen, not on a dashboard asking what to do today."""
+        p = self._get(self.emp.user)
+        self.assertEqual(
+            [page["stage"] for page in p["board"]],
+            [Lead.STAGE_APPROACH, Lead.STAGE_NEGOTIATION,
+             Lead.STAGE_CONCLUSION, Lead.STAGE_ORDER],
+        )
+
+    def test_a_chased_lead_stays_on_the_board_wearing_its_follow_up(self):
+        lead = Lead.objects.create(customer_name="Chased", assigned_to=self.emp,
+                                   stage=Lead.STAGE_APPROACH)
+        due = timezone.now() + timedelta(days=3)
+        followups.schedule(followups.LEAD, lead, due)
+        page = self._page(self._get(self.emp.user), Lead.STAGE_APPROACH)
+        self.assertEqual(page["count"], 1, "it is still in the pipeline, just handled")
+        self.assertEqual(page["unchased"], 0)
+        row = page["leads"][0]
+        self.assertEqual(row["followups"], 1)
+        self.assertEqual(row["next_followup"], timezone.localtime(due).date().isoformat())
+
+    def test_unchased_leads_sort_above_chased_ones(self):
+        chased = Lead.objects.create(customer_name="Chased", assigned_to=self.emp,
+                                     stage=Lead.STAGE_NEGOTIATION)
+        followups.schedule(followups.LEAD, chased, timezone.now() + timedelta(days=1))
+        Lead.objects.create(customer_name="Nobody is on this", assigned_to=self.emp,
+                            stage=Lead.STAGE_NEGOTIATION)
+        page = self._page(self._get(self.emp.user), Lead.STAGE_NEGOTIATION)
+        self.assertEqual(page["leads"][0]["name"], "Nobody is on this")
 
     def test_an_employee_sees_only_their_own_leads(self):
         Lead.objects.create(customer_name="Not mine", assigned_to=self.other,
                             stage=Lead.STAGE_NEGOTIATION)
         p = self._get(self.emp.user)
         self.assertEqual(p["live"], 0)
-        self.assertEqual(p["hot"], [])
+        self.assertEqual(sum(page["count"] for page in p["board"]), 0)
 
-    def test_a_scheduled_followup_clears_the_lead(self):
-        lead = Lead.objects.create(customer_name="Chased", assigned_to=self.emp,
-                                   stage=Lead.STAGE_APPROACH)
-        followups.schedule(followups.LEAD, lead, timezone.now() + timedelta(days=1))
-        p = self._get(self.emp.user)
-        self.assertEqual(p["hot_total"], 0)
-        self.assertEqual(p["live"], 1, "it is still in the pipeline, just handled")
+    def test_lost_leads_are_off_the_board(self):
+        Lead.objects.create(customer_name="Gone", assigned_to=self.emp,
+                            stage=Lead.STAGE_NEGOTIATION, is_discarded=True)
+        page = self._page(self._get(self.emp.user), Lead.STAGE_NEGOTIATION)
+        self.assertEqual(page["count"], 0)
+
+    def test_a_long_stage_is_capped_and_says_so(self):
+        for i in range(10):
+            Lead.objects.create(customer_name=f"Lead {i}", assigned_to=self.emp,
+                                stage=Lead.STAGE_APPROACH)
+        page = self._page(self._get(self.emp.user), Lead.STAGE_APPROACH)
+        self.assertEqual(page["count"], 10)
+        self.assertEqual(len(page["leads"]), 8)
+        self.assertTrue(page["has_more"])
 
 
 class AppLeadFollowupTests(TestCase):

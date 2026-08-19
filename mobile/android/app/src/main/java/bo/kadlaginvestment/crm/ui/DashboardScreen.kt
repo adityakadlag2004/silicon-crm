@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.net.ApiClient
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /** Native home screen — data from /clients/api/app/dashboard/. */
@@ -179,37 +182,13 @@ private fun Dashboard(
         }
 
         // ── SPANCO pipeline ──
-        // Where the leads stand, and the live ones nobody has dated — the two
-        // things the web dashboards lead with. Tasks and call follow-ups are
-        // deliberately absent: they have their own screens.
+        // The stage chips, then one swipeable page per stage from Approach on.
+        // Tasks and call follow-ups are deliberately absent: they own their
+        // own tabs, and a third copy is what people learn to swipe past.
         val pipeline = d.optJSONObject("pipeline")
         if (pipeline != null) {
             item { PipelineStages(pipeline, onOpenWeb) }
-
-            val hot = pipeline.optJSONArray("hot")
-            val hotShown = hot?.length() ?: 0
-            val hotTotal = pipeline.optInt("hot_total")
-            item { SectionHeader(if (hotTotal > 0) "🔥 Needs you ($hotTotal)" else "🔥 Needs you") }
-            if (hotShown == 0) {
-                item {
-                    Text(
-                        if (pipeline.optInt("live") == 0) "No live leads yet — add one from Menu → Leads."
-                        else "Every live lead has a follow-up booked. Nothing is drifting. ✅",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13),
-                    )
-                }
-            } else {
-                items((0 until hotShown).map { hot!!.getJSONObject(it) }) { l ->
-                    HotLeadCard(l) { onOpenWeb("/clients/leads/${l.optInt("id")}/") }
-                }
-                if (hotTotal > hotShown) {
-                    item {
-                        TextButton(onClick = { onOpenWeb("/clients/leads/") }) {
-                            Text("See all $hotTotal →", fontSize = rsp(13))
-                        }
-                    }
-                }
-            }
+            item { PipelineBoard(pipeline, onOpenWeb) }
         }
 
         if (isAdmin) {
@@ -384,9 +363,85 @@ private fun StageChip(st: JSONObject, onClick: () -> Unit) {
     }
 }
 
-/** A live lead with nothing scheduled on it. Tapping opens the lead. */
+/**
+ * The pipeline, one swipeable page per stage.
+ *
+ * Approach onward only: Suspect and Prospect are the top of the funnel and
+ * belong on the list screen, not on a dashboard answering "what do I do
+ * today?". Each card says on itself whether the lead is being chased, so
+ * chased and unchased leads are visible in the same place instead of the
+ * chased ones being invisible behind a "needs you" list.
+ */
 @Composable
-private fun HotLeadCard(l: JSONObject, onClick: () -> Unit) {
+private fun PipelineBoard(pipeline: JSONObject, onOpenWeb: (String) -> Unit) {
+    val board = pipeline.optJSONArray("board") ?: return
+    if (board.length() == 0) return
+    val pages = (0 until board.length()).map { board.getJSONObject(it) }
+    // Saveable: rotating the phone must not throw the user back to Approach.
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        pageCount = { pages.size })
+    val scope = rememberCoroutineScope()
+
+    Column(Modifier.fillMaxWidth()) {
+        // The chips are the page indicator and the jump-to control; swiping
+        // moves them, tapping moves the pager. One row, both directions.
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(rdp(6)),
+        ) {
+            pages.forEachIndexed { index, page ->
+                val unchased = page.optInt("unchased")
+                Chip(
+                    "${page.optString("label").substringBefore("/").trim()} ${page.optInt("count")}" +
+                        if (unchased > 0) "  ·  $unchased ⚠" else "",
+                    pagerState.currentPage == index,
+                ) { scope.launch { pagerState.animateScrollToPage(index) } }
+            }
+        }
+
+        androidx.compose.foundation.pager.HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth(),
+            pageSpacing = rdp(8),
+            verticalAlignment = Alignment.Top,
+        ) { index ->
+            val page = pages[index]
+            val leads = page.optJSONArray("leads")
+            Column(
+                Modifier.fillMaxWidth().heightIn(min = rdp(150)),
+                verticalArrangement = Arrangement.spacedBy(rdp(8)),
+            ) {
+                if ((leads?.length() ?: 0) == 0) {
+                    Text(
+                        "Nothing at ${page.optString("label")} right now.",
+                        fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                for (i in 0 until (leads?.length() ?: 0)) {
+                    val l = leads!!.getJSONObject(i)
+                    BoardLeadCard(l) { onOpenWeb("/clients/leads/${l.optInt("id")}/") }
+                }
+                if (page.optBoolean("has_more")) {
+                    TextButton(onClick = {
+                        onOpenWeb("/clients/leads/?stage=${page.optString("stage")}")
+                    }) {
+                        Text("See all ${page.optInt("count")} →", fontSize = rsp(13))
+                    }
+                }
+            }
+        }
+        Text(
+            "Swipe for the next stage",
+            fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+/** One lead, wearing its follow-up. Tapping opens it. */
+@Composable
+private fun BoardLeadCard(l: JSONObject, onClick: () -> Unit) {
+    val chased = l.optInt("followups") > 0
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
@@ -402,13 +457,19 @@ private fun HotLeadCard(l: JSONObject, onClick: () -> Unit) {
                 Text(l.optString("name"), fontSize = rsp(14), fontWeight = FontWeight.SemiBold)
                 val owner = l.optString("owner")
                 Text(
-                    "${l.optString("stage_label")} · ${l.optInt("days_in_stage")}d here" +
+                    "${l.optInt("days_in_stage")}d here" +
                         if (owner.isNotBlank()) " · $owner" else "",
                     fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                if (l.optBoolean("no_followup")) ReasonTag("No follow-up", StatusRed)
+                if (chased) {
+                    // The date is the answer to "is anyone on this?", so it is
+                    // the thing shown, not a tick.
+                    ReasonTag("📅 ${fmtDate(l.optString("next_followup"))}", StatusGreen)
+                } else {
+                    ReasonTag("No follow-up", StatusRed)
+                }
                 if (l.optBoolean("stalled")) ReasonTag("Stalled", StatusAmber)
             }
         }

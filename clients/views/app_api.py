@@ -229,7 +229,6 @@ def app_dashboard(request):
     # prefetch is dropped, nothing here renders it.
     lead_qs = _lead_qs(request).prefetch_related(None)
     standing = lead_service.stage_counts(lead_qs.filter(is_discarded=False))
-    hot_rows, hot_total = lead_service.needs_attention(lead_qs, limit=6)
     data["pipeline"] = {
         "stages": [
             {
@@ -241,19 +240,33 @@ def app_dashboard(request):
             for stage, label in Lead.STAGE_CHOICES
         ],
         "live": sum(standing.values()),
-        "hot_total": hot_total,
-        "hot": [
+        # One page per stage from Approach on — the screen is swiped through
+        # stage by stage, and each lead says on its own card whether it is
+        # being chased. A separate "needs you" list beside it would print the
+        # same leads twice and hide the chased ones entirely.
+        "board": [
             {
-                "id": r["lead"].id,
-                "name": r["lead"].customer_name,
-                "stage": r["lead"].stage,
-                "stage_label": r["stage_label"],
-                "owner": r["owner"],
-                "days_in_stage": r["days_in_stage"],
-                "no_followup": r["no_followup"],
-                "stalled": r["stalled"],
+                "stage": page["stage"],
+                "label": page["label"],
+                "count": page["count"],
+                "unchased": page["unchased"],
+                "has_more": page["has_more"],
+                "leads": [
+                    {
+                        "id": r["lead"].id,
+                        "name": r["lead"].customer_name,
+                        "phone": r["lead"].phone or "",
+                        "owner": r["owner"],
+                        "days_in_stage": r["days_in_stage"],
+                        "followups": r["followups"],
+                        "next_followup": (r["next_followup"].isoformat()
+                                          if r["next_followup"] else None),
+                        "stalled": r["stalled"],
+                    }
+                    for r in page["rows"]
+                ],
             }
-            for r in hot_rows
+            for page in lead_service.board(lead_qs)
         ],
     }
 
