@@ -110,12 +110,19 @@
 {% endif %}
 
 {# ── Tabs: the profile is long; split it the way the record shell does ── #}
+{% comment %}
+  The buttons carry data-TAB, the panels below carry data-PANEL. They must not
+  share an attribute: the script hides every [data-panel] whose value is not
+  the active one, and while the buttons also had data-panel that selector
+  matched them too — so on load the page painted all five tabs and then hid
+  four of them, leaving Overview alone.
+{% endcomment %}
 <div class="ki-rtabs" id="profileTabs">
-  <button class="ki-rtab active" data-panel="overview">Overview</button>
-  <button class="ki-rtab" data-panel="insurance">Health &amp; Life ({{ insurance_policies|length }})</button>
-  <button class="ki-rtab" data-panel="portfolio">Portfolio</button>
-  <button class="ki-rtab" data-panel="work">Work ({{ open_tasks|length }})</button>
-  <button class="ki-rtab" data-panel="history">History</button>
+  <button class="ki-rtab active" data-tab="overview">Overview</button>
+  <button class="ki-rtab" data-tab="insurance">Health &amp; Life ({{ insurance_policies|length }})</button>
+  <button class="ki-rtab" data-tab="portfolio">Portfolio</button>
+  <button class="ki-rtab" data-tab="work">Work ({{ open_tasks|length }})</button>
+  <button class="ki-rtab" data-tab="history">History</button>
 </div>
 
 <div class="profile-grid">
@@ -515,16 +522,18 @@
 <script>
   (function () {
     const tabs = document.querySelectorAll('#profileTabs .ki-rtab');
+    // Panels only — the buttons deliberately use data-tab, so this can never
+    // hide the tab strip itself.
     const cards = document.querySelectorAll('[data-panel]');
     function show(panel) {
       cards.forEach(c => { c.hidden = c.dataset.panel !== panel; });
-      tabs.forEach(t => t.classList.toggle('active', t.dataset.panel === panel));
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === panel));
       history.replaceState(null, '', '#' + panel);
     }
-    tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.panel)));
+    tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
     // Deep links (#portfolio) and reloads land on the right tab.
     const start = (location.hash || '#overview').slice(1);
-    show([...tabs].some(t => t.dataset.panel === start) ? start : 'overview');
+    show([...tabs].some(t => t.dataset.tab === start) ? start : 'overview');
   })();
 </script>
 {% endblock %}

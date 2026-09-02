@@ -151,12 +151,23 @@ class ClientProfileShowsTheBookTests(TestCase):
 
     def test_health_and_life_has_its_own_tab_next_to_overview(self):
         html = self._get().content.decode()
-        self.assertIn('data-panel="insurance"', html)
-        # the tab sits immediately right of Overview
-        self.assertLess(html.index('data-panel="overview"'),
-                        html.index('data-panel="insurance"'))
-        self.assertLess(html.index('data-panel="insurance"'),
-                        html.index('data-panel="portfolio"'))
+        self.assertIn('data-tab="insurance"', html)      # the button
+        self.assertIn('data-panel="insurance"', html)    # the panel it reveals
+        # the tab sits immediately right of Overview in the strip
+        self.assertLess(html.index('data-tab="overview"'),
+                        html.index('data-tab="insurance"'))
+        self.assertLess(html.index('data-tab="insurance"'),
+                        html.index('data-tab="portfolio"'))
+
+    def test_the_tab_strip_is_not_hidden_by_its_own_switcher(self):
+        """The buttons must not carry data-panel: the switcher hides every
+        [data-panel] that is not active, so sharing the attribute made the
+        page paint all five tabs and then hide four of them."""
+        html = self._get().content.decode()
+        strip = html[html.index('id="profileTabs"'):]
+        strip = strip[:strip.index("</div>")]
+        self.assertNotIn("data-panel", strip)
+        self.assertEqual(strip.count("data-tab="), 5)
 
     def test_the_tab_lists_only_health_and_life(self):
         InsurancePolicy.objects.create(

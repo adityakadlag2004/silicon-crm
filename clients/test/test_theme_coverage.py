@@ -224,6 +224,30 @@ class ResponsiveHygieneTests(TestCase):
             "a {# #} comment left open at end of line renders as page text; "
             f"use {{% comment %}} for multi-line: {offenders}")
 
+    def test_tab_buttons_are_not_themselves_panels(self):
+        """A tab strip whose buttons carry `data-panel` hides itself.
+
+        The switcher does `querySelectorAll('[data-panel]')` and hides every
+        element whose value is not the active tab. While the buttons shared
+        that attribute they matched it too, so the page painted all the tabs
+        and then hid every one but the first — the client profile shipped like
+        that. Buttons use `data-tab`; only panels use `data-panel`.
+        """
+        import re
+        import pathlib
+        offenders = []
+        for path in pathlib.Path("templates").rglob("*.html"):
+            if "admin/" in str(path):
+                continue
+            text = path.read_text()
+            for m in re.finditer(r"<button[^>]*\bki-rtab\b[^>]*>", text):
+                if "data-panel" in m.group(0):
+                    offenders.append(f"{path}:{text[:m.start()].count(chr(10)) + 1}")
+        self.assertEqual(
+            offenders, [],
+            "a .ki-rtab button must use data-tab, not data-panel, or the "
+            f"switcher hides the tab strip: {offenders}")
+
     def test_no_fixed_pixel_widths_wider_than_a_phone(self):
         """A hard width over ~360px forces horizontal scrolling on a phone."""
         import re
