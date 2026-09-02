@@ -41,10 +41,13 @@ def update_client_status(sender, instance, **kwargs):
         return sales.filter(_line_q(product_code, fallback_name)).exists()
 
     client.sip_amount = _sum_amount("SIP", "SIP", "amount")
-    # Lumpsum was never recomputed here at all — it was only ever typed by hand
-    # on the client edit form, so 433 clients with approved lumpsum sales read
-    # as Rs 0 on their profile.
-    client.lumsum_investment = _sum_amount("LUMSUM", "Lumsum", "amount")
+    # `lumsum_investment` is deliberately NOT derived here. Unlike the others it
+    # has never been signal-owned: it is typed on the client add/edit form and
+    # carries figures from the original data import, so 47 clients hold a real
+    # lumpsum with no lumpsum sale behind it. Deriving it would have erased
+    # Rs 34.3 lakh across 22 clients on the next save of any of their sales.
+    # The profile shows lumpsum from the sales book already — services/holdings
+    # computes it live and never reads this column.
     client.life_cover = _sum_amount("LIFE_INS", "Life Insurance", "cover_amount")
     client.health_cover = _sum_amount("HEALTH_INS", "Health Insurance", "cover_amount")
     client.motor_insured_value = _sum_amount("MOTOR_INS", "Motor Insurance", "amount")

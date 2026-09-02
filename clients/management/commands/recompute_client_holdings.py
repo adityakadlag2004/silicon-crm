@@ -15,7 +15,8 @@ from django.db import transaction
 from clients.models import Client, Sale
 from clients.signals import update_client_status
 
-FIELDS = ["sip_amount", "lumsum_investment", "life_cover", "health_cover",
+# lumsum_investment is intentionally absent — it is hand-curated, not derived.
+FIELDS = ["sip_amount", "life_cover", "health_cover",
           "motor_insured_value", "pms_amount", "sip_status", "life_status",
           "health_status", "motor_status", "pms_status"]
 

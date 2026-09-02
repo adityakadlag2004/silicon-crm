@@ -36,26 +36,31 @@ class ClientHoldingsTests(TestCase):
         cls.health, _ = Product.objects.get_or_create(code="HEALTH_INS", defaults={"name": "Health Insurance"})
         cls.term = Product.objects.create(code="TERM_PLAN", name="Term Plan", parent=cls.life)
 
-    def test_lumpsum_sales_reach_the_profile(self):
-        """It was never recomputed at all — only ever typed by hand — so every
-        client with a lumpsum sale read as Rs 0."""
+    def test_a_hand_entered_lumpsum_survives_a_sale_save(self):
+        """lumsum_investment is curated, not derived: 47 clients hold a real
+        lumpsum from the original import with no lumpsum sale behind it.
+        Deriving it here erased Rs 34.3 lakh across 22 clients in a dry run."""
+        c = Client.objects.create(name="Lump Curated", lumsum_investment=Decimal("1076608.63"))
+        _sale(c, self.emp, self.lumsum, "12000")
+        c.refresh_from_db()
+        self.assertEqual(c.lumsum_investment, Decimal("1076608.63"))
+
+    def test_lumpsum_sales_show_on_the_profile_from_the_sales_book(self):
+        """The profile does not read the column — holdings.portfolio computes
+        the line live, which is what the owner actually asked for."""
+        from clients.services import holdings
         c = Client.objects.create(name="Lump Client")
         _sale(c, self.emp, self.lumsum, "500000")
-        c.refresh_from_db()
-        self.assertEqual(c.lumsum_investment, Decimal("500000"))
-
-    def test_two_lumpsum_sales_add_up(self):
-        c = Client.objects.create(name="Lump Two")
-        _sale(c, self.emp, self.lumsum, "500000")
         _sale(c, self.emp, self.lumsum, "250000")
-        c.refresh_from_db()
-        self.assertEqual(c.lumsum_investment, Decimal("750000"))
+        line = {l["code"]: l for l in holdings.portfolio(c)}["LUMSUM"]
+        self.assertEqual(line["amount"], Decimal("750000"))
+        self.assertEqual(line["count"], 2)
 
     def test_a_pending_sale_does_not_count(self):
+        from clients.services import holdings
         c = Client.objects.create(name="Lump Pending")
         _sale(c, self.emp, self.lumsum, "500000", status=Sale.STATUS_PENDING)
-        c.refresh_from_db()
-        self.assertEqual(c.lumsum_investment, 0)
+        self.assertEqual(holdings.portfolio(c), [])
 
     def test_sub_product_sale_rolls_up_into_its_parent_line(self):
         """A sale names the exact plan sold; matching on the parent code alone
@@ -106,25 +111,36 @@ class RecomputeCommandTests(TestCase):
             user=User.objects.create_user("rc_emp", password="x"),
             role="employee", salary=0, active=True)
         cls.lumsum, _ = Product.objects.get_or_create(code="LUMSUM", defaults={"name": "Lumsum"})
+        cls.life, _ = Product.objects.get_or_create(code="LIFE_INS", defaults={"name": "Life Insurance"})
+        cls.term = Product.objects.create(code="RC_TERM", name="Term Plan", parent=cls.life)
 
     def _stale_client(self):
+        """A sub-product life sale whose cover never rolled up into the parent
+        line — the state 5 clients were actually in before the fix."""
         c = Client.objects.create(name="Stale Client")
-        _sale(c, self.emp, self.lumsum, "300000")
-        # simulate a row written before the recompute knew about lumpsum
-        Client.objects.filter(pk=c.pk).update(lumsum_investment=0)
+        _sale(c, self.emp, self.term, "100000", cover="10000000")
+        Client.objects.filter(pk=c.pk).update(life_cover=0, life_status=False)
         return c
 
     def test_dry_run_reports_but_writes_nothing(self):
         c = self._stale_client()
         call_command("recompute_client_holdings")
         c.refresh_from_db()
-        self.assertEqual(c.lumsum_investment, 0)
+        self.assertEqual(c.life_cover, 0)
 
     def test_apply_writes_the_corrected_value(self):
         c = self._stale_client()
         call_command("recompute_client_holdings", "--apply")
         c.refresh_from_db()
-        self.assertEqual(c.lumsum_investment, Decimal("300000"))
+        self.assertEqual(c.life_cover, Decimal("10000000"))
+        self.assertTrue(c.life_status)
+
+    def test_the_sweep_never_touches_the_curated_lumpsum(self):
+        c = Client.objects.create(name="Sweep Curated", lumsum_investment=Decimal("500000"))
+        _sale(c, self.emp, self.lumsum, "1000")
+        call_command("recompute_client_holdings", "--apply")
+        c.refresh_from_db()
+        self.assertEqual(c.lumsum_investment, Decimal("500000"))
 
     def test_second_run_is_a_no_op(self):
         self._stale_client()

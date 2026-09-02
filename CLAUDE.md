@@ -115,9 +115,17 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `*_status` flags from the client's **approved** sales. The client profile's
   Portfolio cards read only these columns, so **anything this function forgets
   is invisible on the profile however many sales were booked**.
-- It forgot two things until 2026-09-02:
-  - **Lumpsum was never computed at all** — only ever typed by hand on the
-    client edit form. 433 clients with approved lumpsum sales read as ₹0.
+- **`lumsum_investment` is the exception: it is curated, never derived.** It is
+  typed on the client add/edit form and carries figures from the original data
+  import — 47 clients hold a real lumpsum with no lumpsum sale behind it, and
+  the amounts are valuations (₹10,76,608.63), not round typed numbers. Deriving
+  it looked like an obvious missing line; a dry run showed it would erase
+  **₹34.3 lakh across 22 clients**, 7 of them to zero, on the next save of any
+  of their sales. Don't add it back — the profile shows lumpsum from the sales
+  book already, computed live by `services/holdings` which never reads this
+  column. The lesson generalises: **run the sweep's dry run before assuming a
+  denormalised column is safe to derive.**
+- It did forget one thing until 2026-09-02:
   - **Sub-product sales did not roll up.** A sale names the exact plan sold
     ("PR Life Pro", parent `LIFE_INS`), and matching on `product_ref__code`
     alone counted none of them, so ₹2.75cr of life cover read as no life
