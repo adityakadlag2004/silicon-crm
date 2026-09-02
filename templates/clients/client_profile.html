@@ -193,6 +193,49 @@
       </div>
     </div>
 
+    {% comment %}
+      The policies themselves. The cards above are the derived summary
+      (recomputed from approved sales); this names each policy, what it covers
+      and when it renews, which is what the summary could never say.
+    {% endcomment %}
+    <div data-panel="portfolio" class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;">Insurance Policies ({{ policies|length }})</h3>
+      {% if policies %}
+      <div class="ki-table-scroll">
+        <table class="mini-table">
+          <thead><tr>
+            <th>Policy</th><th>Type</th><th class="num">Sum Insured</th>
+            <th class="num">Premium</th><th>Renews</th><th class="num">Renewals</th><th>Status</th>
+          </tr></thead>
+          <tbody>
+            {% for p in policies %}
+            <tr>
+              <td>
+                <a href="{% url 'clients:policy_detail' p.id %}" class="name-link">{{ p.policy_number }}</a>
+                {% if p.insurer %}<div class="text-muted small">{{ p.insurer }}{% if p.plan_name %} · {{ p.plan_name }}{% endif %}</div>{% endif %}
+              </td>
+              <td>{{ p.get_insurance_type_display }}</td>
+              <td class="num">₹{{ p.sum_insured|inr }}</td>
+              <td class="num">₹{{ p.premium_amount|inr }}</td>
+              <td>
+                {{ p.end_date|date:"d M Y"|default:"—" }}
+                {% if p.is_expiring_soon %}<span class="ki-tag" style="--c:#B45309;">Soon</span>{% endif %}
+              </td>
+              <td class="num">{{ p.renewal_count }}</td>
+              <td><span class="ki-tag" style="--c:{% if p.status == 'active' %}#15803D{% elif p.status == 'lapsed' %}#BE123C{% else %}#57534E{% endif %};">{{ p.get_status_display }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted small mb-0">
+        No policies on the tracker yet. One is created automatically when an
+        insurance sale is approved, or when a renewal is added for this client.
+      </p>
+      {% endif %}
+    </div>
+
     {% if open_tasks %}
     <div data-panel="work" class="ki-card mt-3">
       <h3 class="ki-section-title" style="margin-top:0;">Open Tasks ({{ open_tasks|length }})</h3>
@@ -351,7 +394,7 @@
       <h3 class="ki-section-title" style="margin-top:0;">Renewals ({{ renewals|length }})</h3>
       <div style="overflow-x:auto;">
         <table class="mini-table">
-          <thead><tr><th>Next Renewal</th><th>Product</th><th>Frequency</th><th class="text-right">Premium</th><th>Collected</th></tr></thead>
+          <thead><tr><th>Next Renewal</th><th>Product</th><th>Frequency</th><th class="text-right">Premium</th><th>Collected</th><th>Doc Filed</th></tr></thead>
           <tbody>
             {% for r in renewals %}
               <tr>
@@ -360,6 +403,13 @@
                 <td>{{ r.frequency|capfirst }}</td>
                 <td class="text-right">₹{{ r.premium_amount|floatformat:0 }}</td>
                 <td>{{ r.premium_collected_on|date:"d M Y" }}</td>
+                <td>
+                  {% if r.policy_doc_submitted %}
+                    <span class="ki-tag" style="--c:#15803D;">Filed</span>
+                  {% else %}
+                    <span class="ki-tag" style="--c:#B45309;">Pending</span>
+                  {% endif %}
+                </td>
               </tr>
             {% endfor %}
           </tbody>

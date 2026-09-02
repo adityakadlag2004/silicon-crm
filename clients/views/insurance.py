@@ -9,7 +9,7 @@ from datetime import timedelta
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
-from django.db.models import Count, Q, Sum
+from django.db.models import Case, Count, IntegerField, Q, Sum, When
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
@@ -23,54 +23,98 @@ from ..templatetags.custom_filters import inr
 
 @login_required
 def policy_list(request):
-    policies = InsurancePolicy.objects.select_related("client", "relationship_manager__user")
+    """The tracker, read one product line at a time.
+
+    Health and Life are different books with different renewal rhythms, so the
+    type tabs are the primary control and everything below them — the KPI
+    strip included — is scoped to the selected type. A single undivided list
+    of every policy was the complaint: it answered no question anybody asks.
+    """
+    policies = (
+        InsurancePolicy.objects
+        .select_related("client", "relationship_manager__user")
+        .annotate(renewal_count=Count("renewals"))
+    )
+
+    kind = request.GET.get("type", "")
+    if kind not in dict(InsurancePolicy.TYPE_CHOICES):
+        kind = ""
+    # Everything below the tabs reads this book only.
+    book = policies.filter(insurance_type=kind) if kind else policies
 
     q = (request.GET.get("q") or "").strip()
+    rows = book
     if q:
-        policies = policies.filter(
+        rows = rows.filter(
             Q(policy_number__icontains=q) | name_words_q("client__name", q)
             | Q(insurer__icontains=q) | Q(plan_name__icontains=q)
         )
     status = request.GET.get("status", "")
     if status in dict(InsurancePolicy.STATUS_CHOICES):
-        policies = policies.filter(status=status)
-    kind = request.GET.get("type", "")
-    if kind in dict(InsurancePolicy.TYPE_CHOICES):
-        policies = policies.filter(insurance_type=kind)
+        rows = rows.filter(status=status)
 
     today = timezone.localdate()
     soon = today + timedelta(days=30)
+    expiring = request.GET.get("expiring") == "1"
+    if expiring:
+        # A date window, not a status — applied last so it composes with the rest.
+        rows = rows.filter(status=InsurancePolicy.STATUS_ACTIVE,
+                           end_date__gte=today, end_date__lte=soon)
 
-    agg = InsurancePolicy.objects.aggregate(
+    # Soonest renewal first: the tracker is a work queue, not an archive. The
+    # model's default ordering is newest-expiry-first, which buries the row
+    # that needs a call today. Live policies lead — sorting on end_date alone
+    # floats every lapsed policy to the top, since their dates are all past.
+    rows = rows.annotate(
+        _live=Case(When(status=InsurancePolicy.STATUS_ACTIVE, then=0),
+                   default=1, output_field=IntegerField()),
+    ).order_by("_live", "end_date", "policy_number")
+
+    agg = book.aggregate(
         total=Count("id"),
         active=Count("id", filter=Q(status=InsurancePolicy.STATUS_ACTIVE)),
         lapsed=Count("id", filter=Q(status=InsurancePolicy.STATUS_LAPSED)),
         expiring=Count("id", filter=Q(status=InsurancePolicy.STATUS_ACTIVE,
                                       end_date__gte=today, end_date__lte=soon)),
         cover=Sum("sum_insured", filter=Q(status=InsurancePolicy.STATUS_ACTIVE)),
+        premium=Sum("premium_amount", filter=Q(status=InsurancePolicy.STATUS_ACTIVE)),
     )
+
     base = reverse("clients:policy_list")
+    # One count query for every tab, so the tabs themselves say where the book is.
+    per_type = {r["insurance_type"]: r["n"] for r in
+                policies.values("insurance_type").annotate(n=Count("id"))}
+    tabs = [{"key": "", "label": "All", "count": policies.count(),
+             "url": base, "active": not kind}]
+    for key, label in InsurancePolicy.TYPE_CHOICES:
+        tabs.append({"key": key, "label": label, "count": per_type.get(key, 0),
+                     "url": f"{base}?type={key}", "active": kind == key})
+
+    def tab_url(**params):
+        """Keep the selected type when a KPI tile or status filter is clicked."""
+        parts = [f"type={kind}"] if kind else []
+        parts += [f"{k}={v}" for k, v in params.items()]
+        return f"{base}?{'&'.join(parts)}" if parts else base
+
     return render(request, "insurance/policy_list.html", {
         "crumbs": [{"label": "Insurance Tracker"}],
         "kpis": [
-            {"label": "All Policies", "value": agg["total"], "color": "#4338CA",
-             "url": base, "active": not status},
+            {"label": "Policies", "value": agg["total"], "color": "#4338CA",
+             "url": tab_url(), "active": not status and not expiring},
             {"label": "Active", "value": agg["active"], "color": "#15803D",
-             "url": f"{base}?status={InsurancePolicy.STATUS_ACTIVE}",
+             "url": tab_url(status=InsurancePolicy.STATUS_ACTIVE),
              "active": status == InsurancePolicy.STATUS_ACTIVE},
-            {"label": "Expiring ≤30d", "value": agg["expiring"], "color": "#B45309",
-             "url": f"{base}?expiring=1", "active": request.GET.get("expiring") == "1"},
+            {"label": "Renewing ≤30d", "value": agg["expiring"], "color": "#B45309",
+             "url": tab_url(expiring=1), "active": expiring},
             {"label": "Lapsed", "value": agg["lapsed"], "color": "#BE123C",
-             "url": f"{base}?status={InsurancePolicy.STATUS_LAPSED}",
+             "url": tab_url(status=InsurancePolicy.STATUS_LAPSED),
              "active": status == InsurancePolicy.STATUS_LAPSED},
-            {"label": "Active Cover", "value": f"₹{inr(agg['cover'] or 0)}", "color": "#0F766E"},
+            {"label": "Active Cover", "value": f"₹{inr(agg['cover'] or 0)}", "color": "#0F766E",
+             "sub": f"₹{inr(agg['premium'] or 0)} premium"},
         ],
-        # The expiring tile is a date window, not a status — applied last so it
-        # composes with whatever else is filtered.
-        "policies": (policies.filter(status=InsurancePolicy.STATUS_ACTIVE,
-                                     end_date__gte=today, end_date__lte=soon)
-                     if request.GET.get("expiring") == "1" else policies)[:300],
+        "policies": rows[:300],
         "q": q, "status": status, "kind": kind,
+        "tabs": tabs, "today": today,
         "statuses": InsurancePolicy.STATUS_CHOICES,
         "types": InsurancePolicy.TYPE_CHOICES,
     })

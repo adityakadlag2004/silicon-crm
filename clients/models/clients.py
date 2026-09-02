@@ -196,6 +196,13 @@ class Renewal(models.Model):
     employee = models.ForeignKey("Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="renewals")
     premium_amount = models.DecimalField(max_digits=14, decimal_places=2, validators=[MinValueValidator(0)], default=0)
     premium_collected_on = models.DateField(default=timezone.localdate, db_index=True)
+    # Ticked by the employee once the renewed policy document is filed in the
+    # client's Drive folder. Left blank means not filed — that is the whole
+    # point of the tick, so it must never default to True.
+    policy_doc_submitted = models.BooleanField(
+        default=False,
+        verbose_name="Renewal policy submitted to Google Drive",
+    )
     notes = models.TextField(blank=True, null=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)

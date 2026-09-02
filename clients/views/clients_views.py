@@ -483,6 +483,17 @@ def client_profile(request, client_id):
 
     from django.db.models import Count
     from ..models import SipRegistration
+
+    # What this client actually holds with us. The Portfolio cards show the
+    # derived health/life *summary* recomputed from approved sales; they never
+    # named a policy, so the profile could not answer "which policy, and when
+    # does it renew" — the question anyone opening a client asks.
+    policies = (
+        client.policies
+        .select_related("relationship_manager__user")
+        .annotate(renewal_count=Count("renewals"))
+        .order_by("insurance_type", "end_date")
+    )
     from ..services import rta_feed
     mf_folios = (
         client.mf_folios.select_related("arn")
@@ -510,6 +521,11 @@ def client_profile(request, client_id):
         {"label": "PMS", "color": "#7E22CE", "value": f"₹{inr(client.pms_amount or 0)}"},
         {"label": "Open Tasks", "color": "#BE123C", "value": open_tasks.count()},
     ]
+    live_cover = sum((p.sum_insured or 0) for p in policies if p.status == "active")
+    if policies:
+        kpis.insert(3, {"label": "Insured Cover", "color": "#0F766E",
+                        "value": f"₹{inr(live_cover)}",
+                        "sub": f"{len(policies)} polic" + ("y" if len(policies) == 1 else "ies")})
 
     return render(request, "clients/client_profile.html", {
         "crumbs": [
@@ -524,6 +540,7 @@ def client_profile(request, client_id):
         "mf_folios": mf_folios,
         "mf_sips": mf_sips,
         "mf_summary": mf_summary,
+        "policies": policies,
         "sales_total_amount": sales_summary.get("total_amount") or 0,
         "sales_total_points": sales_summary.get("total_points") or 0,
     })

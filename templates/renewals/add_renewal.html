@@ -138,6 +138,26 @@
           {% if form.premium_collected_on.errors %}<div class="text-danger small mt-1">{{ form.premium_collected_on.errors|striptags }}</div>{% endif %}
         </div>
         <div class="col-12">
+          {% comment %}
+            Filing checklist. One tick, deliberately not required: blank means
+            the document is not filed yet, which is exactly what the owner
+            needs to be able to see. The renewals list shows it as a column.
+          {% endcomment %}
+          <div class="ki-card" style="background:var(--ki-primary-bg);padding:.75rem 1rem;">
+            <div class="fw-semibold small mb-2" style="color:var(--ki-dark);">
+              <i class="bi bi-check2-square me-1"></i> Checklist
+            </div>
+            <div class="form-check mb-0">
+              <input class="form-check-input" type="checkbox" name="policy_doc_submitted"
+                     id="id_policy_doc_submitted"
+                     {% if form.policy_doc_submitted.value %}checked{% endif %}>
+              <label class="form-check-label" for="id_policy_doc_submitted">
+                Renewal policy submitted to Google Drive
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="col-12">
           <label for="id_notes" class="form-label fw-semibold">Notes</label>
           {{ form.notes }}
           {% if form.notes.errors %}<div class="text-danger small mt-1">{{ form.notes.errors|striptags }}</div>{% endif %}

@@ -3,13 +3,37 @@
 {% block title %}Insurance Tracker{% endblock %}
 {% block page_title %}Insurance Tracker{% endblock %}
 {% block content %}
-{% include "insurance/_searchbar.html" with count=policies|length noun="policy" %}
+
+{% comment %}
+  Type tabs are the primary control: Health and Life are different books with
+  different renewal rhythms, and the KPI strip above is already scoped to
+  whichever is selected. Same chip idiom as the renewals period chips.
+{% endcomment %}
+<div class="ki-showbar" style="gap:.4rem;">
+  {% for t in tabs %}
+    <a href="{{ t.url }}" class="ki-btn ki-btn-sm {% if t.active %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">
+      {{ t.label }} <span class="text-muted">({{ t.count }})</span>
+    </a>
+  {% endfor %}
+</div>
+
+<form method="get" class="ki-showbar">
+  {% if kind %}<input type="hidden" name="type" value="{{ kind }}">{% endif %}
+  {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+  <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm"
+         style="max-width:300px;" placeholder="Policy no., client, insurer or plan…">
+  <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit"><i class="bi bi-search"></i> Search</button>
+  {% if q or status %}<a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% if kind %}?type={{ kind }}{% else %}?{% endif %}">Reset</a>{% endif %}
+  <span class="right">{{ policies|length }} polic{{ policies|length|pluralize:"y,ies" }}</span>
+</form>
 
 <div class="ki-table-wrap">
   <table class="ki-dtable ki-cardify">
     <thead><tr>
-      <th>Policy</th><th>Client</th><th>Type</th><th class="num">Sum Insured</th>
-      <th class="num">Premium</th><th>Ends</th><th>Status</th>
+      <th>Policy</th><th>Client</th>
+      {% if not kind %}<th>Type</th>{% endif %}
+      <th class="num">Sum Insured</th><th class="num">Premium</th>
+      <th>Cover Period</th><th>Renews</th><th class="num">Renewals</th><th>Status</th>
     </tr></thead>
     <tbody>
       {% for p in policies %}
@@ -18,25 +42,56 @@
           <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
             <span class="ki-mono ki-mono-sm" style="--c:{{ p.insurer|monocolor }};">{{ p.insurer|monogram }}</span>
             <div style="min-width:0;">
+              {# Masked in the list like every other identifier; the detail page shows it in full. #}
               <a href="{% url 'clients:policy_detail' p.id %}" class="name-link">{{ p.policy_number|mask_pan }}</a>
-              <div class="text-muted small">{{ p.insurer }}{% if p.plan_name %} · {{ p.plan_name }}{% endif %}</div>
+              <div class="text-muted small">
+                {{ p.insurer|default:"Insurer not set" }}{% if p.plan_name %} · {{ p.plan_name }}{% endif %}
+              </div>
             </div>
           </div>
         </td>
-        <td data-label="Client"><a href="{% url 'clients:client_profile' p.client.id %}" class="name-link">{{ p.client.name }}</a></td>
-        <td data-label="Type">{{ p.get_insurance_type_display }}</td>
+        <td data-label="Client">
+          <a href="{% url 'clients:client_profile' p.client.id %}" class="name-link">{{ p.client.name }}</a>
+          {% if p.relationship_manager %}
+            <div class="text-muted small">{{ p.relationship_manager.user.get_full_name|default:p.relationship_manager.user.username }}</div>
+          {% endif %}
+        </td>
+        {% if not kind %}<td data-label="Type">{{ p.get_insurance_type_display }}</td>{% endif %}
         <td data-label="Sum Insured" class="num">₹{{ p.sum_insured|inr }}</td>
         <td data-label="Premium" class="num">₹{{ p.premium_amount|inr }}</td>
-        <td data-label="Ends">
+        <td data-label="Cover Period">
+          {% if p.start_date %}{{ p.start_date|date:"d M Y" }}{% else %}—{% endif %}
+          <span class="text-muted">→</span>
           {{ p.end_date|date:"d M Y"|default:"—" }}
-          {% if p.is_expiring_soon %}<span class="ki-tag" style="--c:#B45309;">Soon</span>{% endif %}
         </td>
+        <td data-label="Renews">
+          {% if p.end_date %}
+            {% if p.status == 'active' %}
+              {% if p.end_date < today %}
+                <span class="ki-tag" style="--c:#BE123C;">Overdue</span>
+              {% elif p.is_expiring_soon %}
+                <span class="ki-tag" style="--c:#B45309;">in {{ p.end_date|timeuntil }}</span>
+              {% else %}
+                <span class="text-muted small">in {{ p.end_date|timeuntil }}</span>
+              {% endif %}
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          {% else %}
+            <span class="ki-tag" style="--c:#BE123C;">No date</span>
+          {% endif %}
+        </td>
+        <td data-label="Renewals" class="num">{{ p.renewal_count }}</td>
         <td data-label="Status">
           <span class="ki-tag" style="--c:{% if p.status == 'active' %}#15803D{% elif p.status == 'lapsed' %}#BE123C{% else %}#57534E{% endif %};">{{ p.get_status_display }}</span>
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="7"><div class="ki-empty"><i class="bi bi-shield-check"></i>No policies yet. Add them from the admin.</div></td></tr>
+      <tr><td colspan="9">
+        <div class="ki-empty"><i class="bi bi-shield-check"></i>
+          No policies here yet. They are created automatically when an insurance
+          sale is approved, or when a renewal is added for a policy the tracker
+          doesn't know.
+        </div>
+      </td></tr>
       {% endfor %}
     </tbody>
   </table>

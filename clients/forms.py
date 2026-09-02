@@ -322,6 +322,7 @@ class RenewalForm(forms.ModelForm):
             "frequency",
             "premium_amount",
             "premium_collected_on",
+            "policy_doc_submitted",
             "notes",
         ]
         widgets = {
@@ -372,6 +373,7 @@ class EditRenewalForm(forms.ModelForm):
             "frequency",
             "premium_amount",
             "premium_collected_on",
+            "policy_doc_submitted",
             "notes",
         ]
         widgets = {

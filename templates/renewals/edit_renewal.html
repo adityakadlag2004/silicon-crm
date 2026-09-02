@@ -48,6 +48,17 @@
       {% if form.premium_collected_on.errors %}<div class="text-danger small mt-1">{{ form.premium_collected_on.errors|striptags }}</div>{% endif %}
     </div>
     <div class="mb-3">
+      {# The filing tick, correctable here when it was missed on entry. #}
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="policy_doc_submitted"
+               id="id_policy_doc_submitted"
+               {% if form.policy_doc_submitted.value %}checked{% endif %}>
+        <label class="form-check-label fw-semibold" for="id_policy_doc_submitted">
+          Renewal policy submitted to Google Drive
+        </label>
+      </div>
+    </div>
+    <div class="mb-3">
       <label for="id_notes" class="form-label fw-semibold">Notes</label>
       {{ form.notes }}
       {% if form.notes.errors %}<div class="text-danger small mt-1">{{ form.notes.errors|striptags }}</div>{% endif %}

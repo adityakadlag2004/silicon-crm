@@ -111,6 +111,7 @@ panel breaks it out with counts and today's collection.
         <th>Employee</th>
         <th>Premium (Rs)</th>
         <th>Payment Submitted On</th>
+        <th title="Renewal policy filed in the client's Drive folder">Doc Filed</th>
         <th>Notes</th>
         <th>Actions</th>
       </tr>
@@ -127,6 +128,13 @@ panel breaks it out with counts and today's collection.
         <td>{{ renewal.employee.user.username|default:"-" }}</td>
         <td>{{ renewal.premium_amount|floatformat:2 }}</td>
         <td>{{ renewal.premium_collected_on }}</td>
+        <td>
+          {% if renewal.policy_doc_submitted %}
+            <span class="ki-tag" style="--c:#15803D;"><i class="bi bi-check-lg"></i> Filed</span>
+          {% else %}
+            <span class="ki-tag" style="--c:#B45309;">Pending</span>
+          {% endif %}
+        </td>
         <td>{{ renewal.notes|default:"-" }}</td>
         <td>
           <a href="{% url 'clients:edit_renewal' renewal.id %}" class="ki-btn ki-btn-sm ki-btn-primary"><i class="bi bi-pencil"></i> Edit</a>
@@ -134,7 +142,7 @@ panel breaks it out with counts and today's collection.
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="11" class="text-center">No renewals found</td></tr>
+      <tr><td colspan="12" class="text-center">No renewals found</td></tr>
       {% endfor %}
     </tbody>
   </table>

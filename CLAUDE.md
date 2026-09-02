@@ -108,6 +108,44 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   client's Drive folder to upload the policy (created on first click) — a
   link, never a forced redirect, so daily bulk entry isn't interrupted.
 
+## Insurance Tracker + the client's book
+
+- **The tracker is read one product line at a time.** Health and Life are
+  different books with different renewal rhythms, so the type tabs are the
+  primary control and *everything* below them — the KPI strip included — is
+  scoped to the selected type (`book` in `policy_list`). A Health tab
+  reporting Life's cover is worse than no number. The tile URLs carry
+  `type=` so a tile click never silently widens the book.
+- The `type` filter existed in the view for months with no UI; the page was
+  one undivided list, which answered no question anybody asks.
+- **Ordering is a work queue, not an archive**: live policies first
+  (`_live` Case/When), then soonest renewal. Sorting on `end_date` alone
+  floats every lapsed policy to the top, since their dates are all in the
+  past — caught by rendering the page, not by the assertions.
+- Policy numbers stay **masked in the list** (`mask_pan`, pinned by
+  `test_insurance_modules`) and print in full on the detail page and on the
+  client's own profile — masking is a list rule, not a record rule.
+- **The client profile names the policies.** The Portfolio cards are the
+  derived health/life *summary* recomputed from approved sales by
+  `signals.update_client_status`; they never named a policy, so the profile
+  could not answer "which policy, and when does it renew" — the first thing
+  anyone opening a client asks. `policies` (with `renewal_count`) now renders
+  under the cards, and an "Insured Cover" tile appears when there are any.
+- `clients.test.test_insurance_tracker_views` pins the tabs, the scoping, the
+  ordering and the profile.
+
+## Renewal filing checklist
+
+- `Renewal.policy_doc_submitted` (migration 0125) is one tick: "Renewal policy
+  submitted to Google Drive". **Blank means not filed** — that is the whole
+  point, so it must never default True and is deliberately not required.
+- On both renewal forms (add + edit, so a missed tick is correctable), and
+  shown as a Filed/Pending column on the renewals list and on the client
+  profile's renewal history — the tick is only worth collecting if somebody
+  can see what is outstanding.
+- Not on the app's Add Renewal yet: a phone-entered renewal reads Pending
+  until someone edits it on the web.
+
 ## No duplicate renewals
 
 - **One renewal per policy per cycle.** `insurance_sync.duplicate_renewal()`
