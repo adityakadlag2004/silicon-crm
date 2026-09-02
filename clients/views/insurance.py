@@ -81,10 +81,13 @@ def policy_list(request):
     )
 
     base = reverse("clients:policy_list")
-    # One count query for every tab, so the tabs themselves say where the book is.
+    # One count query for every tab, so the tabs themselves say where the book
+    # is. Counted off a CLEAN queryset: `policies` carries a Count("renewals")
+    # join, and grouping over that counts joined rows — a policy with three
+    # renewals lands in its tab three times.
     per_type = {r["insurance_type"]: r["n"] for r in
-                policies.values("insurance_type").annotate(n=Count("id"))}
-    tabs = [{"key": "", "label": "All", "count": policies.count(),
+                InsurancePolicy.objects.values("insurance_type").annotate(n=Count("id"))}
+    tabs = [{"key": "", "label": "All", "count": sum(per_type.values()),
              "url": base, "active": not kind}]
     for key, label in InsurancePolicy.TYPE_CHOICES:
         tabs.append({"key": key, "label": label, "count": per_type.get(key, 0),

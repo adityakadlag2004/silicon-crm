@@ -98,6 +98,25 @@ class TrackerTypeTabTests(TestCase):
         self.assertEqual(counts["Health"], 1)
         self.assertEqual(counts["Life"], 1)
 
+    def test_tab_counts_survive_policies_with_renewals(self):
+        """The list queryset carries a Count("renewals") join; grouping over
+        it counts joined rows, so a policy with three renewals was landing in
+        its tab three times and the tabs stopped summing to the total."""
+        product, _ = Product.objects.get_or_create(
+            code="HEALTH_INS", defaults={"name": "Health Insurance"})
+        for n in range(3):
+            Renewal.objects.create(
+                client=self.customer, policy=self.health, product_ref=product,
+                product_type=Renewal.PRODUCT_TYPE_HEALTH,
+                renewal_date=datetime.date(2026, 4, 1) + datetime.timedelta(days=n),
+                frequency=Renewal.FREQUENCY_YEARLY, premium_amount=Decimal("100"))
+        resp = self.client.force_login(self.user) or self.client.get(
+            reverse("clients:policy_list"))
+        counts = {t["label"]: t["count"] for t in resp.context["tabs"]}
+        self.assertEqual(counts["Health"], 1)
+        self.assertEqual(counts["All"], 2)
+        self.assertEqual(counts["All"], counts["Health"] + counts["Life"])
+
 
 class ClientProfileShowsTheBookTests(TestCase):
     @classmethod
