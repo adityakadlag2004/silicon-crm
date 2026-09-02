@@ -202,6 +202,28 @@ class ResponsiveHygieneTests(TestCase):
             "tables outside a scroll container overflow the page on mobile; "
             f"wrap them in .ki-table-scroll: {offenders}")
 
+    def test_django_comments_do_not_span_lines(self):
+        """`{# ... #}` is single-line only: Django does not close it across a
+        newline, so a multi-line one renders as visible text on the page.
+
+        Documented in CLAUDE.md and still walked into twice, most recently on
+        the client profile where the comment printed above the Portfolio
+        lines. Anything longer than one line is `{% comment %}`.
+        """
+        import pathlib
+        offenders = []
+        for path in pathlib.Path("templates").rglob("*.html"):
+            if "admin/" in str(path):
+                continue
+            for lineno, line in enumerate(path.read_text().splitlines(), 1):
+                opens = line.count("{#")
+                if opens and opens != line.count("#}"):
+                    offenders.append(f"{path}:{lineno}")
+        self.assertEqual(
+            offenders, [],
+            "a {# #} comment left open at end of line renders as page text; "
+            f"use {{% comment %}} for multi-line: {offenders}")
+
     def test_no_fixed_pixel_widths_wider_than_a_phone(self):
         """A hard width over ~360px forces horizontal scrolling on a phone."""
         import re

@@ -46,6 +46,22 @@
   .mini-table th, .mini-table td { padding: 0.45rem 0.5rem; text-align: left; font-size: 0.87rem; border-bottom: 1px solid var(--ki-card-border); }
   .mini-table th { color: var(--ki-text-muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
   .text-right { text-align: right; }
+
+  /* A product line can run to dozens of records (one client has 22 lumpsum
+     entries), which pushed everything below it off the page. Cap the list and
+     scroll it, keeping the column headers pinned so a long scroll stays
+     readable. The totals sit outside the box so they never scroll away. */
+  .rows-scroll { max-height: 320px; overflow-y: auto; }
+  .rows-scroll thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--ki-card-bg); box-shadow: inset 0 -1px 0 var(--ki-card-border);
+  }
+  .rows-total {
+    display: flex; flex-wrap: wrap; gap: .25rem .9rem; align-items: baseline;
+    padding: .5rem .5rem 0; border-top: 2px solid var(--ki-card-border);
+    font-size: .84rem; color: var(--ki-text-secondary);
+  }
+  .rows-total strong { color: var(--ki-text-primary); }
 </style>
 {% endblock %}
 
@@ -127,20 +143,15 @@
       {% if portfolio %}
         {% for line in portfolio %}
         <div class="ki-card mb-2" style="padding:.75rem 1rem;">
+          {% comment %}
+            Name + count only; the totals bar under the table carries the
+            figures, so they are not printed twice on every line.
+          {% endcomment %}
           <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem;">
             <span class="fw-bold" style="color:var(--ki-dark);">{{ line.label }}</span>
             <span class="ki-tag" style="--c:#4338CA;">{{ line.count }} record{{ line.count|pluralize }}</span>
-            {% if line.is_cover %}
-              <span class="text-muted small">Cover <strong>₹{{ line.cover|inr }}</strong></span>
-              <span class="text-muted small">· Premium ₹{{ line.amount|inr }}</span>
-            {% else %}
-              <span class="text-muted small">Total <strong>₹{{ line.amount|inr }}</strong></span>
-            {% endif %}
-            {% if line.collected %}
-              <span class="text-muted small">· Renewals collected ₹{{ line.collected|inr }}</span>
-            {% endif %}
           </div>
-          <div class="ki-table-scroll mt-2">
+          <div class="ki-table-scroll rows-scroll mt-2">
             <table class="mini-table">
               <thead><tr>
                 <th>Date</th><th>Policy / Plan</th>
@@ -172,6 +183,18 @@
               </tbody>
             </table>
           </div>
+          <div class="rows-total">
+            <span>{{ line.count }} record{{ line.count|pluralize }}</span>
+            {% if line.is_cover %}
+              <span>Total cover <strong>₹{{ line.cover|inr }}</strong></span>
+              <span>Total premium <strong>₹{{ line.amount|inr }}</strong></span>
+            {% else %}
+              <span>Total invested <strong>₹{{ line.amount|inr }}</strong></span>
+            {% endif %}
+            {% if line.collected %}
+              <span>Renewals collected <strong>₹{{ line.collected|inr }}</strong></span>
+            {% endif %}
+          </div>
         </div>
         {% endfor %}
       {% else %}
@@ -189,7 +212,7 @@
     <div data-panel="portfolio" class="ki-card mt-3">
       <h3 class="ki-section-title" style="margin-top:0;">Insurance Policies ({{ policies|length }})</h3>
       {% if policies %}
-      <div class="ki-table-scroll">
+      <div class="ki-table-scroll rows-scroll">
         <table class="mini-table">
           <thead><tr>
             <th>Policy</th><th>Type</th><th class="num">Sum Insured</th>
@@ -215,6 +238,12 @@
             {% endfor %}
           </tbody>
         </table>
+      </div>
+      <div class="rows-total">
+        <span>{{ policies|length }} polic{{ policies|length|pluralize:"y,ies" }}</span>
+        <span>Total sum insured <strong>₹{{ policies_cover|inr }}</strong></span>
+        <span>Total premium <strong>₹{{ policies_premium|inr }}</strong></span>
+        <span>Renewals logged <strong>{{ policies_renewals }}</strong></span>
       </div>
       {% else %}
       <p class="text-muted small mb-0">
