@@ -1,5 +1,7 @@
 """Insurance Tracker sync: sales and renewals feed the tracker automatically."""
+import datetime
 from datetime import date
+from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -394,3 +396,55 @@ class AppRenewalPolicyLinkTests(TestCase):
             reverse("clients:client_policies_json", args=[self.client_rec.id])
         ).json()
         self.assertTrue(any(p["number"] == "LIST1" for p in data["policies"]))
+
+
+class SubProductPolicySyncTests(TestCase):
+    """A life sale names the exact plan, so the tracker has to roll it up."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.life, _ = Product.objects.get_or_create(
+            code="LIFE_INS", defaults={"name": "Life Insurance"})
+        cls.plan = Product.objects.create(
+            code="SP_PRLIFE", name="PR Life Pro", parent=cls.life)
+        cls.emp = Employee.objects.create(
+            user=User.objects.create_user("sp_emp", password="x"),
+            role="employee", salary=0, active=True)
+        cls.customer = Client.objects.create(name="SP Client")
+
+    def _sale(self):
+        return Sale.objects.create(
+            client=self.customer, employee=self.emp, product_ref=self.plan,
+            product=self.plan.name, amount=Decimal("96000"),
+            cover_amount=Decimal("10000000"), status=Sale.STATUS_APPROVED,
+            date=datetime.date(2026, 5, 1), policy_date=datetime.date(2026, 5, 1),
+            policy_number="SUBPOL1")
+
+    def test_a_sub_product_life_sale_creates_a_life_policy(self):
+        """It created none at all before: 5 sales on production, and they are
+        the largest-cover life policies in the book."""
+        policy = insurance_sync.sync_policy_from_sale(self._sale())
+        self.assertIsNotNone(policy)
+        self.assertEqual(policy.insurance_type, InsurancePolicy.TYPE_LIFE)
+        self.assertEqual(policy.policy_number, "SUBPOL1")
+        self.assertEqual(policy.sum_insured, Decimal("10000000"))
+
+    def test_the_plan_name_is_kept_on_the_policy(self):
+        policy = insurance_sync.sync_policy_from_sale(self._sale())
+        self.assertEqual(policy.plan_name, "PR Life Pro")
+
+    def test_backfill_creates_the_missing_policies_only_on_apply(self):
+        from io import StringIO
+        from django.core.management import call_command
+        sale = self._sale()
+        InsurancePolicy.objects.filter(source_sale=sale).delete()
+
+        call_command("backfill_insurance_policies", stdout=StringIO())
+        self.assertFalse(InsurancePolicy.objects.filter(source_sale=sale).exists())
+
+        call_command("backfill_insurance_policies", "--apply", stdout=StringIO())
+        self.assertTrue(InsurancePolicy.objects.filter(source_sale=sale).exists())
+
+        out = StringIO()
+        call_command("backfill_insurance_policies", "--apply", stdout=out)
+        self.assertIn("0 polic", out.getvalue())      # idempotent

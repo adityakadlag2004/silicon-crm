@@ -488,12 +488,26 @@ def client_profile(request, client_id):
     # derived health/life *summary* recomputed from approved sales; they never
     # named a policy, so the profile could not answer "which policy, and when
     # does it renew" — the question anyone opening a client asks.
+    # The Insurance tab reads the tracker, which is a **persisted** record:
+    # InsurancePolicy rows are created once, when a sale is approved or a
+    # renewal is logged, and updated in place. Nothing here rescans the sales
+    # or renewals tables — two queries serve the whole tab however long the
+    # client's history is.
+    from django.db.models import Prefetch
+    from ..models import Renewal as _Renewal
     policies = (
         client.policies
-        .select_related("relationship_manager__user")
+        .select_related("relationship_manager__user", "source_sale")
         .annotate(renewal_count=Count("renewals"))
+        .prefetch_related(Prefetch(
+            "renewals",
+            queryset=_Renewal.objects.select_related("employee__user")
+                                     .order_by("-premium_collected_on"),
+        ))
         .order_by("insurance_type", "end_date")
     )
+    insurance_policies = [p for p in policies
+                          if p.insurance_type in ("health", "life")]
     from ..services import rta_feed
     mf_folios = (
         client.mf_folios.select_related("arn")
@@ -552,6 +566,7 @@ def client_profile(request, client_id):
         "mf_sips": mf_sips,
         "mf_summary": mf_summary,
         "policies": policies,
+        "insurance_policies": insurance_policies,
         "policies_cover": sum((p.sum_insured or 0) for p in policies),
         "policies_premium": sum((p.premium_amount or 0) for p in policies),
         "policies_renewals": sum(p.renewal_count for p in policies),

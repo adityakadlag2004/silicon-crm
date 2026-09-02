@@ -32,9 +32,19 @@ _RENEWAL_TYPE = {
 
 
 def _sale_insurance_type(sale: Sale):
-    """TYPE_HEALTH / TYPE_LIFE for an insurance sale, else None."""
-    if sale.product_ref_id and sale.product_ref.code in _SALE_TYPE:
-        return _SALE_TYPE[sale.product_ref.code]
+    """TYPE_HEALTH / TYPE_LIFE for an insurance sale, else None.
+
+    A sale names the exact plan sold, so a life policy is usually booked under
+    a sub-product ("PR Life Pro", parent LIFE_INS). Matching the code alone
+    meant those sales created no tracker policy at all — 5 of them on
+    production, and they are the largest-cover life policies in the book.
+    """
+    ref = sale.product_ref
+    if ref is not None:
+        if ref.code in _SALE_TYPE:
+            return _SALE_TYPE[ref.code]
+        if ref.parent_id and ref.parent.code in _SALE_TYPE:
+            return _SALE_TYPE[ref.parent.code]
     return _SALE_TYPE.get((sale.product or "").strip().lower())
 
 
@@ -76,6 +86,10 @@ def sync_policy_from_sale(sale: Sale) -> InsurancePolicy | None:
     # current; a blank sale number never overwrites an existing real one.
     policy.client = sale.client
     policy.insurance_type = kind
+    # A sub-product sale names the plan; keep it so the policy row reads as
+    # "PR Life Pro" rather than a bare "Life Insurance".
+    if sale.product_ref_id and sale.product_ref.parent_id and not policy.plan_name:
+        policy.plan_name = sale.product_ref.name
     if (sale.policy_number or "").strip():
         policy.policy_number = number
     policy.premium_amount = sale.amount or 0

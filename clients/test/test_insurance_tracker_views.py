@@ -145,9 +145,38 @@ class ClientProfileShowsTheBookTests(TestCase):
 
     def test_profile_names_the_policy(self):
         html = self._get().content.decode()
-        self.assertIn("Insurance Policies", html)
+        self.assertIn("Health &amp; Life Policies", html)
         self.assertIn("PROFPOL1", html)          # full number on the record page
         self.assertIn("Niva Bupa", html)
+
+    def test_health_and_life_has_its_own_tab_next_to_overview(self):
+        html = self._get().content.decode()
+        self.assertIn('data-panel="insurance"', html)
+        # the tab sits immediately right of Overview
+        self.assertLess(html.index('data-panel="overview"'),
+                        html.index('data-panel="insurance"'))
+        self.assertLess(html.index('data-panel="insurance"'),
+                        html.index('data-panel="portfolio"'))
+
+    def test_the_tab_lists_only_health_and_life(self):
+        InsurancePolicy.objects.create(
+            client=self.customer, policy_number="MOTOR1",
+            insurance_type=InsurancePolicy.TYPE_MOTOR)
+        rows = self._get().context["insurance_policies"]
+        self.assertEqual([p.policy_number for p in rows], ["PROFPOL1"])
+
+    def test_the_tab_shows_the_renewals_against_a_policy(self):
+        html = self._get().content.decode()
+        self.assertIn("Renewals collected (1)", html)
+
+    def test_the_tab_reads_stored_policies_not_a_rescan(self):
+        """The point of the tab: it renders the tracker's own rows, so its cost
+        does not grow with the client's sales and renewal history."""
+        rows = self._get().context["insurance_policies"]
+        self.assertEqual(rows[0].renewal_count, 1)
+        # renewals came from the prefetch, so touching them costs no query
+        with self.assertNumQueries(0):
+            list(rows[0].renewals.all())
 
     def test_profile_carries_the_policy_in_context(self):
         self.assertEqual(list(self._get().context["policies"]), [self.policy])

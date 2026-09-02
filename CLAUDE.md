@@ -158,6 +158,29 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   so asking "what would this change?" never writes to production.
 - `clients.test.test_client_holdings` pins all of it.
 
+## Health & Life is its own tab, and it is a stored record
+
+- The client profile's **Health & Life** tab (right of Overview) renders
+  `InsurancePolicy` rows — policy number, insurer, plan, cover, premium, cover
+  period, nominee, status, and every renewal collected against each one.
+- **It is a stored record, not a calculation.** A policy is written once, when
+  its sale is approved (`sync_policy_from_sale`) or its first renewal is logged
+  (`link_renewal_to_policy`), and updated in place thereafter. Opening the tab
+  costs two queries — the policy list plus a `Prefetch` of its renewals —
+  however long the client's history is. Never rebuild this tab by scanning
+  Sale/Renewal: that is what the Portfolio tab does, and it is the thing the
+  owner explicitly did not want here.
+- **`_sale_insurance_type` rolls sub-products up to the parent.** A life sale
+  names the exact plan ("PR Life Pro", parent LIFE_INS), and matching the code
+  alone meant those sales created no policy at all — 5 on production, and the
+  largest-cover life policies in the book. The sub-product's name is kept as
+  the policy's `plan_name`.
+- `sync_policy_from_sale` runs only from the sale approval path, so sales
+  approved before it existed have no policy: 84 of 94 were in that state.
+  `manage.py backfill_insurance_policies` fixes that (dry run by default,
+  `--apply` writes, idempotent via `source_sale`). Purely additive — it only
+  creates missing rows, unlike `recompute_client_holdings`.
+
 ## The client's Portfolio is the sales book
 
 - `services/holdings.portfolio(client)` groups a client's **approved sales**
@@ -783,6 +806,7 @@ signal there is, since the app is self-hosted with no Play Console.
   the admin incentive report always computes live from `Sale` now)
 - Manual tools (intentionally not in CRONJOBS): `fix_phone_floats`,
   `prod_readiness_check`, `recompute_client_holdings`,
+  `backfill_insurance_policies`,
   `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`,
   `seed_incentive_structure`, `clear_unreleased_ladder_bonus`.
   `clear_unreleased_ladder_bonus` is the one-off that took the FY prize back off
