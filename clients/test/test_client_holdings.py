@@ -8,6 +8,7 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from clients.models import Client, Employee, Product, Sale
@@ -132,3 +133,103 @@ class RecomputeCommandTests(TestCase):
         out = StringIO()
         call_command("recompute_client_holdings", "--apply", stdout=out)
         self.assertIn("0 client(s) updated", out.getvalue())
+
+
+class PortfolioBreakdownTests(TestCase):
+    """The profile shows one line per product and one row per policy."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.emp = Employee.objects.create(
+            user=User.objects.create_user("pf_emp", password="x"),
+            role="employee", salary=0, active=True)
+        cls.lumsum, _ = Product.objects.get_or_create(code="LUMSUM", defaults={"name": "Lumsum"})
+        cls.sip, _ = Product.objects.get_or_create(code="SIP", defaults={"name": "SIP"})
+        cls.life, _ = Product.objects.get_or_create(code="LIFE_INS", defaults={"name": "Life Insurance"})
+        cls.health, _ = Product.objects.get_or_create(code="HEALTH_INS", defaults={"name": "Health Insurance"})
+        cls.term = Product.objects.create(code="PF_TERM", name="Term Plan", parent=cls.life)
+
+    def _portfolio(self, client):
+        from clients.services import holdings
+        return {line["code"]: line for line in holdings.portfolio(client)}
+
+    def test_each_product_line_is_its_own_entry(self):
+        c = Client.objects.create(name="PF Mixed")
+        _sale(c, self.emp, self.sip, "5000")
+        _sale(c, self.emp, self.lumsum, "200000")
+        _sale(c, self.emp, self.health, "18000", cover="500000")
+        lines = self._portfolio(c)
+        self.assertEqual(set(lines), {"SIP", "LUMSUM", "HEALTH_INS"})
+        self.assertEqual(lines["SIP"]["amount"], Decimal("5000"))
+        self.assertEqual(lines["LUMSUM"]["amount"], Decimal("200000"))
+        self.assertEqual(lines["HEALTH_INS"]["cover"], Decimal("500000"))
+
+    def test_two_health_policies_are_two_rows(self):
+        """'How many policies and what are the numbers' — the question the old
+        Yes/No cards could not answer."""
+        c = Client.objects.create(name="PF Two Policies")
+        _sale(c, self.emp, self.health, "18000", cover="500000")
+        _sale(c, self.emp, self.health, "24000", cover="1000000")
+        line = self._portfolio(c)["HEALTH_INS"]
+        self.assertEqual(line["count"], 2)
+        self.assertEqual(len(line["rows"]), 2)
+        self.assertEqual(line["cover"], Decimal("1500000"))
+
+    def test_policy_number_rides_on_the_row(self):
+        c = Client.objects.create(name="PF Number")
+        s = _sale(c, self.emp, self.health, "18000", cover="500000")
+        s.policy_number = "hp-9001 "
+        s.save()
+        row = self._portfolio(c)["HEALTH_INS"]["rows"][0]
+        self.assertEqual(row["policy_number"], "HP-9001")   # normalised by Sale.save
+
+    def test_sub_product_sale_lands_under_its_parent_line(self):
+        c = Client.objects.create(name="PF Sub")
+        _sale(c, self.emp, self.term, "100000", cover="10000000")
+        lines = self._portfolio(c)
+        self.assertIn("LIFE_INS", lines)
+        self.assertNotIn("PF_TERM", lines)
+        self.assertEqual(lines["LIFE_INS"]["rows"][0]["plan"], "Term Plan")
+
+    def test_renewals_add_to_collected_not_to_cover(self):
+        from clients.models import Renewal
+        c = Client.objects.create(name="PF Renewed")
+        _sale(c, self.emp, self.health, "18000", cover="500000")
+        Renewal.objects.create(
+            client=c, product_ref=self.health, product_type=Renewal.PRODUCT_TYPE_HEALTH,
+            renewal_date=timezone.localdate(), frequency=Renewal.FREQUENCY_YEARLY,
+            premium_amount=Decimal("19500"))
+        line = self._portfolio(c)["HEALTH_INS"]
+        self.assertEqual(line["collected"], Decimal("19500"))
+        self.assertEqual(line["cover"], Decimal("500000"))
+        self.assertEqual(line["count"], 2)
+
+    def test_a_renewal_with_no_sale_still_opens_its_line(self):
+        """The old book: sold before this system existed, so a renewal is the
+        only record. Hiding it would leave those profiles blank."""
+        from clients.models import Renewal
+        c = Client.objects.create(name="PF Old Book")
+        Renewal.objects.create(
+            client=c, product_ref=self.life, product_type=Renewal.PRODUCT_TYPE_LIFE,
+            renewal_date=timezone.localdate(), frequency=Renewal.FREQUENCY_YEARLY,
+            premium_amount=Decimal("40000"))
+        self.assertIn("LIFE_INS", self._portfolio(c))
+
+    def test_pending_sales_are_not_holdings(self):
+        c = Client.objects.create(name="PF Pending")
+        _sale(c, self.emp, self.sip, "5000", status=Sale.STATUS_PENDING)
+        self.assertEqual(self._portfolio(c), {})
+
+    def test_profile_renders_the_lines(self):
+        c = Client.objects.create(name="PF Render")
+        _sale(c, self.emp, self.sip, "5000")
+        s = _sale(c, self.emp, self.health, "18000", cover="500000")
+        s.policy_number = "RENDER99"; s.save()
+        admin = User.objects.create_superuser("pf_admin", password="x")
+        Employee.objects.create(user=admin, role="admin", salary=0, active=True)
+        self.client.force_login(admin)
+        html = self.client.get(
+            reverse("clients:client_profile", args=[c.id])).content.decode()
+        self.assertIn("RENDER99", html)
+        self.assertIn("Health Insurance", html)
+        self.assertIn("SIP", html)

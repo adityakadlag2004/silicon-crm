@@ -50,13 +50,12 @@ def update_client_status(sender, instance, **kwargs):
     client.motor_insured_value = _sum_amount("MOTOR_INS", "Motor Insurance", "amount")
     client.pms_amount = _sum_amount("PMS", "PMS", "amount")
 
-    # When the client is covered by the RTA SIP register, the feed is the
-    # truth for the SIP columns — sales exist for incentives, not holdings.
-    from .models import SipRegistration
-    if SipRegistration.objects.filter(client=client).exists():
-        client.sip_amount = SipRegistration.objects.filter(
-            client=client, status=SipRegistration.STATUS_ACTIVE,
-        ).aggregate(total=Sum("amount"))["total"] or 0
+    # The RTA SIP register used to override this: any client appearing in the
+    # feed had sip_amount replaced by their *active* registrations, so 194
+    # clients whose registrations had all ceased showed Rs 0 no matter what
+    # they had bought. Owner's call 2026-09-02 — the Portfolio cards read the
+    # sales book and nothing else. The RTA sections lower down the profile
+    # still show the feed's own view, clearly labelled as such.
 
     # For an investment the amount IS the holding, so a zero is a real zero.
     client.sip_status = client.sip_amount > 0

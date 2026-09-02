@@ -117,80 +117,68 @@
 
     <div data-panel="portfolio" class="ki-card mt-3">
       <h3 class="ki-section-title" style="margin-top:0;">Portfolio</h3>
-      <div class="product-section">
-        {% if mf_summary %}
-        {# RTA-linked MF products: numbers come from the feed, never sales #}
-        <div class="product-card">
-          <div class="pc-title"><i class="bi bi-piggy-bank"></i> SIP
-            <span class="status-pill {% if mf_summary.monthly_sip %}status-yes{% else %}status-no{% endif %}">{% if mf_summary.monthly_sip %}Yes{% else %}No{% endif %}</span>
+      {% comment %}
+        Built from the client's approved sales and the renewals collected
+        against them — one line per main product, and inside it one row per
+        record with its policy number. The old six hard-coded cards read
+        denormalised columns, so they could say "Health: Yes" but never which
+        policy, how many, or what the number was.
+      {% endcomment %}
+      {% if portfolio %}
+        {% for line in portfolio %}
+        <div class="ki-card mb-2" style="padding:.75rem 1rem;">
+          <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem;">
+            <span class="fw-bold" style="color:var(--ki-dark);">{{ line.label }}</span>
+            <span class="ki-tag" style="--c:#4338CA;">{{ line.count }} record{{ line.count|pluralize }}</span>
+            {% if line.is_cover %}
+              <span class="text-muted small">Cover <strong>₹{{ line.cover|inr }}</strong></span>
+              <span class="text-muted small">· Premium ₹{{ line.amount|inr }}</span>
+            {% else %}
+              <span class="text-muted small">Total <strong>₹{{ line.amount|inr }}</strong></span>
+            {% endif %}
+            {% if line.collected %}
+              <span class="text-muted small">· Renewals collected ₹{{ line.collected|inr }}</span>
+            {% endif %}
           </div>
-          <div class="pc-sub">
-            {% if mf_summary.monthly_sip %}₹{{ mf_summary.monthly_sip|inr }}/mo{% else %}—{% endif %}
-            <span class="text-muted" style="font-size:.72rem;"> · live from RTA</span>
-          </div>
-        </div>
-        <div class="product-card">
-          <div class="pc-title"><i class="bi bi-cash-stack"></i> MF Value</div>
-          <div class="pc-sub">
-            {% if mf_summary.est_value %}₹{{ mf_summary.est_value|inr }} <span class="text-muted" style="font-size:.72rem;">est.</span>{% else %}—{% endif %}
-            {% if mf_summary.lumpsum_12m %}<br><span class="text-muted" style="font-size:.76rem;">Lumpsum 12m: ₹{{ mf_summary.lumpsum_12m|inr }}</span>{% endif %}
-          </div>
-        </div>
-        {% else %}
-        <div class="product-card">
-          <div class="pc-title"><i class="bi bi-piggy-bank"></i> SIP
-            <span class="status-pill {% if client.sip_status %}status-yes{% else %}status-no{% endif %}">{% if client.sip_status %}Yes{% else %}No{% endif %}</span>
-          </div>
-          <div class="pc-sub">
-            {% if client.sip_amount %}Amount: ₹{{ client.sip_amount|inr }}{% if client.sip_topup %} · Topup: ₹{{ client.sip_topup|inr }}{% endif %}{% else %}—{% endif %}
-          </div>
-        </div>
-        <div class="product-card">
-          <div class="pc-title"><i class="bi bi-cash-stack"></i> Lumpsum</div>
-          <div class="pc-sub">{% if client.lumsum_investment %}₹{{ client.lumsum_investment|inr }}{% else %}—{% endif %}</div>
-        </div>
-        {% endif %}
-        <div class="product-card">
-          <div class="pc-title"><i class="bi bi-heart-pulse"></i> Health
-            <span class="status-pill {% if client.health_status %}status-yes{% else %}status-no{% endif %}">{% if client.health_status %}Yes{% else %}No{% endif %}</span>
-          </div>
-          <div class="pc-sub">
-            {% if client.health_cover %}Cover: ₹{{ client.health_cover|floatformat:0 }}{% endif %}
-            {% if client.health_product %} · {{ client.health_product }}{% endif %}
-            {% if not client.health_cover and not client.health_product %}—{% endif %}
-          </div>
-        </div>
-        <div class="product-card">
-          <div class="pc-title"><i class="bi bi-shield-check"></i> Life
-            <span class="status-pill {% if client.life_status %}status-yes{% else %}status-no{% endif %}">{% if client.life_status %}Yes{% else %}No{% endif %}</span>
-          </div>
-          <div class="pc-sub">
-            {% if client.life_cover %}Cover: ₹{{ client.life_cover|floatformat:0 }}{% endif %}
-            {% if client.life_product %} · {{ client.life_product }}{% endif %}
-            {% if not client.life_cover and not client.life_product %}—{% endif %}
-          </div>
-        </div>
-        <div class="product-card">
-          <div class="pc-title"><i class="bi bi-car-front"></i> Motor
-            <span class="status-pill {% if client.motor_status %}status-yes{% else %}status-no{% endif %}">{% if client.motor_status %}Yes{% else %}No{% endif %}</span>
-          </div>
-          <div class="pc-sub">
-            {% if client.motor_insured_value %}Insured: ₹{{ client.motor_insured_value|floatformat:0 }}{% endif %}
-            {% if client.motor_product %} · {{ client.motor_product }}{% endif %}
-            {% if not client.motor_insured_value and not client.motor_product %}—{% endif %}
+          <div class="ki-table-scroll mt-2">
+            <table class="mini-table">
+              <thead><tr>
+                <th>Date</th><th>Policy / Plan</th>
+                {% if line.is_cover %}<th class="num">Cover</th>{% endif %}
+                <th class="num">Amount</th><th>Booked by</th>
+              </tr></thead>
+              <tbody>
+                {% for row in line.rows %}
+                <tr>
+                  <td>
+                    {{ row.date|date:"d M Y"|default:"—" }}
+                    {% if row.kind == "renewal" %}<span class="ki-tag" style="--c:#0369A1;">Renewal</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if row.policy_number %}<strong>{{ row.policy_number }}</strong>{% else %}<span class="text-muted">No policy no.</span>{% endif %}
+                    <div class="text-muted small">
+                      {{ row.plan }}{% if row.years > 1 %} · {{ row.years }}-year term{% endif %}
+                      {% if row.kind == "renewal" %}
+                        · collected {{ row.collected_on|date:"d M Y" }}
+                        {% if row.filed %}· filed{% else %}· not filed{% endif %}
+                      {% endif %}
+                    </div>
+                  </td>
+                  {% if line.is_cover %}<td class="num">{% if row.cover %}₹{{ row.cover|inr }}{% else %}—{% endif %}</td>{% endif %}
+                  <td class="num">₹{{ row.amount|inr }}</td>
+                  <td class="text-muted small">{{ row.by|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div class="product-card">
-          <div class="pc-title"><i class="bi bi-briefcase"></i> PMS
-            <span class="status-pill {% if client.pms_status %}status-yes{% else %}status-no{% endif %}">{% if client.pms_status %}Yes{% else %}No{% endif %}</span>
-          </div>
-          <div class="pc-sub">
-            {% if client.pms_amount %}Amount: ₹{{ client.pms_amount|floatformat:0 }}{% endif %}
-            {% if client.pms_start_date %} · Started {{ client.pms_start_date|date:"d M Y" }}{% endif %}
-            {% if not client.pms_amount and not client.pms_start_date %}—{% endif %}
-          </div>
-        </div>
-      </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted small mb-0">
+          Nothing booked for this client yet — no approved sales and no renewals.
+        </p>
+      {% endif %}
     </div>
 
     {% comment %}

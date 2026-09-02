@@ -130,15 +130,46 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   cover alone told those clients they held no policy. The flag is now "holds an
   approved sale of that line, or has cover". SIP/PMS keep `amount > 0` — for an
   investment the amount *is* the holding, so a zero is a real zero.
-- **The RTA SIP register still overrides sales** when the client appears in it
-  (the feed is the truth for a live SIP), so a client whose registrations have
-  all ceased shows ₹0 — that is deliberate, not a bug.
+- **The RTA feed does not touch these columns** (owner's call 2026-09-02,
+  reversing the earlier rule). It used to: any client the feed covered had
+  `sip_amount` replaced by their *active* registrations, so 194 clients whose
+  registrations had all ceased read ₹0 whatever they had bought, and a real SIP
+  sale was overwritten on the next hourly import. Two writers had to go — the
+  override inside `update_client_status` **and**
+  `rta_feed.refresh_client_sip_fields`, now a documented no-op (kept, not
+  deleted: four call sites in the import pipeline, and it returns 0 so their
+  counters stay truthful). Fixing only the signal would have been undone by
+  the next `import_rta_feeds` run.
+- The feed's own view is still on the profile as the **MF Folios / SIP Register
+  / Valuation Report** sections, read straight from `SipRegistration` and
+  labelled as RTA data. That is the honest place for it.
 - **The signal only fires on a Sale save**, so changing what it derives leaves
   every existing row stale. `manage.py recompute_client_holdings` sweeps the
   book (dry run by default, `--apply` writes, idempotent). Its dry run does the
   real work inside a rolled-back transaction rather than writing and restoring,
   so asking "what would this change?" never writes to production.
 - `clients.test.test_client_holdings` pins all of it.
+
+## The client's Portfolio is the sales book
+
+- `services/holdings.portfolio(client)` groups a client's **approved sales**
+  and the **renewals** collected against them into one line per **main
+  product**, and hands back the individual records behind each line — so the
+  profile prints one row per policy, with its number, plan, cover, premium and
+  who booked it. The six hard-coded Yes/No cards it replaced could say
+  "Health: Yes, cover ₹5,00,000" but never *which* policy, how many, or what
+  the number was.
+- Sub-products fold into the parent line (`_main_product`), so a sale of
+  "PR Life Pro" shows under **Life Insurance** with its plan name on the row.
+- **A renewal adds to `collected`, never to `cover`** — it is a premium
+  collected against a policy, not a new holding. A renewal for a line with no
+  sale still opens its own line: that is the old book, and hiding it would
+  leave exactly those profiles blank.
+- KPI tiles are per line (SIP / Lumpsum / Health Cover / Life Cover), derived
+  the same way. The MF Value tile is gone — it was feed data in a strip that
+  now describes the sales book.
+- `clients.test.test_client_holdings` pins the lines, the roll-up, the policy
+  numbers and the renewal handling.
 
 ## Insurance Tracker + the client's book
 

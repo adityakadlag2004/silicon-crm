@@ -509,23 +509,34 @@ def client_profile(request, client_id):
     )
     mf_summary = rta_feed.mf_summary_for_client(client)
 
-    # Portfolio headline tiles — MF numbers come from the RTA feed, the rest
-    # from the client record.
+    # What the client holds, grouped by product line, straight off the sales
+    # book and the renewals against it — one row per policy, with its number.
+    # The RTA feed is not consulted here (owner's call 2026-09-02); its own
+    # sections lower down still show the feed's view, labelled as such.
+    from ..services import holdings as holdings_service
+    portfolio = holdings_service.portfolio(client)
+    by_code = {line["code"]: line for line in portfolio}
+
+    def _line_total(code):
+        line = by_code.get(code)
+        if not line:
+            return 0
+        return line["cover"] if line["is_cover"] else line["amount"]
+
     kpis = [
-        {"label": "MF Value", "color": "#15803D",
-         "value": f"₹{inr((mf_summary or {}).get('est_value') or 0)}"},
-        {"label": "Monthly SIP", "color": "#0369A1",
-         "value": f"₹{inr((mf_summary or {}).get('monthly_sip') or 0)}"},
-        {"label": "Lumpsum", "color": "#B45309",
-         "value": f"₹{inr(client.lumsum_investment or 0)}"},
-        {"label": "PMS", "color": "#7E22CE", "value": f"₹{inr(client.pms_amount or 0)}"},
+        {"label": "SIP", "color": "#0369A1", "value": f"₹{inr(_line_total('SIP'))}",
+         "sub": f"{by_code['SIP']['count']} sale(s)" if "SIP" in by_code else None},
+        {"label": "Lumpsum", "color": "#B45309", "value": f"₹{inr(_line_total('LUMSUM'))}",
+         "sub": f"{by_code['LUMSUM']['count']} sale(s)" if "LUMSUM" in by_code else None},
+        {"label": "Health Cover", "color": "#15803D",
+         "value": f"₹{inr(_line_total('HEALTH_INS'))}",
+         "sub": f"{by_code['HEALTH_INS']['count']} record(s)" if "HEALTH_INS" in by_code else None},
+        {"label": "Life Cover", "color": "#7E22CE",
+         "value": f"₹{inr(_line_total('LIFE_INS'))}",
+         "sub": f"{by_code['LIFE_INS']['count']} record(s)" if "LIFE_INS" in by_code else None},
         {"label": "Open Tasks", "color": "#BE123C", "value": open_tasks.count()},
     ]
-    live_cover = sum((p.sum_insured or 0) for p in policies if p.status == "active")
-    if policies:
-        kpis.insert(3, {"label": "Insured Cover", "color": "#0F766E",
-                        "value": f"₹{inr(live_cover)}",
-                        "sub": f"{len(policies)} polic" + ("y" if len(policies) == 1 else "ies")})
+
 
     return render(request, "clients/client_profile.html", {
         "crumbs": [
@@ -541,6 +552,7 @@ def client_profile(request, client_id):
         "mf_sips": mf_sips,
         "mf_summary": mf_summary,
         "policies": policies,
+        "portfolio": portfolio,
         "sales_total_amount": sales_summary.get("total_amount") or 0,
         "sales_total_points": sales_summary.get("total_points") or 0,
     })

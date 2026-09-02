@@ -1186,43 +1186,23 @@ def mf_summary_for_client(client):
 
 
 def refresh_client_sip_fields(client_ids=None):
-    """Keep Client.sip_amount/sip_status in step with the SIP register.
+    """Deprecated no-op — the SIP register no longer writes Client columns.
 
-    For any client that has register rows, the RTA feed is the truth for the
-    SIP product columns (sales exist for incentives, not holdings). Clients
-    without register rows keep their sales-derived values. Returns the
-    number of clients updated.
+    It used to overwrite ``Client.sip_amount``/``sip_status`` from the register
+    for any client the feed covered, on the reasoning that the feed was the
+    truth for holdings. The effect was that 194 clients whose registrations had
+    all ceased showed Rs 0 whatever they had actually bought, and a real SIP
+    sale was silently replaced on the next import.
+
+    Owner's call 2026-09-02: the Portfolio columns are derived from the sales
+    book and nothing else (``signals.update_client_status``). The register is
+    still shown on the profile as its own clearly-labelled section, straight
+    from ``SipRegistration`` — which is the honest place for it.
+
+    Kept as a no-op rather than deleted because it is called from four places
+    in the import pipeline; it returns 0 so callers' counters stay truthful.
     """
-    from collections import defaultdict
-
-    from django.db.models import Q
-
-    from ..models import Client, SipRegistration
-
-    # A registration belongs to its own client, or failing that its folio's
-    # client — the same two link directions the profile reads.
-    rows = SipRegistration.objects.filter(
-        Q(client__isnull=False) | Q(folio__client__isnull=False)
-    ).values_list("client_id", "folio__client_id", "status", "amount")
-    covered_ids = set()
-    totals = defaultdict(lambda: Decimal("0"))
-    for client_id, folio_client_id, status, amount in rows:
-        cid = client_id or folio_client_id
-        if client_ids is not None and cid not in client_ids:
-            continue
-        covered_ids.add(cid)
-        if status == SipRegistration.STATUS_ACTIVE:
-            totals[cid] += amount or Decimal("0")
-    updated = 0
-    for client in Client.objects.filter(id__in=covered_ids):
-        total = totals.get(client.id, Decimal("0"))
-        status = total > 0
-        if client.sip_amount != total or client.sip_status != status:
-            client.sip_amount = total
-            client.sip_status = status
-            client.save(update_fields=["sip_amount", "sip_status"])
-            updated += 1
-    return updated
+    return 0
 
 
 def cob_opportunities():

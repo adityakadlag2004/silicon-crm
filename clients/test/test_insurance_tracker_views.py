@@ -152,10 +152,11 @@ class ClientProfileShowsTheBookTests(TestCase):
     def test_profile_carries_the_policy_in_context(self):
         self.assertEqual(list(self._get().context["policies"]), [self.policy])
 
-    def test_cover_tile_appears_once_there_are_policies(self):
+    def test_health_cover_tile_reads_the_sales_book(self):
+        """The tiles are per product line now, derived from sales/renewals."""
         kpis = {k["label"]: k["value"] for k in self._get().context["kpis"]}
-        self.assertIn("Insured Cover", kpis)
-        self.assertIn("7,00,000", kpis["Insured Cover"])
+        self.assertIn("Health Cover", kpis)
+        self.assertIn("Life Cover", kpis)
 
     def test_renewal_count_is_shown_per_policy(self):
         self.assertEqual(self._get().context["policies"][0].renewal_count, 1)

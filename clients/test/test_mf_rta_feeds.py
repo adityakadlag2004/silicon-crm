@@ -1131,13 +1131,20 @@ class SipFieldSyncAndIdentityTests(TestCase):
             dedupe_key="ss1", folio_number="550001", client=cls.client_row,
             amount=7000, status="active", rta_status="Live SIP")
 
-    def test_refresh_sets_client_sip_columns_from_register(self):
-        rta_feed.refresh_client_sip_fields()
+    def test_refresh_no_longer_writes_client_sip_columns(self):
+        """The register is shown on the profile from SipRegistration directly;
+        it stopped writing Client.sip_* on 2026-09-02, so the sales book is the
+        only thing that fills the Portfolio."""
+        before = self.client_row.sip_amount
+        self.assertEqual(rta_feed.refresh_client_sip_fields(), 0)
         self.client_row.refresh_from_db()
-        self.assertEqual(self.client_row.sip_amount, 7000)
-        self.assertTrue(self.client_row.sip_status)
+        self.assertEqual(self.client_row.sip_amount, before)
 
-    def test_sale_signal_does_not_override_register_truth(self):
+    def test_sales_are_the_truth_for_the_sip_column(self):
+        """Reversed 2026-09-02 (owner): the register used to win here, which
+        meant a real SIP sale was replaced on the next import and 194 clients
+        with only ceased registrations read Rs 0. The Portfolio columns come
+        from the sales book now; the register still shows as its own section."""
         rta_feed.refresh_client_sip_fields()
         product, _ = Product.objects.get_or_create(name="SIP", defaults={"code": "SIP"})
         emp_user = User.objects.create_user(username="ss_emp2", password="x")
@@ -1145,16 +1152,18 @@ class SipFieldSyncAndIdentityTests(TestCase):
         Sale.objects.create(client=self.client_row, employee=emp, product="SIP",
                             product_ref=product, amount=999, status=Sale.STATUS_APPROVED)
         self.client_row.refresh_from_db()
-        self.assertEqual(self.client_row.sip_amount, 7000)  # register wins over the 999 sale
+        self.assertEqual(self.client_row.sip_amount, 999)
 
-    def test_ceased_register_zeroes_sip_columns(self):
+    def test_a_ceased_register_no_longer_zeroes_the_sip_column(self):
+        """The register writing Client columns is what zeroed people out; it is
+        a no-op now, so a ceased registration leaves the sales figure alone."""
         from clients.models import SipRegistration
         self.reg.status = SipRegistration.STATUS_CEASED
         self.reg.save()
-        rta_feed.refresh_client_sip_fields()
+        before = self.client_row.sip_amount
+        self.assertEqual(rta_feed.refresh_client_sip_fields(), 0)
         self.client_row.refresh_from_db()
-        self.assertEqual(self.client_row.sip_amount, 0)
-        self.assertFalse(self.client_row.sip_status)
+        self.assertEqual(self.client_row.sip_amount, before)
 
     def test_identity_issue_detection(self):
         from clients.views.kyc import _folio_identity_issues
@@ -1197,12 +1206,15 @@ class SipFieldSyncAndIdentityTests(TestCase):
         summary = rta_feed.mf_summary_for_client(self.client_row)
         self.assertEqual(summary["lumpsum_12m"], 100000)  # SIN row excluded
 
-    def test_profile_portfolio_uses_feed_numbers(self):
+    def test_profile_portfolio_is_built_from_sales_not_the_feed(self):
+        """The Portfolio block no longer carries the feed's numbers; the SIP
+        Register section below it still does, from SipRegistration directly."""
         c = TestClient()
         c.force_login(self.admin_user)
         resp = c.get(reverse("clients:client_profile", args=[self.client_row.id]))
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "live from RTA")
+        self.assertNotContains(resp, "live from RTA")
+        self.assertContains(resp, "SIP Register")
 
 
 class BulkKycTests(TestCase):
@@ -1577,13 +1589,22 @@ class ProfileValuationTests(TestCase):
         self.assertContains(resp, "70,000")   # invested total
         self.assertContains(resp, "Lumpsum")
 
-    def test_refresh_sets_sip_tag_for_folio_linked_registration(self):
+    def test_folio_linked_registration_still_reaches_the_profile(self):
+        """A registration whose client FK is null is resolved through its
+        folio. That link direction still matters — it is how the profile's SIP
+        Register section finds the row — but it no longer writes Client
+        columns, which the Portfolio derives from sales alone."""
         SipRegistration.objects.create(
             dedupe_key="vtag1", folio=self.folio, folio_number="VAL-1",
             amount=7500, status=SipRegistration.STATUS_ACTIVE)  # client FK null
 
-        rta_feed.refresh_client_sip_fields()
-
+        before = self.client_obj.sip_amount
+        self.assertEqual(rta_feed.refresh_client_sip_fields(), 0)
         self.client_obj.refresh_from_db()
-        self.assertTrue(self.client_obj.sip_status)
-        self.assertEqual(self.client_obj.sip_amount, 7500)
+        self.assertEqual(self.client_obj.sip_amount, before)
+
+        from django.db.models import Q
+        self.assertTrue(
+            SipRegistration.objects.filter(
+                Q(client=self.client_obj) | Q(folio__client=self.client_obj)
+            ).filter(folio_number="VAL-1").exists())
