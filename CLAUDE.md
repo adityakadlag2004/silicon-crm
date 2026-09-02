@@ -108,6 +108,38 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   client's Drive folder to upload the policy (created on first click) — a
   link, never a forced redirect, so daily bulk entry isn't interrupted.
 
+## What a client holds (the Portfolio cards)
+
+- `signals.update_client_status` derives `sip_amount`, `lumsum_investment`,
+  `life_cover`, `health_cover`, `motor_insured_value`, `pms_amount` and their
+  `*_status` flags from the client's **approved** sales. The client profile's
+  Portfolio cards read only these columns, so **anything this function forgets
+  is invisible on the profile however many sales were booked**.
+- It forgot two things until 2026-09-02:
+  - **Lumpsum was never computed at all** — only ever typed by hand on the
+    client edit form. 433 clients with approved lumpsum sales read as ₹0.
+  - **Sub-product sales did not roll up.** A sale names the exact plan sold
+    ("PR Life Pro", parent `LIFE_INS`), and matching on `product_ref__code`
+    alone counted none of them, so ₹2.75cr of life cover read as no life
+    insurance. `_line_q` now matches code **or `product_ref__parent__code`**
+    or the legacy name — the same roll-up the incentive rules and campaigns
+    already used. This is the rule under "Main products vs sub-products";
+    this signal was the one place still ignoring it.
+- **An insurance flag is not a cover figure.** `cover_amount` is blank on a
+  small tail of sales (8% health / 4% life), and keying `health_status` off
+  cover alone told those clients they held no policy. The flag is now "holds an
+  approved sale of that line, or has cover". SIP/PMS keep `amount > 0` — for an
+  investment the amount *is* the holding, so a zero is a real zero.
+- **The RTA SIP register still overrides sales** when the client appears in it
+  (the feed is the truth for a live SIP), so a client whose registrations have
+  all ceased shows ₹0 — that is deliberate, not a bug.
+- **The signal only fires on a Sale save**, so changing what it derives leaves
+  every existing row stale. `manage.py recompute_client_holdings` sweeps the
+  book (dry run by default, `--apply` writes, idempotent). Its dry run does the
+  real work inside a rolled-back transaction rather than writing and restoring,
+  so asking "what would this change?" never writes to production.
+- `clients.test.test_client_holdings` pins all of it.
+
 ## Insurance Tracker + the client's book
 
 - **The tracker is read one product line at a time.** Health and Life are
@@ -711,7 +743,7 @@ signal there is, since the app is self-hosted with no Play Console.
 - (none currently — `monthly_snapshot` + `MonthlyIncentive` deleted 2026-07-16;
   the admin incentive report always computes live from `Sale` now)
 - Manual tools (intentionally not in CRONJOBS): `fix_phone_floats`,
-  `prod_readiness_check`,
+  `prod_readiness_check`, `recompute_client_holdings`,
   `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`,
   `seed_incentive_structure`, `clear_unreleased_ladder_bonus`.
   `clear_unreleased_ladder_bonus` is the one-off that took the FY prize back off

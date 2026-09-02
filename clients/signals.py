@@ -7,18 +7,44 @@ from django.urls import reverse
 
 @receiver([post_save, post_delete], sender=Sale)
 def update_client_status(sender, instance, **kwargs):
+    """Recompute what a client holds from their approved sales.
+
+    The Portfolio cards on the client profile read these columns, so anything
+    this function forgets is invisible on the profile no matter how many sales
+    were booked.
+    """
     client = instance.client
     # Only approved sales define what products a client actually holds.
     sales = Sale.objects.filter(client=client, status=Sale.STATUS_APPROVED)
 
     code_to_name = {p.code: p.name for p in Product.objects.all().only("code", "name")}
 
-    def _sum_amount(product_code, fallback_name, field_name):
+    def _line_q(product_code, fallback_name):
+        """Every sale belonging to a product line, sub-products included.
+
+        A sale names the exact plan sold ("PR Life Pro", parent LIFE_INS), so
+        matching on the code alone counted none of them and a client with a
+        crore of cover read as holding no life insurance. Same roll-up rule the
+        incentive rules and campaigns already use (`product_ref__parent_id`).
+        """
         product_name = code_to_name.get(product_code, fallback_name)
-        amount = sales.filter(Q(product_ref__code=product_code) | Q(product=product_name)).aggregate(total=Sum(field_name))["total"]
+        return (Q(product_ref__code=product_code)
+                | Q(product_ref__parent__code=product_code)
+                | Q(product=product_name))
+
+    def _sum_amount(product_code, fallback_name, field_name):
+        amount = sales.filter(_line_q(product_code, fallback_name)).aggregate(
+            total=Sum(field_name))["total"]
         return amount or 0
 
+    def _holds(product_code, fallback_name):
+        return sales.filter(_line_q(product_code, fallback_name)).exists()
+
     client.sip_amount = _sum_amount("SIP", "SIP", "amount")
+    # Lumpsum was never recomputed here at all — it was only ever typed by hand
+    # on the client edit form, so 433 clients with approved lumpsum sales read
+    # as Rs 0 on their profile.
+    client.lumsum_investment = _sum_amount("LUMSUM", "Lumsum", "amount")
     client.life_cover = _sum_amount("LIFE_INS", "Life Insurance", "cover_amount")
     client.health_cover = _sum_amount("HEALTH_INS", "Health Insurance", "cover_amount")
     client.motor_insured_value = _sum_amount("MOTOR_INS", "Motor Insurance", "amount")
@@ -32,11 +58,16 @@ def update_client_status(sender, instance, **kwargs):
             client=client, status=SipRegistration.STATUS_ACTIVE,
         ).aggregate(total=Sum("amount"))["total"] or 0
 
+    # For an investment the amount IS the holding, so a zero is a real zero.
     client.sip_status = client.sip_amount > 0
-    client.life_status = client.life_cover > 0
-    client.health_status = client.health_cover > 0
-    client.motor_status = client.motor_insured_value > 0
     client.pms_status = client.pms_amount > 0
+    # Insurance is different: "do they hold a policy" and "how much cover" are
+    # two questions, and cover_amount is blank on a small tail of sales. Keying
+    # the flag off cover alone told those clients they had no policy at all.
+    client.life_status = client.life_cover > 0 or _holds("LIFE_INS", "Life Insurance")
+    client.health_status = client.health_cover > 0 or _holds("HEALTH_INS", "Health Insurance")
+    client.motor_status = (client.motor_insured_value > 0
+                           or _holds("MOTOR_INS", "Motor Insurance"))
 
     client.save()
 
