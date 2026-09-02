@@ -32,13 +32,6 @@
     <a class="health-tile" href="#duplicates">
       <div class="num">{{ duplicate_groups|length }}</div><div class="lbl">Duplicate groups</div>
     </a>
-    <a class="health-tile" href="{% url 'clients:mf_folio_match' %}">
-      <div class="num">{{ unlinked_folios }}</div>
-      <div class="lbl">Unlinked folios ({{ match_suggestions }} auto-matched) →</div>
-    </a>
-    <a class="health-tile" href="#identity-issues">
-      <div class="num" style="color:#b91c1c;">{{ identity_issues|length }}</div><div class="lbl">PAN / name conflicts</div>
-    </a>
     <a class="health-tile" href="#junk-names">
       <div class="num">{{ single_word|length }}</div><div class="lbl">Single-word names</div>
     </a>
@@ -51,10 +44,8 @@
     <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-person-vcard"></i> Clients missing PAN ({{ missing_total }})</span></div>
     <div class="ki-card-body" style="overflow-x:auto;">
       <p class="text-muted" style="font-size:.85rem;">
-        Without a PAN the system can't link a client to their mutual-fund folios or verify their
-        sales against the RTA feeds. Where the client's name matches an unlinked folio, its
-        <strong>PAN is suggested</strong> below with the folio's investor name — cross-check the name,
-        edit if needed, and hit <strong>Save</strong> on that row. Folios auto-link the moment it's saved.
+        PAN is the client's identity key — without it, profiles can't be matched or
+        de-duplicated. Type it on the row and hit <strong>Save</strong>.
       </p>
       <form method="get" action="#missing-pan" class="kyc-pan-form" style="margin-bottom:.75rem;">
         <input class="form-control form-control-sm" name="q" value="{{ search }}"
@@ -65,20 +56,14 @@
       <div class="ki-table-scroll">
 <table class="kyc-table">
         <thead><tr>
-          <th>Client</th><th>Phone</th><th>Suggested from folio (cross-check the name)</th><th>PAN</th>
+          <th>Client</th><th>Phone</th><th>Mapped to</th><th>PAN</th>
         </tr></thead>
         <tbody>
           {% for client in missing %}
           <tr>
             <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
             <td>{{ client.phone|default:"—" }}</td>
-            <td>
-              {% if client.pan_suggestion %}
-                <span class="dup-tag">{{ client.pan_suggestion.level_label }}</span>
-                <strong>{{ client.pan_suggestion.investor_name }}</strong>
-                <span class="text-muted">· {{ client.pan_suggestion.folios|length }} folio(s)</span>
-              {% else %}<span class="text-muted">no folio name-match</span>{% endif %}
-            </td>
+            <td>{{ client.mapped_to.user.username|default:"—" }}</td>
             <td>
               <form method="post" action="{% url 'clients:client_kyc_update_pan' client.id %}" class="kyc-pan-form">
                 {% csrf_token %}
@@ -86,7 +71,7 @@
                 <input type="hidden" name="page" value="{{ page_obj.number }}">
                 <input type="hidden" name="q" value="{{ search }}">
                 <input class="form-control form-control-sm" name="pan"
-                       value="{{ client.pan_suggestion.pan|default:'' }}"
+                       value=""
                        placeholder="ABCDE1234F" maxlength="10" required
                        style="text-transform:uppercase;">
                 <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check-lg"></i> Save</button>
@@ -127,7 +112,7 @@
         Profiles sharing a PAN, phone number, or exact name — <strong>but a shared phone can also be two
         real people</strong>, so nothing is pre-selected. In a group that really is one person:
         <strong>tick the profiles to merge</strong> and mark <strong>one as ● Keep</strong>. Ticked
-        profiles fold into the Keep one (with all their sales, renewals, folios, SIPs, tasks); untouched
+        profiles fold into the Keep one (with all their sales, renewals, tasks); untouched
         rows stay separate. Then hit <strong>Merge all selected</strong>.
       </p>
       <form method="post" action="{% url 'clients:client_bulk_merge' %}"
@@ -170,41 +155,6 @@
         </div>
         {% endif %}
       </form>
-    </div>
-  </div>
-
-  <div class="ki-card" id="identity-issues" style="margin-bottom:1rem;">
-    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-fingerprint"></i> PAN / name conflicts ({{ identity_issues|length }}) — check these links</span></div>
-    <div class="ki-card-body">
-      <p class="text-muted" style="font-size:.85rem;">
-        The client and their linked folios disagree — usually a wrongly typed PAN or a folio
-        linked to the wrong person. Compare the names and PANs, then either fix the client's PAN,
-        or open the folio and unlink / relink it to the right client.
-      </p>
-      {% for issue in identity_issues %}
-      <div class="dup-group">
-        <div style="margin-bottom:.35rem;">
-          <a href="{% url 'clients:client_profile' issue.client.id %}"><strong>{{ issue.client.name }}</strong></a>
-          <span class="text-muted">#{{ issue.client.id }} · client PAN: <code>{{ issue.client.pan|default:"—" }}</code></span>
-          {% for p in issue.problems %}<span class="dup-tag">{{ p }}</span>{% endfor %}
-          <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:edit_client' issue.client.id %}" style="float:right;"><i class="bi bi-pencil"></i> Edit client</a>
-        </div>
-        {% for folio in issue.folios %}
-        <div class="dup-row">
-          <span style="flex:1 1 260px;">
-            Folio <strong>{{ folio.folio_number }}</strong> · {{ folio.amc_name|default:"—" }}
-            <div class="dup-meta">
-              investor: <strong {% if folio.name_mismatch %}style="color:var(--ki-danger);"{% endif %}>{{ folio.investor_name|default:"—" }}</strong>
-              · folio PAN: <code>{{ folio.pan|default:"—" }}</code>
-            </div>
-          </span>
-          <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:mf_folio_link' folio.id %}"><i class="bi bi-link-45deg"></i> Relink / unlink</a>
-        </div>
-        {% endfor %}
-      </div>
-      {% empty %}
-      <p class="text-muted">🎉 Every linked folio agrees with its client's PAN and name.</p>
-      {% endfor %}
     </div>
   </div>
 
@@ -254,7 +204,7 @@
     <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-person-x"></i> No business records ({{ no_business|length }}) — delete candidates</span></div>
     <div class="ki-card-body" style="overflow-x:auto;">
       <p class="text-muted" style="font-size:.85rem;">
-        No sales, renewals, folios, SIPs, tasks or follow-ups anywhere. Real prospects belong in the
+        No sales, renewals, tasks or follow-ups anywhere. Real prospects belong in the
         Lead Pipeline — empty duplicates can go. Deletion re-checks every relation before removing.
       </p>
       <table class="kyc-table">

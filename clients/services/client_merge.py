@@ -1,7 +1,7 @@
 """Merging duplicate Client profiles.
 
 Accidentally-created duplicates hold real business records (sales, renewals,
-tasks, MF folios, call follow-ups…), so plain deletion would cascade them
+tasks, call follow-ups…), so plain deletion would cascade them
 away. merge_clients() repoints every relation from the duplicate onto the
 kept profile, copies over any contact fields the kept profile is missing,
 then deletes the emptied duplicate.

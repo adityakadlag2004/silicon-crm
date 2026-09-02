@@ -107,7 +107,6 @@
           <th>Name</th>
           <th>Code</th>
           <th>Renewal Tracked</th>
-          <th>RTA Feed Link</th>
           <th>Margin %</th>
           <th>Renewal Margin %</th>
           <th>Margin Slabs</th>
@@ -123,7 +122,6 @@
           <td>{{ product.name }}{% if product.parent_id %} <small class="text-muted">↳ under {{ product.parent.name }}</small>{% endif %}</td>
           <td>{{ product.code }}</td>
           <td>{% if product.domain == "both" or product.domain == "renewal" %}Yes{% else %}No{% endif %}</td>
-          <td>{% if product.rta_match %}<span style="display:inline-block;padding:.15rem .5rem;border-radius:10px;font-size:.76rem;font-weight:600;background:#dbeafe;color:#1d4ed8;">{{ product.get_rta_match_display }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
           <td>{{ product.margin_percent }}%</td>
           <td>{% if product.tracks_renewals %}{{ product.renewal_margin_percent }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
           <td>
@@ -159,7 +157,6 @@
                 data-code="{{ product.code }}"
                 data-domain="{{ product.domain }}"
                 data-renewal-tracked="{% if product.domain == "both" or product.domain == "renewal" %}yes{% else %}no{% endif %}"
-                data-rta-match="{{ product.rta_match }}"
                 data-margin-percent="{{ product.margin_percent }}"
                 data-renewal-margin-percent="{{ product.renewal_margin_percent }}"
                 data-display-order="{{ product.display_order }}"
@@ -236,16 +233,6 @@
               <option value="no" selected>No</option>
               <option value="yes">Yes</option>
             </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">RTA Feed Link</label>
-            <select class="form-select" name="rta_match" id="add_rta_match" aria-label="RTA Feed Link">
-              <option value="" selected>Not RTA-linked</option>
-              <option value="sip">MF SIP installments</option>
-              <option value="lumpsum">MF lumpsum purchases</option>
-              <option value="any">Any MF transaction</option>
-            </select>
-            <small class="text-muted">Linked products get pending sales cross-checked against CAMS/KFintech data by client PAN on the Approve Sales screen.</small>
           </div>
           <div class="mb-2">
             <label class="form-label">Default Margin %</label>
@@ -360,16 +347,6 @@
               <option value="no">No</option>
               <option value="yes">Yes</option>
             </select>
-          </div>
-          <div class="mb-2">
-            <label class="form-label">RTA Feed Link</label>
-            <select class="form-select" name="rta_match" id="edit_rta_match" aria-label="RTA Feed Link">
-              <option value="">Not RTA-linked</option>
-              <option value="sip">MF SIP installments</option>
-              <option value="lumpsum">MF lumpsum purchases</option>
-              <option value="any">Any MF transaction</option>
-            </select>
-            <small class="text-muted">Cross-check pending sales against CAMS/KFintech data by client PAN.</small>
           </div>
           <div class="mb-2">
             <label class="form-label">Default Margin %</label>
@@ -537,7 +514,6 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('edit_name').value = btn.getAttribute('data-name') || '';
     document.getElementById('edit_code').value = btn.getAttribute('data-code') || '';
     document.getElementById('edit_renewal_tracked').value = btn.getAttribute('data-renewal-tracked') || 'no';
-    document.getElementById('edit_rta_match').value = btn.getAttribute('data-rta-match') || '';
     document.getElementById('edit_margin_percent').value = btn.getAttribute('data-margin-percent') || '0';
     document.getElementById('edit_renewal_margin_percent').value = btn.getAttribute('data-renewal-margin-percent') || '0';
     document.getElementById('edit_display_order').value = btn.getAttribute('data-display-order') || '0';

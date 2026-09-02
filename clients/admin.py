@@ -24,10 +24,6 @@ from .models import (
     Campaign,
     CampaignProduct,
     CampaignSlab,
-    ArnAccount,
-    MutualFundFolio,
-    MutualFundTransaction,
-    RTAFeedImport,
     InsurancePolicy,
     InsuranceClaim,
     ClaimActivity,
@@ -36,34 +32,6 @@ from .models import (
 )
 
 
-@admin.register(ArnAccount)
-class ArnAccountAdmin(admin.ModelAdmin):
-    list_display = ("label", "arn_code", "sub_broker_code", "is_active")
-
-
-@admin.register(MutualFundFolio)
-class MutualFundFolioAdmin(admin.ModelAdmin):
-    list_display = ("folio_number", "amc_name", "investor_name", "pan", "client", "arn", "rta")
-    search_fields = ("folio_number", "investor_name", "pan", "client__name")
-    list_filter = ("rta", "arn")
-    raw_id_fields = ("client",)
-
-
-@admin.register(MutualFundTransaction)
-class MutualFundTransactionAdmin(admin.ModelAdmin):
-    list_display = ("trade_date", "folio", "scheme_name", "txn_type", "amount", "units", "arn")
-    search_fields = ("folio__folio_number", "scheme_name", "txn_type")
-    list_filter = ("rta", "arn", "txn_type")
-    date_hierarchy = "trade_date"
-    raw_id_fields = ("folio", "source_import")
-
-
-@admin.register(RTAFeedImport)
-class RTAFeedImportAdmin(admin.ModelAdmin):
-    list_display = ("created_at", "file_name", "rta", "source", "status",
-                    "rows_imported", "rows_duplicate", "folios_created", "clients_linked")
-    list_filter = ("status", "rta", "source")
-    search_fields = ("file_name",)
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
     list_display = ("user", "role", "salary")

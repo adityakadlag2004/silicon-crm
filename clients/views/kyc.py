@@ -1,10 +1,9 @@
 """Client KYC Issues — missing PANs and duplicate profiles.
 
-PAN is what links a client to their RTA mutual-fund folios, so clients
-without one break auto-linking and sale verification. This screen lists them
-(each employee sees their own mapped clients; managers/admins see everyone),
-lets PANs be filled inline, and — for admins — surfaces likely duplicate
-profiles with merge / safe-delete actions.
+PAN is the client's identity key, so profiles without one can't be matched or
+de-duplicated. This screen lists them (each employee sees their own mapped
+clients; managers/admins see everyone), lets PANs be filled inline, and — for
+admins — surfaces likely duplicate profiles with merge / safe-delete actions.
 """
 import re
 from collections import defaultdict
@@ -23,7 +22,7 @@ from ..forms import validate_pan
 from .. import permissions
 from ..models import Client
 from .helpers import name_words_q
-from ..services import client_merge, rta_feed
+from ..services import client_merge
 
 
 def _role(request):
@@ -108,12 +107,10 @@ def _ids_with_business():
     """Client ids that hold any real business record — cheap union used to
     find delete-candidate profiles. client_safe_delete stays the
     authoritative guard (it checks every relation)."""
-    from ..models import (CalendarEvent, CallFollowUp, MutualFundFolio,
-                          Renewal, Sale, SipRegistration, Task)
+    from ..models import (CalendarEvent, CallFollowUp, Renewal, Sale, Task)
 
     ids = set()
     for model, field in ((Sale, "client_id"), (Renewal, "client_id"),
-                         (MutualFundFolio, "client_id"), (SipRegistration, "client_id"),
                          (CallFollowUp, "client_id"), (CalendarEvent, "client_id"),
                          (Task, "client_id")):
         ids |= set(model.objects.exclude(**{f"{field}__isnull": True})
@@ -138,54 +135,8 @@ def _hygiene_lists():
     return single_word, no_business
 
 
-def _folio_identity_issues():
-    """Folio↔client identity conflicts — usually a wrong PAN typed on the
-    client or a folio linked to the wrong person:
-      - the client's folios carry 2+ different PANs
-      - the client's PAN differs from the folio PAN(s)
-      - a linked folio's investor name shares no word with the client's name
-    """
-    from ..models import MutualFundFolio
-    from ..services.rta_feed import _name_tokens
-
-    by_client = defaultdict(list)
-    for folio in (MutualFundFolio.objects.filter(client__isnull=False)
-                  .select_related("client")):
-        by_client[folio.client].append(folio)
-
-    issues = []
-    for client, folios in by_client.items():
-        pans = {f.pan for f in folios if f.pan}
-        client_pan = re.sub(r"[^A-Z0-9]", "", (client.pan or "").upper())
-        client_tokens = set(_name_tokens(client.name))
-        name_mismatch_ids = {
-            f.id for f in folios
-            if _name_tokens(f.investor_name)
-            and client_tokens
-            and not (set(_name_tokens(f.investor_name)) & client_tokens)
-        }
-        problems = []
-        if len(pans) > 1:
-            problems.append(f"folios carry {len(pans)} different PANs")
-        if client_pan and pans and client_pan not in pans:
-            problems.append("client PAN matches none of the folio PANs")
-        if name_mismatch_ids:
-            problems.append("investor name shares no word with the client name")
-        if problems:
-            for f in folios:
-                f.name_mismatch = f.id in name_mismatch_ids
-            issues.append({
-                "client": client, "folios": folios,
-                "pans": sorted(pans), "problems": problems,
-            })
-    return issues
-
-
 @login_required
 def client_kyc_issues(request):
-    from ..models import MutualFundFolio
-    from ..services import rta_feed
-
     is_admin = _is_admin(request)
     search = (request.GET.get("q") or "").strip()
 
@@ -195,25 +146,10 @@ def client_kyc_issues(request):
         .get_page(request.GET.get("page"))
     missing = list(page_obj)
 
-    # Folio name-matches suggest PANs for the missing-PAN rows: investor name
-    # shown alongside for a visual cross-check before saving.
-    suggestions = rta_feed.suggest_folio_matches()
-    best_by_client = {}
-    for s in suggestions:
-        cid = s["client"].id
-        if s["pan"] and (cid not in best_by_client or s["level"] > best_by_client[cid]["level"]):
-            best_by_client[cid] = s
-    for c in missing:
-        c.pan_suggestion = best_by_client.get(c.id)
-
     context = {
         "page_title": "Client KYC & Data Health",
         "kpis": [
             {"label": "Missing PAN", "value": page_obj.paginator.count, "color": "#BE123C"},
-            {"label": "Unlinked Folios",
-             "value": MutualFundFolio.objects.filter(client__isnull=True).count(),
-             "color": "#B45309"},
-            {"label": "Match Suggestions", "value": len(suggestions), "color": "#0369A1"},
         ],
         "missing": missing,
         "page_obj": page_obj,
@@ -227,9 +163,6 @@ def client_kyc_issues(request):
         context.update({
             "single_word": single_word,
             "no_business": no_business,
-            "unlinked_folios": MutualFundFolio.objects.filter(client__isnull=True).count(),
-            "match_suggestions": len(suggestions),
-            "identity_issues": _folio_identity_issues(),
         })
     return render(request, "clients/kyc_issues.html", context)
 
@@ -295,9 +228,7 @@ def client_kyc_update_pan(request, client_id):
 
     client.pan = pan
     client.save(update_fields=["pan"])
-    linked = rta_feed.relink_folios()
-    note = f" — {linked} MF record(s) auto-linked" if linked else ""
-    messages.success(request, f"PAN saved for {client.name}{note}.")
+    messages.success(request, f"PAN saved for {client.name}.")
     return _kyc_redirect(request)
 
 

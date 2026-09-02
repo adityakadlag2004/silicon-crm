@@ -645,9 +645,9 @@ in-house.
 
 ### 4.16 KYC issues & client merge — `views/kyc.py`, `services/client_merge.py`
 
-**Why:** PAN is what links a client to their RTA mutual-fund folios. A client
-without one breaks auto-linking and sale verification. And accidental duplicate
-profiles hold real business records, so plain deletion would cascade them away.
+**Why:** PAN is the client's identity key — without it, profiles can't be
+matched or de-duplicated. And accidental duplicate profiles hold real business
+records, so plain deletion would cascade them away.
 
 **How:** the KYC screen lists clients missing PANs (each employee sees their own
 mapped clients; managers and admins see everyone) and lets PANs be filled
@@ -659,29 +659,7 @@ deletes the emptied duplicate.
 **Use:** `/clients/clients/kyc-issues/`, `/clients/clients/merge/`,
 `/clients/clients/bulk-merge/`.
 
-### 4.17 Mutual funds / RTA feeds — `models/mf.py`, `services/rta_feed.py`, `views/mf.py`
-
-**Why:** CAMS and KFintech email ARN holders free daily "mailback" files. Using
-them keeps folios and transactions current without any manual data entry or
-paid feed.
-
-**How:** `services/rta_feed.py` (the largest service in the repo) ingests those
-password-protected zips of DBF/CSV — from an IMAP mailbox on a cron, or a manual
-upload — and upserts `MutualFundFolio` / `MutualFundTransaction`, auto-linking
-folios to clients by PAN. Every row carries a sha1 over its identifying columns,
-so a re-imported file is a no-op. The firm operates under two ARN codes
-(NJ-routed and direct/NSE); `ArnAccount` models each and every row is attributed
-to one. `RTAFeedImport` is the run log. `SipRegistration` powers the SIP
-Register, which distinguishes a real stoppage (a leak worth calling about) from
-a natural expiry by keeping the RTA's verbatim status string.
-
-The import cron runs hourly at :15 — on-demand mailbacks land at arbitrary times
-— and is a no-op until `RTA_FEED_IMAP_*` is configured.
-
-**Use:** `/clients/mf/` (import dashboard), folios, folio↔client linking,
-transactions, `/clients/mf/sips/`, ARN management.
-
-### 4.18 Financial planner — `services/financial_plan.py`, `views/planner.py`
+### 4.17 Financial planner — `services/financial_plan.py`, `views/planner.py`
 
 **Why:** the previous planner calculated in the browser, and its PDF endpoint
 rendered whatever numbers the page posted — so the report was not necessarily
@@ -712,7 +690,7 @@ renders as a black box.
 **Use:** `/clients/sales/financial-planner/` + its download endpoint. Stays a
 WebView screen on the app.
 
-### 4.19 Google Drive — `services/google_drive.py`
+### 4.18 Google Drive — `services/google_drive.py`
 
 **Why:** client documents, policy copies, claim papers and task attachments
 have to live somewhere the firm already uses.
@@ -791,7 +769,6 @@ the phone still goes off (see `Task.silent`).
 | every minute | `tasks_ring_due` | Exact due-time ring + 4h re-ring of unacked high/critical |
 | */15 min | `tasks_mark_overdue` | Flip past-due tasks to Overdue and notify |
 | hourly | `tasks_send_reminders` | Day-before / same-day task reminders (gated to the configured hour) |
-| hourly :15 | `import_rta_feeds` | Pull CAMS/KFintech mailbacks from IMAP |
 | daily 00:20 | `tasks_generate_recurring` | Materialise recurring task instances |
 | daily 06:10 | `multiyear_incentive_accruals` | Year 2..N points of multiyear health policies |
 | daily 08:00, 3rd–5th | `emi_reminders` | EMI collection push + call task (due the 5th) |

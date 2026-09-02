@@ -41,7 +41,7 @@ def nav(request):
         # leads: admin + employees always; managers if granted
         "can_leads": is_admin or is_employee or (is_manager and access.allow_lead_management),
         # whole-section visibility
-        "show_mf": is_admin,
+        "show_admin_reports": is_admin,
         "show_settings": is_admin,
         "show_tasks_categories": is_admin,
         "show_reports_menu": is_manager and (
@@ -72,7 +72,6 @@ _CRUMB_SECTIONS = [
     ("meeting_", "Meetings", "meeting_list"),
     ("lead_", "Leads", "lead_management"),
     ("task_", "Tasks", "task_dashboard"),
-    ("mf_", "Mutual Funds", "mf_dashboard"),
     ("link_", "Links", "links_dashboard"),
     ("links_", "Links", "links_dashboard"),
     ("team_", "Team", "team_list"),
@@ -120,12 +119,6 @@ _CRUMB_LABELS = {
     "client_profile": "Profile",
     "all_sales": "All Sales",
     "all_renewals": "All Renewals",
-    "mf_dashboard": "RTA Feeds",
-    "mf_folios": "Folios",
-    "mf_sips": "SIP Register",
-    "mf_cob": "COB Opportunities",
-    "mf_transactions": "Transactions",
-    "mf_folio_match": "Match Folios",
     "task_dashboard": "Dashboard",
     "task_my": "My Tasks",
     "task_delegated": "Delegated",

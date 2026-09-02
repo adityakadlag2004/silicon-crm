@@ -25,5 +25,4 @@ from . import tasks  # noqa: F401  (task views referenced as views.tasks.* in ur
 from . import links  # noqa: F401  (link views referenced as views.links.* in urls)
 from . import app_tasks_api  # noqa: F401  (native JSON endpoints as views.app_tasks_api.*)
 from . import app_settings_api  # noqa: F401  (native Settings screen as views.app_settings_api.*)
-from . import mf  # noqa: F401  (Mutual Funds RTA-feed views as views.mf.*)
 from . import kyc  # noqa: F401  (Client KYC issues / merge views as views.kyc.*)

@@ -9,16 +9,6 @@
 
   .approve-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 
-  /* RTA feed cross-check evidence */
-  .rta-evidence-row td { padding-top: 0 !important; border-top: none !important; }
-  .rta-ev { font-size: 0.82rem; padding: 0.35rem 0.5rem 0.5rem; }
-  .rta-pill { display: inline-block; padding: 0.16rem 0.55rem; border-radius: 12px; font-size: 0.76rem; font-weight: 600; }
-  .rta-ok { background: #dcfce7; color: #166534; }
-  .rta-miss { background: #fef3c7; color: #b45309; }
-  .rta-warn { background: #f3f4f6; color: #6b7280; }
-  .rta-note { margin-left: 0.5rem; color: var(--ki-text-muted, #6b7280); font-size: 0.75rem; }
-  .rta-txn { margin-top: 0.3rem; color: var(--ki-text-primary, #1f2937); }
-  .rta-dim { color: var(--ki-text-muted, #6b7280); }
   .approve-reject-form { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
   .approve-reject-form input[name="reason"] { width: 160px; min-width: 0; }
 
@@ -121,9 +111,6 @@
             </div>
           </td>
         </tr>
-        {% if sale.rta_evidence %}
-        <tr class="rta-evidence-row"><td colspan="8">{% include "sales/_rta_evidence.html" with ev=sale.rta_evidence %}</td></tr>
-        {% endif %}
         {% empty %}
         <tr><td colspan="8" class="text-center">No pending sales.</td></tr>
         {% endfor %}
@@ -146,7 +133,6 @@
         <div><div class="label">Points</div><div class="value">{{ sale.points }}</div></div>
         <div style="grid-column: 1 / -1;"><div class="label">Employee</div><div class="value">{{ sale.employee.user.get_full_name|default:sale.employee.user.username }}</div></div>
       </div>
-      {% if sale.rta_evidence %}{% include "sales/_rta_evidence.html" with ev=sale.rta_evidence %}{% endif %}
       <div class="approve-card-actions">
         <form method="post" action="{% url 'clients:approve_sales' %}">
           {% csrf_token %}

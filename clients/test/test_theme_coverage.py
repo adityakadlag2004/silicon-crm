@@ -17,7 +17,6 @@ SCREENS = [
     "policy_list", "claim_list", "meeting_list",
     "lead_management", "task_dashboard", "task_my", "task_delegated",
     "task_all", "task_activities", "task_deleted",
-    "mf_dashboard", "mf_folios", "mf_sips", "mf_transactions", "mf_cob",
     "links_dashboard", "team_list", "my_call_followups",
     "manage_campaigns", "manage_incentive_rules",
     "business_overview", "net_business", "net_sip", "monthly_business_report",
@@ -137,7 +136,7 @@ class TemplateHygieneTests(TestCase):
 KPI_SCREENS = [
     "all_clients", "my_clients", "family_list", "client_kyc_issues",
     "all_sales", "all_renewals", "policy_list", "claim_list", "meeting_list",
-    "lead_management", "task_deleted", "mf_folios", "mf_transactions",
+    "lead_management", "task_deleted",
     "links_dashboard", "team_list", "my_call_followups",
     "manage_incentive_rules", "audit_log",
 ]

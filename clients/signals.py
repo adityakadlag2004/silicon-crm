@@ -53,12 +53,9 @@ def update_client_status(sender, instance, **kwargs):
     client.motor_insured_value = _sum_amount("MOTOR_INS", "Motor Insurance", "amount")
     client.pms_amount = _sum_amount("PMS", "PMS", "amount")
 
-    # The RTA SIP register used to override this: any client appearing in the
-    # feed had sip_amount replaced by their *active* registrations, so 194
-    # clients whose registrations had all ceased showed Rs 0 no matter what
-    # they had bought. Owner's call 2026-09-02 — the Portfolio cards read the
-    # sales book and nothing else. The RTA sections lower down the profile
-    # still show the feed's own view, clearly labelled as such.
+    # The Portfolio cards read the sales book and nothing else. (The RTA SIP
+    # register used to override sip_amount here; the whole RTA-feed module was
+    # removed 2026-09-02.)
 
     # For an investment the amount IS the holding, so a zero is a real zero.
     client.sip_status = client.sip_amount > 0

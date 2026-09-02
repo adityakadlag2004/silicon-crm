@@ -391,19 +391,11 @@ def approve_sales(request):
 
     sales = list(sales_qs.order_by("-date", "-created_at"))
 
-    # RTA cross-check evidence for MF-linked products (advisory only).
-    from ..models import RTAFeedImport
-    from ..services import rta_feed
-    for sale in sales:
-        sale.rta_evidence = rta_feed.rta_evidence_for_sale(sale)
-    last_feed = RTAFeedImport.objects.filter(status=RTAFeedImport.STATUS_PROCESSED).first()
-
     context = {
         "sales": sales,
         "employee_filter": employee_filter,
         "start_date": start_date,
         "end_date": end_date,
-        "rta_feeds_updated": last_feed.created_at if last_feed else None,
     }
     return render(request, "sales/approve_sales.html", context)
 

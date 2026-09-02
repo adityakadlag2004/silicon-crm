@@ -1269,10 +1269,6 @@ def product_management_page(request):
                 messages.error(request, f"Product code '{code}' already exists.")
                 return redirect("clients:product_management")
 
-            rta_match = (request.POST.get("rta_match") or "").strip()
-            if rta_match not in dict(Product.RTA_MATCH_CHOICES):
-                rta_match = Product.RTA_MATCH_NONE
-
             parent, parent_err = _resolve_parent()
             if parent_err:
                 messages.error(request, parent_err)
@@ -1283,7 +1279,6 @@ def product_management_page(request):
                 code=code,
                 parent=parent,
                 domain=domain,
-                rta_match=rta_match,
                 display_order=display_order_val,
                 margin_percent=_parse_margin(request.POST.get("margin_percent")),
                 renewal_margin_percent=_parse_margin(request.POST.get("renewal_margin_percent")),
@@ -1372,10 +1367,6 @@ def product_management_page(request):
                 messages.error(request, f"Product code '{code}' already exists.")
                 return redirect("clients:product_management")
 
-            rta_match = (request.POST.get("rta_match") or "").strip()
-            if rta_match not in dict(Product.RTA_MATCH_CHOICES):
-                rta_match = product.rta_match
-
             parent, parent_err = _resolve_parent(self_pk=product.pk)
             if parent_err:
                 messages.error(request, parent_err)
@@ -1385,14 +1376,13 @@ def product_management_page(request):
             product.code = code
             product.parent = parent
             product.domain = domain
-            product.rta_match = rta_match
             product.display_order = display_order_val
             product.margin_percent = _parse_margin(request.POST.get("margin_percent"), product.margin_percent)
             product.renewal_margin_percent = _parse_margin(
                 request.POST.get("renewal_margin_percent"), product.renewal_margin_percent
             )
             product.save(update_fields=[
-                "name", "code", "parent", "domain", "rta_match", "display_order",
+                "name", "code", "parent", "domain", "display_order",
                 "margin_percent", "renewal_margin_percent", "updated_at",
             ])
             messages.success(request, f"Product '{name}' updated.")

@@ -110,6 +110,3 @@ class GateRegressionTests(TestCase):
         resp = self._http(self.employee).get(reverse("clients:audit_log"))
         self.assertEqual(resp.status_code, 403)
 
-    def test_employee_blocked_from_mf_dashboard(self):
-        resp = self._http(self.employee).get(reverse("clients:mf_dashboard"))
-        self.assertEqual(resp.status_code, 403)

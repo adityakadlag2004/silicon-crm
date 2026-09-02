@@ -1,9 +1,8 @@
 """Client KYC: PAN required on add, KYC Issues screen (inline PAN entry,
-role scoping), duplicate merge/safe-delete, and the live MF profile summary.
+role scoping) and duplicate merge/safe-delete.
 
 Run: .venv/bin/python manage.py test clients.test.test_client_kyc -v 2
 """
-from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -14,14 +13,8 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from clients.forms import ClientForm
-from clients.models import (
-    Client,
-    Employee,
-    MutualFundFolio,
-    MutualFundTransaction,
-    Sale,
-)
-from clients.services import client_merge, rta_feed
+from clients.models import Client, Employee, Sale
+from clients.services import client_merge
 
 
 def _form_data(**overrides):
@@ -99,13 +92,6 @@ class KycIssuesScreenTests(TestCase):
             reverse("clients:client_kyc_update_pan", args=[self.others.id]), {"pan": "FGHIJ5678K"})
         self.assertEqual(resp.status_code, 403)
 
-    def test_pan_save_triggers_folio_relink(self):
-        MutualFundFolio.objects.create(folio_number="42", amc_name="H", pan="FGHIJ5678K")
-        self._login("employee").post(
-            reverse("clients:client_kyc_update_pan", args=[self.mine.id]), {"pan": "FGHIJ5678K"})
-        folio = MutualFundFolio.objects.get(folio_number="42")
-        self.assertEqual(folio.client_id, self.mine.id)
-
     def test_dashboard_banner_count(self):
         resp = self._login("employee").get(reverse("clients:employee_dashboard"))
         self.assertContains(resp, "KYC Issues")
@@ -128,15 +114,11 @@ class MergeDeleteTests(TestCase):
     def test_merge_moves_records_and_fills_fields(self):
         Sale.objects.create(client=self.dup, employee=self.admin_emp, product="SIP",
                             amount=Decimal("5000"))
-        folio = MutualFundFolio.objects.create(folio_number="77", amc_name="H", client=self.dup)
-
         moved = client_merge.merge_clients(self.keep, self.dup)
         self.assertIn("sales", moved)
         self.assertFalse(Client.objects.filter(id=self.dup.id).exists())
         self.keep.refresh_from_db()
         self.assertEqual(self.keep.pan, "ABCDE1234F")  # filled from duplicate
-        folio.refresh_from_db()
-        self.assertEqual(folio.client_id, self.keep.id)
         self.assertEqual(self.keep.sales.count(), 1)
 
     def test_merge_view_handles_group(self):
@@ -199,8 +181,6 @@ class MergeDeleteTests(TestCase):
     def test_bulk_counts_match_per_client_counts(self):
         Sale.objects.create(client=self.dup, employee=self.admin_emp, product="SIP",
                             amount=Decimal("5000"))
-        MutualFundFolio.objects.create(folio_number="88", amc_name="H", client=self.dup)
-
         bulk = client_merge.business_record_counts_bulk([self.keep, self.dup])
         self.assertEqual(bulk[self.dup.id], client_merge.business_record_counts(self.dup))
         self.assertEqual(bulk[self.keep.id], client_merge.business_record_counts(self.keep))
@@ -223,32 +203,3 @@ class MergeDeleteTests(TestCase):
         with CaptureQueriesContext(connection) as large:
             client_merge.business_record_counts_bulk([self.keep, self.dup] + extra)
         self.assertEqual(len(small.captured_queries), len(large.captured_queries))
-
-
-class MfSummaryTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.client_obj = Client.objects.create(name="Investor", pan="ABCDE1234F")
-        cls.folio = MutualFundFolio.objects.create(folio_number="9", amc_name="H", client=cls.client_obj)
-
-    def _txn(self, key, **kw):
-        defaults = dict(folio=self.folio, txn_type="SIP Purchase", amount=Decimal("5000"),
-                        units=Decimal("50"), nav=Decimal("100"),
-                        trade_date=date.today() - timedelta(days=5), dedupe_key=key)
-        defaults.update(kw)
-        return MutualFundTransaction.objects.create(**defaults)
-
-    def test_summary_math(self):
-        self._txn("a", scheme_name="Scheme A")
-        self._txn("b", scheme_name="Scheme A", txn_type="Redemption",
-                  amount=Decimal("2000"), units=Decimal("10"), nav=Decimal("200"))
-        summary = rta_feed.mf_summary_for_client(self.client_obj)
-        self.assertEqual(summary["monthly_sip"], Decimal("5000"))
-        self.assertEqual(summary["inflow_12m"], Decimal("5000"))
-        self.assertEqual(summary["outflow_12m"], Decimal("2000"))
-        # 50 bought − 10 redeemed = 40 units × last NAV 200 = 8000
-        self.assertEqual(summary["est_value"], Decimal("8000"))
-
-    def test_no_transactions_returns_none(self):
-        stranger = Client.objects.create(name="Empty")
-        self.assertIsNone(rta_feed.mf_summary_for_client(stranger))

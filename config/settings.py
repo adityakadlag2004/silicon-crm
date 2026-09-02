@@ -170,12 +170,6 @@ CRONJOBS = [
     # Issue the 2nd/3rd-year points of multiyear health policies on their
     # anniversary — the premium was paid up front, so nothing else triggers them.
     ('10 6 * * *', 'django.core.management.call_command', ['multiyear_incentive_accruals']),
-    # Import CAMS/KFintech distributor mailback files from the feeds mailbox.
-    # Hourly at :15 — on-demand mailback requests (historical backfills, AUM
-    # reports) land at arbitrary times and shouldn't wait a day; the run only
-    # touches unread RTA mail so quiet hours cost nothing.
-    # No-op until RTA_FEED_IMAP_* env vars are set — see .env.example.
-    ('15 * * * *', 'django.core.management.call_command', ['import_rta_feeds']),
     # EMI-collection reminders for multiyear health policies on EMI: push +
     # auto call-task to the client's mapped employee. 8 AM on the 3rd–5th.
     ('0 8 3-5 * *', 'django.core.management.call_command', ['emi_reminders']),

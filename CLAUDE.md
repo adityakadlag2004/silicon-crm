@@ -11,7 +11,7 @@ Production: **bo.kadlaginvestment.com** (DigitalOcean droplet `ubuntu@139.59.28.
 | `clients/models/` | Models split by domain (`hr.py`, `sales.py`, `leads.py`, `insurance.py`, …), all re-exported in `__init__.py` — always import via `clients.models` |
 | `clients/views/` | One module per domain (`tasks.py`, `sales.py`, `messaging.py`, `app_*.py` = mobile JSON APIs) |
 | `clients/urls/` | URL patterns split by domain, assembled in `__init__.py` under the single `clients` namespace |
-| `clients/services/` | Business logic shared by web + app views (`sales.py`, `targets.py`, `tasks.py`, `calendar_feed.py`, `employee_performance.py`, `push.py`, `rta_feed.py`, `google_drive.py`) |
+| `clients/services/` | Business logic shared by web + app views (`sales.py`, `targets.py`, `tasks.py`, `calendar_feed.py`, `employee_performance.py`, `push.py`, `google_drive.py`) |
 | `clients/management/commands/` | Cron jobs — every command here must be in `CRONJOBS` (config/settings.py) or documented as a manual tool |
 | `clients/test/` | All tests (`manage.py test clients`) |
 | `config/settings.py` | Settings incl. `CRONJOBS`; env read from `.env` (template: `.env.example`) |
@@ -138,19 +138,11 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   cover alone told those clients they held no policy. The flag is now "holds an
   approved sale of that line, or has cover". SIP/PMS keep `amount > 0` — for an
   investment the amount *is* the holding, so a zero is a real zero.
-- **The RTA feed does not touch these columns** (owner's call 2026-09-02,
-  reversing the earlier rule). It used to: any client the feed covered had
-  `sip_amount` replaced by their *active* registrations, so 194 clients whose
-  registrations had all ceased read ₹0 whatever they had bought, and a real SIP
-  sale was overwritten on the next hourly import. Two writers had to go — the
-  override inside `update_client_status` **and**
-  `rta_feed.refresh_client_sip_fields`, now a documented no-op (kept, not
-  deleted: four call sites in the import pipeline, and it returns 0 so their
-  counters stay truthful). Fixing only the signal would have been undone by
-  the next `import_rta_feeds` run.
-- The feed's own view is still on the profile as the **MF Folios / SIP Register
-  / Valuation Report** sections, read straight from `SipRegistration` and
-  labelled as RTA data. That is the honest place for it.
+- **These columns are derived from sales alone.** The CAMS/KFintech RTA feed
+  used to overwrite `sip_amount` with the client's *active* registrations, so
+  194 clients whose registrations had all ceased read ₹0 whatever they had
+  bought. The whole Mutual Funds / RTA module was removed on 2026-09-02 (see
+  "The Mutual Funds module is gone" below), so there is now one writer.
 - **The signal only fires on a Sale save**, so changing what it derives leaves
   every existing row stale. `manage.py recompute_client_holdings` sweeps the
   book (dry run by default, `--apply` writes, idempotent). Its dry run does the
@@ -789,6 +781,26 @@ test the release APK, not just the debug one.
 Field crashes post themselves to `/api/app/crash/` on the next launch and land
 in the Audit Log as `app.crash` (`CrashReporter.kt`) — that is the only crash
 signal there is, since the app is self-hosted with no Play Console.
+
+## The Mutual Funds module is gone (2026-09-02)
+
+- The CAMS/KFintech **RTA feed** and everything it built — `MutualFundFolio`,
+  `MutualFundTransaction`, `SipRegistration`, `RTAFeedImport`, `ArnAccount`,
+  the `/clients/mf/…` screens (RTA Feeds, Transactions, Folios, Match Folios,
+  SIP Register, COB), `services/rta_feed.py`, the hourly `import_rta_feeds`
+  cron and the `Product.rta_match` sale cross-check — were **deleted**, tables
+  and all (migration **0126**). Owner's call: the feature was not used.
+- The firm still **sells** mutual funds. SIP / Lumpsum are ordinary products in
+  the catalog, and the client's Portfolio is the sales book (`services/holdings`)
+  — that is unchanged, and it never read the feed.
+- Three screens lost feed-derived sections and are otherwise intact: the client
+  profile (MF Folios / SIP Register / Valuation Report), **KYC Issues** (the
+  unlinked-folio tile, folio PAN suggestions and the PAN/name-conflict card),
+  and **Approve Sales** (the RTA evidence row). PAN stays mandatory on new
+  clients — it is the identity key behind duplicate detection.
+- `RTA_FEED_IMAP_*` env vars, the `rta_formats/` samples and the feed-only pins
+  (`dbfread`, `pyzipper`, `xlrd`, `msoffcrypto-tool`) are gone too. Don't
+  reintroduce any of it without the owner asking.
 
 ## Housekeeping standard (5S — run this audit monthly)
 

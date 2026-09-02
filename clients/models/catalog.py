@@ -39,19 +39,6 @@ class Product(models.Model):
         (DOMAIN_BOTH, "Both"),
     ]
 
-    # RTA feed cross-check: products flagged here get their pending sales
-    # verified against the client's PAN in the imported CAMS/KFintech data.
-    RTA_MATCH_NONE = ""
-    RTA_MATCH_SIP = "sip"
-    RTA_MATCH_LUMPSUM = "lumpsum"
-    RTA_MATCH_ANY = "any"
-    RTA_MATCH_CHOICES = [
-        (RTA_MATCH_NONE, "Not RTA-linked"),
-        (RTA_MATCH_SIP, "MF SIP installments"),
-        (RTA_MATCH_LUMPSUM, "MF lumpsum purchases"),
-        (RTA_MATCH_ANY, "Any MF transaction"),
-    ]
-
     name = models.CharField(max_length=100, unique=True)
     code = models.CharField(max_length=30, unique=True)
     parent = models.ForeignKey(
@@ -62,10 +49,6 @@ class Product(models.Model):
                   "category's insurance behaviour and carries its own margin.",
     )
     domain = models.CharField(max_length=20, choices=DOMAIN_CHOICES, default=DOMAIN_BOTH)
-    rta_match = models.CharField(
-        max_length=10, blank=True, default=RTA_MATCH_NONE, choices=RTA_MATCH_CHOICES,
-        help_text="If set, pending sales of this product are cross-checked against RTA feed transactions by client PAN.",
-    )
     display_order = models.IntegerField(default=0)
     margin_percent = models.DecimalField(
         max_digits=6,

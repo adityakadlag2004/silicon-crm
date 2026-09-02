@@ -81,7 +81,7 @@ class NavSidebarTests(TestCase):
 
     def test_admin_sees_monogrammed_modules(self):
         html = self._home(self.admin)
-        for mono in ("Db", "Cl", "Sa", "In", "MF", "Ta", "Re", "Se"):
+        for mono in ("Db", "Cl", "Sa", "In", "Ta", "Re", "Se"):
             self.assertIn(f'kn-mono" style="--c:', html)
             self.assertIn(f">{mono}</span>", html)
         # Links has no group of its own — it is a section inside Tasks.

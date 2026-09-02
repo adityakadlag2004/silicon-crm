@@ -4,7 +4,7 @@ Each module holds the path() entries for one domain and they are
 assembled here under the single "clients" namespace, so every URL
 name stays `clients:<name>` and every path is unchanged.
 """
-from . import auth, clients, dashboards, team, reports, notifications, calls, tasks, links, api_app, sales, renewals, leads, campaigns, calendar, messaging, mf, insurance
+from . import auth, clients, dashboards, team, reports, notifications, calls, tasks, links, api_app, sales, renewals, leads, campaigns, calendar, messaging, insurance
 
 app_name = "clients"
 
@@ -25,6 +25,5 @@ urlpatterns = [
     *campaigns.urlpatterns,
     *calendar.urlpatterns,
     *messaging.urlpatterns,
-    *mf.urlpatterns,
     *insurance.urlpatterns,
 ]

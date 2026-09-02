@@ -24,10 +24,10 @@ class BreadcrumbDerivationTests(TestCase):
                          [{"label": "All Sales"}])
 
     def test_child_pages_get_section_then_page(self):
-        crumbs = breadcrumbs(_FakeRequest("mf_sips"))["crumbs"]
-        self.assertEqual(crumbs[0]["label"], "Mutual Funds")
-        self.assertIn("/mf/", crumbs[0]["url"])
-        self.assertEqual(crumbs[1]["label"], "SIP Register")
+        crumbs = breadcrumbs(_FakeRequest("task_my"))["crumbs"]
+        self.assertEqual(crumbs[0]["label"], "Tasks")
+        self.assertIn("/tasks/", crumbs[0]["url"])
+        self.assertEqual(crumbs[1]["label"], "My Tasks")
 
     def test_unmapped_and_dashboard_pages_get_nothing(self):
         self.assertEqual(breadcrumbs(_FakeRequest("admin_dashboard")), {})

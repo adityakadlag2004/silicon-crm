@@ -384,11 +384,6 @@ def add_client(request):
         if form.is_valid():
             client = form.save()
             messages.success(request, "Client added successfully!")
-            if client.pan:
-                from ..services import rta_feed
-                linked = rta_feed.relink_folios()
-                if linked:
-                    messages.info(request, f"{linked} RTA folio/SIP record(s) matched this PAN and were linked.")
             drive_created = False
             if request.POST.get("create_drive_folder"):
                 try:
@@ -439,11 +434,6 @@ def edit_client(request, client_id):
                 updated.edited_by = user_emp
             updated.save()
             messages.success(request, "Client updated successfully!")
-            if "pan" in form.changed_data and updated.pan:
-                from ..services import rta_feed
-                linked = rta_feed.relink_folios()
-                if linked:
-                    messages.info(request, f"{linked} RTA folio/SIP record(s) matched this PAN and were linked.")
             if not is_employee:
                 return redirect("clients:all_clients")
             return redirect("clients:my_clients")
@@ -482,7 +472,6 @@ def client_profile(request, client_id):
     )
 
     from django.db.models import Count
-    from ..models import SipRegistration
 
     # What this client actually holds with us. The Portfolio cards show the
     # derived health/life *summary* recomputed from approved sales; they never
@@ -508,25 +497,8 @@ def client_profile(request, client_id):
     )
     insurance_policies = [p for p in policies
                           if p.insurance_type in ("health", "life")]
-    from ..services import rta_feed
-    mf_folios = (
-        client.mf_folios.select_related("arn")
-        .annotate(txn_count=Count("transactions"))
-        .order_by("amc_name", "folio_number")
-    )
-    # Match via the reg's own client OR its folio's client — a folio linked
-    # after the registration was imported leaves reg.client null.
-    mf_sips = (
-        SipRegistration.objects
-        .filter(Q(client=client) | Q(folio__client=client))
-        .order_by("status", "-registered_on", "-first_seen_at")
-    )
-    mf_summary = rta_feed.mf_summary_for_client(client)
-
     # What the client holds, grouped by product line, straight off the sales
     # book and the renewals against it — one row per policy, with its number.
-    # The RTA feed is not consulted here (owner's call 2026-09-02); its own
-    # sections lower down still show the feed's view, labelled as such.
     from ..services import holdings as holdings_service
     portfolio = holdings_service.portfolio(client)
     by_code = {line["code"]: line for line in portfolio}
@@ -562,9 +534,6 @@ def client_profile(request, client_id):
         "sales": sales,
         "renewals": renewals,
         "open_tasks": open_tasks,
-        "mf_folios": mf_folios,
-        "mf_sips": mf_sips,
-        "mf_summary": mf_summary,
         "policies": policies,
         "insurance_policies": insurance_policies,
         "policies_cover": sum((p.sum_insured or 0) for p in policies),

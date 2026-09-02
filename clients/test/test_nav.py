@@ -40,7 +40,7 @@ class NavFlagTests(TestCase):
         f = self._flags(self.admin)
         self.assertTrue(f["is_admin"])
         self.assertTrue(f["dashboard_admin"])
-        self.assertTrue(f["show_mf"])
+        self.assertTrue(f["show_admin_reports"])
         self.assertTrue(f["show_settings"])
         self.assertTrue(f["show_bulk_reassign"])
         self.assertTrue(f["can_approve"])
@@ -54,7 +54,7 @@ class NavFlagTests(TestCase):
         f = self._flags(self.employee)
         self.assertTrue(f["is_employee"])
         self.assertFalse(f["dashboard_admin"])
-        self.assertFalse(f["show_mf"])
+        self.assertFalse(f["show_admin_reports"])
         self.assertFalse(f["show_settings"])
         self.assertFalse(f["show_bulk_reassign"])
         self.assertFalse(f["can_approve"])
@@ -75,7 +75,7 @@ class NavFlagTests(TestCase):
         self.assertFalse(f["can_incentives"])
         self.assertFalse(f["can_leads"])
         self.assertFalse(f["show_reports_menu"])
-        self.assertFalse(f["show_mf"])               # MF stays admin-only
+        self.assertFalse(f["show_admin_reports"])               # admin-only reports
         self.assertFalse(f["show_settings"])
 
         cfg.allow_approve_sales = True

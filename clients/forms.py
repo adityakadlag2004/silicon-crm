@@ -16,7 +16,7 @@ def validate_pan(raw, required=False):
     value = re.sub(r"\s+", "", (raw or "")).upper()
     if not value:
         if required:
-            raise forms.ValidationError("PAN is required — it links the client to their mutual fund folios.")
+            raise forms.ValidationError("PAN is required — it is the client's identity key.")
         return None
     if not PAN_RE.fullmatch(value):
         raise forms.ValidationError("Enter a valid PAN (format: ABCDE1234F).")
@@ -465,9 +465,8 @@ class ClientForm(forms.ModelForm):
         return value
 
     def clean_pan(self):
-        # Required for NEW clients (RTA folio matching runs on PAN); existing
-        # clients without one are surfaced on the KYC Issues screen instead of
-        # blocking every edit.
+        # Required for NEW clients; existing clients without one are surfaced
+        # on the KYC Issues screen instead of blocking every edit.
         return validate_pan(self.cleaned_data.get("pan"),
                             required=not getattr(self.instance, "pk", None))
 

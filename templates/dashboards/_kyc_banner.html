@@ -4,7 +4,7 @@
   <span style="flex:1 1 240px;color:#78350f;">
     <strong>{{ kyc_missing_count }} client{{ kyc_missing_count|pluralize }}</strong>
     {% if is_admin_dashboard %}across the firm are{% else %}mapped to you {{ kyc_missing_count|pluralize:"is,are" }}{% endif %}
-    missing a PAN — their mutual fund folios can't be linked or verified.
+    missing a PAN — profiles can't be matched or de-duplicated without it.
   </span>
   <a class="ki-btn ki-btn-primary ki-btn-sm" href="{% url 'clients:client_kyc_issues' %}"><i class="bi bi-pencil-square"></i> Fix in KYC Issues</a>
 </div>
