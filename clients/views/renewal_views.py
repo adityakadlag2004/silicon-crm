@@ -104,18 +104,44 @@ def add_renewal(request, client_id=None):
 			elif not renewal.employee_id and user_emp:
 				renewal.employee = user_emp
 
+			# One renewal per policy per cycle. Checked before the write, and
+			# again in app_renewal_create — the phone does not come through
+			# this view, so a guard here alone leaves that door open.
+			from ..services import insurance_sync
+			selected_policy_id = (request.POST.get("policy") or "").strip() or None
+			typed_number = request.POST.get("policy_number") or ""
+			clash = insurance_sync.duplicate_renewal(
+				client=renewal.client,
+				renewal_date=renewal.renewal_date,
+				frequency=renewal.frequency,
+				policy=(insurance_sync.InsurancePolicy.objects.filter(
+					pk=selected_policy_id, client=renewal.client).first()
+					if selected_policy_id else None),
+				policy_number=typed_number,
+			)
+			if clash and not request.POST.get("confirm_duplicate"):
+				form.add_error(None, insurance_sync.duplicate_message(clash))
+				context = {
+					"form": form, "client": client,
+					"client_label": (f"{client.name} ({client.email or ''} {client.phone or ''})"
+					                 if client else ""),
+					"is_admin_user": bool(is_admin_user),
+					"no_name_product_ids": _no_name_product_ids(),
+					"duplicate_warning": True,
+				}
+				return render(request, "renewals/add_renewal.html", context)
+
 			renewal.created_by = request.user
 			renewal.save()
 
 			# Link this renewal to a policy on the Insurance Tracker: the
 			# existing one the user ticked, or a new one created from the
 			# number they typed (old book sold before the tracker existed).
-			from ..services import insurance_sync
 			try:
 				insurance_sync.link_renewal_to_policy(
 					renewal,
-					selected_policy_id=(request.POST.get("policy") or "").strip() or None,
-					new_policy_number=request.POST.get("policy_number") or "",
+					selected_policy_id=selected_policy_id,
+					new_policy_number=typed_number,
 				)
 			except Exception:
 				pass

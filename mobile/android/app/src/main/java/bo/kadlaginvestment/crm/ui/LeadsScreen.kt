@@ -648,6 +648,7 @@ private fun LeadCreateForm(
 
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    var pickedName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var income by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
@@ -671,10 +672,21 @@ private fun LeadCreateForm(
             modifier = Modifier.fillMaxWidth(), singleLine = true,
         )
         OutlinedTextField(
-            value = phone, onValueChange = { phone = it }, label = { Text("Phone") },
+            value = phone, onValueChange = { phone = it; pickedName = "" }, label = { Text("Phone") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             modifier = Modifier.fillMaxWidth(), singleLine = true,
         )
+        // A lead is usually created with the person's card already open in the
+        // phonebook: one tap fills the number and the name it belongs to.
+        ContactPickButton(
+            label = if (pickedName.isEmpty()) "\uD83D\uDC64 Pick from contacts" else "\uD83D\uDC64 $pickedName",
+            modifier = Modifier.fillMaxWidth(),
+        ) { contactName, contactPhone ->
+            phone = contactPhone
+            pickedName = contactName
+            // Never overwrite a name already typed — the picker is a shortcut.
+            if (name.isBlank()) name = contactName
+        }
         OutlinedTextField(
             value = email, onValueChange = { email = it }, label = { Text("Email") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),

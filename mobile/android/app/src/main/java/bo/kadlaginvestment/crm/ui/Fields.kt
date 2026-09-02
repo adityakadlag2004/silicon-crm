@@ -3,11 +3,16 @@ package bo.kadlaginvestment.crm.ui
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
+import android.content.Intent
+import android.provider.ContactsContract
 import android.text.format.DateFormat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -203,4 +208,57 @@ private fun parseIso(iso: String): java.util.Date? = try {
     if (iso.length >= 10) java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso.take(10)) else null
 } catch (_: Exception) {
     null
+}
+
+/**
+ * Pick a contact's phone number off the device.
+ *
+ * ACTION_PICK on the *Phone* table, not `PickContact()`: the user picks one
+ * **number**, so a contact with three of them resolves itself, and the row
+ * comes back readable without a READ_CONTACTS grant — the picker hands over
+ * access to just that row. Typing the number by hand stays available; this is
+ * a shortcut, never the only way in.
+ *
+ * `label` is the caller's, so a screen can show the picked name on the button
+ * and drop it again when the number is edited by hand.
+ */
+@Composable
+fun ContactPickButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    onPicked: (name: String, phone: String) -> Unit,
+) {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+        try {
+            context.contentResolver.query(
+                uri,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ),
+                null, null, null,
+            )?.use { c ->
+                if (c.moveToFirst()) {
+                    onPicked(
+                        c.getString(1).orEmpty(),
+                        c.getString(0).orEmpty().filterNot { it.isWhitespace() },
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            // provider hiccup → the number can still be typed in by hand
+        }
+    }
+    OutlinedButton(
+        onClick = {
+            launcher.launch(
+                Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI)
+            )
+        },
+        modifier = modifier,
+    ) { Text(label) }
 }

@@ -81,7 +81,10 @@ def sync_policy_from_sale(sale: Sale) -> InsurancePolicy | None:
     policy.premium_amount = sale.amount or 0
     policy.sum_insured = sale.cover_amount or 0
     policy.start_date = start
-    policy.end_date = _plus_one_year(start)
+    # A multiyear policy is paid through its whole term — expire the tracker
+    # entry when Sale.coverage_end() says, or a 3-year policy reads as due in
+    # 12 months and the renewal reminder fires two years early.
+    policy.end_date = sale.coverage_end() or _plus_one_year(start)
     policy.relationship_manager = sale.employee
     policy.save()
     return policy
@@ -150,6 +153,96 @@ def sync_policy_from_renewal(renewal: Renewal) -> InsurancePolicy | None:
     )
 
 
+# One renewal per policy per cycle. A yearly policy collected twice inside ~10
+# months is a double entry, not two renewals; the shorter frequencies scale the
+# same way. Deliberately loose — a genuine early renewal is rarer than a staff
+# member entering the same receipt twice.
+_CYCLE_DAYS = {
+    Renewal.FREQUENCY_YEARLY: 300,
+    Renewal.FREQUENCY_HALF_YEARLY: 150,
+    Renewal.FREQUENCY_QUARTERLY: 75,
+    Renewal.FREQUENCY_MONTHLY: 25,
+}
+
+
+def find_policy_by_number(number, client=None):
+    """The tracker policy carrying `number` (client-scoped when given).
+
+    Normalises the way ``InsurancePolicy.save()`` does, so a typed "ins123 "
+    finds the stored "INS123" instead of creating a second policy for it.
+    """
+    number = (number or "").strip().upper()
+    if not number:
+        return None
+    qs = InsurancePolicy.objects.filter(policy_number=number)
+    if client is not None:
+        qs = qs.filter(client=client)
+    return qs.select_related("client").first()
+
+
+def duplicate_renewal(*, client, renewal_date, frequency, policy=None,
+                      policy_number="", exclude_pk=None):
+    """The renewal this one would duplicate, or None.
+
+    Checked BEFORE the row is written, by both the web view and the app API —
+    the two never share a save path, so a guard on either one alone leaves the
+    other door open.
+
+    A duplicate is the same *policy* collected again inside one renewal cycle.
+    When no policy is picked, a typed number that already exists on the tracker
+    identifies the policy just as well — that is the case worth catching, since
+    it is exactly how the same policy gets entered twice under two numbers.
+    """
+    policy = policy or find_policy_by_number(policy_number, client)
+    if policy is None or not renewal_date:
+        return None
+    window = timedelta(days=_CYCLE_DAYS.get(frequency, 300))
+    qs = Renewal.objects.filter(
+        policy=policy,
+        renewal_date__gt=renewal_date - window,
+        renewal_date__lt=renewal_date + window,
+    ).select_related("employee__user")
+    if exclude_pk:
+        qs = qs.exclude(pk=exclude_pk)
+    return qs.order_by("-renewal_date").first()
+
+
+def duplicate_message(existing):
+    """Plain-language warning naming the renewal already on file."""
+    who = ""
+    if existing.employee_id and existing.employee.user_id:
+        who = f" by {existing.employee.user.get_full_name() or existing.employee.user.username}"
+    number = existing.policy.policy_number if existing.policy_id else "this policy"
+    return (
+        f"Already added: policy {number} was renewed on "
+        f"{existing.renewal_date:%d %b %Y} (₹{existing.premium_amount:,.0f} collected "
+        f"{existing.premium_collected_on:%d %b %Y}{who}). "
+        f"Check the renewals list before adding it again."
+    )
+
+
+def _advance_cover(policy, renewal):
+    """Move a policy's expiry to the period the collected renewal has paid for.
+
+    Without this the tracker's ``end_date`` stays at whatever the policy was
+    first created with, so "Expiring ≤30d" goes stale after the first renewal
+    and ``renewal_reminders`` keeps chasing a premium already in the bank.
+    Only ever moves the date *forward* — back-entering an old renewal must not
+    pull live cover backwards.
+    """
+    new_end = renewal.renewal_end_date or _plus_one_year(renewal.renewal_date)
+    if not new_end or (policy.end_date and new_end <= policy.end_date):
+        return
+    policy.end_date = new_end
+    fields = ["end_date"]
+    # A lapsed policy whose premium was just collected is in force again.
+    # Cancelled/matured are deliberate end-states and stay put.
+    if policy.status == InsurancePolicy.STATUS_LAPSED:
+        policy.status = InsurancePolicy.STATUS_ACTIVE
+        fields.append("status")
+    policy.save(update_fields=fields)
+
+
 def link_renewal_to_policy(renewal, *, selected_policy_id=None, new_policy_number=""):
     """Attach a renewal to a policy on the tracker.
 
@@ -180,6 +273,7 @@ def link_renewal_to_policy(renewal, *, selected_policy_id=None, new_policy_numbe
         if policy:
             renewal.policy = policy
             renewal.save(update_fields=["policy"])
+            _advance_cover(policy, renewal)
             return policy
 
     number = (new_policy_number or "").strip()

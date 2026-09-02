@@ -17,6 +17,26 @@
   <form method="post" id="renewalForm" novalidate>
     {% csrf_token %}
 
+    {% comment %}
+      Form-level errors. The duplicate guard reports here: it is a warning, not
+      a hard block, so the same submit carries a tick to enter it anyway (a
+      genuine early renewal has to stay possible).
+    {% endcomment %}
+    {% if form.non_field_errors %}
+      <div class="alert {% if duplicate_warning %}alert-warning{% else %}alert-danger{% endif %} mb-3">
+        {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+        {% if duplicate_warning %}
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" name="confirm_duplicate"
+                   value="1" id="confirmDuplicate">
+            <label class="form-check-label fw-semibold" for="confirmDuplicate">
+              This is a different renewal — add it anyway
+            </label>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
     <div class="ki-card mb-3">
       <h3 style="font-size:.95rem;font-weight:700;color:var(--ki-dark);margin-bottom:16px;">
         <i class="bi bi-person-vcard me-2" style="color:var(--ki-primary);"></i> Client

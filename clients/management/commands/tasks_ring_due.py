@@ -17,37 +17,14 @@ from django.core.management.base import BaseCommand
 from django.db.models import Q
 from django.utils import timezone
 
-from clients.models import Notification, Task
-from clients.services.push import send_data_push_to_user
+from clients.models import Task
+from clients.services.tasks import ring_task as _ring
 
 RING_WINDOW = timedelta(minutes=15)   # don't resurrect long-past deadlines
 ACK_RERING_EVERY = timedelta(hours=4)
 ACK_QUIET_START, ACK_QUIET_END = 21, 8  # no re-rings 21:00–08:00
 
 ACTIVE = [Task.STATUS_PENDING, Task.STATUS_IN_PROGRESS, Task.STATUS_OVERDUE]
-
-
-def _ring(user, title, body, task, kind="task_alarm"):
-    """One ringing push + a silent in-app Notification row.
-
-    A task marked ``silent`` ("don't ring") gets the ordinary Notification
-    instead — signals.push_on_notification mirrors it as a plain tray push, so
-    the assignee still hears about the deadline without an alarm going off.
-    """
-    link = f"/clients/tasks/{task.pk}/"
-    if task.silent:
-        Notification.objects.create(recipient=user, title=title, body=body, link=link)
-        return
-    notification = Notification(recipient=user, title=title, body=body, link=link)
-    notification._skip_push = True  # the ringing push below replaces the mirror
-    notification.save()
-    send_data_push_to_user(user, {
-        "kind": kind,
-        "task_id": task.pk,
-        "title": title,
-        "body": body,
-        "link": link,
-    })
 
 
 class Command(BaseCommand):

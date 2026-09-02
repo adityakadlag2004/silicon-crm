@@ -265,6 +265,32 @@ def create_notification(user, title, body, link="", event=None, ring=True):
     return Notification.objects.create(recipient=user, title=title, body=body, link=link)
 
 
+def ring_task(user, title, body, task, kind="task_alarm"):
+    """One ringing push + a silent in-app Notification row, for `task`.
+
+    The alarm-clock path used outside the assign/comment flow: due-time rings
+    and renewal reminders. A task marked ``silent`` gets the ordinary
+    Notification instead — signals.push_on_notification mirrors it as a plain
+    tray push, so the assignee still hears about it without the phone going
+    off at 11pm.
+    """
+    link = f"/clients/tasks/{task.pk}/"
+    if task.silent:
+        Notification.objects.create(recipient=user, title=title, body=body, link=link)
+        return
+    notification = Notification(recipient=user, title=title, body=body, link=link)
+    notification._skip_push = True  # the ringing push below replaces the mirror
+    notification.save()
+    from .push import send_data_push_to_user
+    send_data_push_to_user(user, {
+        "kind": kind,
+        "task_id": task.pk,
+        "title": title,
+        "body": body,
+        "link": link,
+    })
+
+
 def task_recipients(task, exclude_user=None):
     """Users who should hear about a change: assignee + subscribers.
 

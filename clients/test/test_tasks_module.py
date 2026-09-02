@@ -254,7 +254,7 @@ class TaskV414Tests(TestCase):
         task = self._task(priority="medium",
                           due_date=fixed.date(), due_time=(fixed - timedelta(minutes=5)).time())
         with mock.patch("django.utils.timezone.localtime", return_value=fixed), \
-                mock.patch("clients.management.commands.tasks_ring_due.send_data_push_to_user") as push:
+                mock.patch("clients.services.push.send_data_push_to_user") as push:
             call_command("tasks_ring_due")
             push.assert_called_once()
             user, payload = push.call_args.args
@@ -323,7 +323,7 @@ class TaskV414Tests(TestCase):
         task = self._task()  # high priority, no due date
         Task.objects.filter(pk=task.pk).update(created_at=fixed - timedelta(hours=5))
         with mock.patch("django.utils.timezone.localtime", return_value=fixed), \
-                mock.patch("clients.management.commands.tasks_ring_due.send_data_push_to_user") as push:
+                mock.patch("clients.services.push.send_data_push_to_user") as push:
             call_command("tasks_ring_due")
             push.assert_called_once()
             self.assertIn("acknowledgement", push.call_args.args[1]["title"].lower())
@@ -815,8 +815,7 @@ class TaskSilentTests(TestCase):
                                    assigned_to=self.emp, due_date=now.date(),
                                    due_time=now.time(), silent=True)
         with mock.patch("django.utils.timezone.localtime", return_value=now), \
-                mock.patch("clients.management.commands.tasks_ring_due"
-                           ".send_data_push_to_user") as ring:
+                mock.patch("clients.services.push.send_data_push_to_user") as ring:
             call_command("tasks_ring_due")
             ring.assert_not_called()
         task.refresh_from_db()

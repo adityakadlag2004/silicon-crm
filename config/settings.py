@@ -179,8 +179,9 @@ CRONJOBS = [
     # EMI-collection reminders for multiyear health policies on EMI: push +
     # auto call-task to the client's mapped employee. 8 AM on the 3rd–5th.
     ('0 8 3-5 * *', 'django.core.management.call_command', ['emi_reminders']),
-    # Insurance renewal reminders: 30/15/5 days before a policy renews, push +
-    # auto call-task to the client's mapped employee. Daily 8:45 AM.
+    # Insurance renewal reminders: a month and a week before a tracker policy's
+    # end_date, ringing push + auto call-task to the client's mapped employee.
+    # Daily 8:45 AM.
     ('45 8 * * *', 'django.core.management.call_command', ['renewal_reminders']),
 ]
 

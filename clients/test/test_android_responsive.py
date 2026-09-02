@@ -246,6 +246,25 @@ class AndroidAccessibilityTests(TestCase):
             f"use pickTime/pickDateTime from Fields.kt, not a raw dialog: {offenders}",
         )
 
+    def test_contacts_are_picked_through_the_shared_button(self):
+        """Contact picking is ContactPickButton in Fields.kt, not a per-screen
+        launcher. Two screens hand-rolled the same ACTION_PICK block; a third
+        copy is how one of them quietly loses the whitespace strip.
+
+        Only the *picker* is pinned — net/ContactResolver.kt reads
+        ContactsContract for a different job (number to saved name)."""
+        offenders = []
+        for p in _kotlin_files():
+            if p.name == "Fields.kt":
+                continue
+            text = p.read_text()
+            for m in re.finditer(r"ACTION_PICK", text):
+                offenders.append(f"{p.name}:{text[:m.start()].count(chr(10)) + 1}")
+        self.assertEqual(
+            offenders, [],
+            f"use ContactPickButton from Fields.kt, not a raw picker: {offenders}",
+        )
+
     def test_writes_do_not_swallow_failures(self):
         """`when (ApiClient.post(...)) { ... else -> reload }` treats an error
         as success. Every call site must handle Result.Error explicitly."""

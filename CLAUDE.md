@@ -108,6 +108,26 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   client's Drive folder to upload the policy (created on first click) — a
   link, never a forced redirect, so daily bulk entry isn't interrupted.
 
+## No duplicate renewals
+
+- **One renewal per policy per cycle.** `insurance_sync.duplicate_renewal()`
+  is the single check, called by **both** write paths *before* the row is
+  saved — the web view and `app_renewal_create` never meet before the save, so
+  a guard on either one alone leaves the other door open.
+- The window scales with `Renewal.frequency` (`_CYCLE_DAYS`: yearly 300 days,
+  half-yearly 150, quarterly 75, monthly 25) — a flat one-year window would
+  refuse the second of twelve monthly collections.
+- **A typed policy number identifies the policy just as well as a ticked one**,
+  via `find_policy_by_number` (which upper-cases/strips the way
+  `InsurancePolicy.save()` does). That is the case worth catching: it is
+  exactly how one policy gets entered twice under two numbers.
+- It is a **warning, not a block** — a genuine early renewal has to stay
+  possible. Web re-renders the form with a tick ("add it anyway",
+  `confirm_duplicate`); the app answers **409** with `duplicate: true` and
+  shows the same AlertDialog Add Sale uses. Both re-post with
+  `confirm_duplicate`.
+- `clients.test.test_renewal_duplicates` pins both doors and the override.
+
 ## Renewals list
 
 - The page **opens on this month's collection** — that figure is reported every
@@ -138,16 +158,36 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   cancel the policy, so the reminder is the point.
 - The app's Add Sale carries the multiyear term + EMI pickers too (Health only,
   same rules as the web form).
-- **Renewal reminders** (`renewal_reminders` cron, daily 8:45 AM): single-year
-  insurance policies renew manually, so at **30/15/5 days** before the next
-  renewal the system pushes the client's **mapped employee** (fallback seller)
-  and auto-assigns a "call to renew" **task** due on the renewal date (deduped by
-  `assign_group = "renewal:<sale>:<date>"`). The task shows on the home calendar;
-  push + the `insurance_renewal` feed marker cover the rest. `Sale.coverage_end()`
-  / `Sale.next_renewal_date()` account for a **multiyear** term already paid — a
-  multiyear policy stays silent until its term ends (policy_date + years). The
-  `insurance_renewal` calendar feed now keys on the **mapped** employee and skips
-  the paid multiyear years too.
+- **Renewal reminders** (`renewal_reminders` cron, daily 8:45 AM) walk the
+  **Insurance Tracker, not the sales book**. A policy's `end_date` *is* its
+  renewal due date, so `InsurancePolicy` is the only queryable that reaches the
+  **old book** — those policies were back-filled from a renewal entry and have
+  no `Sale` behind them, so a sale-keyed job left the most lapse-prone half of
+  the register with no reminder at all (fixed 2026-09-02).
+- A month (**30 days**) and a week (**7 days**) before `end_date`, the client's
+  **mapped employee** (fallback `relationship_manager`) gets one high-priority
+  **"Renewal Reminder · client · type number"** task due on the renewal date,
+  deduped by `assign_group = "polrenew:<policy>:<date>"` (that field is
+  `max_length=32` — keep the prefix short). The body carries the whole policy:
+  number, insurer, plan, sum assured, premium, cover dates, client phone,
+  nominee, last premium collected.
+- **All three alert paths fire.** `services.tasks.ring_task` (shared with
+  `tasks_ring_due`, which is why it lives in the service and not in either
+  command) sends the ringing `task_alarm` push on each reminder day; the task
+  carries a `due_time`, without which `tasks_ring_due` skips it and the app's
+  on-device `due_at_ms` alarm never arms; and HIGH priority re-rings every 4h
+  until acknowledged. A `silent` task still degrades to a plain tray push.
+- **A collected renewal stops the chase by itself.** `insurance_sync._advance_cover`
+  rolls `end_date` forward (and revives a `lapsed` policy) when a renewal is
+  logged against it, so the policy leaves the reminder window with nobody
+  closing a task. Without it `end_date` froze at creation, "Expiring ≤30d" went
+  permanently stale, and the job chased premiums already banked.
+- `sync_policy_from_sale` writes `Sale.coverage_end()`, not `+1 year` — a
+  multiyear policy must expire when its **paid term** ends or the tracker calls
+  a 3-year policy due after 12 months and reminds two years early.
+- Still sale-keyed and therefore still blind to the old book: the
+  `insurance_renewal` **calendar feed** (`services/calendar_feed.py`). Move it
+  onto `InsurancePolicy.end_date` when the calendar next gets touched.
 
 ## Employee incentive (points = rupees)
 

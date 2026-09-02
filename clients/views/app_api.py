@@ -1019,6 +1019,24 @@ def app_renewal_create(request):
     if is_admin and body.get("employee_id"):
         renewal_emp = Employee.objects.filter(pk=body.get("employee_id"), active=True).first() or emp
 
+    # Same duplicate guard the web view runs — the two write paths never meet
+    # before the save, so each has to check. The app confirms in a dialog and
+    # re-posts with confirm_duplicate.
+    from ..services import insurance_sync
+    selected_policy_id = str(body.get("policy_id") or "").strip() or None
+    typed_number = str(body.get("policy_number") or "").strip()
+    clash = insurance_sync.duplicate_renewal(
+        client=client, renewal_date=renewal_date, frequency=frequency,
+        policy=(insurance_sync.InsurancePolicy.objects.filter(
+            pk=selected_policy_id, client=client).first() if selected_policy_id else None),
+        policy_number=typed_number,
+    )
+    if clash and not body.get("confirm_duplicate"):
+        return JsonResponse({
+            "ok": False, "duplicate": True,
+            "error": insurance_sync.duplicate_message(clash),
+        }, status=409)
+
     renewal = Renewal.objects.create(
         client=client,
         product_ref=product,
@@ -1039,11 +1057,10 @@ def app_renewal_create(request):
     # renewal that was just saved.
     policy_id = None
     try:
-        from ..services import insurance_sync
         policy = insurance_sync.link_renewal_to_policy(
             renewal,
-            selected_policy_id=(str(body.get("policy_id") or "").strip() or None),
-            new_policy_number=str(body.get("policy_number") or "").strip(),
+            selected_policy_id=selected_policy_id,
+            new_policy_number=typed_number,
         )
         policy_id = policy.id if policy else None
     except Exception:

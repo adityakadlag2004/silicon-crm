@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -217,6 +218,7 @@ private fun AddRenewalForm(
     var employeeMenuOpen by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var duplicateWarning by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         when (val r = ApiClient.get("/clients/api/app/renewal-meta/")) {
@@ -435,35 +437,60 @@ private fun AddRenewalForm(
             Text(text, color = if (ok) StatusGreen else StatusRed, fontSize = rsp(14), fontWeight = FontWeight.SemiBold)
         }
 
-        Button(
-            onClick = {
-                message = null
-                submitting = true
-                scope.launch {
-                    val body = JSONObject()
-                        .put("client_id", selectedClient?.first ?: 0)
-                        .put("product_id", selectedProduct?.first ?: 0)
-                        .put("premium_amount", premium)
-                        .put("renewal_date", renewalDate.trim())
-                        .put("frequency", frequency?.first ?: "")
-                        .put("notes", notes)
-                    if (policyId != null && policyId != NEW_POLICY) body.put("policy_id", policyId)
-                    if (policyId == NEW_POLICY) body.put("policy_number", newPolicyNumber)
-                    if (selectedEmployee != null) body.put("employee_id", selectedEmployee!!.first)
-                    when (val r = ApiClient.post("/clients/api/app/renewals/create/", body)) {
-                        is ApiClient.Result.Ok -> {
-                            message = true to "Renewal added ✓"
-                            selectedClient = null; clientQuery = ""; selectedProduct = null
-                            frequency = null; premium = ""; renewalDate = ""; notes = ""
-                            selectedEmployee = null
-                            policies = emptyList(); policyId = null; newPolicyNumber = ""
-                        }
-                        is ApiClient.Result.NotLoggedIn -> onSessionExpired()
-                        is ApiClient.Result.Error -> message = false to r.message
-                    }
-                    submitting = false
+        // Posted twice at most: plainly, then again with confirm_duplicate if
+        // the server matched a renewal already collected on this policy this
+        // cycle and the user says it is a real one. Same idiom as Add Sale.
+        suspend fun submit(confirmDuplicate: Boolean) {
+            message = null
+            submitting = true
+            val body = JSONObject()
+                .put("client_id", selectedClient?.first ?: 0)
+                .put("product_id", selectedProduct?.first ?: 0)
+                .put("premium_amount", premium)
+                .put("renewal_date", renewalDate.trim())
+                .put("frequency", frequency?.first ?: "")
+                .put("notes", notes)
+            if (confirmDuplicate) body.put("confirm_duplicate", true)
+            if (policyId != null && policyId != NEW_POLICY) body.put("policy_id", policyId)
+            if (policyId == NEW_POLICY) body.put("policy_number", newPolicyNumber)
+            if (selectedEmployee != null) body.put("employee_id", selectedEmployee!!.first)
+            when (val r = ApiClient.post("/clients/api/app/renewals/create/", body)) {
+                is ApiClient.Result.Ok -> {
+                    message = true to "Renewal added ✓"
+                    selectedClient = null; clientQuery = ""; selectedProduct = null
+                    frequency = null; premium = ""; renewalDate = ""; notes = ""
+                    selectedEmployee = null
+                    policies = emptyList(); policyId = null; newPolicyNumber = ""
                 }
-            },
+                is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+                is ApiClient.Result.Error ->
+                    if (r.body?.optBoolean("duplicate") == true) duplicateWarning = r.message
+                    else message = false to r.message
+            }
+            submitting = false
+        }
+
+        duplicateWarning?.let { warning ->
+            AlertDialog(
+                onDismissRequest = { duplicateWarning = null },
+                title = { Text("Already added?", fontSize = rsp(18), fontWeight = FontWeight.Bold) },
+                text = { Text(warning, fontSize = rsp(14)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        duplicateWarning = null
+                        scope.launch { submit(confirmDuplicate = true) }
+                    }) { Text("Add anyway", fontSize = rsp(14)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { duplicateWarning = null }) {
+                        Text("Cancel", fontSize = rsp(14))
+                    }
+                },
+            )
+        }
+
+        Button(
+            onClick = { scope.launch { submit(confirmDuplicate = false) } },
             enabled = !submitting && selectedClient != null && selectedProduct != null
                 && frequency != null && premium.isNotBlank() && renewalDate.isNotBlank(),
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
