@@ -41,10 +41,12 @@
               <i class="bi bi-person-check me-1"></i> <span id="client-selected-name"></span>
               <button type="button" class="btn-close btn-close-sm ms-2" style="font-size:.6rem;" onclick="clearClient()"></button>
             </span>
-            <a id="client-drive" class="ki-btn ki-btn-sm ki-btn-secondary ms-2" href="#" target="_blank" rel="noopener"
-               title="Open this client's Google Drive folder to upload documents">
-              <i class="bi bi-folder2-open"></i> Open Drive folder
-            </a>
+            <div class="mt-2">
+              <a id="client-drive" class="ki-btn ki-btn-sm ki-btn-secondary" href="#" target="_blank" rel="noopener"
+                 title="Open this client's Google Drive folder to upload documents">
+                <i class="bi bi-folder2-open"></i> 📎 Open this client's Google Drive folder
+              </a>
+            </div>
           </div>
         </div>
         <div class="col-12">
@@ -202,7 +204,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const link = document.getElementById("client-drive");
     if (!link) return;
     link.href = id ? driveUrlTpl.replace("/0/", "/" + id + "/") : "#";
-    link.style.display = id ? "" : "none";
   }
   setClientDrive(clientSelect ? clientSelect.value : "");   // a re-rendered form keeps its client
 
