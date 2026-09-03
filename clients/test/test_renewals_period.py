@@ -86,3 +86,93 @@ class RenewalPeriodTests(TestCase):
     def test_an_unknown_period_falls_back_to_this_month(self):
         _, ctx = self._ids(period="nonsense")
         self.assertEqual(ctx["period"], "month")
+
+
+class RenewalTypeTabTests(TestCase):
+    """Health and Life are separate books, and the page must read one at a time."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from clients.models import Product
+        user = User.objects.create_user(username="ren_tabs", password="x")
+        cls.emp = Employee.objects.create(user=user, role="admin", salary=0, active=True)
+        cls.client_row = Client.objects.create(name="TAB CLIENT")
+
+        cls.health, _ = Product.objects.get_or_create(
+            code="HEALTH_INS", defaults={"name": "Health Insurance"})
+        cls.life, _ = Product.objects.get_or_create(
+            code="LIFE_INS", defaults={"name": "Life Insurance"})
+        # A sale names the exact plan; its parent is what the book is filed under.
+        cls.life_plan, _ = Product.objects.get_or_create(
+            code="PR_LIFE_PRO", defaults={"name": "PR Life Pro", "parent": cls.life})
+        cls.life_plan.parent = cls.life
+        cls.life_plan.save()
+
+        today = date.today()
+        cls.h = cls._renewal(cls.health, 1000, today)
+        cls.l = cls._renewal(cls.life, 2000, today)
+        cls.sub = cls._renewal(cls.life_plan, 3000, today)
+        cls.other = cls._renewal(None, 500, today)
+        # Falls due next week — the work queue, not this month's collection.
+        cls.due_soon = cls._renewal(cls.health, 900, today, end=today + timedelta(days=7))
+        cls.lapsed = cls._renewal(cls.health, 800, today, end=today - timedelta(days=5))
+
+    @classmethod
+    def _renewal(cls, product, amount, collected_on, end=None):
+        return Renewal.objects.create(
+            client=cls.client_row, employee=cls.emp, product_ref=product,
+            product_type=Renewal.PRODUCT_TYPE_OTHER if product is None else "",
+            product_name="Misc" if product is None else None,
+            renewal_date=collected_on, renewal_end_date=end,
+            premium_collected_on=collected_on,
+            frequency=Renewal.FREQUENCY_YEARLY, premium_amount=amount,
+        )
+
+    def _get(self, **params):
+        client = TestClient()
+        client.force_login(self.emp.user)
+        res = client.get(reverse("clients:all_renewals"), params)
+        self.assertEqual(res.status_code, 200)
+        return {r.id for r in res.context["renewals"]}, res.context
+
+    def test_the_health_tab_excludes_life(self):
+        ids, ctx = self._get(type="health")
+        self.assertEqual(ctx["kind"], "health")
+        self.assertEqual(ids, {self.h.id, self.due_soon.id, self.lapsed.id})
+
+    def test_a_sub_product_renewal_files_under_its_parent_book(self):
+        """A renewal names the exact plan ("PR Life Pro"); matching the code
+        alone filed every plan-level renewal under Other."""
+        ids, _ = self._get(type="life")
+        self.assertIn(self.sub.id, ids)
+        self.assertEqual(self.sub.insurance_kind, "life")
+
+    def test_other_is_what_is_left(self):
+        ids, _ = self._get(type="other")
+        self.assertEqual(ids, {self.other.id})
+
+    def test_the_tabs_count_every_book_not_just_the_open_one(self):
+        _, ctx = self._get(type="health")
+        counts = {t["key"]: t["count"] for t in ctx["tabs"]}
+        self.assertEqual(counts["health"], 3)
+        self.assertEqual(counts["life"], 2)     # main + sub-product plan
+        self.assertEqual(counts["other"], 1)
+        self.assertEqual(counts[""], 6)
+
+    def test_a_search_keeps_the_open_book(self):
+        _, ctx = self._get(type="life", q="TAB")
+        self.assertEqual(ctx["kind"], "life")
+
+    def test_due_soon_ignores_the_payment_window(self):
+        ids, ctx = self._get(due="30")
+        self.assertEqual(ctx["due"], "30")
+        self.assertEqual(ctx["period"], "")
+        self.assertEqual(ids, {self.due_soon.id})
+
+    def test_overdue_lists_what_has_lapsed(self):
+        ids, _ = self._get(due="overdue")
+        self.assertEqual(ids, {self.lapsed.id})
+
+    def test_due_and_book_combine(self):
+        ids, _ = self._get(due="overdue", type="life")
+        self.assertEqual(ids, set())

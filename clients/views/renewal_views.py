@@ -8,7 +8,6 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .. import permissions
@@ -187,6 +186,10 @@ PERIOD_LABELS = {
 }
 
 
+# "" is the All tab; the three others match Renewal.kind_q.
+KIND_LABELS = {"": "All", "health": "Health", "life": "Life", "other": "Other"}
+
+
 def _period_range(period, today):
 	"""(payment_start, payment_end) as ISO strings for a named period."""
 	if period == "last_month":
@@ -228,13 +231,31 @@ def all_renewals(request):
 	payment_start = (request.GET.get("payment_start") or "").strip()
 	payment_end = (request.GET.get("payment_end") or "").strip()
 
+	# Health and Life are different books with different renewal rhythms, so the
+	# type tabs are the primary control and everything below them — the KPI strip
+	# included — reads the selected type. Same rule as the Insurance Tracker: a
+	# Health tab reporting Life's collection is worse than no number.
+	kind = (request.GET.get("type") or "").strip()
+	if kind not in ("health", "life", "other"):
+		kind = ""
+
+	# The work queue: what falls due, read off renewal_end_date. It answers a
+	# different question from "what did we collect", so it replaces the payment
+	# window rather than narrowing it — otherwise "due next month" would also
+	# demand the premium was already collected this month, i.e. nothing.
+	due = (request.GET.get("due") or "").strip()
+	if due not in ("30", "overdue"):
+		due = ""
+
 	# The page opens on this month's renewal business — that is the figure the
 	# desk reports every day, and nobody should have to type two dates for it.
 	# A search no longer clears it: only typing an explicit date does, and that
 	# is what "Custom" means.
 	today = date.today()
 	period = (request.GET.get("period") or "").strip()
-	if start_date or end_date or payment_start or payment_end:
+	if due:
+		period, payment_start, payment_end = "", "", ""
+	elif start_date or end_date or payment_start or payment_end:
 		period = "custom"
 	else:
 		period = period if period in PERIOD_LABELS else "month"
@@ -272,19 +293,41 @@ def all_renewals(request):
 		renewals_qs = renewals_qs.filter(premium_collected_on__gte=payment_from)
 	if payment_to:
 		renewals_qs = renewals_qs.filter(premium_collected_on__lte=payment_to)
+	if due == "30":
+		renewals_qs = renewals_qs.filter(renewal_end_date__gte=today,
+		                                 renewal_end_date__lte=today + timedelta(days=30))
+	elif due == "overdue":
+		renewals_qs = renewals_qs.filter(renewal_end_date__lt=today)
+	if due:
+		# A due list is a work queue: soonest first, not newest collection first.
+		renewals_qs = renewals_qs.order_by("renewal_end_date")
+
+	# Everything the user asked for EXCEPT the type. The tabs and the strip have
+	# to say what each type holds in this window; scoping them to the open tab
+	# would leave the other tabs unreadable until you clicked them.
+	window_qs = renewals_qs
+	if kind:
+		renewals_qs = renewals_qs.filter(Renewal.kind_q(kind))
+
+	# One query for all four tab figures — Health / Life / Other / everything.
+	split = window_qs.aggregate(
+		all_count=Count("id"), all_amount=Sum("premium_amount"),
+		**{f"{k}_{agg}": expr for k in ("health", "life", "other")
+		   for agg, expr in (
+			   ("count", Count("id", filter=Renewal.kind_q(k))),
+			   ("amount", Sum("premium_amount", filter=Renewal.kind_q(k))),
+		   )}
+	)
 
 	today_qs = scoped_qs.filter(premium_collected_on=today)
+	if kind:
+		today_qs = today_qs.filter(Renewal.kind_q(kind))
 	today_submission_total = today_qs.aggregate(total=Sum("premium_amount"))["total"] or 0
 	today_submission_count = today_qs.count()
 
-	# Month-to-date premium collection (collected_on between 1st of this month and today).
-	month_start = today.replace(day=1)
-	month_qs = scoped_qs.filter(premium_collected_on__range=[month_start, today])
-	month_submission_total = month_qs.aggregate(total=Sum("premium_amount"))["total"] or 0
-	month_submission_count = month_qs.count()
-	month_label = today.strftime("%B %Y")
-
-	filtered_total_premium = renewals_qs.aggregate(total=Sum("premium_amount"))["total"] or 0
+	filtered_total_premium = split["all_amount"] if not kind else (
+		split[f"{kind}_amount"] or 0)
+	filtered_total_premium = filtered_total_premium or 0
 
 	paginator = Paginator(renewals_qs, 50)
 	page_number = request.GET.get("page")
@@ -297,69 +340,93 @@ def all_renewals(request):
 	# Query string the period chips carry: everything except the page and the
 	# date window they are about to set.
 	pdict = request.GET.copy()
-	for key in ("page", "period", "start_date", "end_date", "payment_start", "payment_end"):
+	for key in ("page", "period", "start_date", "end_date", "payment_start", "payment_end", "due"):
 		pdict.pop(key, None)
 	period_qstring = pdict.urlencode()
 
-	today = timezone.localdate()
+	# ...and the type tabs keep the window, so switching book never widens it.
+	tdict = request.GET.copy()
+	for key in ("page", "type"):
+		tdict.pop(key, None)
+	type_qstring = tdict.urlencode()
 
-	# This-month renewal business, split by Health / Life / Other \u2014 the figure
-	# the team actually reports on. Scoped like the list (an employee sees only
-	# their own), measured on when the premium was collected.
-	month_start = today.replace(day=1)
-	month_biz = scoped_qs.filter(premium_collected_on__range=[month_start, today])
+	def _type_url(key):
+		base = f"?{type_qstring}&" if type_qstring else "?"
+		return f"{base}type={key}" if key else (f"?{type_qstring}" if type_qstring else "?")
 
-	def _type_biz(kind):
-		rows = month_biz.filter(Renewal.kind_q(kind)).aggregate(
-			amount=Sum("premium_amount"), count=Count("id"))
-		return {"amount": rows["amount"] or 0, "count": rows["count"] or 0}
+	tabs = [
+		{"key": key, "label": label, "active": kind == key,
+		 "count": split[f"{key or 'all'}_count"] or 0,
+		 "amount": split[f"{key or 'all'}_amount"] or 0,
+		 "url": _type_url(key)}
+		for key, label in KIND_LABELS.items()
+	]
 
-	health_biz = _type_biz("health")
-	life_biz = _type_biz("life")
-	other_biz = _type_biz("other")
+	# What the numbers on screen describe, in words.
+	if due == "30":
+		window_label = "Due ≤30 days"
+	elif due == "overdue":
+		window_label = "Overdue"
+	elif period == "custom":
+		window_label = "Custom dates"
+	else:
+		window_label = PERIOD_LABELS.get(period, "This Month")
 
-	agg = Renewal.objects.aggregate(
-		total=Count("id"),
+	# The due/overdue counts answer "what is coming", so they ignore the payment
+	# window — but they honour the employee scope and the open tab. They were
+	# read off the whole table until 2026-09-03, so an employee saw the firm's.
+	due_qs = scoped_qs.filter(Renewal.kind_q(kind)) if kind else scoped_qs
+	due_agg = due_qs.aggregate(
 		due_30=Count("id", filter=Q(renewal_end_date__gte=today,
 		                            renewal_end_date__lte=today + timedelta(days=30))),
 		overdue=Count("id", filter=Q(renewal_end_date__lt=today)),
-		premium=Sum("premium_amount"),
 	)
+
+	due_base = period_qstring + ("&" if period_qstring else "")
 	context = {
-		# KPI strip leads with this month's business split by product line,
-		# since that is what the renewals desk tracks day to day.
+		# The strip describes the window and the tab on screen: one tile per
+		# product line (each a link to its tab), then the work queue.
 		"kpis": [
-			{"label": f"Health \u00b7 {month_label}", "color": "#15803D",
-			 "value": f"\u20b9{inr(health_biz['amount'])}",
-			 "sub": f"{health_biz['count']} renewal{'' if health_biz['count'] == 1 else 's'}"},
-			{"label": f"Life \u00b7 {month_label}", "color": "#4338CA",
-			 "value": f"\u20b9{inr(life_biz['amount'])}",
-			 "sub": f"{life_biz['count']} renewal{'' if life_biz['count'] == 1 else 's'}"},
-			{"label": f"This Month", "color": "#B45309",
-			 "value": f"\u20b9{inr(month_submission_total)}",
-			 "sub": f"{month_submission_count} total"},
-			{"label": "Due \u226430 days", "value": agg["due_30"], "color": "#0369A1"},
-			{"label": "Overdue", "value": agg["overdue"], "color": "#BE123C"},
+			{"label": f"Health · {window_label}", "color": "#15803D",
+			 "value": f"₹{inr(split['health_amount'] or 0)}",
+			 "sub": f"{split['health_count'] or 0} renewal{'' if split['health_count'] == 1 else 's'}",
+			 "url": _type_url("health"), "active": kind == "health"},
+			{"label": f"Life · {window_label}", "color": "#4338CA",
+			 "value": f"₹{inr(split['life_amount'] or 0)}",
+			 "sub": f"{split['life_count'] or 0} renewal{'' if split['life_count'] == 1 else 's'}",
+			 "url": _type_url("life"), "active": kind == "life"},
+			{"label": f"Other · {window_label}", "color": "#6B7280",
+			 "value": f"₹{inr(split['other_amount'] or 0)}",
+			 "sub": f"{split['other_count'] or 0} renewal{'' if split['other_count'] == 1 else 's'}",
+			 "url": _type_url("other"), "active": kind == "other"},
+			{"label": f"Total · {window_label}", "color": "#B45309",
+			 "value": f"₹{inr(split['all_amount'] or 0)}",
+			 "sub": f"{split['all_count'] or 0} renewal{'' if split['all_count'] == 1 else 's'}",
+			 "url": _type_url(""), "active": not kind},
+			{"label": "Due ≤30 days", "value": due_agg["due_30"], "color": "#0369A1",
+			 "url": f"?{due_base}due=30", "active": due == "30"},
+			{"label": "Overdue", "value": due_agg["overdue"], "color": "#BE123C",
+			 "url": f"?{due_base}due=overdue", "active": due == "overdue"},
 		],
-		"health_biz": health_biz,
-		"life_biz": life_biz,
-		"other_biz": other_biz,
 		"renewals": page_obj,
+		"tabs": tabs,
+		"kind": kind,
+		"due": due,
+		"window_label": window_label,
+		"result_count": paginator.count,
 		"is_employee": bool(user_emp and user_emp.role == "employee"),
 		"is_manager": is_manager,
 		"manager_can_edit": bool(is_manager and permissions.can(request.user, "edit_sales")),
 		"qstring": qstring,
 		"today_submission_total": today_submission_total,
 		"today_submission_count": today_submission_count,
-		"month_submission_total": month_submission_total,
-		"month_submission_count": month_submission_count,
-		"month_label": month_label,
 		"filtered_total_premium": filtered_total_premium,
 		"filter_payment_start": payment_start,
 		"filter_payment_end": payment_end,
 		"period": period,
 		"period_options": list(PERIOD_LABELS.items()),
 		"period_qstring": period_qstring,
+		"all_time_url": (f"?{period_qstring}&period=all" if period_qstring else "?period=all"),
 		"product_options": Product.objects.filter(parent__isnull=True, domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]).order_by("display_order", "name"),
 	}
 	return render(request, "renewals/all_renewals.html", context)

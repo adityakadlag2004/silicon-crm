@@ -223,10 +223,15 @@ class Renewal(models.Model):
         """'health' / 'life' / 'other' — derived from product_ref first, since
         product_type wasn't always persisted on historical rows."""
         if self.product_ref_id:
-            code = (self.product_ref.code or "").upper()
-            if code == "HEALTH_INS":
+            # A renewal names the exact plan ("PR Life Pro", parent LIFE_INS),
+            # so a sub-product must roll up to its parent — matching the code
+            # alone filed every plan-level renewal under "other".
+            codes = {(self.product_ref.code or "").upper()}
+            if self.product_ref.parent_id:
+                codes.add((self.product_ref.parent.code or "").upper())
+            if "HEALTH_INS" in codes:
                 return "health"
-            if code == "LIFE_INS":
+            if "LIFE_INS" in codes:
                 return "life"
         if self.product_type == self.PRODUCT_TYPE_HEALTH:
             return "health"
@@ -239,10 +244,16 @@ class Renewal(models.Model):
     def kind_q(kind):
         from django.db.models import Q
         if kind == "health":
-            return Q(product_ref__code="HEALTH_INS") | Q(product_type="health_insurance")
+            return (Q(product_ref__code="HEALTH_INS")
+                    | Q(product_ref__parent__code="HEALTH_INS")
+                    | Q(product_type="health_insurance"))
         if kind == "life":
-            return Q(product_ref__code="LIFE_INS") | Q(product_type="life_insurance")
-        return ~(Q(product_ref__code__in=["HEALTH_INS", "LIFE_INS"])
+            return (Q(product_ref__code="LIFE_INS")
+                    | Q(product_ref__parent__code="LIFE_INS")
+                    | Q(product_type="life_insurance"))
+        codes = ["HEALTH_INS", "LIFE_INS"]
+        return ~(Q(product_ref__code__in=codes)
+                 | Q(product_ref__parent__code__in=codes)
                  | Q(product_type__in=["health_insurance", "life_insurance"]))
 
     def __str__(self):

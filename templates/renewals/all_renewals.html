@@ -6,39 +6,17 @@
 {% load custom_filters %}
 
 {% comment %}
-This month's renewal business, split by product line — the numbers the
-renewals desk reports on. The KPI strip above carries the headline; this
-panel breaks it out with counts and today's collection.
+Type tabs are the primary control — Health and Life are different books with
+different rhythms — and everything below reads the selected type. Period chips
+set the window. Both keep the other's setting, so neither widens the view.
 {% endcomment %}
-<div class="ki-card mb-4">
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.6rem;margin-bottom:.9rem;">
-    <h3 class="ki-section-title" style="margin:0;"><i class="bi bi-arrow-repeat"></i> {{ month_label }} — renewal business</h3>
-    <span class="text-muted" style="font-size:.85rem;">
-      Today: <strong>₹{{ today_submission_total|inr }}</strong> ({{ today_submission_count }} renewal{{ today_submission_count|pluralize }})
-    </span>
-  </div>
-  <div class="ki-kpis" style="margin-bottom:0;">
-    <div class="ki-kpi" style="--c:#15803D;">
-      <div class="l"><i class="bi bi-heart-pulse"></i> Health Insurance</div>
-      <div class="v">₹{{ health_biz.amount|inr }}</div>
-      <div class="sub">{{ health_biz.count }} renewal{{ health_biz.count|pluralize }}</div>
-    </div>
-    <div class="ki-kpi" style="--c:#4338CA;">
-      <div class="l"><i class="bi bi-shield-check"></i> Life Insurance</div>
-      <div class="v">₹{{ life_biz.amount|inr }}</div>
-      <div class="sub">{{ life_biz.count }} renewal{{ life_biz.count|pluralize }}</div>
-    </div>
-    <div class="ki-kpi" style="--c:#6B7280;">
-      <div class="l"><i class="bi bi-three-dots"></i> Other</div>
-      <div class="v">₹{{ other_biz.amount|inr }}</div>
-      <div class="sub">{{ other_biz.count }} renewal{{ other_biz.count|pluralize }}</div>
-    </div>
-    <div class="ki-kpi" style="--c:#B45309;">
-      <div class="l"><i class="bi bi-cash-stack"></i> Month Total</div>
-      <div class="v">₹{{ month_submission_total|inr }}</div>
-      <div class="sub">{{ month_submission_count }} renewal{{ month_submission_count|pluralize }}</div>
-    </div>
-  </div>
+<div class="ki-showbar mb-3" style="gap:.4rem;">
+  <span class="text-muted" style="font-size:.8rem;font-weight:600;">Book:</span>
+  {% for t in tabs %}
+    <a href="{{ t.url }}" class="ki-btn ki-btn-sm {% if t.active %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">
+      {{ t.label }} <span class="text-muted">({{ t.count }} · ₹{{ t.amount|inr }})</span>
+    </a>
+  {% endfor %}
 </div>
 
 <div class="ki-card mb-4">
@@ -55,8 +33,24 @@ panel breaks it out with counts and today's collection.
     {% if period == "custom" %}
       <span class="ki-tag" style="--c:#B45309;">Custom dates</span>
     {% endif %}
+    <span class="text-muted ms-auto" style="font-size:.82rem;">
+      Today: <strong>₹{{ today_submission_total|inr }}</strong> ({{ today_submission_count }} renewal{{ today_submission_count|pluralize }})
+    </span>
+  </div>
+  {% comment %}
+  Due / Overdue read renewal_end_date, so they replace the payment window
+  rather than narrowing it — "due next month, collected this month" is nobody.
+  {% endcomment %}
+  <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+    <span class="text-muted" style="font-size:.8rem;font-weight:600;">Work queue:</span>
+    <a href="?{{ period_qstring }}{% if period_qstring %}&amp;{% endif %}due=30"
+       class="ki-btn ki-btn-sm {% if due == '30' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Due &le;30 days</a>
+    <a href="?{{ period_qstring }}{% if period_qstring %}&amp;{% endif %}due=overdue"
+       class="ki-btn ki-btn-sm {% if due == 'overdue' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Overdue</a>
   </div>
   <form method="get" class="ki-filter-bar" style="flex-wrap:wrap;gap:1rem;align-items:flex-end;">
+    {% if kind %}<input type="hidden" name="type" value="{{ kind }}">{% endif %}
+    {% if due %}<input type="hidden" name="due" value="{{ due }}">{% endif %}
     <div style="min-width:220px;">
       <label class="form-label">Search</label>
       <input type="text" name="q" class="form-control" placeholder="Client, phone, notes, product" value="{{ request.GET.q|default:'' }}">
@@ -96,6 +90,16 @@ panel breaks it out with counts and today's collection.
       <a href="{% url 'clients:add_renewal' %}" class="ki-btn ki-btn-primary"><i class="bi bi-plus-lg"></i> Add Renewal</a>
     </div>
   </form>
+</div>
+
+<div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-2">
+    <h3 class="ki-section-title" style="margin:0;">
+      <i class="bi bi-arrow-repeat"></i>
+      {% for t in tabs %}{% if t.active %}{{ t.label }}{% endif %}{% endfor %}{% if not kind %}All{% endif %} renewals · {{ window_label }}
+    </h3>
+    <span class="text-muted" style="font-size:.85rem;">
+      {{ result_count }} renewal{{ result_count|pluralize }} · ₹{{ filtered_total_premium|inr }} collected
+    </span>
 </div>
 
 <div class="ki-card ki-table-wrap">
@@ -142,7 +146,10 @@ panel breaks it out with counts and today's collection.
         </td>
       </tr>
       {% empty %}
-      <tr><td colspan="12" class="text-center">No renewals found</td></tr>
+      <tr><td colspan="12" class="text-center">
+        No renewals in {{ window_label|lower }}.
+        <a href="{{ all_time_url }}">Show all time</a> — or pick another period above.
+      </td></tr>
       {% endfor %}
     </tbody>
   </table>

@@ -280,6 +280,21 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   day and nobody should type two dates for it. Period chips (This Month / Last
   Month / This FY / All) set the window; typing a date is what "Custom" means,
   and a *search* no longer clears the month the way it used to.
+- **Type tabs are the primary control**, as on the Insurance Tracker: All /
+  Health / Life / Other, each carrying its own count and premium, and
+  everything below reads the selected book — the KPI strip, the totals line,
+  the due counts. Tabs keep the period and the period chips keep the tab, so
+  neither control silently widens the other.
+- **`Renewal.kind_q` / `insurance_kind` roll sub-products up to the parent**
+  (`product_ref__parent__code`). Matching the code alone filed every
+  plan-level renewal ("PR Life Pro", parent LIFE_INS) under *Other* — the
+  same roll-up rule as everywhere else, and `insurance_sync` reads the same
+  property, so those renewals were also missing their tracker policy.
+- **Due ≤30 days / Overdue are a separate control** reading
+  `renewal_end_date`, so they *replace* the payment window instead of
+  narrowing it (due next month AND collected this month is nobody), and they
+  sort soonest-first — a work queue, not a collection log. Their counts honour
+  the employee scope; they were read off the whole table until 2026-09-03.
 - **Each date bound works alone.** Both `renewal_date` and
   `premium_collected_on` filter with separate `__gte` / `__lte` clauses; the old
   `if start and end` pair meant a lone "Payment Start" filtered nothing at all
