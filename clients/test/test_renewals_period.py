@@ -173,6 +173,23 @@ class RenewalTypeTabTests(TestCase):
         ids, _ = self._get(due="overdue")
         self.assertEqual(ids, {self.lapsed.id})
 
+    def test_a_renewal_with_no_end_date_still_falls_due(self):
+        """Only 31 of 192 production rows carry renewal_end_date, so a due
+        filter on the column alone would hide most of the book."""
+        soon = self._renewal(self.health, 700, date.today() - timedelta(days=345))
+        self.assertIsNone(soon.renewal_end_date)
+        ids, _ = self._get(due="30")
+        self.assertIn(soon.id, ids)
+
+    def test_a_monthly_renewal_uses_its_own_cycle(self):
+        monthly = Renewal.objects.create(
+            client=self.client_row, employee=self.emp, product_ref=self.health,
+            renewal_date=date.today() - timedelta(days=25),
+            premium_collected_on=date.today(),
+            frequency=Renewal.FREQUENCY_MONTHLY, premium_amount=100)
+        ids, _ = self._get(due="30")
+        self.assertIn(monthly.id, ids)          # 25 + 30-day cycle = due in 5 days
+
     def test_due_and_book_combine(self):
         ids, _ = self._get(due="overdue", type="life")
         self.assertEqual(ids, set())

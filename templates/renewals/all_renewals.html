@@ -95,7 +95,7 @@ set the window. Both keep the other's setting, so neither widens the view.
 <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-2">
     <h3 class="ki-section-title" style="margin:0;">
       <i class="bi bi-arrow-repeat"></i>
-      {% for t in tabs %}{% if t.active %}{{ t.label }}{% endif %}{% endfor %}{% if not kind %}All{% endif %} renewals · {{ window_label }}
+      {% for t in tabs %}{% if t.active %}{{ t.label }}{% endif %}{% endfor %} renewals · {{ window_label }}
     </h3>
     <span class="text-muted" style="font-size:.85rem;">
       {{ result_count }} renewal{{ result_count|pluralize }} · ₹{{ filtered_total_premium|inr }} collected
@@ -107,7 +107,7 @@ set the window. Both keep the other's setting, so neither widens the view.
     <thead>
       <tr>
         <th>Renewal Date</th>
-        <th>End Date</th>
+        <th title="Collected end date, or one cycle on from the renewal date">Due</th>
         <th>Client</th>
         <th>Product Type</th>
         <th>Product Name</th>
@@ -124,7 +124,8 @@ set the window. Both keep the other's setting, so neither widens the view.
       {% for renewal in renewals %}
       <tr>
         <td>{{ renewal.renewal_date }}</td>
-        <td>{{ renewal.renewal_end_date|default:"-" }}</td>
+        <td>{{ renewal.due_on|date:"Y-m-d" }}{% if not renewal.renewal_end_date %}
+          <span class="text-muted" title="Derived from the renewal date and frequency">est.</span>{% endif %}</td>
         <td>{{ renewal.client.name }}</td>
         <td>{% if renewal.product_ref %}{{ renewal.product_ref.name }}{% else %}{{ renewal.get_product_type_display }}{% endif %}</td>
         <td>{{ renewal.product_name|default:"-" }}</td>

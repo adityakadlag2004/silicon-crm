@@ -207,9 +207,9 @@ def _period_range(period, today):
 
 @login_required
 def all_renewals(request):
-	renewals_qs = Renewal.objects.select_related("client", "employee__user", "created_by").all().order_by(
-		"-premium_collected_on", "-created_at"
-	)
+	renewals_qs = Renewal.objects.select_related(
+		"client", "employee__user", "created_by"
+	).annotate(due_on=Renewal.due_on_expr()).order_by("-premium_collected_on", "-created_at")
 
 	user_emp = getattr(request.user, "employee", None)
 	is_manager = bool(user_emp and user_emp.role == "manager")
@@ -294,13 +294,13 @@ def all_renewals(request):
 	if payment_to:
 		renewals_qs = renewals_qs.filter(premium_collected_on__lte=payment_to)
 	if due == "30":
-		renewals_qs = renewals_qs.filter(renewal_end_date__gte=today,
-		                                 renewal_end_date__lte=today + timedelta(days=30))
+		renewals_qs = renewals_qs.filter(due_on__gte=today,
+		                                 due_on__lte=today + timedelta(days=30))
 	elif due == "overdue":
-		renewals_qs = renewals_qs.filter(renewal_end_date__lt=today)
+		renewals_qs = renewals_qs.filter(due_on__lt=today)
 	if due:
 		# A due list is a work queue: soonest first, not newest collection first.
-		renewals_qs = renewals_qs.order_by("renewal_end_date")
+		renewals_qs = renewals_qs.order_by("due_on")
 
 	# Everything the user asked for EXCEPT the type. The tabs and the strip have
 	# to say what each type holds in this window; scoping them to the open tab
@@ -377,9 +377,9 @@ def all_renewals(request):
 	# read off the whole table until 2026-09-03, so an employee saw the firm's.
 	due_qs = scoped_qs.filter(Renewal.kind_q(kind)) if kind else scoped_qs
 	due_agg = due_qs.aggregate(
-		due_30=Count("id", filter=Q(renewal_end_date__gte=today,
-		                            renewal_end_date__lte=today + timedelta(days=30))),
-		overdue=Count("id", filter=Q(renewal_end_date__lt=today)),
+		due_30=Count("id", filter=Q(due_on__gte=today,
+		                            due_on__lte=today + timedelta(days=30))),
+		overdue=Count("id", filter=Q(due_on__lt=today)),
 	)
 
 	due_base = period_qstring + ("&" if period_qstring else "")

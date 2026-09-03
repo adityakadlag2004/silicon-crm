@@ -290,11 +290,16 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   plan-level renewal ("PR Life Pro", parent LIFE_INS) under *Other* — the
   same roll-up rule as everywhere else, and `insurance_sync` reads the same
   property, so those renewals were also missing their tracker policy.
-- **Due ≤30 days / Overdue are a separate control** reading
-  `renewal_end_date`, so they *replace* the payment window instead of
-  narrowing it (due next month AND collected this month is nobody), and they
-  sort soonest-first — a work queue, not a collection log. Their counts honour
-  the employee scope; they were read off the whole table until 2026-09-03.
+- **Due ≤30 days / Overdue are a separate control**, so they *replace* the
+  payment window instead of narrowing it (due next month AND collected this
+  month is nobody), and they sort soonest-first — a work queue, not a
+  collection log. Their counts honour the employee scope; they were read off
+  the whole table until 2026-09-03.
+- **They read `Renewal.due_on_expr()`, not the column.** Only 31 of 192
+  production rows carry `renewal_end_date`, so filtering the column alone
+  showed a due list of zero on a live book: the expression falls back to one
+  `CYCLE_DAYS` cycle on from `renewal_date`, per frequency. The Due column
+  marks a derived date "est.".
 - **Each date bound works alone.** Both `renewal_date` and
   `premium_collected_on` filter with separate `__gte` / `__lte` clauses; the old
   `if start and end` pair meant a lone "Payment Start" filtered nothing at all

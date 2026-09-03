@@ -256,6 +256,31 @@ class Renewal(models.Model):
                  | Q(product_ref__parent__code__in=codes)
                  | Q(product_type__in=["health_insurance", "life_insurance"]))
 
+    # When this renewal falls due, at the DB level. The collected end date when
+    # there is one — but only 31 of 192 rows carry it, so a filter on the column
+    # alone hides most of the book. Everything else is one cycle on from the
+    # renewal date, the same cycle lengths the duplicate check uses.
+    CYCLE_DAYS = {"monthly": 30, "quarterly": 91, "half_yearly": 182, "yearly": 365}
+
+    @staticmethod
+    def due_on_expr():
+        from datetime import timedelta
+
+        from django.db.models import Case, DateField, ExpressionWrapper, F, When
+        from django.db.models.functions import Coalesce
+
+        def _plus(days):
+            return ExpressionWrapper(F("renewal_date") + timedelta(days=days),
+                                     output_field=DateField())
+
+        return Coalesce(
+            F("renewal_end_date"),
+            Case(*[When(frequency=freq, then=_plus(days))
+                   for freq, days in Renewal.CYCLE_DAYS.items()],
+                 default=_plus(365), output_field=DateField()),
+            output_field=DateField(),
+        )
+
     def __str__(self):
         product_label = self.product_ref.name if self.product_ref_id else self.get_product_type_display()
         return f"{self.client} - {product_label} - {self.renewal_date}"
