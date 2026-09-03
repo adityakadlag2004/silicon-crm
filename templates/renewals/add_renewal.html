@@ -155,6 +155,12 @@
                 Renewal policy submitted to Google Drive
               </label>
             </div>
+            <div class="mt-2">
+              <a id="renewal-drive" class="ki-btn ki-btn-sm ki-btn-secondary" href="#"
+                 title="Open this client's Google Drive folder to upload the renewed policy">
+                <i class="bi bi-folder2-open"></i> 📎 Open this client's Google Drive folder
+              </a>
+            </div>
           </div>
         </div>
         <div class="col-12">
@@ -241,6 +247,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
   updateOtherProductVisibility();
   if (productType) productType.addEventListener("change", updateOtherProductVisibility);
+
+  const driveUrlTpl = "{% url 'clients:client_drive_folder' 0 %}";
+  const driveLink = document.getElementById("renewal-drive");
+  if (driveLink) driveLink.addEventListener("click", function (e) {
+    e.preventDefault();
+    const id = clientIdField.value;
+    if (!id) { alert("Pick a client first — the folder is the client's."); return; }
+    window.open(driveUrlTpl.replace("/0/", "/" + id + "/"), "_blank", "noopener");
+  });
 
   window.clearClient = function() {
     clientIdField.value = "";

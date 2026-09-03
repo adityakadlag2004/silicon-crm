@@ -101,3 +101,35 @@ class SalePolicyUploadTests(TestCase):
         self.assertEqual(resp.status_code, 403)
         sale.refresh_from_db()
         self.assertFalse(sale.policy_doc_submitted)
+
+
+class RenewalDriveLinkTests(TestCase):
+    """The renewal forms offer the client's Drive folder right under the tick."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.health, _ = Product.objects.get_or_create(
+            code="HEALTH_INS", defaults={"name": "Health Insurance"})
+        cls.health.domain = Product.DOMAIN_BOTH
+        cls.health.save()
+        cls.user = User.objects.create_superuser("rnw_admin", password="x")
+        cls.emp = Employee.objects.create(
+            user=cls.user, role=Employee.Role.ADMIN, salary=0, active=True)
+        cls.customer = Client.objects.create(name="RNW Client", mapped_to=cls.emp)
+
+    def test_the_add_form_carries_the_drive_button(self):
+        self.client.force_login(self.user)
+        html = self.client.get(reverse("clients:add_renewal")).content.decode()
+        self.assertIn('id="renewal-drive"', html)
+
+    def test_the_edit_form_links_straight_to_the_clients_folder(self):
+        from clients.models import Renewal
+        renewal = Renewal.objects.create(
+            client=self.customer, product_ref=self.health, employee=self.emp,
+            renewal_date="2026-05-10", frequency=Renewal.FREQUENCY_YEARLY,
+            premium_amount=Decimal("15000"), premium_collected_on="2026-05-10")
+        self.client.force_login(self.user)
+        html = self.client.get(
+            reverse("clients:edit_renewal", args=[renewal.id])).content.decode()
+        self.assertIn(
+            reverse("clients:client_drive_folder", args=[self.customer.id]), html)
