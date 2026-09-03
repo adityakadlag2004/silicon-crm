@@ -90,6 +90,13 @@ class Sale(models.Model):
     # Health/Life in the sale forms — it's what links this sale to its policy
     # on the Insurance Tracker and to future renewals of the same policy.
     policy_number = models.CharField(max_length=60, blank=True, db_index=True)
+    # Ticked when the policy document is filed in the client's Drive folder.
+    # Blank means not filed — same tick as Renewal.policy_doc_submitted, and it
+    # must never default True or the "not uploaded" chase is silently over.
+    policy_doc_submitted = models.BooleanField(
+        default=False,
+        verbose_name="Policy uploaded to Google Drive",
+    )
 
     # PPT-priced life plans: the Premium Paying Term chosen, and the FYC (sale
     # margin %) resolved from it at sale time — using Advisor or MDRT rates per

@@ -232,6 +232,28 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - Not on the app's Add Renewal yet: a phone-entered renewal reads Pending
   until someone edits it on the web.
 
+## Sale policy filing (the Drive tick on a sale)
+
+- `Sale.policy_doc_submitted` (migration 0128) is the renewal tick one line up:
+  the add-sale forms ask "Policy uploaded to Google Drive?" for Health/Life
+  only (same JS toggle as policy date/number; `clean()` forces it False for
+  everything else).
+- **Blank is the point.** `services.sales._notify_policy_not_uploaded` runs
+  inside `finalize_new_sale`, so a sale booked on the phone raises the same
+  flag as one typed on the web: every active admin gets a "Policy not
+  uploaded" notification. The sales list shows the badge, with a
+  **Mark uploaded** button beside it.
+- That button is its own endpoint (`mark_policy_uploaded`), not the edit form:
+  a non-admin edit sends the sale back to pending approval, and filing a
+  document must never un-approve a sale. It saves with
+  `update_fields=["policy_doc_submitted"]`, so `save()`'s `compute_points()`
+  can't reprice an old sale under today's structure.
+- The add-sale forms also link straight to the picked client's Drive folder
+  (`#client-drive`, any product) — the folder is created on first click.
+- Not on the app's Add Sale yet: a phone-entered sale reads "not uploaded"
+  until someone ticks it on the web, which is the right default anyway.
+- `clients.test.test_sale_policy_upload` pins all of it.
+
 ## No duplicate renewals
 
 - **One renewal per policy per cycle.** `insurance_sync.duplicate_renewal()`
@@ -801,6 +823,24 @@ signal there is, since the app is self-hosted with no Play Console.
 - `RTA_FEED_IMAP_*` env vars, the `rta_formats/` samples and the feed-only pins
   (`dbfread`, `pyzipper`, `xlrd`, `msoffcrypto-tool`) are gone too. Don't
   reintroduce any of it without the owner asking.
+
+## The Meetings module is gone (2026-09-02)
+
+- The `Meeting` model, `/clients/meetings/`, its nav entry, admin and the
+  "RM wise Next Meeting Chart" were **deleted**, table and all (migration
+  **0127**). Owner's call: follow-ups and the SPANCO pipeline already do this
+  job, and a third place to record "I am seeing this client" is one people
+  learn to ignore.
+- It was never wired in anyway — `Meeting.scheduled_at` was not a
+  `calendar_feed` source, so a booked review appeared on no calendar and no
+  agenda, nothing reminded anyone, and `is_overdue` was read by no code. It
+  was a list that had to be maintained by hand to tell you what a follow-up
+  task tells you for free.
+- **Booking a meeting still works and is unchanged**: `CalendarEvent` keeps
+  its `("meeting", "Meeting")` event type, so a meeting is put on the common
+  calendar like any other event, and a dated commitment to call or visit a
+  client is a `Task` via `services/followups.py`. Don't reintroduce a
+  separate meetings table — put the date on the calendar or make it a task.
 
 ## Housekeeping standard (5S — run this audit monthly)
 

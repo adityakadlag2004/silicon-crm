@@ -1134,6 +1134,29 @@ def edit_sale(request, sale_id):
 
 
 @login_required
+@require_POST
+def mark_policy_uploaded(request, sale_id):
+    """Tick the Drive box on a sale after the policy has been filed.
+
+    Its own endpoint rather than the edit form: a non-admin edit sends the sale
+    back to pending approval, and filing a document must not un-approve a sale.
+    """
+    sale = get_object_or_404(Sale, id=sale_id)
+    user_emp = getattr(request.user, "employee", None)
+    if (
+        not permissions.is_admin(request.user)
+        and not permissions.can(request.user, "edit_sales")
+        and (not user_emp or sale.employee != user_emp)
+    ):
+        return HttpResponseForbidden("You do not have permission to update this sale.")
+    if not sale.policy_doc_submitted:
+        sale.policy_doc_submitted = True
+        sale.save(update_fields=["policy_doc_submitted"])
+    messages.success(request, "Marked as uploaded to Drive.")
+    return redirect(request.META.get("HTTP_REFERER") or "clients:all_sales")
+
+
+@login_required
 def delete_sale(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
     user_emp = getattr(request.user, "employee", None)

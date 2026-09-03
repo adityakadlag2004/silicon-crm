@@ -9,6 +9,7 @@ urlpatterns = [
     path("sales/approve/", sales.approve_sales, name="approve_sales"),
     path("sales/<int:sale_id>/edit/", sales.edit_sale, name="edit_sale"),
     path("sales/<int:sale_id>/delete/", sales.delete_sale, name="delete_sale"),
+    path("sales/<int:sale_id>/policy-uploaded/", sales.mark_policy_uploaded, name="mark_policy_uploaded"),
     path("sales/recalc/", sales.recalc_points, name="recalc_points"),
     path("sales/all/", sales.all_sales, name="all_sales"),
     path("incentives/calculator/", sales.incentive_calculator, name="incentive_calculator"),

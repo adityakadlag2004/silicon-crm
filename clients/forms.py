@@ -228,6 +228,9 @@ class SalePolicyTypeMixin:
                                    "Enter the policy number from the policy document.")
             else:
                 cleaned_data["policy_number"] = ""
+        # The Drive tick only means anything for a policy document.
+        if "policy_doc_submitted" in self.fields and not _is_insurance_product_name(product):
+            cleaned_data["policy_doc_submitted"] = False
 
         # Multiyear + EMI apply to Health Insurance only. For everything else,
         # force single-year / no-EMI so the fields can't leak onto other sales.
@@ -264,7 +267,7 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "policy_years", "emi_months"]
+        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "policy_doc_submitted", "policy_years", "emi_months"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),

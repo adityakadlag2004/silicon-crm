@@ -97,7 +97,22 @@
         <td>₹{{ sale.amount }}</td>
         <td>{{ sale.points }}</td>
         <td>{{ sale.employee.user.username }}</td>
-        <td>{{ sale.status|title }}</td>
+        <td>
+          {{ sale.status|title }}
+          {% if sale.is_insurance %}
+            {% if sale.policy_doc_submitted %}
+              <span class="badge bg-success-subtle text-success d-block mt-1"><i class="bi bi-cloud-check"></i> Policy filed</span>
+            {% else %}
+              <form method="post" action="{% url 'clients:mark_policy_uploaded' sale.id %}" class="mt-1">
+                {% csrf_token %}
+                <span class="badge bg-danger-subtle text-danger"><i class="bi bi-cloud-slash"></i> Policy not uploaded</span>
+                <button type="submit" class="ki-btn ki-btn-sm ki-btn-secondary mt-1" title="Mark the policy document as uploaded to Drive">
+                  <i class="bi bi-check2"></i> Mark uploaded
+                </button>
+              </form>
+            {% endif %}
+          {% endif %}
+        </td>
         {% if not is_employee %}
         <td>
           <div style="display:flex;gap:0.3rem;flex-wrap:wrap;">

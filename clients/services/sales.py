@@ -190,7 +190,31 @@ def finalize_new_sale(sale, actor, *, auto_approve):
     if sale.status == Sale.STATUS_APPROVED:
         recompute_sibling_sales(sale)
     _sync_insurance_tracker(sale)
+    _notify_policy_not_uploaded(sale)
     return sale
+
+
+def _notify_policy_not_uploaded(sale):
+    """Tell the admins when an insurance sale is booked without its policy
+    document filed in Drive. Booked here rather than in the view so a sale
+    entered on the phone raises the same flag."""
+    if not (sale.is_insurance and not sale.policy_doc_submitted):
+        return
+    from .tasks import create_notification
+    from ..models import Employee
+    seller = sale.employee.short_name if sale.employee else "Someone"
+    for admin in Employee.objects.filter(
+            active=True, role=Employee.Role.ADMIN).select_related("user"):
+        create_notification(
+            admin.user,
+            f"📎 Policy not uploaded — {sale.product}",
+            f"{seller} booked {sale.product} for "
+            f"{sale.client.name if sale.client else 'a client'} "
+            f"({sale.policy_number or 'no policy number'}); the policy document "
+            f"is not in Drive yet.",
+            link="/clients/sales/all/",
+            event=None,
+        )
 
 
 def _sync_insurance_tracker(sale):

@@ -41,6 +41,10 @@
               <i class="bi bi-person-check me-1"></i> <span id="client-selected-name"></span>
               <button type="button" class="btn-close btn-close-sm ms-2" style="font-size:.6rem;" onclick="clearClient()"></button>
             </span>
+            <a id="client-drive" class="ki-btn ki-btn-sm ki-btn-secondary ms-2" href="#" target="_blank" rel="noopener"
+               title="Open this client's Google Drive folder to upload documents">
+              <i class="bi bi-folder2-open"></i> Open Drive folder
+            </a>
           </div>
         </div>
         <div class="col-12">
@@ -123,6 +127,19 @@
             <i class="bi bi-hash"></i> The insurer's policy number — links this sale to its policy on the tracker.
           </small>
         </div>
+        <div class="col-12" id="policy-doc-group" style="display:none;">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="policy_doc_submitted"
+                   id="id_policy_doc_submitted" {% if form.policy_doc_submitted.value %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="id_policy_doc_submitted">
+              Policy uploaded to Google Drive?
+            </label>
+          </div>
+          <small class="form-text text-muted">
+            Leave unticked if not uploaded yet — the admins are notified, the sale shows
+            “Policy not uploaded”, and you can mark it uploaded from the sales list later.
+          </small>
+        </div>
         <div class="col-md-6" id="multiyear-group" style="display:none;">
           <label for="id_policy_years" class="form-label fw-semibold">Policy term</label>
           {{ form.policy_years }}
@@ -180,6 +197,15 @@ document.addEventListener("DOMContentLoaded", function () {
   // Hide Django dropdown
   if (clientSelect) clientSelect.style.display = "none";
 
+  const driveUrlTpl = "{% url 'clients:client_drive_folder' 0 %}";
+  function setClientDrive(id) {
+    const link = document.getElementById("client-drive");
+    if (!link) return;
+    link.href = id ? driveUrlTpl.replace("/0/", "/" + id + "/") : "#";
+    link.style.display = id ? "" : "none";
+  }
+  setClientDrive(clientSelect ? clientSelect.value : "");   // a re-rendered form keeps its client
+
   // Client live search with debounce
   let debounceTimer;
   searchInput.addEventListener("input", function () {
@@ -207,6 +233,7 @@ document.addEventListener("DOMContentLoaded", function () {
               clientSelect.value = client.id;
               selectedName.textContent = client.text;
               selectedDiv.style.display = "block";
+              setClientDrive(client.id);
               resultsDiv.innerHTML = "";
             };
             resultsDiv.appendChild(item);
@@ -226,6 +253,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Clear selected client
   window.clearClient = function() {
     clientSelect.value = "";
+    setClientDrive("");
     selectedDiv.style.display = "none";
     searchInput.style.display = "";
     searchInput.value = "";
@@ -265,6 +293,13 @@ document.addEventListener("DOMContentLoaded", function () {
       const isInsurance = insuranceProductNames.includes(sel);
       const isHealthInsurance = healthProductNames.includes(sel);
       coverAmountGroup.style.display = isInsurance ? "block" : "none";
+    const policyDocGroup = document.getElementById("policy-doc-group");
+    if (policyDocGroup) {
+      policyDocGroup.style.display = isInsurance ? "" : "none";
+      const docBox = document.getElementById("id_policy_doc_submitted");
+      if (!isInsurance && docBox) docBox.checked = false;
+    }
+
       policyTypeGroup.style.display = isHealthInsurance ? "block" : "none";
       const policyDateGroup = document.getElementById("policy-date-group");
       const policyDateInput = document.getElementById("id_policy_date");
