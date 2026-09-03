@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 
 from clients.models import (
     Client, Employee, Family, InsuranceClaim, InsurancePolicy, Lead,
-    LeadInterest, LeadStageEvent, Meeting, Product,
+    LeadInterest, LeadStageEvent, Product,
 )
 
 
@@ -28,12 +28,11 @@ class SeedDemoCrmTests(TestCase):
     def _seed(self, *args):
         call_command("seed_demo_crm", *args, stdout=StringIO())
 
-    def test_seeding_creates_all_four_modules(self):
+    def test_seeding_creates_all_the_modules(self):
         self._seed()
         self.assertTrue(Family.objects.filter(code__startswith="DEMO-").exists())
         self.assertTrue(InsurancePolicy.objects.filter(policy_number__startswith="DEMO-").exists())
         self.assertTrue(InsuranceClaim.objects.exists())
-        self.assertTrue(Meeting.objects.exists())
         # Households get a head and members, so combined AUM is non-zero.
         fam = Family.objects.filter(code__startswith="DEMO-").first()
         self.assertIsNotNone(fam.head)
@@ -42,11 +41,11 @@ class SeedDemoCrmTests(TestCase):
     def test_seeding_twice_does_not_duplicate(self):
         self._seed()
         counts = (Family.objects.count(), InsurancePolicy.objects.count(),
-                  Meeting.objects.count(), Client.objects.count())
+                  Client.objects.count())
         self._seed()
         self.assertEqual(
             (Family.objects.count(), InsurancePolicy.objects.count(),
-             Meeting.objects.count(), Client.objects.count()),
+             Client.objects.count()),
             counts)
 
     def test_undo_removes_demo_data_and_spares_real_records(self):
@@ -70,7 +69,6 @@ class SeedDemoCrmTests(TestCase):
             status=InsuranceClaim.STATUS_SETTLED).exists())
         self.assertTrue(InsuranceClaim.objects.filter(
             status__in=InsuranceClaim.OPEN_STATUSES).exists())
-        self.assertTrue(any(m.is_overdue for m in Meeting.objects.all()))
 
 
 class SeedDemoCrmGuardTests(TestCase):

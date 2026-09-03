@@ -1,4 +1,4 @@
-"""Insurance Tracker, Claim Tracker and Meetings — list + detail screens.
+"""Insurance Tracker and Claim Tracker — list + detail screens.
 
 Read screens only: records are created and edited through the Django admin,
 which already gives full CRUD for free. Bespoke forms can come later if the
@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import InsuranceClaim, InsurancePolicy, Meeting
+from ..models import InsuranceClaim, InsurancePolicy
 from .helpers import name_words_q
 from ..templatetags.custom_filters import inr
 
@@ -224,66 +224,6 @@ def claim_detail(request, claim_id):
         ],
         "claim": claim,
     })
-
-
-# ───────────────────────────── meetings ─────────────────────────────
-
-@login_required
-def meeting_list(request):
-    meetings = Meeting.objects.select_related("client", "employee__user")
-
-    q = (request.GET.get("q") or "").strip()
-    if q:
-        meetings = meetings.filter(name_words_q("client__name", q) | Q(outcome__icontains=q))
-    status = request.GET.get("status", "")
-    now = timezone.now()
-    if status == "overdue":
-        meetings = meetings.filter(status=Meeting.STATUS_SCHEDULED, scheduled_at__lt=now)
-    elif status in dict(Meeting.STATUS_CHOICES):
-        meetings = meetings.filter(status=status)
-
-    agg = Meeting.objects.aggregate(
-        total=Count("id"),
-        scheduled=Count("id", filter=Q(status=Meeting.STATUS_SCHEDULED)),
-        overdue=Count("id", filter=Q(status=Meeting.STATUS_SCHEDULED, scheduled_at__lt=now)),
-        completed=Count("id", filter=Q(status=Meeting.STATUS_COMPLETED)),
-    )
-    base = reverse("clients:meeting_list")
-    return render(request, "insurance/meeting_list.html", {
-        "crumbs": [{"label": "Meetings"}],
-        "kpis": [
-            {"label": "All Meetings", "value": agg["total"], "color": "#4338CA",
-             "url": base, "active": not status},
-            {"label": "Scheduled", "value": agg["scheduled"], "color": "#0369A1",
-             "url": f"{base}?status={Meeting.STATUS_SCHEDULED}",
-             "active": status == Meeting.STATUS_SCHEDULED},
-            {"label": "Overdue", "value": agg["overdue"], "color": "#BE123C",
-             "url": f"{base}?status=overdue", "active": status == "overdue"},
-            {"label": "Completed", "value": agg["completed"], "color": "#15803D",
-             "url": f"{base}?status={Meeting.STATUS_COMPLETED}",
-             "active": status == Meeting.STATUS_COMPLETED},
-        ],
-        "meetings": meetings[:300], "q": q, "status": status,
-        "next_by_rm": _next_meeting_by_rm(),
-    })
-
-
-def _next_meeting_by_rm():
-    """RM → count of clients with a next-meeting date booked, by month.
-
-    Mirrors the reference CRM's "RM wise Next Meeting Chart": who has their
-    forward book filled and who doesn't.
-    """
-    rows = (
-        Meeting.objects.filter(next_meeting_date__isnull=False)
-        .values("employee__user__first_name", "employee__user__username")
-        .annotate(n=Count("id")).order_by("-n")
-    )
-    out = []
-    for r in rows:
-        name = r["employee__user__first_name"] or r["employee__user__username"] or "Unassigned"
-        out.append({"name": name, "count": r["n"]})
-    return out
 
 
 @login_required

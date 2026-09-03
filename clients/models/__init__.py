@@ -33,7 +33,6 @@ from .insurance import (  # noqa: F401
     ClaimDocument,
     InsuranceClaim,
     InsurancePolicy,
-    Meeting,
 )
 from .targets import (  # noqa: F401
     Target,

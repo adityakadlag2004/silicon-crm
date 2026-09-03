@@ -1,4 +1,4 @@
-"""Populate Households, Insurance, Claims, Meetings and the SPANCO lead
+"""Populate Households, Insurance, Claims and the SPANCO lead
 pipeline with demo data.
 
 Manual tool — never in CRONJOBS. Companion to seed_demo_tasks_links, which
@@ -34,7 +34,6 @@ from clients.models import (
     LeadInterest,
     LeadRemark,
     LeadStageEvent,
-    Meeting,
     Product,
     Task,
 )
@@ -110,7 +109,7 @@ DEMO_REMARKS = [
 
 
 class Command(BaseCommand):
-    help = "Seed demo households, insurance policies, claims and meetings."
+    help = "Seed demo households, insurance policies and claims."
 
     def add_arguments(self, parser):
         parser.add_argument("--undo", action="store_true",
@@ -138,12 +137,11 @@ class Command(BaseCommand):
             clients = [c for f in families for c in f.members.all()]
             policies = self._seed_policies(clients, emps)
             claims = self._seed_claims(policies, emps)
-            meetings = self._seed_meetings(clients, emps)
             leads = self._seed_leads(emps)
 
         self.stdout.write(self.style.SUCCESS(
             f"Seeded {len(families)} households, {len(clients)} clients, "
-            f"{len(policies)} policies, {len(claims)} claims, {len(meetings)} meetings, "
+            f"{len(policies)} policies, {len(claims)} claims, "
             f"{len(leads)} leads."))
         self.stdout.write("Remove it again with:  manage.py seed_demo_crm --undo")
 
@@ -273,46 +271,6 @@ class Command(BaseCommand):
                 out.append(claim)
         return out
 
-    def _seed_meetings(self, clients, emps):
-        # Anchor to 10:00 today rather than "now", so scheduled_at is stable
-        # across runs on the same day and get_or_create actually matches.
-        from datetime import datetime, time as dtime
-        base = timezone.make_aware(
-            datetime.combine(timezone.localdate(), dtime(10, 0)),
-            timezone.get_current_timezone())
-        now = base
-        out = []
-        for i, client in enumerate(clients):
-            # A past meeting that was held, plus a forward booking.
-            held_at = now - timedelta(days=30 + i * 3)
-            done, created = Meeting.objects.get_or_create(
-                client=client, scheduled_at=held_at,
-                defaults={
-                    "employee": emps[i % len(emps)] if emps else None,
-                    "kind": Meeting.KIND_REVIEW,
-                    "status": Meeting.STATUS_COMPLETED,
-                    "held_at": held_at,
-                    "next_meeting_date": (now + timedelta(days=60 + i * 5)).date(),
-                    "outcome": "Portfolio reviewed. Client comfortable with allocation.",
-                },
-            )
-            if created:
-                out.append(done)
-
-            # Every third client has one that slipped — populates "Overdue".
-            upcoming = now + (timedelta(days=7 + i) if i % 3 else -timedelta(days=4))
-            nxt, created = Meeting.objects.get_or_create(
-                client=client, scheduled_at=upcoming,
-                defaults={
-                    "employee": emps[i % len(emps)] if emps else None,
-                    "kind": Meeting.KIND_SERVICE if i % 2 else Meeting.KIND_REVIEW,
-                    "status": Meeting.STATUS_SCHEDULED,
-                },
-            )
-            if created:
-                out.append(nxt)
-        return out
-
     def _seed_leads(self, emps):
         """Leads spread across all six SPANCO stages, plus two lost ones.
 
@@ -409,15 +367,13 @@ class Command(BaseCommand):
         policies = InsurancePolicy.objects.filter(policy_number__startswith=DEMO_PREFIX)
         claims = InsuranceClaim.objects.filter(policy__in=policies)
         clients = Client.objects.filter(id__gte=DEMO_CLIENT_ID_BASE)
-        meetings = Meeting.objects.filter(client__in=clients)
         families = Family.objects.filter(code__startswith=DEMO_PREFIX)
         leads = Lead.objects.filter(id__gte=DEMO_LEAD_ID_BASE)
 
-        counts = (claims.count(), policies.count(), meetings.count(),
+        counts = (claims.count(), policies.count(),
                   clients.count(), families.count(), leads.count())
         claims.delete()
         policies.delete()
-        meetings.delete()
         # Requirements, stage history, follow-ups and remarks cascade off these.
         leads.delete()
         # Clear the head FK first so deleting members doesn't trip on it.
@@ -426,5 +382,5 @@ class Command(BaseCommand):
         families.delete()
 
         self.stdout.write(self.style.SUCCESS(
-            "Removed demo data: %d claims, %d policies, %d meetings, "
+            "Removed demo data: %d claims, %d policies, "
             "%d clients, %d households, %d leads." % counts))

@@ -28,7 +28,6 @@ from .models import (
     InsuranceClaim,
     ClaimActivity,
     ClaimDocument,
-    Meeting,
 )
 
 
@@ -390,7 +389,7 @@ admin.site.get_urls = get_admin_urls(admin.site.get_urls())
 
 
 
-# ── Insurance Tracker / Claim Tracker / Meetings ──
+# ── Insurance Tracker / Claim Tracker ──
 # The web screens are read-only; records are created and maintained here.
 
 @admin.register(InsurancePolicy)
@@ -409,15 +408,6 @@ class InsuranceClaimAdmin(admin.ModelAdmin):
                     "settled_amount", "intimation_date")
     list_filter = ("status", "claim_mode")
     search_fields = ("policy__policy_number", "policy__client__name", "claim_type")
-
-
-@admin.register(Meeting)
-class MeetingAdmin(admin.ModelAdmin):
-    list_display = ("client", "kind", "scheduled_at", "employee", "status", "next_meeting_date")
-    list_filter = ("status", "kind")
-    search_fields = ("client__name", "outcome")
-    autocomplete_fields = ("client",)
-    date_hierarchy = "scheduled_at"
 
 
 @admin.register(ClaimDocument)

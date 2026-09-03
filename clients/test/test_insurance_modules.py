@@ -1,4 +1,4 @@
-"""Insurance Tracker, Claim Tracker, Meetings: derived fields + screens."""
+"""Insurance Tracker and Claim Tracker: derived fields + screens."""
 from datetime import timedelta
 
 from django.contrib.auth.models import User
@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from clients.models import (
-    Client, Employee, InsuranceClaim, InsurancePolicy, Meeting,
+    Client, Employee, InsuranceClaim, InsurancePolicy,
 )
 
 
@@ -46,17 +46,6 @@ class InsuranceModelTests(TestCase):
                                           settled_amount=218750)
         self.assertEqual(c.shortfall, 26750)
 
-    def test_meeting_overdue_only_when_still_scheduled(self):
-        past = timezone.now() - timedelta(hours=2)
-        overdue = Meeting.objects.create(client=self.client_rec, scheduled_at=past)
-        self.assertTrue(overdue.is_overdue)
-        done = Meeting.objects.create(client=self.client_rec, scheduled_at=past,
-                                      status=Meeting.STATUS_COMPLETED)
-        self.assertFalse(done.is_overdue)
-        future = Meeting.objects.create(client=self.client_rec,
-                                        scheduled_at=timezone.now() + timedelta(days=1))
-        self.assertFalse(future.is_overdue)
-
 
 class InsuranceScreenTests(TestCase):
     @classmethod
@@ -72,10 +61,6 @@ class InsuranceScreenTests(TestCase):
             policy=cls.policy, claim_type="Hospitalisation Claim",
             claimed_amount=245500, settled_amount=218750,
             status=InsuranceClaim.STATUS_SETTLED)
-        cls.meeting = Meeting.objects.create(
-            client=cls.c, employee=cls.emp,
-            scheduled_at=timezone.now() + timedelta(days=3),
-            next_meeting_date=timezone.localdate() + timedelta(days=90))
 
     def _get(self, url, **params):
         tc = TC(); tc.force_login(self.u)
@@ -106,11 +91,6 @@ class InsuranceScreenTests(TestCase):
         self.assertIn("Hospitalisation Claim", lst)
         detail = self._get(reverse("clients:claim_detail", args=[self.claim.id]))
         self.assertIn("26,750", detail)      # 2,45,500 - 2,18,750
-
-    def test_meeting_list_and_forward_book(self):
-        html = self._get(reverse("clients:meeting_list"))
-        self.assertIn("Vishal Bose", html)
-        self.assertIn("Forward book", html)
 
     def test_policy_number_is_masked_in_the_list(self):
         html = self._get(reverse("clients:policy_list"))

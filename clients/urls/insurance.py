@@ -1,4 +1,4 @@
-"""Insurance Tracker, Claim Tracker and Meetings URLs."""
+"""Insurance Tracker and Claim Tracker URLs."""
 from django.urls import path
 
 from ..views import insurance
@@ -16,7 +16,6 @@ urlpatterns = [
     path("claims/<int:claim_id>/document/upload/", insurance.claim_upload_document, name="claim_upload_document"),
     path("claims/document/<int:doc_id>/download/", insurance.claim_document_download, name="claim_document_download"),
     path("claims/document/<int:doc_id>/delete/", insurance.claim_delete_document, name="claim_delete_document"),
-    path("meetings/", insurance.meeting_list, name="meeting_list"),
     path("api/client/<int:client_id>/policies/", insurance.client_policies_json,
          name="client_policies_json"),
 ]

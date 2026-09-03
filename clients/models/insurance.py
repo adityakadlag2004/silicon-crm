@@ -137,54 +137,6 @@ class InsuranceClaim(models.Model):
         return (self.claimed_amount or 0) - (self.settled_amount or 0)
 
 
-class Meeting(models.Model):
-    """A client meeting — held or scheduled. Drives the review cadence."""
-
-    STATUS_SCHEDULED = "scheduled"
-    STATUS_COMPLETED = "completed"
-    STATUS_CANCELLED = "cancelled"
-    STATUS_CHOICES = [
-        (STATUS_SCHEDULED, "Scheduled"), (STATUS_COMPLETED, "Completed"),
-        (STATUS_CANCELLED, "Cancelled"),
-    ]
-
-    KIND_REVIEW = "review"
-    KIND_ONBOARDING = "onboarding"
-    KIND_SERVICE = "service"
-    KIND_SALES = "sales"
-    KIND_CHOICES = [
-        (KIND_REVIEW, "Portfolio Review"), (KIND_ONBOARDING, "Onboarding"),
-        (KIND_SERVICE, "Service"), (KIND_SALES, "Sales"),
-    ]
-
-    client = models.ForeignKey("Client", on_delete=models.CASCADE, related_name="meetings")
-    employee = models.ForeignKey("Employee", null=True, blank=True, on_delete=models.SET_NULL,
-                                 related_name="meetings")
-    kind = models.CharField(max_length=15, choices=KIND_CHOICES, default=KIND_REVIEW)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES,
-                              default=STATUS_SCHEDULED, db_index=True)
-    scheduled_at = models.DateTimeField(db_index=True)
-    held_at = models.DateTimeField(null=True, blank=True)
-    # Set when a review is booked forward — the "next meeting" report reads this.
-    next_meeting_date = models.DateField(null=True, blank=True, db_index=True)
-    outcome = models.TextField(blank=True)
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
-                                   on_delete=models.SET_NULL, related_name="+")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-scheduled_at"]
-
-    def __str__(self):
-        return f"{self.get_kind_display()} · {self.client.name}"
-
-    @property
-    def is_overdue(self):
-        """Scheduled, but the slot has passed and nobody closed it off."""
-        from django.utils import timezone
-        return self.status == self.STATUS_SCHEDULED and self.scheduled_at < timezone.now()
-
-
 class ClaimActivity(models.Model):
     """Append-only trail for a claim: stage changes, notes, documents.
 

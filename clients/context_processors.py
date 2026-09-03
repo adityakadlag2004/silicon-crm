@@ -69,7 +69,6 @@ _CRUMB_SECTIONS = [
     ("family_", "Households", "family_list"),
     ("policy_", "Insurance Tracker", "policy_list"),
     ("claim_", "Claim Tracker", "claim_list"),
-    ("meeting_", "Meetings", "meeting_list"),
     ("lead_", "Leads", "lead_management"),
     ("task_", "Tasks", "task_dashboard"),
     ("link_", "Links", "links_dashboard"),

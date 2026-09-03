@@ -14,7 +14,7 @@ from clients.models import Client, Employee
 SCREENS = [
     "all_clients", "my_clients", "family_list", "client_kyc_issues",
     "all_sales", "approve_sales", "all_renewals",
-    "policy_list", "claim_list", "meeting_list",
+    "policy_list", "claim_list",
     "lead_management", "task_dashboard", "task_my", "task_delegated",
     "task_all", "task_activities", "task_deleted",
     "links_dashboard", "team_list", "my_call_followups",
@@ -135,7 +135,7 @@ class TemplateHygieneTests(TestCase):
 # form is noise, and the task board already has its status tabs.
 KPI_SCREENS = [
     "all_clients", "my_clients", "family_list", "client_kyc_issues",
-    "all_sales", "all_renewals", "policy_list", "claim_list", "meeting_list",
+    "all_sales", "all_renewals", "policy_list", "claim_list",
     "lead_management", "task_deleted",
     "links_dashboard", "team_list", "my_call_followups",
     "manage_incentive_rules", "audit_log",
