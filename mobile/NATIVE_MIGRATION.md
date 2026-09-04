@@ -54,6 +54,7 @@ in the WebView.
 | 23 | Lead detail shows its follow-ups and can schedule one (it had neither, so a chased lead read as unchased); a row opens the task in the Tasks module | `/api/app/leads/<id>/` (`followups`), `/api/app/leads/<id>/followup/` | **v4.34.0** |
 | 24 | Home pipeline is swipeable: one page per stage from Approach on, every lead wearing its next follow-up date or a No-follow-up tag; chips double as page indicator | `/api/app/dashboard/` (`pipeline.board`) | **v4.35.0** |
 | 25 | Renewals: "Already added?" dialog when the server matches a renewal already collected on this policy this cycle (window scales with frequency) — Add anyway, same idiom as Add Sale. Lead create picks a phone straight from the device contacts via the shared `ContactPickButton` (extracted from Follow-ups; a lint rule pins the single copy) | `/api/app/renewals/create/` (409 + `duplicate`, `confirm_duplicate`) | **v4.38.0** |
+| 26 | Add Client requires the date of birth (the server rejects a blank, so the field is no longer "optional" and Save stays disabled until it is picked); client detail shows the date of birth and the age it implies — the age is what raises the birthday task and the retirement-planning task at 40 | `/api/app/clients/create/`, `/api/app/clients/<id>/` (`date_of_birth`, `age`) | **v4.39.0** |
 | — | Business Links (My Apps tab) | opens web `/clients/links/` for now; native screens later | |
 | — | Financial planner | stays WebView (calc engine is fine there) | |
 
