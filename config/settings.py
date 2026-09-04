@@ -177,6 +177,14 @@ CRONJOBS = [
     # end_date, ringing push + auto call-task to the client's mapped employee.
     # Daily 8:45 AM.
     ('45 8 * * *', 'django.core.management.call_command', ['renewal_reminders']),
+    # Client birthdays: one task per client per year (wish them, send the
+    # valuation report, review the plan) for the mapped employee + admins.
+    # Daily 8:05 AM.
+    ('5 8 * * *', 'django.core.management.call_command', ['client_birthday_tasks']),
+    # Clients turning 40 today: ringing retirement-planning task for their
+    # mapped employee + admins. Daily 8:15 AM. (The 40+ backlog is the same
+    # command's --backlog --apply, run by hand.)
+    ('15 8 * * *', 'django.core.management.call_command', ['retirement_alerts']),
 ]
 
 

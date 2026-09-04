@@ -29,6 +29,9 @@
     <a class="health-tile" href="#missing-pan">
       <div class="num">{{ missing_total }}</div><div class="lbl">Missing PAN</div>
     </a>
+    <a class="health-tile" href="#missing-dob">
+      <div class="num">{{ missing_dob_total }}</div><div class="lbl">Missing date of birth</div>
+    </a>
     <a class="health-tile" href="#duplicates">
       <div class="num">{{ duplicate_groups|length }}</div><div class="lbl">Duplicate groups</div>
     </a>
@@ -104,7 +107,136 @@
     </div>
   </div>
 
+  <div class="ki-card" style="margin-bottom:1rem;" id="missing-dob">
+    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-calendar-heart"></i> Clients missing date of birth ({{ missing_dob_total }})</span></div>
+    <div class="ki-card-body" style="overflow-x:auto;">
+      <p class="text-muted" style="font-size:.85rem;">
+        Date of birth is required on every client added from September 2026 on. These
+        are the older profiles that pre-date the rule — their age is what triggers the
+        <strong>retirement-planning alert at 40</strong>, so a client with no date of
+        birth is one nobody will ever be reminded about.
+      </p>
+      <form method="get" action="#missing-dob" class="kyc-pan-form" style="margin-bottom:.75rem;">
+        {% if search %}<input type="hidden" name="q" value="{{ search }}">{% endif %}
+        <input class="form-control form-control-sm" name="dq" value="{{ dob_search }}"
+               placeholder="Search name, phone or employee" style="width:260px;text-transform:none;">
+        <button class="ki-btn ki-btn-sm"><i class="bi bi-search"></i> Search</button>
+        {% if dob_search %}<a class="ki-btn ki-btn-sm" href="?#missing-dob">Clear</a>{% endif %}
+      </form>
+      <div class="ki-table-scroll">
+        <table class="kyc-table">
+          <thead><tr><th>Client</th><th>Phone</th><th>Mapped to</th><th>Date of birth</th></tr></thead>
+          <tbody>
+            {% for client in missing_dob %}
+            <tr>
+              <td><a href="{% url 'clients:client_profile' client.id %}">{{ client.name }}</a> <span class="text-muted">#{{ client.id }}</span></td>
+              <td>{{ client.phone|default:"—" }}</td>
+              <td>{{ client.mapped_to.user.username|default:"—" }}</td>
+              <td>
+                <form method="post" action="{% url 'clients:client_kyc_update_dob' client.id %}" class="kyc-pan-form">
+                  {% csrf_token %}
+                  {# carried through so saving returns to this page of results #}
+                  <input type="hidden" name="dpage" value="{{ dob_page_obj.number }}">
+                  <input type="hidden" name="dq" value="{{ dob_search }}">
+                  <input class="form-control form-control-sm" type="date" name="date_of_birth"
+                         max="{{ today }}" required style="width:auto;"
+                         aria-label="Date of birth for {{ client.name }}">
+                  <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check-lg"></i> Save</button>
+                </form>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-muted">
+              {% if dob_search %}No client matches “{{ dob_search }}”.
+              {% else %}🎉 Every client{% if not is_admin %} mapped to you{% endif %} has a date of birth.{% endif %}
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if dob_page_obj.paginator.num_pages > 1 %}
+      <div style="display:flex;gap:.5rem;align-items:center;justify-content:center;margin-top:.75rem;">
+        {% if dob_page_obj.has_previous %}
+          <a class="ki-btn ki-btn-sm" href="?{% if dob_search %}dq={{ dob_search|urlencode }}&{% endif %}dpage={{ dob_page_obj.previous_page_number }}#missing-dob">← Prev</a>
+        {% endif %}
+        <span class="text-muted" style="font-size:.85rem;">
+          Page {{ dob_page_obj.number }} of {{ dob_page_obj.paginator.num_pages }}
+          · showing {{ dob_page_obj.start_index }}–{{ dob_page_obj.end_index }} of {{ missing_dob_total }}
+        </span>
+        {% if dob_page_obj.has_next %}
+          <a class="ki-btn ki-btn-sm" href="?{% if dob_search %}dq={{ dob_search|urlencode }}&{% endif %}dpage={{ dob_page_obj.next_page_number }}#missing-dob">Next →</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
   {% if is_admin %}
+  <div class="ki-card" id="merge-search" style="margin-bottom:1rem;">
+    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-search"></i> Find &amp; merge by name</span></div>
+    <div class="ki-card-body">
+      <p class="text-muted" style="font-size:.85rem;">
+        The duplicate list below only catches profiles sharing an <em>exact</em> PAN,
+        phone or name. Type a client's name here to find the near-misses —
+        “Rajesh Sharma” also matches “Sharma Rajesh Kumar” — then tick the profile
+        to <strong>keep</strong> and the ones to merge into it.
+      </p>
+      <form method="get" action="#merge-search" class="kyc-pan-form" style="margin-bottom:.75rem;">
+        <input class="form-control form-control-sm" name="mq" value="{{ merge_query }}"
+               placeholder="Client name" style="width:260px;text-transform:none;">
+        <button class="ki-btn ki-btn-sm"><i class="bi bi-search"></i> Search</button>
+        {% if merge_query %}<a class="ki-btn ki-btn-sm" href="?#merge-search">Clear</a>{% endif %}
+      </form>
+
+      {% if merge_query %}
+        {% if merge_candidates|length > 1 %}
+        <form method="post" action="{% url 'clients:client_merge' %}"
+              onsubmit="return confirm('Merge the ticked profiles into the one marked Keep? This cannot be undone.');">
+          {% csrf_token %}
+          <div class="ki-table-scroll">
+            <table class="kyc-table">
+              <thead><tr>
+                <th>Keep</th><th>Merge away</th><th>Client</th><th>Phone</th>
+                <th>PAN</th><th>Mapped to</th><th>Records</th>
+              </tr></thead>
+              <tbody>
+                {% for c in merge_candidates %}
+                <tr>
+                  <td><input type="radio" name="keep_id" value="{{ c.id }}" required
+                             aria-label="Keep {{ c.name }} (#{{ c.id }})"></td>
+                  <td><input type="checkbox" name="remove_id" value="{{ c.id }}"
+                             aria-label="Merge away {{ c.name }} (#{{ c.id }})"></td>
+                  <td><a href="{% url 'clients:client_profile' c.id %}">{{ c.name }}</a> <span class="text-muted">#{{ c.id }}</span></td>
+                  <td>{{ c.phone|default:"—" }}</td>
+                  <td>{{ c.pan|default:"—" }}</td>
+                  <td>{{ c.mapped_to.user.username|default:"—" }}</td>
+                  <td class="dup-meta">
+                    {% if c.record_total %}
+                      {% for label, n in c.record_counts.items %}{{ n }} {{ label }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    {% else %}no records{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <p class="text-muted" style="font-size:.8rem;margin:.6rem 0;">
+            Everything on a merged-away profile — sales, renewals, policies, tasks,
+            calls — moves onto the kept one, and any contact detail the keeper is
+            missing is copied across. The emptied profile is then deleted.
+            Prefer keeping the profile with the most records.
+          </p>
+          <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-arrow-left-right"></i> Merge ticked into Keep</button>
+        </form>
+        {% elif merge_candidates %}
+          <p class="text-muted">Only one profile matches “{{ merge_query }}” — nothing to merge.</p>
+        {% else %}
+          <p class="text-muted">No client matches “{{ merge_query }}”.</p>
+        {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
   <div class="ki-card" id="duplicates" style="margin-bottom:1rem;">
     <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-people"></i> Possible duplicate profiles ({{ duplicate_groups|length }})</span></div>
     <div class="ki-card-body">

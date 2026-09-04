@@ -623,6 +623,64 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   (`/clients/leads/?stage=x`, `/clients/leads/<id>/`) into the native
   `LeadsScreen` via the overlay string `leads:<id|stage>`.
 
+## Date of birth, and the two alerts it drives
+
+- `Client.date_of_birth` is **mandatory on every client added from 2026-09-04
+  on** — enforced in the web `ClientForm.clean_date_of_birth` **and**
+  `app_client_create`, because a rule guarded only in the browser is not a rule
+  (the phone is a real add-client path). Both also refuse a future date and a
+  year over 120 back: a typo'd year sits in the age reports forever.
+- The column **stays nullable**. ~2,900 imported clients have none, and making
+  it non-null would make every one of them uneditable. They are chased on the
+  **KYC Issues** screen ("Clients missing date of birth", its own search +
+  pagination + inline save), exactly as PAN, phone and email already were.
+- `Client.age` is a property, never stored. **A missing DOB is `None`, not 0** —
+  every caller must handle it.
+- **Why it is collected.** `services/client_alerts.py` owns both alerts; they
+  share one task-raising implementation and differ only in what they say:
+  - **Birthday**, every year on the day (`client_birthday_tasks`, 8:05 AM):
+    "wish them / send the valuation report / review the financial plan" ride as
+    a **checklist**, so they can be ticked off rather than read. Key
+    `bday:<client>:<YYYY>` — **the year is in the key**, or the birthday comes
+    round once per lifetime. **MEDIUM priority on purpose**: high/critical
+    re-ring every 4h until acknowledged, and a daily task at that volume is a
+    storm people learn to swipe away.
+  - **Retirement planning**, once, at 40 (`retirement_alerts`, 8:15 AM). HIGH
+    priority — it fires once per client ever. Key `retire:<client>`.
+- Both are **assigned to the mapped employee AND every active admin** as one
+  multi-assignee group (sibling rows sharing `assign_group`), so each person
+  closes their own copy. That group id doubles as the dedup key, so a re-run can
+  never raise the work twice. An unmapped client's alert falls to the admins
+  rather than into a hole. `Task.assign_group` is 32 chars — keep prefixes short.
+- Volume: one group per birthday per year × (1 employee + every admin). At ~2,900
+  clients and 3 admins that is roughly **30 task rows a day**. If it proves
+  noisy, give admins one daily digest instead of a row per client — the change
+  is `assignees()` in `client_alerts.py`.
+- **The daily crons only ever see today's birthdays.** The clients already past
+  40 are a **backlog**, not a cron job: `retirement_alerts --backlog` (dry run)
+  / `--apply`. Running it automatically would raise hundreds of tasks the first
+  morning after deploy. Typing an old client's DOB on KYC Issues is how a
+  45-year-old first becomes visible, so that save's success message names the
+  backlog command.
+- The calendar's `birthday` source (`calendar_feed._birthdays`) still expands
+  birthdays across any date range — that is the *planning* view ("who is coming
+  up"), while the task is the work item for today. Both will show on a day view.
+- `clients.test.test_client_dob_retirement` pins all of it.
+
+## Merging duplicate clients
+
+- `services/client_merge.merge_clients(keep, remove)` repoints every reverse
+  relation by walking `Client._meta.related_objects`, fills any contact field
+  the keeper is missing, then deletes the emptied profile. It is the only
+  implementation — three screens call it, none reimplement it.
+- The KYC screen's automatic duplicate groups only catch an **exact** shared
+  PAN, phone or name, so "Rajesh Sharma" and "Sharma Rajesh Kumar" sat there as
+  two profiles forever. **Find & merge by name** (admin-only, `?mq=`) uses
+  `name_words_q` — every word, any order — and shows what each profile holds
+  (`business_record_counts_bulk`) so the keeper is an informed pick. It posts to
+  the existing `client_merge` endpoint; the picker is UI over logic that was
+  already there.
+
 ## Phone numbers are a matching key
 
 - **Normalised on the model, never in the form.** `Client.save()` and
@@ -878,7 +936,7 @@ signal there is, since the app is self-hosted with no Play Console.
   the admin incentive report always computes live from `Sale` now)
 - Manual tools (intentionally not in CRONJOBS): `fix_phone_floats`,
   `prod_readiness_check`, `recompute_client_holdings`,
-  `backfill_insurance_policies`,
+  `backfill_insurance_policies`, `retirement_alerts --backlog`,
   `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`,
   `seed_incentive_structure`, `clear_unreleased_ladder_bonus`.
   `clear_unreleased_ladder_bonus` is the one-off that took the FY prize back off

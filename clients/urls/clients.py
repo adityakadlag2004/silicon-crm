@@ -19,6 +19,7 @@ urlpatterns = [
     path("reassign-bulk/", clients_views.bulk_reassign_view, name="bulk_reassign"),
     path("clients/kyc-issues/", kyc.client_kyc_issues, name="client_kyc_issues"),
     path("clients/<int:client_id>/kyc-pan/", kyc.client_kyc_update_pan, name="client_kyc_update_pan"),
+    path("clients/<int:client_id>/kyc-dob/", kyc.client_kyc_update_dob, name="client_kyc_update_dob"),
     path("clients/merge/", kyc.client_merge_view, name="client_merge"),
     path("clients/bulk-merge/", kyc.client_bulk_merge, name="client_bulk_merge"),
     path("clients/<int:client_id>/safe-delete/", kyc.client_safe_delete, name="client_safe_delete"),

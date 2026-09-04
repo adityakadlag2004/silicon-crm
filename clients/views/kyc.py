@@ -1,4 +1,4 @@
-"""Client KYC Issues — missing PANs and duplicate profiles.
+"""Client KYC Issues — missing PANs and dates of birth, and duplicate profiles.
 
 PAN is the client's identity key, so profiles without one can't be matched or
 de-duplicated. This screen lists them (each employee sees their own mapped
@@ -7,6 +7,7 @@ admins — surfaces likely duplicate profiles with merge / safe-delete actions.
 """
 import re
 from collections import defaultdict
+from datetime import date
 from urllib.parse import urlencode
 
 from django import forms
@@ -16,13 +17,14 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from ..forms import validate_pan
 from .. import permissions
 from ..models import Client
 from .helpers import name_words_q
-from ..services import client_merge
+from ..services import client_alerts, client_merge
 
 
 def _role(request):
@@ -48,14 +50,32 @@ def _missing_pan_qs(request, search=""):
     return qs.order_by("mapped_to__user__username", "name")
 
 
-def _kyc_redirect(request):
+def _missing_dob_qs(request, search=""):
+    """Clients with no date of birth — scoped exactly like the missing-PAN list.
+
+    Date of birth became mandatory for new clients in Sep 2026; the imported
+    book has none, and their age is what drives the retirement-planning alert
+    at 40, so these are worth chasing rather than blocking every edit over.
+    """
+    qs = Client.objects.filter(date_of_birth__isnull=True).select_related("mapped_to__user")
+    if _role(request) == "employee":
+        qs = qs.filter(mapped_to=request.user.employee)
+    if search:
+        qs = qs.filter(name_words_q("name", search)
+                       | Q(phone__icontains=search)
+                       | Q(mapped_to__user__username__icontains=search))
+    return qs.order_by("mapped_to__user__username", "name")
+
+
+def _kyc_redirect(request, anchor="missing-pan"):
     """Back to the KYC screen on the page/search the row was saved from —
     without this, every save bounced the user to the top of 1800+ rows."""
     url = redirect("clients:client_kyc_issues").url
-    params = urlencode({k: v for k, v in (("q", request.POST.get("q", "").strip()),
-                                          ("page", request.POST.get("page", "").strip()))
+    keys = (("q", "q"), ("page", "page")) if anchor == "missing-pan" else (("dq", "dq"), ("dpage", "dpage"))
+    params = urlencode({k: v for k, v in
+                        ((key, request.POST.get(post_key, "").strip()) for key, post_key in keys)
                         if v})
-    return redirect(f"{url}?{params}#missing-pan" if params else f"{url}#missing-pan")
+    return redirect(f"{url}?{params}#{anchor}" if params else f"{url}#{anchor}")
 
 
 def missing_pan_count_for(user):
@@ -146,18 +166,32 @@ def client_kyc_issues(request):
         .get_page(request.GET.get("page"))
     missing = list(page_obj)
 
+    # Missing dates of birth carry their own search + page params, so filling in
+    # one list never resets the other.
+    dob_search = (request.GET.get("dq") or "").strip()
+    dob_page = Paginator(_missing_dob_qs(request, dob_search), MISSING_PAN_PER_PAGE) \
+        .get_page(request.GET.get("dpage"))
+
     context = {
         "page_title": "Client KYC & Data Health",
         "kpis": [
             {"label": "Missing PAN", "value": page_obj.paginator.count, "color": "#BE123C"},
+            {"label": "Missing DOB", "value": dob_page.paginator.count, "color": "#B45309"},
         ],
         "missing": missing,
         "page_obj": page_obj,
         "missing_total": page_obj.paginator.count,
         "search": search,
+        "missing_dob": list(dob_page),
+        "dob_page_obj": dob_page,
+        "missing_dob_total": dob_page.paginator.count,
+        "dob_search": dob_search,
+        "today": timezone.localdate().isoformat(),
         "is_admin": is_admin,
         "duplicate_groups": _duplicate_groups() if is_admin else [],
     }
+    if is_admin:
+        context.update(_merge_search_context(request))
     if is_admin:
         single_word, no_business = _hygiene_lists()
         context.update({
@@ -165,6 +199,72 @@ def client_kyc_issues(request):
             "no_business": no_business,
         })
     return render(request, "clients/kyc_issues.html", context)
+
+
+MERGE_SEARCH_LIMIT = 40
+
+
+def _merge_search_context(request):
+    """Clients matching the typed name, for the manual merge picker.
+
+    The automatic duplicate groups only catch an *exact* shared PAN, phone or
+    name, so "Rajesh Sharma" and "Sharma Rajesh Kumar" sit there as two
+    profiles forever. ``name_words_q`` matches every word in any order, which
+    is what somebody actually means when they type a name looking for
+    duplicates. Each candidate carries what a merge would move, so the keeper
+    is an informed pick rather than a guess.
+    """
+    query = (request.GET.get("mq") or "").strip()
+    if not query:
+        return {"merge_query": "", "merge_candidates": []}
+    candidates = list(
+        Client.objects.filter(name_words_q("name", query))
+        .select_related("mapped_to__user")
+        .order_by("name", "id")[:MERGE_SEARCH_LIMIT]
+    )
+    counts = client_merge.business_record_counts_bulk({c.id for c in candidates})
+    for c in candidates:
+        c.record_counts = counts.get(c.id, {})
+        c.record_total = sum(c.record_counts.values())
+    return {"merge_query": query, "merge_candidates": candidates}
+
+
+@login_required
+@require_POST
+def client_kyc_update_dob(request, client_id):
+    """Fill in one old client's date of birth from the KYC screen."""
+    client = get_object_or_404(Client, id=client_id)
+    if _role(request) == "employee" and client.mapped_to != request.user.employee:
+        return HttpResponseForbidden("You can update only your assigned clients.")
+    raw = (request.POST.get("date_of_birth") or "").strip()
+    try:
+        dob = date.fromisoformat(raw)
+    except ValueError:
+        messages.error(request, f"{client.name}: enter the date of birth as YYYY-MM-DD.")
+        return _kyc_redirect(request, "missing-dob")
+
+    # Same two sanity checks the add form applies — a typo'd year would sit in
+    # the age reports (and the retirement alert) forever.
+    today = timezone.localdate()
+    if dob > today:
+        messages.error(request, f"{client.name}: date of birth cannot be in the future.")
+        return _kyc_redirect(request, "missing-dob")
+    if dob.year < today.year - 120:
+        messages.error(request, f"{client.name}: check the year — that is over 120 years ago.")
+        return _kyc_redirect(request, "missing-dob")
+
+    client.date_of_birth = dob
+    client.save(update_fields=["date_of_birth"])
+    note = ""
+    if (client.age or 0) >= client_alerts.TRIGGER_AGE:
+        # Typing a DOB is how a 45-year-old first becomes visible as one; the
+        # daily cron only ever sees today's birthdays, so say where the alert
+        # comes from rather than leaving it silently unraised.
+        note = (f" They are {client.age} — run "
+                f"`retirement_alerts --backlog --apply` to raise their "
+                f"retirement-planning task.")
+    messages.success(request, f"Date of birth saved for {client.name} (age {client.age}).{note}")
+    return _kyc_redirect(request, "missing-dob")
 
 
 @login_required

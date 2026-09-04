@@ -4,6 +4,7 @@ from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django.forms import inlineformset_factory
+from django.utils import timezone
 from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadInterest, FirmSettings, Renewal, Product, PlanPptRate
 
 # Indian PAN: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).
@@ -416,7 +417,7 @@ class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
         fields = [
-            "name", "email", "phone", "pan", "address", "mapped_to",
+            "name", "email", "phone", "pan", "date_of_birth", "address", "mapped_to",
             "sip_status", "sip_amount", "sip_topup",
             "lumsum_investment",
             "life_status", "life_cover", "life_product",
@@ -426,6 +427,7 @@ class ClientForm(forms.ModelForm):
         ]
         widgets = {
             "address": forms.Textarea(attrs={"rows": 3}),
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
             "pms_start_date": forms.DateInput(attrs={"type": "date"}),
             "lumsum_investment": forms.NumberInput(attrs={"step": "0.01", "placeholder": "0"}),
         }
@@ -438,6 +440,10 @@ class ClientForm(forms.ModelForm):
             self.fields["phone"].required = True
             self.fields["email"].required = True
             self.fields["pan"].required = True
+            # Mandatory from 2026-09 on: the client's age drives the retirement
+            # -planning alert at 40. Imported clients have none and are filled
+            # in on KYC Issues, so this is an add-flow rule only.
+            self.fields["date_of_birth"].required = True
         if "mapped_to" in self.fields:
             self.fields["mapped_to"].queryset = Employee.objects.filter(active=True)
         for name, field in self.fields.items():
@@ -478,6 +484,25 @@ class ClientForm(forms.ModelForm):
         if not getattr(self.instance, "pk", None) and not value:
             raise forms.ValidationError("Email is required.")
         return value
+
+    def clean_date_of_birth(self):
+        """Required for NEW clients; sanity-checked for everyone.
+
+        A typo'd year is worse than a blank — "2026" makes a newborn and
+        "1826" a 200-year-old, and both would sit in the age reports forever.
+        """
+        dob = self.cleaned_data.get("date_of_birth")
+        is_add_flow = not getattr(self.instance, "pk", None)
+        if dob is None:
+            if is_add_flow:
+                raise forms.ValidationError("Date of birth is required.")
+            return dob
+        today = timezone.localdate()
+        if dob > today:
+            raise forms.ValidationError("Date of birth cannot be in the future.")
+        if dob.year < today.year - 120:
+            raise forms.ValidationError("Check the year — that date of birth is over 120 years ago.")
+        return dob
 
     def clean_lumsum_investment(self):
         val = self.cleaned_data.get("lumsum_investment")

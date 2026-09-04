@@ -23,7 +23,10 @@ class Client(models.Model):
     pan = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
 
-    # Optional date of birth to support Birthday Calls in calendar
+    # Mandatory on every client added from 2026-09 on (the add form and the app
+    # API both enforce it); nullable because the imported book has none, and
+    # those blanks are filled in on the KYC Issues screen rather than blocking
+    # every edit — the same rule PAN, phone and email follow.
     date_of_birth = models.DateField(null=True, blank=True)
 
     mapped_to = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True)
@@ -69,6 +72,19 @@ class Client(models.Model):
     # Google Drive doc-folder (created lazily on first request from the client profile page).
     drive_folder_id = models.CharField(max_length=100, blank=True, default="")
     drive_folder_url = models.URLField(max_length=500, blank=True, default="")
+
+    @property
+    def age(self):
+        """Whole years old today, or None when no date of birth is on file.
+
+        Old clients legitimately have no DOB, so every caller has to handle
+        None — never treat a missing birth date as age 0.
+        """
+        dob = self.date_of_birth
+        if not dob:
+            return None
+        today = timezone.localdate()
+        return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
     def __str__(self):
         return f"{self.id} - {self.name}"

@@ -594,6 +594,9 @@ class AppClientCreateTests(TestCase):
         import json as _json
         c = TestClient()
         c.force_login(user)
+        # Mandatory on a new client since Sep 2026; these cases are about PAN
+        # and mapping, so they get a valid one unless they say otherwise.
+        payload = {"date_of_birth": "1990-04-02", **payload}
         return c.post(reverse("clients:app_client_create"),
                       data=_json.dumps(payload), content_type="application/json")
 

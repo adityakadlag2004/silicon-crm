@@ -550,6 +550,10 @@ def app_client_detail(request, client_id):
         "email": c.email or "",
         "pan": c.pan or "",
         "address": c.address or "",
+        # Age drives the birthday call and the retirement alert at 40, so the
+        # phone shows it rather than making somebody work it out from the date.
+        "date_of_birth": c.date_of_birth.isoformat() if c.date_of_birth else "",
+        "age": c.age,
         "mapped_to": (
             c.mapped_to.user.get_full_name() or c.mapped_to.user.username
         ) if c.mapped_to and c.mapped_to.user_id else "",
@@ -2119,13 +2123,21 @@ def app_client_create(request):
         else:
             mapped_to = Employee.objects.filter(pk=raw, active=True).first()
 
-    dob = None
+    # Mandatory here as well as on the web form: guarding only the browser
+    # would let every phone-added client skip it, which is the whole of the
+    # rule. Old clients keep their blank and are filled in on KYC Issues.
     raw_dob = str(body.get("date_of_birth") or "").strip()
-    if raw_dob:
-        try:
-            dob = date.fromisoformat(raw_dob)
-        except ValueError:
-            return JsonResponse({"ok": False, "error": "Date of birth must be YYYY-MM-DD."}, status=400)
+    if not raw_dob:
+        return JsonResponse({"ok": False, "error": "Date of birth is required."}, status=400)
+    try:
+        dob = date.fromisoformat(raw_dob)
+    except ValueError:
+        return JsonResponse({"ok": False, "error": "Date of birth must be YYYY-MM-DD."}, status=400)
+    today = timezone.localdate()
+    if dob > today:
+        return JsonResponse({"ok": False, "error": "Date of birth cannot be in the future."}, status=400)
+    if dob.year < today.year - 120:
+        return JsonResponse({"ok": False, "error": "Check the year — that date of birth is over 120 years ago."}, status=400)
 
     client = Client.objects.create(
         name=name[:255],

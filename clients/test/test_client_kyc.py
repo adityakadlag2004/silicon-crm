@@ -20,7 +20,8 @@ from clients.services import client_merge
 def _form_data(**overrides):
     data = {
         "name": "Test Person", "phone": "9876543210", "email": "t@x.com",
-        "pan": "ABCDE1234F", "lumsum_investment": "0",
+        # Mandatory on a new client since Sep 2026 — see test_client_dob_retirement.
+        "pan": "ABCDE1234F", "date_of_birth": "1990-04-02", "lumsum_investment": "0",
     }
     data.update(overrides)
     return data

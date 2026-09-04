@@ -239,6 +239,10 @@ private fun ClientDetail(
                 InfoRow("Phone", d.optString("phone"))
                 InfoRow("Email", d.optString("email"))
                 InfoRow("PAN", d.optString("pan"))
+                // Blank on the imported book — those are filled in on the web
+                // KYC Issues screen, so show the gap rather than hiding the row.
+                InfoRow("Date of birth", d.optString("date_of_birth"))
+                InfoRow("Age", if (d.isNull("age")) "" else d.optInt("age").toString())
                 InfoRow("Address", d.optString("address"))
                 InfoRow("Mapped to", d.optString("mapped_to"))
                 val products = buildList {
@@ -357,7 +361,9 @@ private fun AddClientForm(
         OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth())
         // A birthday can't be in the future, and typing "YYYY-MM-DD" on a phone
         // keyboard was a guaranteed source of 400s.
-        DateField("Date of birth (optional)", dob, maxToday = true) { dob = it }
+        // Mandatory since Sep 2026 — the client's age is what triggers the
+        // retirement-planning alert at 40, and the server rejects a blank.
+        DateField("Date of birth", dob, maxToday = true) { dob = it }
 
         if (isAdmin) {
             androidx.compose.foundation.layout.Box {
@@ -424,7 +430,7 @@ private fun AddClientForm(
                     submitting = false
                 }
             },
-            enabled = !submitting && name.isNotBlank() && phone.isNotBlank(),
+            enabled = !submitting && name.isNotBlank() && phone.isNotBlank() && dob.isNotBlank(),
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
         ) { Text(if (submitting) "Saving…" else "Save Client", fontSize = rsp(16)) }
 
