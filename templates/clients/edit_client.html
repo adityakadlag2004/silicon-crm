@@ -42,6 +42,16 @@
           {{ form.pan }}
         </div>
         <div>
+          {% comment %}
+          Blank on the imported book — not required here, so an old client stays
+          editable, but this is where it gets filled in one at a time.
+          {% endcomment %}
+          <label class="form-label">Date of Birth</label>
+          {{ form.date_of_birth }}
+          {% if form.date_of_birth.errors %}<div class="text-danger" style="font-size:.85rem;">{{ form.date_of_birth.errors.0 }}</div>{% endif %}
+          {% if form.instance.age is not None %}<div class="form-text">Age {{ form.instance.age }}.</div>{% endif %}
+        </div>
+        <div>
           <label class="form-label">Mapped To</label>
           {% if request.user.employee and request.user.employee.role == 'admin' %}
             {{ form.mapped_to }}

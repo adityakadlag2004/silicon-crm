@@ -405,7 +405,10 @@ def add_client(request):
             return redirect(target)
     else:
         form = ClientForm()
-    return render(request, "clients/add_client.html", {"form": form})
+    # `today` caps the date-of-birth picker — a future birth date is refused
+    # server-side anyway, but the picker should not offer it in the first place.
+    return render(request, "clients/add_client.html",
+                  {"form": form, "today": timezone.localdate().isoformat()})
 
 
 @login_required

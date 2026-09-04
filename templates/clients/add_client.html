@@ -49,6 +49,17 @@
           {% if form.pan.errors %}{{ form.pan.errors.0 }}{% else %}PAN is required (ABCDE1234F){% endif %}
         </div>
       </div>
+      <!-- Date of birth -->
+      <div class="col-md-6">
+        <label class="form-label">Date of Birth *</label>
+        <input type="date" name="date_of_birth" value="{{ form.date_of_birth.value|default_if_none:'' }}"
+               class="form-control {% if form.date_of_birth.errors %}is-invalid{% endif %}" required
+               max="{{ today }}" aria-label="Date of Birth">
+        <div class="invalid-feedback">
+          {% if form.date_of_birth.errors %}{{ form.date_of_birth.errors.0 }}{% else %}Date of birth is required{% endif %}
+        </div>
+        <div class="form-text">Their age drives the birthday call and the retirement-planning reminder at 40.</div>
+      </div>
       <!-- Address -->
       <div class="col-12">
         <label class="form-label">Address</label>

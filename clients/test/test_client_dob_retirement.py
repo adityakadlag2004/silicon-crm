@@ -83,6 +83,60 @@ class ClientFormDobTests(TestCase):
         self.assertFalse(form.is_valid())
 
 
+class AddClientPageRendersDobTests(TestCase):
+    """The form requiring a field the PAGE never draws is a blocked form.
+
+    add_client.html hand-writes every input rather than looping the form, so
+    making date_of_birth required in ClientForm silently broke every web
+    add-client submit: the browser posted nothing for it, validation failed,
+    and the template only prints errors next to fields it draws — so the page
+    came back with no visible reason. A form-level test cannot see that; this
+    posts what the rendered page actually contains.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        u = User.objects.create_user("addpage_admin", password="pw")
+        Employee.objects.create(user=u, role="admin", salary=0, active=True)
+        cls.user = u
+
+    def _as_admin(self):
+        c = DjangoClient()
+        c.force_login(self.user)
+        return c
+
+    def test_the_add_client_page_draws_a_date_of_birth_input(self):
+        html = self._as_admin().get(reverse("clients:add_client")).content.decode()
+        self.assertIn('name="date_of_birth"', html,
+                      "ClientForm requires it — the page must offer somewhere to type it")
+
+    def test_the_edit_client_page_draws_one_too(self):
+        client = Client.objects.create(id=7801, name="LEGACY", phone="9876500099")
+        html = self._as_admin().get(
+            reverse("clients:edit_client", args=[client.id])).content.decode()
+        self.assertIn('name="date_of_birth"', html)
+
+    def test_posting_exactly_what_the_page_offers_creates_the_client(self):
+        """Every field the rendered form carries, posted back — the round trip
+        a person actually makes."""
+        import re
+        c = self._as_admin()
+        html = c.get(reverse("clients:add_client")).content.decode()
+        names = set(re.findall(r'name="([a-z_]+)"', html))
+        self.assertIn("date_of_birth", names)
+        resp = c.post(reverse("clients:add_client"), {
+            "name": "Web Added", "email": "w@x.com", "phone": "9876500088",
+            "pan": "ABCDE1234F", "date_of_birth": "1990-04-02",
+            "address": "", "lumsum_investment": "0",
+        })
+        self.assertEqual(resp.status_code, 302, "a complete post must not bounce")
+        self.assertTrue(Client.objects.filter(name="WEB ADDED").exists())
+
+    def test_the_picker_cannot_offer_a_future_date(self):
+        html = self._as_admin().get(reverse("clients:add_client")).content.decode()
+        self.assertIn(f'max="{timezone.localdate().isoformat()}"', html)
+
+
 class AppClientCreateDobTests(TestCase):
     """The phone is a real add-client path — a rule enforced only in the
     browser is not enforced."""
