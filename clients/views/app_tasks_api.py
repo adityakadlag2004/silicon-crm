@@ -22,7 +22,6 @@ from ..models import (
     Link,
     LinkCategory,
     LinkFavorite,
-    RecurringTaskRule,
     Task,
     TaskActivity,
     TaskCategory,
@@ -32,8 +31,7 @@ from ..models import (
     TaskTemplate,
 )
 from ..services.tasks import (
-    GROUP_SHARED_FIELDS,
-    apply_to_group,
+    apply_edit,
     assignee_label,
     build_recurrence,
     collapse_groups,
@@ -44,7 +42,6 @@ from ..services.tasks import (
     log_activity,
     notify_mentions,
     notify_task,
-    sync_group_assignees,
 )
 from .helpers import parse_date_param
 from .. import permissions
@@ -665,83 +662,9 @@ def app_task_action(request, pk):
     elif action == "remove_subscriber":
         TaskSubscriber.objects.filter(pk=body.get("subscriber_id"), task=task).delete()
     elif action == "edit":
-        # Update every provided field at once (the native Edit sheet).
-        if body.get("title", "").strip():
-            task.title = body["title"].strip()[:255]
-        if "description" in body:
-            task.description = (body.get("description") or "").strip()
-        if body.get("priority") in dict(Task.PRIORITY_CHOICES):
-            task.priority = body["priority"]
-        if "category_id" in body:
-            cid = body.get("category_id")
-            task.category = TaskCategory.objects.filter(pk=cid).first() if cid else None
-        if "due_date" in body:
-            new_date = parse_date_param(body.get("due_date"))
-            new_time = _parse_time(body.get("due_time"))
-            if new_date != task.due_date or new_time != task.due_time:
-                task.reminded_day_before = False
-                task.reminded_same_day = False
-                task.due_alarm_sent_at = None
-            task.due_date = new_date
-            task.due_time = new_time
-            if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
-                task.status = Task.STATUS_PENDING
-        if "client_id" in body:
-            cid = body.get("client_id")
-            task.client = Client.objects.filter(pk=cid).first() if cid else None
-        # Assignees: a list reconciles the whole group (adding/removing sibling
-        # rows); the legacy single id still works for a solo task.
-        group_assignees = body.get("assignees")
-        if isinstance(group_assignees, list):
-            pass  # applied after save(), so new siblings copy the fresh fields
-        elif "assigned_to" in body:
-            aid = body.get("assigned_to")
-            new_assignee = Employee.objects.filter(pk=aid, active=True).first() if aid else None
-            if new_assignee != task.assigned_to:
-                task.acknowledged_at = None  # a new assignee must acknowledge afresh
-                task.ack_last_rung_at = None
-            task.assigned_to = new_assignee
-        if "repeat_rule" in body:
-            freq = (body.get("repeat_rule") or "").strip()
-            if freq != (task.repeat_rule or ""):
-                task.repeat_rule = freq
-                rule = task.recurring_rule
-                if not freq:
-                    # Repeat switched off — stop generating future instances.
-                    if rule:
-                        rule.is_active = False
-                        rule.save(update_fields=["is_active"])
-                elif rule:
-                    rule.frequency = freq
-                    rule.is_active = True
-                    rule.save(update_fields=["frequency", "is_active"])
-                elif freq in dict(RecurringTaskRule.FREQ_CHOICES):
-                    build_recurrence(task, freq, request.user)
-        if "silent" in body:
-            task.silent = bool(body["silent"])
-        # Replace subscribers if a list is supplied.
-        if isinstance(body.get("subscribers"), list):
-            task.subscribers.all().delete()
-            for uid in body["subscribers"]:
-                if str(uid).isdigit():
-                    TaskSubscriber.objects.get_or_create(task=task, user_id=int(uid))
-        task.save()
-        # Replace checklist if supplied.
-        if isinstance(body.get("checklist"), list):
-            task.checklist_items.all().delete()
-            for i, ct in enumerate(body["checklist"]):
-                if (ct or "").strip():
-                    TaskChecklistItem.objects.create(task=task, title=ct.strip()[:255], order=i)
-        # A multi-assignee task is N sibling rows — the shared fields must move
-        # on all of them, or the other people keep the old title/deadline.
-        apply_to_group(task, request.user, {f: getattr(task, f) for f in GROUP_SHARED_FIELDS})
-        if isinstance(group_assignees, list):
-            ids = [int(x) for x in group_assignees if str(x).isdigit()]
-            if ids:
-                sync_group_assignees(task, ids, request.user)
-        log_activity(task, request.user, TaskActivity.DESCRIPTION_UPDATED, "Task details updated.")
-        notify_task(task, request.user, "Task updated",
-                    f"“{task.title}” was updated.", event="status_changed")
+        # Update every provided field at once (the native Edit sheet). Shared
+        # with the web Edit modal — see services.tasks.apply_edit.
+        apply_edit(task, request.user, body)
     elif action == "delete":
         if not _can_delete(request, task):
             return JsonResponse({"ok": False, "error": "forbidden"}, status=403)

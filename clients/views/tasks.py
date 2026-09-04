@@ -40,12 +40,14 @@ from ..models import (
 )
 from ..services.tasks import (
     GROUP_SHARED_FIELDS,
+    apply_edit,
     apply_to_group,
     assignee_label,
     collapse_groups,
     create_notification,
     delete_task,
     group_ack_roster,
+    group_siblings,
     log_activity,
     notify_mentions,
     notify_task,
@@ -457,6 +459,10 @@ def task_detail(request, pk):
         "can_delete": _can_delete(request, task),
         # Who has actually seen this task — by name, for multi-assignee groups.
         "ack_roster": group_ack_roster(task),
+        # Prefill the Edit modal (the assign modal in edit mode): a group task
+        # is N sibling rows, so every assignee on it must come back selected.
+        "edit_assignee_ids": [t.assigned_to_id for t in group_siblings(task) if t.assigned_to_id],
+        "edit_subscriber_ids": [s.user_id for s in task.subscribers.all()],
         "is_admin": _is_admin(request),
     }
     return render(request, "tasks/detail.html", ctx)
@@ -598,6 +604,40 @@ def _maybe_create_recurrence(request, task):
     raw_max = request.POST.get("repeat_max")
     max_occ = int(raw_max) if (raw_max or "").isdigit() and int(raw_max) > 0 else None
     return build_recurrence(task, freq, request.user, end_date=end_date, max_occ=max_occ)
+
+
+# ─────────────────────────────── edit ───────────────────────────────
+
+@login_required
+@require_POST
+def task_edit(request, pk):
+    """Edit the whole task in one submit — the web half of the app's Edit sheet.
+
+    The sidebar's per-field setters can move status/priority/category/due, but
+    nothing on the web could fix a title, a description, who it is assigned to,
+    the repeat rule or the "don't ring" flag; only the phone could. Both now
+    call ``services.tasks.apply_edit``.
+    """
+    task = _visible_task_or_404(request, pk)
+    guard = _guard_edit(request, task)
+    if guard:
+        return guard
+    apply_edit(task, request.user, {
+        "title": request.POST.get("title") or "",
+        "description": request.POST.get("description") or "",
+        "priority": request.POST.get("priority"),
+        "category_id": request.POST.get("category") or None,
+        "due_date": request.POST.get("due_date"),
+        "due_time": request.POST.get("due_time"),
+        "repeat_rule": request.POST.get("repeat_rule") or "",
+        # An unticked checkbox is simply absent from the POST — that is the
+        # "ring again" case, so it has to read as False, not as "unchanged".
+        "silent": bool(request.POST.get("silent")),
+        "subscribers": request.POST.getlist("subscribers"),
+        "assignees": request.POST.getlist("assigned_to"),
+    })
+    messages.success(request, "Task updated.")
+    return redirect("clients:task_detail", pk=task.pk)
 
 
 # ─────────────────────────────── actions ───────────────────────────────

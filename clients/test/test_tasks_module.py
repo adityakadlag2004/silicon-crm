@@ -765,6 +765,71 @@ class TaskGroupEditDeleteTests(TestCase):
             reverse("clients:app_task_detail", args=[tasks[0].pk])).json()
         self.assertEqual(len(data["assignee_ids"]), 3)
 
+    # ── the web Edit form (same service as the app's edit sheet) ──
+    def _web_edit(self, task, **fields):
+        """Post the Edit modal the way the browser does: every field it shows,
+        every time — an unticked checkbox and an empty multi-select simply do
+        not appear in a real POST, so the view must read them correctly."""
+        data = {"title": task.title, "priority": task.priority,
+                "due_date": "", "due_time": "", "repeat_rule": ""}
+        data.update(fields)
+        return self._client(self.boss).post(
+            reverse("clients:task_edit", args=[task.pk]), data)
+
+    def test_web_edit_retitles_every_sibling(self):
+        tasks = self._assign_to_all("Web old title")
+        self._web_edit(tasks[0], title="Web new title")
+        self.assertEqual(Task.objects.filter(title="Web new title", is_deleted=False).count(), 3)
+        self.assertEqual(Task.objects.filter(title="Web old title", is_deleted=False).count(), 0)
+
+    def test_web_edit_changes_description_and_silent(self):
+        tasks = self._assign_to_all("Web details")
+        self._web_edit(tasks[0], description="Ring the client first.", silent="1")
+        for t in Task.objects.filter(title="Web details"):
+            self.assertEqual(t.description, "Ring the client first.")
+            self.assertTrue(t.silent, "the whole group must stop ringing, not one row")
+        # …and untick it again: an absent checkbox means False, not "unchanged".
+        self._web_edit(tasks[0], description="Ring the client first.")
+        self.assertFalse(Task.objects.get(pk=tasks[0].pk).silent)
+
+    def test_web_edit_reconciles_assignees(self):
+        tasks = self._assign_to_all("Web shrinking")
+        keep = [self.people[0].pk, self.people[1].pk]
+        self._web_edit(tasks[0], assigned_to=[str(p) for p in keep])
+        live = Task.objects.filter(title="Web shrinking", is_deleted=False)
+        self.assertEqual(live.count(), 2)
+        self.assertEqual({t.assigned_to_id for t in live}, set(keep))
+
+    def test_web_edit_rearms_the_due_ring(self):
+        tasks = self._assign_to_all("Web rearm")
+        task = tasks[0]
+        Task.objects.filter(pk=task.pk).update(
+            due_date="2026-09-01", due_time="09:00",
+            due_alarm_sent_at=timezone.now(), reminded_same_day=True)
+        self._web_edit(task, due_date="2026-09-20", due_time="16:30")
+        task.refresh_from_db()
+        self.assertEqual(str(task.due_date), "2026-09-20")
+        self.assertIsNone(task.due_alarm_sent_at, "a moved deadline must ring again")
+        self.assertFalse(task.reminded_same_day)
+
+    def test_web_edit_is_refused_to_a_stranger(self):
+        tasks = self._assign_to_all("Web guarded")
+        stranger = User.objects.create_user(username="g_stranger", password="pw")
+        Employee.objects.create(user=stranger, role="employee", salary=0, active=True)
+        c = Client()
+        c.force_login(stranger)
+        resp = c.post(reverse("clients:task_edit", args=[tasks[0].pk]),
+                      {"title": "Hijacked", "priority": "low"})
+        self.assertIn(resp.status_code, (403, 404))
+        self.assertEqual(Task.objects.filter(title="Hijacked").count(), 0)
+
+    def test_detail_page_offers_the_edit_form(self):
+        tasks = self._assign_to_all("Web editable")
+        html = self._client(self.boss).get(
+            reverse("clients:task_detail", args=[tasks[0].pk])).content.decode()
+        self.assertIn(reverse("clients:task_edit", args=[tasks[0].pk]), html)
+        self.assertIn("Edit task", html)
+
 
 class TaskSilentTests(TestCase):
     """"Don't ring": a task assigned out of office hours still lands and still

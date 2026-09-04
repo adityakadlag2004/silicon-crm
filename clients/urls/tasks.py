@@ -18,6 +18,7 @@ urlpatterns = [
     path("tasks/filters/<int:filter_id>/delete/", tasks.task_delete_filter, name="task_delete_filter"),
     path("tasks/create/", tasks.task_create, name="task_create"),
     path("tasks/<int:pk>/", tasks.task_detail, name="task_detail"),
+    path("tasks/<int:pk>/edit/", tasks.task_edit, name="task_edit"),
     path("tasks/<int:pk>/status/", tasks.task_set_status, name="task_set_status"),
     path("tasks/<int:pk>/priority/", tasks.task_set_priority, name="task_set_priority"),
     path("tasks/<int:pk>/due/", tasks.task_set_due, name="task_set_due"),

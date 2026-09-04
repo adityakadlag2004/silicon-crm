@@ -1,42 +1,50 @@
-{# Assign Task popup. Expects `employees`, `categories`, `all_users`, `priorities`. #}
+{% comment %}
+Assign Task popup. Expects `employees`, `categories`, `all_users`, `priorities`.
+Include it with `edit_task=task` (the detail page does) and the same fields
+become the Edit form for that task, prefilled and posting to task_edit — one
+set of field markup, so the two can never drift apart. Attachments, voice note
+and checklist stay create-only: the detail page owns those already.
+{% endcomment %}
 <div class="modal fade" id="assignTaskModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
-      <form method="post" action="{% url 'clients:task_create' %}" enctype="multipart/form-data" id="assignTaskForm">
+      <form method="post" action="{% if edit_task %}{% url 'clients:task_edit' edit_task.pk %}{% else %}{% url 'clients:task_create' %}{% endif %}" enctype="multipart/form-data" id="assignTaskForm">
         {% csrf_token %}
         <div class="ki-modal-header modal-header">
-          <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Assign Task</h5>
+          <h5 class="modal-title"><i class="bi bi-{% if edit_task %}pencil-square"></i> Edit Task{% else %}plus-circle"></i> Assign Task{% endif %}</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body" style="max-height:65vh; overflow-y:auto;">
           <div class="mb-3">
             <label class="form-label">Title</label>
-            <input type="text" name="title" class="form-control" required maxlength="255" placeholder="What needs to be done?">
+            <input type="text" name="title" class="form-control" required maxlength="255" placeholder="What needs to be done?" value="{{ edit_task.title|default:'' }}">
           </div>
           <div class="mb-3">
             <label class="form-label">Description</label>
-            <textarea name="description" class="form-control" rows="3" placeholder="Details, context, links…"></textarea>
+            <textarea name="description" class="form-control" rows="3" placeholder="Details, context, links…">{{ edit_task.description|default:'' }}</textarea>
           </div>
 
+          {% if not edit_task %}
           <div class="mb-3">
             <label class="form-label">Checklist</label>
             <div id="tkChecklist"></div>
             <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" id="tkAddCheck"><i class="bi bi-plus"></i> Add item</button>
           </div>
+          {% endif %}
 
           <div class="row g-3">
             <div class="col-md-6">
               <label class="form-label">Assign to <span class="text-muted" style="font-weight:400;">(pick one or more)</span></label>
               <select name="assigned_to" class="form-select" multiple size="4" aria-label="Assign to (pick one or more)">
-                {% for e in employees %}<option value="{{ e.id }}">{{ e.user.get_full_name|default:e.user.username }} ({{ e.role }})</option>{% endfor %}
+                {% for e in employees %}<option value="{{ e.id }}" {% if e.id in edit_assignee_ids %}selected{% endif %}>{{ e.user.get_full_name|default:e.user.username }} ({{ e.role }})</option>{% endfor %}
               </select>
-              <div class="form-text">Select multiple to create a copy of the task for each person. Leave blank for an unassigned task.</div>
+              <div class="form-text">{% if edit_task %}Adding someone gives them their own copy of this task; removing them takes it off their list. Leave as-is to keep the current assignees.{% else %}Select multiple to create a copy of the task for each person. Leave blank for an unassigned task.{% endif %}</div>
             </div>
             <div class="col-md-6">
               <label class="form-label">Category</label>
               <select name="category" class="form-select" id="tkCatSelect" data-create-url="{% url 'clients:task_category_create' %}" aria-label="Category">
                 <option value="">— None —</option>
-                {% for c in categories %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                {% for c in categories %}<option value="{{ c.id }}" {% if edit_task.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
                 <option value="__add__">＋ Add category…</option>
               </select>
               <div id="tkCatAdd" style="display:none;margin-top:.5rem;gap:.4rem;flex-wrap:wrap;">
@@ -50,21 +58,21 @@
             </div>
             <div class="col-md-4">
               <label class="form-label">Due date</label>
-              <input type="date" name="due_date" class="form-control" aria-label="Due date">
+              <input type="date" name="due_date" class="form-control" aria-label="Due date" value="{{ edit_task.due_date|date:'Y-m-d' }}">
             </div>
             <div class="col-md-4">
               <label class="form-label">Due time</label>
-              <input type="time" name="due_time" class="form-control" aria-label="Due time">
+              <input type="time" name="due_time" class="form-control" aria-label="Due time" value="{{ edit_task.due_time|time:'H:i' }}">
             </div>
             <div class="col-md-4">
               <label class="form-label">Priority</label>
               <select name="priority" class="form-select" aria-label="Priority">
-                {% for val,label in priorities %}<option value="{{ val }}" {% if val == 'medium' %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                {% for val,label in priorities %}<option value="{{ val }}" {% if edit_task %}{% if val == edit_task.priority %}selected{% endif %}{% elif val == 'medium' %}selected{% endif %}>{{ label }}</option>{% endfor %}
               </select>
             </div>
             <div class="col-12">
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="1" name="silent" id="tkSilent">
+                <input class="form-check-input" type="checkbox" value="1" name="silent" id="tkSilent" {% if edit_task.silent %}checked{% endif %}>
                 <label class="form-check-label" for="tkSilent">
                   <i class="bi bi-bell-slash"></i> Don’t ring the phone
                 </label>
@@ -74,7 +82,7 @@
             <div class="col-md-8">
               <label class="form-label">Subscribers (In Loop)</label>
               <select name="subscribers" class="form-select" multiple size="4" aria-label="Subscribers (In Loop)">
-                {% for u in all_users %}<option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>{% endfor %}
+                {% for u in all_users %}<option value="{{ u.id }}" {% if u.id in edit_subscriber_ids %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>{% endfor %}
               </select>
               <div class="form-text">Ctrl/Cmd-click to pick multiple. They get notified but aren't responsible.</div>
             </div>
@@ -82,11 +90,17 @@
               <label class="form-label">Repeat</label>
               <select name="repeat_rule" class="form-select" id="tkRepeat" aria-label="Repeat">
                 <option value="">Does not repeat</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
+                <option value="daily" {% if edit_task.repeat_rule == 'daily' %}selected{% endif %}>Daily</option>
+                <option value="weekly" {% if edit_task.repeat_rule == 'weekly' %}selected{% endif %}>Weekly</option>
+                <option value="monthly" {% if edit_task.repeat_rule == 'monthly' %}selected{% endif %}>Monthly</option>
               </select>
             </div>
+            {% comment %}
+            Repeat end/count is create-only: the recurrence rule already exists
+            by the time you are editing, and task_edit does not rewrite it — a
+            control that silently does nothing is worse than no control.
+            {% endcomment %}
+            {% if not edit_task %}
             <div class="col-12" id="tkRepeatEnd" style="display:none;">
               <div class="row g-3">
                 <div class="col-md-6">
@@ -100,8 +114,10 @@
                 <div class="col-12"><div class="form-text">Leave both blank to repeat forever. The first task is created now; the rest are generated automatically.</div></div>
               </div>
             </div>
+            {% endif %}
           </div>
 
+          {% if not edit_task %}
           <div class="row g-3 mt-1">
             <div class="col-md-6">
               <label class="form-label">Attachments</label>
@@ -117,10 +133,11 @@
               <audio data-voice-preview controls class="mt-2" style="display:none;width:100%;"></audio>
             </div>
           </div>
+          {% endif %}
         </div>
         <div class="modal-footer">
           <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-send"></i> Assign</button>
+          <button type="submit" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-{% if edit_task %}check-lg"></i> Save changes{% else %}send"></i> Assign{% endif %}</button>
         </div>
       </form>
     </div>
