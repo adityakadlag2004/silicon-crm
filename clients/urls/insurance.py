@@ -6,6 +6,7 @@ from ..views import insurance
 urlpatterns = [
     path("insurance/", insurance.policy_list, name="policy_list"),
     path("insurance/<int:policy_id>/", insurance.policy_detail, name="policy_detail"),
+    path("insurance/<int:policy_id>/delete/", insurance.policy_delete, name="policy_delete"),
     path("claims/", insurance.claim_list, name="claim_list"),
     path("claims/raise/", insurance.raise_claim, name="raise_claim"),
     path("claims/raise/<int:policy_id>/", insurance.raise_claim, name="raise_claim_for_policy"),

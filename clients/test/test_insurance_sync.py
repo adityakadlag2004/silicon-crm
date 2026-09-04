@@ -4,9 +4,12 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import Client as DjangoClient, TestCase
+from django.urls import reverse
 
-from clients.models import Client, Employee, InsurancePolicy, Product, Renewal, Sale
+from clients.models import (
+    AuditLog, Client, Employee, InsuranceClaim, InsurancePolicy, Product, Renewal, Sale,
+)
 from clients.services import insurance_sync, sales as sales_service
 
 
@@ -448,3 +451,108 @@ class SubProductPolicySyncTests(TestCase):
         out = StringIO()
         call_command("backfill_insurance_policies", "--apply", stdout=out)
         self.assertIn("0 polic", out.getvalue())      # idempotent
+
+
+class PolicyDeleteTests(TestCase):
+    """Removing a policy booked under the wrong product line.
+
+    Health and Life often carry the same premium, so an employee picks the
+    wrong one, approves it, and the tracker gains a policy in the wrong book.
+    Deleting it is a correction to the client's insurance record — admin only,
+    refused once real history hangs off it, and it can take the mis-booked sale
+    with it (the half that keeps the wrong figures out of the reports).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        _products()
+        u = User.objects.create_user("pd_admin", password="pw")
+        cls.admin = Employee.objects.create(user=u, role="admin", salary=0, active=True)
+        e = User.objects.create_user("pd_emp", password="pw")
+        cls.emp = Employee.objects.create(user=e, role="employee", salary=0, active=True)
+        cls.client_rec = Client.objects.create(id=6301, name="Wrong Book")
+
+    def _approved_sale(self, product="Life Insurance", number="WRONG1"):
+        sale = Sale(client=self.client_rec, employee=self.emp, product=product,
+                    amount=15000, cover_amount=900000, policy_number=number,
+                    policy_date=date(2026, 2, 1), date=date(2026, 2, 10))
+        sales_service.finalize_new_sale(sale, self.admin.user, auto_approve=True)
+        return sale, InsurancePolicy.objects.get(source_sale=sale)
+
+    def _post_delete(self, policy, user, **data):
+        c = DjangoClient()
+        c.force_login(user)
+        return c.post(reverse("clients:policy_delete", args=[policy.pk]), data)
+
+    # ── the correction itself ──
+    def test_deleting_the_policy_can_take_the_mis_booked_sale_with_it(self):
+        sale, policy = self._approved_sale()
+        resp = self._post_delete(policy, self.admin.user, with_sale="1")
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(InsurancePolicy.objects.filter(pk=policy.pk).exists())
+        self.assertFalse(Sale.objects.filter(pk=sale.pk).exists())
+
+    def test_the_sale_can_be_kept_when_only_the_tracker_row_is_wrong(self):
+        sale, policy = self._approved_sale()
+        self._post_delete(policy, self.admin.user)   # tick absent
+        self.assertFalse(InsurancePolicy.objects.filter(pk=policy.pk).exists())
+        self.assertTrue(Sale.objects.filter(pk=sale.pk).exists())
+
+    def test_deleting_a_policy_writes_an_audit_row(self):
+        _sale, policy = self._approved_sale(number="AUDIT1")
+        self._post_delete(policy, self.admin.user, with_sale="1")
+        log = AuditLog.objects.filter(action=AuditLog.ACTION_POLICY_DELETED,
+                                      target_id=policy.pk).first()
+        self.assertIsNotNone(log, "a deleted policy must leave a trail")
+        self.assertEqual(log.actor, self.admin.user)
+        self.assertEqual(log.details["policy_number"], "AUDIT1")
+
+    # ── guards ──
+    def test_a_policy_with_a_collected_renewal_is_refused(self):
+        _sale, policy = self._approved_sale(number="HASREN")
+        Renewal.objects.create(
+            client=self.client_rec, employee=self.emp, policy=policy,
+            product_type=Renewal.PRODUCT_TYPE_LIFE, renewal_date=date(2026, 2, 1),
+            premium_amount=15000, premium_collected_on=date(2026, 2, 1),
+            frequency=Renewal.FREQUENCY_YEARLY)
+        self._post_delete(policy, self.admin.user, with_sale="1")
+        self.assertTrue(InsurancePolicy.objects.filter(pk=policy.pk).exists(),
+                        "collected premium must not be orphaned by a delete")
+
+    def test_a_policy_with_a_claim_is_refused(self):
+        _sale, policy = self._approved_sale(number="HASCLAIM")
+        InsuranceClaim.objects.create(policy=policy, claim_type="Hospitalisation")
+        self._post_delete(policy, self.admin.user, with_sale="1")
+        self.assertTrue(InsurancePolicy.objects.filter(pk=policy.pk).exists(),
+                        "Claim.policy CASCADEs — a delete would take the claim too")
+
+    def test_an_employee_cannot_delete_a_policy(self):
+        _sale, policy = self._approved_sale(number="NOPERM")
+        resp = self._post_delete(policy, self.emp.user, with_sale="1")
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(InsurancePolicy.objects.filter(pk=policy.pk).exists())
+
+    # ── the other half: deleting the sale anywhere cleans up its policy ──
+    def test_deleting_the_sale_removes_its_auto_created_policy(self):
+        sale, policy = self._approved_sale(number="SALEGONE")
+        sales_service.delete_sale(sale, self.admin.user)
+        self.assertFalse(InsurancePolicy.objects.filter(pk=policy.pk).exists(),
+                         "a deleted sale must not leave its policy on the tracker")
+
+    def test_a_curated_policy_survives_its_sale_and_is_merely_detached(self):
+        sale, policy = self._approved_sale(number="CURATED")
+        policy.insurer = "HDFC Ergo"       # somebody filled in the real details
+        policy.save()
+        sales_service.delete_sale(sale, self.admin.user)
+        policy.refresh_from_db()
+        self.assertIsNone(policy.source_sale_id)
+
+    def test_the_detail_page_offers_delete_to_an_admin_only(self):
+        _sale, policy = self._approved_sale(number="BUTTON1")
+        url = reverse("clients:policy_detail", args=[policy.pk])
+        link = reverse("clients:policy_delete", args=[policy.pk])
+        c = DjangoClient()
+        c.force_login(self.admin.user)
+        self.assertIn(link, c.get(url).content.decode())
+        c.force_login(self.emp.user)
+        self.assertNotIn(link, c.get(url).content.decode())

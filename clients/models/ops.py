@@ -101,6 +101,7 @@ class AuditLog(models.Model):
     ACTION_SALE_PENDING = "sale.pending_again"
     ACTION_SALE_DELETED = "sale.deleted"
     ACTION_CLIENT_DELETED = "client.deleted"
+    ACTION_POLICY_DELETED = "policy.deleted"
     ACTION_EMPLOYEE_ROLE_CHANGED = "employee.role_changed"
 
     action = models.CharField(max_length=64, db_index=True)

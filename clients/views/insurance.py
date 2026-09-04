@@ -6,15 +6,18 @@ admin proves too clunky for daily use.
 """
 from datetime import timedelta
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET
 from django.db.models import Case, Count, IntegerField, Q, Sum, When
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
 from ..models import InsuranceClaim, InsurancePolicy
+from ..permissions import admin_required, is_admin
+from ..services import insurance_sync
 from .helpers import name_words_q
 from ..templatetags.custom_filters import inr
 
@@ -146,6 +149,38 @@ def policy_detail(request, policy_id):
         ],
         "policy": policy, "claims": claims,
         "renewals": renewals, "renewals_total": renewals_total,
+        "can_delete": is_admin(request.user),
+    })
+
+
+@admin_required
+def policy_delete(request, policy_id):
+    """Remove a policy that should never have been on the tracker.
+
+    Employees pick the product line by hand when booking a sale, and Health and
+    Life often carry the same premium — so a Health policy gets booked as Life,
+    approved, and lands in the wrong book. Admin-only: this is a correction to
+    the client's insurance record, not a tidy-up.
+    """
+    policy = get_object_or_404(
+        InsurancePolicy.objects.select_related("client", "source_sale"), pk=policy_id)
+    blockers = insurance_sync.policy_delete_blockers(policy)
+    if request.method == "POST" and not blockers:
+        number, client = policy.policy_number, policy.client.name
+        with_sale = bool(request.POST.get("with_sale")) and policy.source_sale_id
+        insurance_sync.delete_policy(policy, request.user, with_sale=bool(with_sale))
+        messages.success(request, (
+            f"Policy {number} removed from the tracker"
+            + (" — and the sale that created it." if with_sale else ".")))
+        return redirect("clients:policy_list")
+    return render(request, "insurance/policy_delete.html", {
+        "crumbs": [
+            {"label": "Insurance Tracker", "url": reverse("clients:policy_list")},
+            {"label": policy.policy_number,
+             "url": reverse("clients:policy_detail", args=[policy.pk])},
+            {"label": "Delete"},
+        ],
+        "policy": policy, "blockers": blockers, "sale": policy.source_sale,
     })
 
 

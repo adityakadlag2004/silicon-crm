@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Delete {{ policy.policy_number }}{% endblock %}
+{% block page_title %}Delete Policy{% endblock %}
+
+{% block content %}
+<div class="ki-card" style="max-width:720px;">
+  <h3 class="ki-section-title" style="margin-top:0;">
+    <i class="bi bi-exclamation-triangle" style="color:var(--ki-danger);"></i>
+    Delete policy {{ policy.policy_number }}?
+  </h3>
+
+  <div class="ki-fields">
+    <div class="ki-field"><span class="k">Client</span><span class="v">{{ policy.client.name }}</span></div>
+    <div class="ki-field"><span class="k">Type</span><span class="v">{{ policy.get_insurance_type_display }}</span></div>
+    <div class="ki-field"><span class="k">Insurer</span><span class="v">{{ policy.insurer|default:"—" }}</span></div>
+    <div class="ki-field"><span class="k">Plan</span><span class="v">{{ policy.plan_name|default:"—" }}</span></div>
+    <div class="ki-field"><span class="k">Sum Insured</span><span class="v">₹{{ policy.sum_insured|inr }}</span></div>
+    <div class="ki-field"><span class="k">Premium</span><span class="v">₹{{ policy.premium_amount|inr }}</span></div>
+    <div class="ki-field"><span class="k">Cover</span><span class="v">{{ policy.start_date|date:"d M Y"|default:"—" }} → {{ policy.end_date|date:"d M Y"|default:"—" }}</span></div>
+  </div>
+
+  {% if blockers %}
+    <div class="ki-alert ki-alert-warning mt-3">
+      <b>This policy has history, so it can't be deleted.</b>
+      <ul style="margin:.5rem 0 0 1.1rem;">
+        {% for b in blockers %}<li>{{ b }}</li>{% endfor %}
+      </ul>
+      <p style="margin:.6rem 0 0;">
+        Deleting it would take live claims with it and leave collected premium
+        pointing at nothing. If the policy is genuinely wrong, mark it
+        <b>Cancelled</b> in the admin instead, or move the renewals onto the
+        right policy first.
+      </p>
+    </div>
+    <div class="mt-3">
+      <a href="{% url 'clients:policy_detail' policy.id %}" class="ki-btn ki-btn-secondary"><i class="bi bi-arrow-left"></i> Back to policy</a>
+    </div>
+  {% else %}
+    <form method="post" class="mt-3">
+      {% csrf_token %}
+      {% if sale %}
+        <div class="ki-alert ki-alert-warning">
+          This policy was created by <b>sale #{{ sale.id }}</b> —
+          {{ sale.product }}, ₹{{ sale.amount|inr }},
+          booked by {{ sale.employee.user.get_full_name|default:sale.employee.user.username|default:"—" }}
+          on {{ sale.date|date:"d M Y" }}.
+        </div>
+        <div class="form-check" style="margin:.8rem 0;">
+          <input class="form-check-input" type="checkbox" value="1" name="with_sale" id="withSale" checked>
+          <label class="form-check-label" for="withSale">
+            <b>Delete the sale as well</b>
+          </label>
+          <div class="form-text">
+            Leave this ticked when the sale itself was booked under the wrong
+            product. The policy alone is only half the correction — the sale
+            keeps counting as {{ policy.get_insurance_type_display }} business in
+            the reports and the incentive it paid, and a re-run of
+            <code>backfill_insurance_policies</code> would recreate the policy.
+            Untick it only if the sale is right and just the tracker entry is wrong.
+          </div>
+        </div>
+      {% else %}
+        <p class="text-muted" style="font-size:.88rem;">
+          No sale is linked to this policy — it was added by hand or back-filled
+          from a renewal, so only the tracker entry is removed.
+        </p>
+      {% endif %}
+
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+        <button type="submit" class="ki-btn" style="background:var(--ki-danger);color:#fff;">
+          <i class="bi bi-trash"></i> Yes, delete
+        </button>
+        <a href="{% url 'clients:policy_detail' policy.id %}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Cancel</a>
+      </div>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}

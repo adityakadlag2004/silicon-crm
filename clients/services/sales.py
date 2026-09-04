@@ -254,5 +254,11 @@ def _finish_review(sale, actor):
 
 def delete_sale(sale, actor):
     sale._audit_actor = actor  # picked up by the AuditLog signal
+    # Its auto-created tracker policy goes with it. InsurancePolicy.source_sale
+    # is SET_NULL and nothing else clears it, so deleting a wrongly-booked sale
+    # used to leave its policy sitting on the Insurance Tracker for good — with
+    # no sale left to trace it back to.
+    from . import insurance_sync
+    insurance_sync.unsync_policy_for_sale(sale)
     sale.delete()
     recompute_sibling_sales(sale)

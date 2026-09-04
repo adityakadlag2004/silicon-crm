@@ -15,6 +15,12 @@
         {% if policy.is_expiring_soon %}<span class="ki-tag" style="--c:#B45309;">Expiring ≤30 days</span>{% endif %}
       </div>
     </div>
+    {% if can_delete %}
+    <a href="{% url 'clients:policy_delete' policy.id %}" class="ki-btn ki-btn-secondary ki-btn-sm"
+       title="Delete this policy — for a sale booked under the wrong product">
+      <i class="bi bi-trash"></i> Delete policy
+    </a>
+    {% endif %}
   </div>
   <div class="ki-rec-summary">
     <div class="ki-sum-item"><span class="k">Insurer</span><span class="v">{{ policy.insurer }}</span></div>

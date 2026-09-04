@@ -122,6 +122,51 @@ def unsync_policy_for_sale(sale: Sale) -> None:
         policy.save(update_fields=["source_sale"])
 
 
+def policy_delete_blockers(policy):
+    """What stands in the way of removing `policy`, as plain-language lines.
+
+    Empty means it is safe to delete. A policy with history is not a mistake to
+    be tidied away: ``Claim.policy`` CASCADEs, so deleting one would silently
+    take live claims and their documents with it, and ``Renewal.policy`` is
+    SET_NULL, which would leave premium already collected pointing at nothing.
+    """
+    blockers = []
+    claims = policy.claims.count()
+    if claims:
+        blockers.append(f"{claims} claim(s) filed against it")
+    renewals = policy.renewals.count()
+    if renewals:
+        blockers.append(f"{renewals} renewal(s) collected against it")
+    return blockers
+
+
+def delete_policy(policy, actor, *, with_sale=False) -> list:
+    """Remove a wrongly-created tracker policy, optionally with the sale behind it.
+
+    The case this exists for: an employee books a Health policy under Life by
+    mistake, the sale is approved, and ``sync_policy_from_sale`` writes a policy
+    into the wrong book. Deleting the policy alone is only half the correction —
+    the sale still counts as Life business in the margin reports, the incentive
+    it paid and the client's Portfolio, and re-running
+    ``backfill_insurance_policies`` would put the policy straight back. So the
+    sale can go with it.
+
+    Returns the blockers that stopped the delete (empty list = deleted).
+    """
+    blockers = policy_delete_blockers(policy)
+    if blockers:
+        return blockers
+    sale = policy.source_sale
+    policy._audit_actor = actor      # picked up by the AuditLog signal
+    policy.delete()
+    if with_sale and sale is not None:
+        # Deleted after the policy, so delete_sale's own unsync finds nothing
+        # left to do rather than racing this one.
+        from .sales import delete_sale
+        delete_sale(sale, actor)
+    return []
+
+
 def client_health_life_policies(client):
     """Active-ish Health/Life policies for a client, newest first — the list
     the add-renewal screen shows once a client is picked."""

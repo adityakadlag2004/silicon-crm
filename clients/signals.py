@@ -1,7 +1,7 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import Sum, Q
-from .models import Sale, Client, Notification, Employee, Product, AuditLog, Lead, InsuranceClaim, Task
+from .models import Sale, Client, Notification, Employee, Product, AuditLog, Lead, InsuranceClaim, InsurancePolicy, Task
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -216,6 +216,29 @@ def _audit_log_sale_delete(sender, instance, **kwargs):
             "amount": str(instance.amount),
             "product": instance.product or "",
             "employee_id": instance.employee_id,
+        },
+    )
+
+
+@receiver(post_delete, sender=InsurancePolicy)
+def _audit_log_policy_delete(sender, instance, **kwargs):
+    """A removed policy leaves only this row behind — and the Django admin
+    deletes policies too, so the trail is hung off the model, not the view."""
+    AuditLog.objects.create(
+        action=AuditLog.ACTION_POLICY_DELETED,
+        actor=getattr(instance, "_audit_actor", None),
+        target_model="InsurancePolicy",
+        target_id=instance.pk,
+        summary=(f"Policy {instance.policy_number} "
+                 f"({instance.get_insurance_type_display()}) deleted"),
+        details={
+            "policy_number": instance.policy_number,
+            "insurance_type": instance.insurance_type,
+            "insurer": instance.insurer or "",
+            "client_id": instance.client_id,
+            "source_sale_id": instance.source_sale_id,
+            "premium_amount": str(instance.premium_amount),
+            "sum_insured": str(instance.sum_insured),
         },
     )
 
