@@ -14,6 +14,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from clients.models import Sale, Task
+from clients.services import incentives
 from clients.services.tasks import create_notification
 
 
@@ -39,14 +40,21 @@ class Command(BaseCommand):
 
         due = today.replace(day=5)
         ym = f"{today.year}-{today.month:02d}"
-        pushes, tasks_made = 0, 0
+        pushes, tasks_made, skipped = 0, 0, 0
 
         sales = (
             Sale.objects.filter(emi_months__gt=0, status=Sale.STATUS_APPROVED)
-            .select_related("client", "client__mapped_to__user", "employee__user")
+            .select_related("client", "client__mapped_to__user", "employee__user",
+                            "policy")
         )
         for sale in sales:
             if not sale.client_id or not emi_window_contains(sale, today.year, today.month):
+                continue
+            # A cancelled policy is usually cancelled *because* the EMIs stopped.
+            # Chasing an instalment on a policy that no longer exists is the one
+            # call nobody should be assigned, every month, at high priority.
+            if incentives.policy_stopped(sale):
+                skipped += 1
                 continue
             # The employee who owns the client relationship chases the EMI; fall
             # back to the selling employee when the client isn't mapped.
@@ -80,5 +88,6 @@ class Command(BaseCommand):
                 pushes += 1
 
         self.stdout.write(self.style.SUCCESS(
-            f"EMI reminders: {tasks_made} task(s) created, {pushes} push(es) sent."
+            f"EMI reminders: {tasks_made} task(s) created, {pushes} push(es) sent"
+            + (f", {skipped} skipped (policy no longer active)." if skipped else ".")
         ))

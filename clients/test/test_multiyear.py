@@ -157,6 +157,30 @@ class EmiReminderCommandTests(TestCase):
         self._run_on((2026, 8, 5))
         self.assertEqual(Task.objects.filter(assign_group="emi:%d:2026-08" % self.sale.id).count(), 1)
 
+    def test_a_cancelled_policy_is_not_chased_for_its_emis(self):
+        """The policy is usually cancelled *because* the EMIs stopped. A monthly
+        high-priority "call the client for the EMI" on a policy that no longer
+        exists is the one task nobody should ever be assigned."""
+        from clients.models import InsurancePolicy, Notification, Task
+
+        InsurancePolicy.objects.create(
+            client=self.customer, policy_number="EMI1", insurer="Starwell",
+            insurance_type=InsurancePolicy.TYPE_HEALTH, source_sale=self.sale,
+            status=InsurancePolicy.STATUS_CANCELLED)
+        self._run_on((2026, 8, 4))
+        self.assertFalse(Task.objects.filter(assign_group__startswith="emi:").exists())
+        self.assertFalse(Notification.objects.filter(recipient=self.owner.user).exists())
+
+    def test_a_live_policy_is_still_chased(self):
+        from clients.models import InsurancePolicy, Task
+
+        InsurancePolicy.objects.create(
+            client=self.customer, policy_number="EMI1", insurer="Starwell",
+            insurance_type=InsurancePolicy.TYPE_HEALTH, source_sale=self.sale,
+            status=InsurancePolicy.STATUS_ACTIVE)
+        self._run_on((2026, 8, 4))
+        self.assertTrue(Task.objects.filter(assign_group__startswith="emi:").exists())
+
     def test_noop_outside_window_and_off_days(self):
         from clients.models import Task
         self._run_on((2026, 6, 4))   # sale month — before window starts

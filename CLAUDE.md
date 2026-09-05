@@ -372,12 +372,29 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   No JS: the browser already has a disclosure widget.
 - **Cancelling is the policy's status, not a new flag.** A multiyear premium is
   paid up front, but the EMIs stop and the policy goes — and then years 2..N
-  were never earned. `insurance_sync.set_policy_status()` marks the tracker
-  policy `cancelled` (`policy_cancel`, from the policy page or the Future Points
-  row, with a reason that is stamped into `policy.notes`) and
-  `incentives.accrual_schedule` reads that status, so nothing further is ever
-  scheduled. **No accrual row needs deleting: a year is only written on the day
-  it falls due.** Reinstating puts the remaining years back.
+  were never earned. `insurance_sync.set_policy_status()` writes the tracker
+  policy's status (`policy_cancel`, from the policy page or the Future Points
+  row, with a reason stamped into `policy.notes`) and
+  `incentives.accrual_schedule` reads it, so nothing further is ever scheduled.
+  **No accrual row needs deleting: a year is only written on the day it falls
+  due.** Reinstating puts the remaining years back.
+- **`incentives.policy_stopped()` is the one gate, and any non-active status
+  stops it** — lapsed is what an EMI-killed policy is often marked and matured
+  means the term is over. Nothing sets those automatically, so each is somebody's
+  deliberate act. A sale with **no** policy keeps accruing: the old book predates
+  the tracker, and silence is not cancellation.
+- **The policy is matched by `source_sale`, then by (client, policy number).**
+  A policy back-filled from a renewal carries no `source_sale`, and reading the
+  link alone left exactly those policies unable to stop anything — and their
+  seller unable to press the button. The number is scoped to the client: two
+  clients can carry the same string.
+- **`emi_reminders` reads the same gate.** The policy is usually cancelled
+  *because* the EMIs stopped, and the job was still assigning a monthly
+  high-priority "call the client for the EMI" on a policy that no longer exists.
+- `pending_accruals` prices the whole firm's book, so the rule and its slabs are
+  read **once, not per sale** (`quote` sorts slabs in Python rather than with
+  `.order_by()`, which would ignore the prefetch). 31 queries → 5 on the local
+  book; flat as the book grows, pinned by a test.
 - **Cancelling is not deleting, so it is not admin-only**: an admin may cancel
   any policy, and **the employee who sold it may cancel their own**. They are
   the one told the EMIs stopped, and the only points a cancellation takes away

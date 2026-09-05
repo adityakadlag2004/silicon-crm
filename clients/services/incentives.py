@@ -147,24 +147,41 @@ def life_bonus_status(rule, employee, fy_year):
     }
 
 
-def policy_cancelled(sale):
-    """True when the sale's tracker policy has been cancelled.
+def policy_stopped(sale):
+    """True when the sale's tracker policy is no longer live.
 
-    A multiyear premium is paid up front, but the insurer can still cancel or
-    the client can walk away — and then years 2..N were never earned. The
-    tracker policy is where that is recorded, so it is read here rather than
-    stored a second time: cancel the policy and the later years stop being
-    scheduled at all. Nothing needs deleting, because an accrual row is only
-    written on the day its year falls due.
+    A multiyear premium is paid up front, but the EMIs stop, the insurer
+    cancels or the client walks away — and then years 2..N were never earned.
+    The tracker policy is where that is recorded, so it is read here rather
+    than stored a second time: take the policy off active and the later years
+    stop being scheduled at all. Nothing needs deleting, because an accrual row
+    is only written on the day its year falls due.
+
+    **Any non-active status stops it**, not just "cancelled": lapsed is what a
+    policy killed by unpaid EMIs is often marked, and matured means the term is
+    over. Nothing sets those automatically — a person does — so this is always
+    a deliberate act, and reinstating the policy resumes the schedule.
+
+    A sale with no tracker policy at all keeps accruing: the old book has sales
+    that predate the tracker, and silence is not cancellation. The policy is
+    matched by ``source_sale`` first and by (client, policy number) second,
+    because a policy back-filled from a renewal carries no ``source_sale`` and
+    is otherwise invisible here.
     """
-    from django.core.exceptions import ObjectDoesNotExist
-
     from ..models import InsurancePolicy
 
-    try:
-        return sale.policy.status == InsurancePolicy.STATUS_CANCELLED
-    except ObjectDoesNotExist:
-        return False
+    policy = tracker_policy(sale)
+    return policy is not None and policy.status != InsurancePolicy.STATUS_ACTIVE
+
+
+def tracker_policy(sale):
+    """The tracker policy a sale belongs to: linked, or matched by number."""
+    policy = getattr(sale, "policy", None)
+    if policy is None and (sale.policy_number or "").strip():
+        from .insurance_sync import find_policy_by_number
+
+        policy = find_policy_by_number(sale.policy_number, client=sale.client)
+    return policy
 
 
 def accrual_schedule(sale):
@@ -180,7 +197,7 @@ def accrual_schedule(sale):
     years = sale.policy_years or 1
     if years < 2 or sale.status != Sale.STATUS_APPROVED or not sale._is_health_product():
         return []
-    if policy_cancelled(sale):
+    if policy_stopped(sale):
         return []
     basis = sale.renewal_basis
     if not basis:
@@ -244,7 +261,7 @@ def pending_accruals(employee=None):
     liability the book is carrying. Each row names the policy it hangs off, so
     a cancellation has something to cancel.
     """
-    from ..models import Sale
+    from ..models import IncentiveRule, Sale
 
     today = _today()
     rows = []
@@ -253,18 +270,31 @@ def pending_accruals(employee=None):
              .prefetch_related("accruals"))
     if employee is not None:
         sales = sales.filter(employee=employee)
+    # One rule lookup per product, not per sale: this reads the whole firm's
+    # book on the admin view, and _rule() plus quote()'s slab read is two
+    # queries every time it is asked.
+    rules = {}
     for sale in sales:
         if not sale._is_health_product():
             continue
         done = {a.year_index for a in sale.accruals.all()}
-        rule = sale._rule()
+        key = sale.product_ref_id or sale.product
+        if key not in rules:
+            rule = sale._rule()
+            if rule is not None:
+                # Re-read with the slabs attached: quote() reads them for every
+                # single year, and this loop prices the whole firm's book.
+                rule = (IncentiveRule.objects.prefetch_related("slabs")
+                        .filter(pk=rule.pk).first())
+            rules[key] = rule
+        rule = rules[key]
         for year_index, due, amount in accrual_schedule(sale):
             if due <= today or year_index in done:
                 continue
             q = quote(rule, amount, policy_type=sale.policy_type or "fresh", is_health=True)
             rows.append({"sale": sale, "employee": sale.employee,
                          "client": sale.client,
-                         "policy": getattr(sale, "policy", None),
+                         "policy": tracker_policy(sale),
                          "policy_number": sale.policy_number,
                          "year_index": year_index, "due": due,
                          "amount": amount, "estimate": q["total"]})
@@ -663,7 +693,9 @@ def quote(rule, amount, *, prior_volume=ZERO, prior_bonus=ZERO,
                 "volume": amount, "band": None,
                 "basis": "Port policy — earns no points."}
 
-    slabs = list(rule.slabs.all().order_by("-threshold"))
+    # Sorted in Python, not with .order_by(): a fresh queryset would ignore a
+    # prefetched slab cache and re-query for every sale a bulk caller prices.
+    slabs = sorted(rule.slabs.all(), key=lambda s: s.threshold, reverse=True)
     volume = prior_volume + amount
 
     if slabs and rule.slab_mode == IncentiveRule.MODE_RATE:

@@ -106,6 +106,80 @@ class CancellationTests(_Base):
         policy.save()
         self.assertEqual(len(inc.accrual_schedule(sale)), 2)
 
+    def test_any_non_live_status_stops_the_remaining_years(self):
+        """Cancelled is not the only way a policy dies. "Lapsed" is what an
+        EMI-killed policy is often marked, and matured means the term is over —
+        none of them should keep paying. Nothing sets these automatically, so
+        every one of them is somebody's deliberate act."""
+        for status in (InsurancePolicy.STATUS_LAPSED, InsurancePolicy.STATUS_MATURED,
+                       InsurancePolicy.STATUS_CANCELLED):
+            with self.subTest(status=status):
+                sale, policy = self.sell(number=f"FPST{status[:4]}")
+                policy.status = status
+                policy.save()
+                self.assertEqual(inc.accrual_schedule(sale), [])
+
+    def test_a_policy_linked_only_by_number_still_stops_the_years(self):
+        """A policy back-filled from a renewal carries no source_sale. Reading
+        the link alone left exactly those policies unable to stop anything."""
+        sale, policy = self.sell(number="FPBYNUM")
+        InsurancePolicy.objects.filter(pk=policy.pk).update(source_sale=None)
+        sale = Sale.objects.get(pk=sale.pk)
+        self.assertEqual(len(inc.accrual_schedule(sale)), 2)
+
+        policy.refresh_from_db()
+        policy.status = InsurancePolicy.STATUS_CANCELLED
+        policy.save()
+        sale = Sale.objects.get(pk=sale.pk)
+        self.assertEqual(inc.accrual_schedule(sale), [])
+
+    def test_the_row_finds_a_policy_matched_by_number(self):
+        sale, policy = self.sell(number="FPBYNUM2")
+        InsurancePolicy.objects.filter(pk=policy.pk).update(source_sale=None)
+        row = inc.pending_accruals(self.emp)[0]
+        self.assertEqual(row["policy"], policy)
+
+    def test_a_number_matched_policy_is_the_sellers_to_cancel(self):
+        _sale, policy = self.sell(number="FPBYNUM3")
+        InsurancePolicy.objects.filter(pk=policy.pk).update(source_sale=None)
+        self.client.force_login(self.user)
+        self.client.post(reverse("clients:policy_cancel", args=[policy.id]),
+                         {"status": "cancelled"})
+        policy.refresh_from_db()
+        self.assertEqual(policy.status, InsurancePolicy.STATUS_CANCELLED)
+
+    def test_a_policy_number_belonging_to_another_client_is_not_this_policy(self):
+        """The number is only an identity within a client — two clients can
+        carry the same string, and matching globally would let one client's
+        cancellation silence another's points."""
+        sale, policy = self.sell(number="SHARED")
+        InsurancePolicy.objects.filter(pk=policy.pk).update(source_sale=None)
+        other = Client.objects.create(name="Someone Else")
+        InsurancePolicy.objects.create(
+            client=other, policy_number="SHARED", insurer="X",
+            insurance_type=InsurancePolicy.TYPE_HEALTH,
+            status=InsurancePolicy.STATUS_CANCELLED)
+        sale = Sale.objects.get(pk=sale.pk)
+        self.assertEqual(len(inc.accrual_schedule(sale)), 2)
+
+    def test_pricing_the_book_does_not_query_per_sale(self):
+        """The admin view reads every multiyear sale in the firm. The rule and
+        its slabs are the same for all of them, so they are read once."""
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        def cost():
+            with CaptureQueriesContext(connection) as q:
+                inc.future_points()
+            return len(q)
+
+        for n in range(4):
+            self.sell(number=f"FPQ{n}")
+        four = cost()
+        for n in range(4, 12):
+            self.sell(number=f"FPQ{n}")
+        self.assertEqual(cost(), four)   # 8 more sales, not one more query
+
     def test_a_sale_with_no_tracker_policy_still_accrues(self):
         sale, policy = self.sell()
         policy.delete()

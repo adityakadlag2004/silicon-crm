@@ -16,7 +16,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import InsuranceClaim, InsurancePolicy
+from ..models import InsuranceClaim, InsurancePolicy, Sale
 from ..permissions import admin_required, is_admin
 from ..services import insurance_sync
 from .helpers import name_words_q
@@ -127,6 +127,19 @@ def policy_list(request):
     })
 
 
+def _sold_by(policy, user):
+    """True when `user` is the employee whose sale this policy came from —
+    by the source_sale link, or by the policy number when there is none."""
+    emp = getattr(user, "employee", None)
+    if emp is None:
+        return False
+    if policy.source_sale_id:
+        return policy.source_sale.employee_id == emp.id
+    return bool(policy.policy_number and Sale.objects.filter(
+        client_id=policy.client_id, policy_number=policy.policy_number,
+        status=Sale.STATUS_APPROVED, employee=emp).exists())
+
+
 @login_required
 def policy_detail(request, policy_id):
     policy = get_object_or_404(
@@ -153,9 +166,7 @@ def policy_detail(request, policy_id):
         "renewals": renewals, "renewals_total": renewals_total,
         "can_delete": is_admin(request.user),
         # Cancelling is not deleting: the employee who sold it may do it too.
-        "can_cancel": is_admin(request.user) or (
-            policy.source_sale_id and policy.source_sale.employee_id
-            == getattr(getattr(request.user, "employee", None), "id", None)),
+        "can_cancel": is_admin(request.user) or _sold_by(policy, request.user),
     })
 
 
@@ -178,6 +189,13 @@ def policy_cancel(request, policy_id):
         InsurancePolicy.objects.select_related("client", "source_sale__employee"),
         pk=policy_id)
     seller = getattr(policy.source_sale, "employee", None)
+    if seller is None and policy.policy_number:
+        # A policy back-filled from a renewal carries no source_sale, so the
+        # number is the only link back to who sold it. Without this the person
+        # holding the policy cannot cancel the very rows they are shown.
+        seller = getattr(Sale.objects.filter(
+            client=policy.client, policy_number=policy.policy_number,
+            status=Sale.STATUS_APPROVED).select_related("employee").first(), "employee", None)
     if not (is_admin(request.user) or (seller and seller == getattr(request.user, "employee", None))):
         messages.error(request, "Only an admin, or the employee who sold it, can cancel this policy.")
         return redirect("clients:policy_detail", policy_id=policy.pk)
