@@ -897,3 +897,48 @@ class TaskSilentTests(TestCase):
         row = next(r for r in rows if r["id"] == task.pk)
         self.assertIsNone(row["due_at_ms"])
         self.assertTrue(row["silent"])
+
+
+class TaskBulkStatusTests(TestCase):
+    """The list's select-all bar: one status applied to many ticked tasks."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username="b_admin", password="pw")
+        Employee.objects.create(user=cls.admin, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="b_emp", password="pw")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee",
+                                          salary=0, active=True)
+        cls.mine = [Task.objects.create(title=f"Mine {i}", created_by=cls.emp_user,
+                                        assigned_to=cls.emp)
+                    for i in range(3)]
+        cls.theirs = Task.objects.create(title="Not mine", created_by=cls.admin)
+
+    def post(self, user, ids, status="completed"):
+        c = Client()
+        c.force_login(user)
+        return c.post(reverse("clients:task_bulk_status"),
+                      {"task_ids": [str(i) for i in ids], "status": status})
+
+    def test_admin_marks_many_done(self):
+        self.post(self.admin, [t.pk for t in self.mine])
+        for t in self.mine:
+            t.refresh_from_db()
+            self.assertEqual(t.status, Task.STATUS_COMPLETED)
+            self.assertIsNotNone(t.completed_at)
+            self.assertTrue(TaskActivity.objects.filter(
+                task=t, action=TaskActivity.COMPLETED).exists())
+
+    def test_employee_cannot_touch_someone_elses_task(self):
+        self.post(self.emp_user, [self.mine[0].pk, self.theirs.pk])
+        self.mine[0].refresh_from_db()
+        self.theirs.refresh_from_db()
+        self.assertEqual(self.mine[0].status, Task.STATUS_COMPLETED)
+        self.assertEqual(self.theirs.status, Task.STATUS_PENDING)
+
+    def test_list_page_offers_select_all(self):
+        c = Client()
+        c.force_login(self.emp_user)
+        html = c.get(reverse("clients:task_my")).content.decode()
+        self.assertIn('id="tkPickAll"', html)
+        self.assertIn(f'name="task_ids" value="{self.mine[0].pk}"', html)

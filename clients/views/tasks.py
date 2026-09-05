@@ -648,22 +648,18 @@ def _guard_edit(request, task):
     return None
 
 
-@login_required
-@require_POST
-def task_set_status(request, pk):
-    task = _visible_task_or_404(request, pk)
-    guard = _guard_edit(request, task)
-    if guard:
-        return guard
-    # A bare POST means "done" — that is the one-tap tick on the calendar
-    # widget and on a lead/claim page, where there is no status to pick.
-    new = request.POST.get("status") or Task.STATUS_COMPLETED
+def _apply_status(request, task, new):
+    """Move one task to `new`, logging + notifying. True if it changed.
+
+    Shared by the single-task endpoint and the list's bulk bar, so a bulk
+    change leaves exactly the same trail as a one-by-one one.
+    """
     # "Pending" past the deadline is really Overdue — a reopen/reset must
     # never hide a blown due date.
     if new == Task.STATUS_PENDING and task.due_at and task.due_at < timezone.now():
         new = Task.STATUS_OVERDUE
     if new not in dict(Task.STATUS_CHOICES) or new == task.status:
-        return _back(request, task)
+        return False
     old = task.get_status_display()
     task.status = new
     # completed_at reflects the LATEST completion — cleared on reopen so
@@ -683,7 +679,38 @@ def task_set_status(request, pk):
                      f"{old} → {task.get_status_display()}.")
         notify_task(task, request.user, "Task status changed",
                     f"“{task.title}”: {old} → {task.get_status_display()}.", event="status_changed")
+    return True
+
+
+@login_required
+@require_POST
+def task_set_status(request, pk):
+    task = _visible_task_or_404(request, pk)
+    guard = _guard_edit(request, task)
+    if guard:
+        return guard
+    # A bare POST means "done" — that is the one-tap tick on the calendar
+    # widget and on a lead/claim page, where there is no status to pick.
+    _apply_status(request, task, request.POST.get("status") or Task.STATUS_COMPLETED)
     return _back(request, task)
+
+
+@login_required
+@require_POST
+def task_bulk_status(request):
+    """Apply one status to every task ticked on the list."""
+    new = request.POST.get("status") or Task.STATUS_COMPLETED
+    ids = request.POST.getlist("task_ids")[:500]
+    changed = skipped = 0
+    for task in _scoped_qs(request).filter(pk__in=ids):
+        if not _can_edit(request, task):
+            skipped += 1
+        elif _apply_status(request, task, new):
+            changed += 1
+    messages.success(request, f"{changed} task{'' if changed == 1 else 's'} updated.")
+    if skipped:
+        messages.warning(request, f"{skipped} skipped — you cannot edit them.")
+    return redirect(request.META.get("HTTP_REFERER") or "clients:task_all")
 
 
 @login_required

@@ -10,6 +10,14 @@
 {# ── List ── #}
 <div class="tk-view" data-view="list">
   {% if tasks %}
+    <form id="tkBulkForm" method="post" action="{% url 'clients:task_bulk_status' %}" class="tk-bulk">
+      {% csrf_token %}
+      <label class="tk-bulk-all"><input type="checkbox" id="tkPickAll"> Select all</label>
+      <span class="tk-bulk-n" id="tkPickCount">0 selected</span>
+      <button type="submit" name="status" value="completed" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check-lg"></i> Mark done</button>
+      <button type="submit" name="status" value="in_progress" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-play-fill"></i> In progress</button>
+      <button type="submit" name="status" value="pending" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reopen</button>
+    </form>
     <div class="tk-list">
       {% for task in tasks %}{% include "tasks/_task_card.html" %}{% endfor %}
     </div>

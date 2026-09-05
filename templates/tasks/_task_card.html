@@ -1,5 +1,9 @@
 {# One task card. Expects `task` (with .can_check). Set `draggable_card=True` for Kanban. #}
 <div class="tk-card p-{{ task.priority }}" {% if draggable_card %}draggable="true" data-task-id="{{ task.pk }}"{% endif %}>
+  {% if task.can_check and not draggable_card %}
+    <input type="checkbox" class="tk-pick" form="tkBulkForm" name="task_ids" value="{{ task.pk }}"
+           aria-label="Select task #{{ task.pk }}">
+  {% endif %}
   {% if task.can_check %}
     <form method="post" action="{% url 'clients:task_set_status' task.pk %}" class="tk-check-form">{% csrf_token %}
       <input type="hidden" name="status" value="{% if task.status == 'completed' %}pending{% else %}completed{% endif %}">

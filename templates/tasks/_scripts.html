@@ -23,6 +23,30 @@
     showView(toggle.dataset.default || 'list');
   }
 
+  /* ---------- Bulk select on the list ---------- */
+  var bulk = document.getElementById('tkBulkForm');
+  if(bulk){
+    var picks = Array.prototype.slice.call(document.querySelectorAll('.tk-pick'));
+    var all = document.getElementById('tkPickAll'), count = document.getElementById('tkPickCount');
+    var acts = bulk.querySelectorAll('button[name=status]');
+    function sync(){
+      var n = picks.filter(function(c){ return c.checked; }).length;
+      count.textContent = n + ' selected';
+      all.checked = n > 0 && n === picks.length;
+      all.indeterminate = n > 0 && n < picks.length;
+      acts.forEach(function(b){ b.disabled = !n; });
+    }
+    all.addEventListener('change', function(){
+      picks.forEach(function(c){ c.checked = all.checked; }); sync();
+    });
+    picks.forEach(function(c){ c.addEventListener('change', sync); });
+    bulk.addEventListener('submit', function(e){
+      var n = picks.filter(function(c){ return c.checked; }).length;
+      if(!n || !confirm('Update ' + n + ' task' + (n===1?'':'s') + '?')) e.preventDefault();
+    });
+    sync();
+  }
+
   /* ---------- Kanban drag & drop ---------- */
   var dragId = null;
   document.querySelectorAll('.tk-card[draggable=true]').forEach(function(card){

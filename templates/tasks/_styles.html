@@ -53,6 +53,12 @@
   .tk-metric.is-done .v { color:#16a34a; }
 
   /* Task card */
+  .tk-bulk { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-bottom:.6rem;
+    padding:.5rem .7rem; border:1px solid var(--ki-card-border,#e5e7eb); border-radius:10px; }
+  .tk-bulk[hidden] { display:none; }
+  .tk-bulk-all { display:inline-flex; align-items:center; gap:.4rem; font-weight:600; font-size:.85rem; margin:0; }
+  .tk-bulk-n { font-size:.8rem; color:var(--ki-text-secondary,#6b7280); margin-right:auto; }
+  .tk-pick { flex:0 0 auto; width:18px; height:18px; margin-top:.15rem; }
   .tk-list { display:flex; flex-direction:column; gap:.55rem; }
   .tk-card { display:flex; align-items:flex-start; gap:.55rem; background:var(--ki-card-bg,#fff);
     border:1px solid var(--ki-card-border,#e5e7eb);
