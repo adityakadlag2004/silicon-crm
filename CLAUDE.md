@@ -388,8 +388,16 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - Deleting a policy is still separate and still blocked by claims/renewals
   (`policy_delete_blockers`); cancelling is the answer when the record has to
   stay.
-- `clients.test.test_future_points` pins the statement, the cancellation and
-  the page.
+- **The page is a personal statement.** A plain employee sees only their own
+  rows — no employee picker, and `?employee=` is ignored for them, so the URL
+  is not a way round it. Admins and managers get the whole firm with a picker.
+- `seed_demo_crm` seeds 10 multiyear health sales (2- and 3-year, spread across
+  employees, months and three financial years, each with its tracker policy) so
+  the drill-down has content locally. `--undo` takes them with the demo clients.
+  Local dev also needs `seed_incentive_structure` — an old rules table quotes
+  these years at the pre-2026 unit rate and every row reads ₹15.
+- `clients.test.test_future_points` pins the statement, the scoping, the
+  cancellation and the page.
 
 ## Employee incentive (points = rupees)
 

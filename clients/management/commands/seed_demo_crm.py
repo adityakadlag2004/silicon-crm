@@ -7,7 +7,8 @@ covers the Tasks and Links modules.
 Everything created here is tagged so it can be removed again exactly:
   * demo clients use ids from DEMO_CLIENT_ID_BASE upward
   * demo households use codes starting DEMO_PREFIX
-  * demo policies use policy numbers starting DEMO_PREFIX
+  * demo policies (and the multiyear sales behind them) use policy numbers
+    starting DEMO_PREFIX
   * demo leads use ids from DEMO_LEAD_ID_BASE upward (deleting one takes its
     requirements, stage history, follow-ups and remarks with it)
 Nothing outside those ranges is ever touched, so running this against a
@@ -35,6 +36,7 @@ from clients.models import (
     LeadRemark,
     LeadStageEvent,
     Product,
+    Sale,
     Task,
 )
 
@@ -138,11 +140,12 @@ class Command(BaseCommand):
             policies = self._seed_policies(clients, emps)
             claims = self._seed_claims(policies, emps)
             leads = self._seed_leads(emps)
+            sales = self._seed_multiyear_sales(clients, emps)
 
         self.stdout.write(self.style.SUCCESS(
             f"Seeded {len(families)} households, {len(clients)} clients, "
             f"{len(policies)} policies, {len(claims)} claims, "
-            f"{len(leads)} leads."))
+            f"{len(leads)} leads, {len(sales)} multiyear health sales."))
         self.stdout.write("Remove it again with:  manage.py seed_demo_crm --undo")
 
     # ── seeding ──────────────────────────────────────────────────────────
@@ -360,6 +363,69 @@ class Command(BaseCommand):
 
         return out
 
+    def _seed_multiyear_sales(self, clients, emps):
+        """Multiyear health policies — the book behind the Future Points page.
+
+        A 2- or 3-year premium is paid up front and credited one year at a
+        time, so each of these sales owes its seller points on anniversaries
+        still to come. Started inside the last year so every later year is in
+        the future, and spread across employees and months so the FY → month →
+        policy drill-down has something in each level.
+        """
+        product = Product.objects.filter(code="HEALTH_INS").first()
+        if not (product and emps):
+            self.stdout.write(self.style.WARNING(
+                "No HEALTH_INS product or no active employees — skipped multiyear sales."))
+            return []
+
+        today = timezone.localdate()
+        out = []
+        for n, client in enumerate(clients[:12]):
+            years = 3 if n % 2 else 2
+            annual = [76_209, 41_500, 128_400, 63_750][n % 4]
+            start = today - timedelta(days=[20, 75, 140, 210, 300][n % 5])
+            number = f"{DEMO_PREFIX}MY{70000 + n:05d}"
+            employee = emps[n % len(emps)]
+
+            sale, created = Sale.objects.get_or_create(
+                client=client, policy_number=number,
+                defaults={
+                    "employee": employee,
+                    "product": product.name,
+                    "product_ref": product,
+                    "amount": annual * years,
+                    "cover_amount": 700_000,
+                    "date": start,
+                    "policy_date": start,
+                    "policy_type": "fresh",
+                    "policy_years": years,
+                    "emi_months": [0, 5, 8, 11][n % 4],
+                    "status": Sale.STATUS_APPROVED,
+                    "policy_doc_submitted": bool(n % 3),
+                },
+            )
+            InsurancePolicy.objects.get_or_create(
+                policy_number=number,
+                defaults={
+                    "client": client,
+                    "insurer": random.choice(INSURERS),
+                    "plan_name": random.choice(HEALTH_PLANS),
+                    "insurance_type": InsurancePolicy.TYPE_HEALTH,
+                    "status": InsurancePolicy.STATUS_ACTIVE,
+                    "sum_insured": 700_000,
+                    "premium_amount": annual,
+                    "start_date": start,
+                    "end_date": start + timedelta(days=365 * years),
+                    "term_months": 12 * years,
+                    "nominee_name": client.name.split()[0] + " (spouse)",
+                    "nominee_relationship": "Spouse",
+                    "relationship_manager": employee,
+                    "source_sale": sale,
+                },
+            )
+            out.append(sale)
+        return out
+
     # ── undo ─────────────────────────────────────────────────────────────
 
     def _undo(self):
@@ -367,13 +433,17 @@ class Command(BaseCommand):
         policies = InsurancePolicy.objects.filter(policy_number__startswith=DEMO_PREFIX)
         claims = InsuranceClaim.objects.filter(policy__in=policies)
         clients = Client.objects.filter(id__gte=DEMO_CLIENT_ID_BASE)
+        # Sales cascade off the client anyway; deleted first so the count is
+        # honest and so their accruals go with them.
+        sales = Sale.objects.filter(client_id__gte=DEMO_CLIENT_ID_BASE)
         families = Family.objects.filter(code__startswith=DEMO_PREFIX)
         leads = Lead.objects.filter(id__gte=DEMO_LEAD_ID_BASE)
 
-        counts = (claims.count(), policies.count(),
+        counts = (claims.count(), policies.count(), sales.count(),
                   clients.count(), families.count(), leads.count())
         claims.delete()
         policies.delete()
+        sales.delete()
         # Requirements, stage history, follow-ups and remarks cascade off these.
         leads.delete()
         # Clear the head FK first so deleting members doesn't trip on it.
@@ -382,5 +452,5 @@ class Command(BaseCommand):
         families.delete()
 
         self.stdout.write(self.style.SUCCESS(
-            "Removed demo data: %d claims, %d policies, "
+            "Removed demo data: %d claims, %d policies, %d sales, "
             "%d clients, %d households, %d leads." % counts))

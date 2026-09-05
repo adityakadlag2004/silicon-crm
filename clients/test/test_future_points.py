@@ -122,6 +122,31 @@ class PageTests(_Base):
         self.assertIn("FY 27-28", html)
         self.assertIn("Jun 2027", html)
 
+    def test_an_employee_never_sees_anyone_elses_points(self):
+        """The page is a personal statement: no picker, and nothing on it that
+        belongs to somebody else."""
+        self.sell()
+        other = User.objects.create_user("fp_other_seller", password="x")
+        other_emp = Employee.objects.create(user=other, role="employee")
+        sale, _p = self.sell(number="FPOTHER")
+        Sale.objects.filter(pk=sale.pk).update(employee=other_emp)
+
+        self.client.force_login(self.user)
+        html = self.client.get(reverse("clients:future_points")).content.decode()
+        self.assertIn("FPPOL1", html)
+        self.assertNotIn("FPOTHER", html)
+        self.assertNotIn("Everyone", html)          # no employee picker
+        self.assertEqual(inc.future_points(self.emp)["count"], 2)   # their two years only
+
+    def test_an_employee_cannot_read_another_persons_statement_by_url(self):
+        self.sell()
+        other = User.objects.create_user("fp_nosy", password="x")
+        Employee.objects.create(user=other, role="employee")
+        self.client.force_login(other)
+        html = self.client.get(
+            reverse("clients:future_points") + f"?employee={self.emp.id}").content.decode()
+        self.assertNotIn("FPPOL1", html)
+
     def test_the_seller_can_cancel_their_own_policy(self):
         """The employee is the one told the EMIs stopped, and the only points a
         cancellation takes away are theirs."""
