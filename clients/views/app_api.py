@@ -73,6 +73,14 @@ def app_me(request):
     })
 
 
+def _product_rows(qs):
+    """product_mix rows in the app's JSON shape."""
+    return [
+        {"name": b["name"], "amount": _money(b["amount"]), "count": b["count"]}
+        for b in product_mix(qs)
+    ]
+
+
 @login_required
 @require_GET
 def app_dashboard(request):
@@ -134,15 +142,6 @@ def app_dashboard(request):
             .annotate(amount=Sum("amount"), n=Count("id")).order_by("-amount")[:6]
         ]
 
-        # Month-to-date business per product CATEGORY (1st of month → today).
-        month_start = today.replace(day=1)
-        data["product_mtd"] = [
-            {"name": b["name"], "amount": _money(b["amount"]), "count": b["count"]}
-            for b in product_mix(Sale.objects.filter(
-                status=Sale.STATUS_APPROVED, date__gte=month_start, date__lte=today,
-            ))
-        ]
-
         # Team call activity today (within the office-hours window)
         from ..models import CallLogEntry, CallTrackingSettings
         cfg = CallTrackingSettings.current()
@@ -177,16 +176,6 @@ def app_dashboard(request):
             "justified": salary > 0 and earned >= salary,
         }
 
-        # Own month-to-date business per product
-        month_start = today.replace(day=1)
-        data["product_mtd"] = [
-            {"name": b["name"], "amount": _money(b["amount"]), "count": b["count"]}
-            for b in product_mix(Sale.objects.filter(
-                employee=emp, status=Sale.STATUS_APPROVED,
-                date__gte=month_start, date__lte=today,
-            ))
-        ]
-
         # Live campaigns the employee can earn extra on
         from ..models import Campaign, CampaignProduct
         camps = Campaign.objects.filter(
@@ -209,6 +198,15 @@ def app_dashboard(request):
                     "products": products,
                 })
         data["active_campaigns"] = active_campaigns
+
+    # Business per product CATEGORY, two windows off the same scoped
+    # queryset: month-to-date and today. `approved` is already scoped (firm
+    # for an admin, own sales for everyone else), so both branches read it.
+    if is_admin or emp is not None:
+        month_start = today.replace(day=1)
+        data["product_mtd"] = _product_rows(
+            approved.filter(date__gte=month_start, date__lte=today))
+        data["product_today"] = _product_rows(approved.filter(date=today))
 
     # ── SPANCO pipeline ──
     # The two things both web dashboards lead with and the app had neither of:

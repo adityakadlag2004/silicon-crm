@@ -2,6 +2,7 @@
 
 Run: venv_new/bin/python manage.py test clients.test.test_app_api -v 2
 """
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -64,6 +65,20 @@ class AppDashboardTests(TestCase):
         self.assertIn("team_calls_today", data)
         self.assertEqual(sum(p["amount"] for p in data["product_mtd"]), 5000.0)  # only approved
         self.assertTrue(any(r["name"] for r in data["leaderboard_today"]))
+
+    def test_product_today_sits_beside_the_month(self):
+        """Same rows, today's window — the app prints it under the month."""
+        for user in (self.admin_user, self.emp_user):
+            data = self._get(user).json()
+            # Every sale in this fixture is dated today, so the two windows
+            # agree; a pending sale is in neither.
+            self.assertEqual(data["product_today"], data["product_mtd"])
+            self.assertEqual(sum(p["amount"] for p in data["product_today"]), 5000.0)
+
+        yesterday = timezone.localdate() - timedelta(days=1)
+        Sale.objects.filter(status=Sale.STATUS_APPROVED).update(date=yesterday)
+        data = self._get(self.emp_user).json()
+        self.assertEqual(data["product_today"], [])
 
 
 class AppScreenApiTests(TestCase):
