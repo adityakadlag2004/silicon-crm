@@ -2102,10 +2102,15 @@ def app_client_create(request):
     if not phone:
         return JsonResponse({"ok": False, "error": "Phone number is required."}, status=400)
 
-    from ..forms import validate_pan
+    from ..forms import validate_dob, validate_pan
     from django.core.exceptions import ValidationError as _VErr
     try:
         pan = validate_pan(body.get("pan"), required=True)
+        # Mandatory here as well as on the web form: guarding only the
+        # browser would let every phone-added client skip it, which is the
+        # whole of the rule. Old clients keep their blank and are filled in
+        # on KYC Issues.
+        dob = validate_dob(body.get("date_of_birth"))
     except _VErr as e:
         return JsonResponse({"ok": False, "error": e.messages[0]}, status=400)
 
@@ -2120,22 +2125,6 @@ def app_client_create(request):
             mapped_to = None
         else:
             mapped_to = Employee.objects.filter(pk=raw, active=True).first()
-
-    # Mandatory here as well as on the web form: guarding only the browser
-    # would let every phone-added client skip it, which is the whole of the
-    # rule. Old clients keep their blank and are filled in on KYC Issues.
-    raw_dob = str(body.get("date_of_birth") or "").strip()
-    if not raw_dob:
-        return JsonResponse({"ok": False, "error": "Date of birth is required."}, status=400)
-    try:
-        dob = date.fromisoformat(raw_dob)
-    except ValueError:
-        return JsonResponse({"ok": False, "error": "Date of birth must be YYYY-MM-DD."}, status=400)
-    today = timezone.localdate()
-    if dob > today:
-        return JsonResponse({"ok": False, "error": "Date of birth cannot be in the future."}, status=400)
-    if dob.year < today.year - 120:
-        return JsonResponse({"ok": False, "error": "Check the year — that date of birth is over 120 years ago."}, status=400)
 
     client = Client.objects.create(
         name=name[:255],

@@ -1,4 +1,5 @@
 import re
+from datetime import date
 
 from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
@@ -22,6 +23,32 @@ def validate_pan(raw, required=False):
     if not PAN_RE.fullmatch(value):
         raise forms.ValidationError("Enter a valid PAN (format: ABCDE1234F).")
     return value
+
+
+def validate_dob(raw, required=True):
+    """Normalize + validate a date of birth. Returns a date (or None when
+    blank and not allowed to be), raises forms.ValidationError otherwise.
+
+    One implementation for all three add-client doors — the web form, the
+    app API and the renewal page's quick-add modal. A rule guarded in only
+    some of them is not a rule.
+    """
+    if raw in (None, ""):
+        if required:
+            raise forms.ValidationError("Date of birth is required.")
+        return None
+    dob = raw
+    if not isinstance(dob, date):
+        try:
+            dob = date.fromisoformat(str(raw).strip())
+        except ValueError:
+            raise forms.ValidationError("Date of birth must be YYYY-MM-DD.")
+    today = timezone.localdate()
+    if dob > today:
+        raise forms.ValidationError("Date of birth cannot be in the future.")
+    if dob.year < today.year - 120:
+        raise forms.ValidationError("Check the year — that date of birth is over 120 years ago.")
+    return dob
 
 
 def _sale_products():
@@ -491,18 +518,8 @@ class ClientForm(forms.ModelForm):
         A typo'd year is worse than a blank — "2026" makes a newborn and
         "1826" a 200-year-old, and both would sit in the age reports forever.
         """
-        dob = self.cleaned_data.get("date_of_birth")
         is_add_flow = not getattr(self.instance, "pk", None)
-        if dob is None:
-            if is_add_flow:
-                raise forms.ValidationError("Date of birth is required.")
-            return dob
-        today = timezone.localdate()
-        if dob > today:
-            raise forms.ValidationError("Date of birth cannot be in the future.")
-        if dob.year < today.year - 120:
-            raise forms.ValidationError("Check the year — that date of birth is over 120 years ago.")
-        return dob
+        return validate_dob(self.cleaned_data.get("date_of_birth"), required=is_add_flow)
 
     def clean_lumsum_investment(self):
         val = self.cleaned_data.get("lumsum_investment")

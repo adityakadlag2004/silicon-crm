@@ -171,6 +171,51 @@ class AppClientCreateDobTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
 
+class RenewalQuickAddDobTests(TestCase):
+    """The third add-client door: the renewal page's quick-add modal. It is
+    now offered up front (not only when a search finds nothing), so it must
+    ask for the same date of birth the other two doors do."""
+
+    @classmethod
+    def setUpTestData(cls):
+        u = User.objects.create_user("dob_ren", password="pw")
+        cls.emp = Employee.objects.create(user=u, role="employee", salary=0, active=True)
+
+    def _post(self, **kw):
+        body = {"name": "Renewal Client", "phone": "9876500033",
+                "email": "r@example.com", "date_of_birth": _dob_for_age(41).isoformat()}
+        body.update(kw)
+        c = DjangoClient()
+        c.force_login(self.emp.user)
+        return c.post(reverse("clients:quick_add_client_for_renewal"),
+                      data=json.dumps(body), content_type="application/json")
+
+    def test_it_refuses_a_client_with_no_date_of_birth(self):
+        resp = self._post(date_of_birth="")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("Date of birth", resp.json()["error"])
+        self.assertFalse(Client.objects.filter(name="RENEWAL CLIENT").exists())
+
+    def test_it_stores_the_date_of_birth(self):
+        resp = self._post()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Client.objects.get(name="RENEWAL CLIENT").age, 41)
+
+    def test_it_refuses_a_future_date_of_birth(self):
+        resp = self._post(date_of_birth=(timezone.localdate() + timedelta(days=1)).isoformat())
+        self.assertEqual(resp.status_code, 400)
+
+    def test_the_page_offers_the_button_and_the_field_up_front(self):
+        c = DjangoClient()
+        c.force_login(self.emp.user)
+        html = c.get(reverse("clients:add_renewal")).content.decode()
+        self.assertIn('id="quick-client-dob"', html)
+        # The button is no longer hidden until a search comes back empty.
+        self.assertNotIn('id="quick-add-client-btn" class="ki-btn ki-btn-secondary mt-2" '
+                         'data-bs-toggle="modal" data-bs-target="#quickAddClientModal" '
+                         'style="display:none;"', html)
+
+
 class KycDobFillTests(TestCase):
     @classmethod
     def setUpTestData(cls):

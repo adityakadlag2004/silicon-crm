@@ -52,7 +52,7 @@
             <input type="hidden" name="client" id="client-id" value="{% if client %}{{ client.id }}{% elif form.instance.client_id %}{{ form.instance.client_id }}{% elif form.initial.client %}{{ form.initial.client }}{% endif %}" required>
             <div id="client-results" class="list-group position-absolute w-100 shadow-sm" style="z-index:1000;max-height:240px;overflow-y:auto;border-radius:0 0 8px 8px;"></div>
           </div>
-          <button type="button" id="quick-add-client-btn" class="ki-btn ki-btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#quickAddClientModal" style="display:none;">
+          <button type="button" id="quick-add-client-btn" class="ki-btn ki-btn-secondary mt-2" data-bs-toggle="modal" data-bs-target="#quickAddClientModal">
             <i class="bi bi-person-plus"></i> Add New Client
           </button>
           {% if form.client.errors %}<div class="text-danger small mt-1">{{ form.client.errors|striptags }}</div>{% endif %}
@@ -203,6 +203,11 @@
           <input type="email" class="form-control" id="quick-client-email" placeholder="Email" required style="text-transform: uppercase;">
         </div>
         <div class="mb-2">
+          <label class="form-label" for="quick-client-dob">Date of Birth <span class="text-danger">*</span></label>
+          <input type="date" class="form-control" id="quick-client-dob" max="{% now 'Y-m-d' %}" required>
+          <div class="form-text">Drives the birthday and retirement-planning reminders.</div>
+        </div>
+        <div class="mb-2">
           <label class="form-label">Address</label>
           <textarea class="form-control" id="quick-client-address" rows="2" placeholder="Address"></textarea>
         </div>
@@ -263,6 +268,8 @@ document.addEventListener("DOMContentLoaded", function () {
     searchInput.style.display = "";
     searchInput.value = "";
     searchInput.focus();
+    const btn = document.getElementById("quick-add-client-btn");
+    if (btn) btn.style.display = "";
     const box = document.getElementById("client-policies");
     if (box) box.style.display = "none";
   };
@@ -373,10 +380,8 @@ document.addEventListener("DOMContentLoaded", function () {
           resultsDiv.innerHTML = "";
           if (!data.results || data.results.length === 0) {
             resultsDiv.innerHTML = '<div class="list-group-item text-muted py-3">No matches found</div>';
-            quickAddClientBtn.style.display = "inline-flex";
             return;
           }
-          quickAddClientBtn.style.display = "none";
           data.results.forEach(client => {
             const item = document.createElement("button");
             item.type = "button";
@@ -388,6 +393,7 @@ document.addEventListener("DOMContentLoaded", function () {
               clientIdField.value = client.id;
               selectedName.textContent = client.text;
               selectedDiv.style.display = "block";
+              quickAddClientBtn.style.display = "none";
               resultsDiv.innerHTML = "";
               loadClientPolicies(client.id);
             };
@@ -416,6 +422,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const phoneInput = document.getElementById("quick-client-phone");
     const emailInput = document.getElementById("quick-client-email");
     const addressInput = document.getElementById("quick-client-address");
+    const dobInput = document.getElementById("quick-client-dob");
 
     [nameInput, phoneInput, emailInput, addressInput].forEach(function(el) {
       if (el) el.value = (el.value || "").toUpperCase();
@@ -426,10 +433,11 @@ document.addEventListener("DOMContentLoaded", function () {
       phone: (phoneInput.value || "").trim(),
       email: (emailInput.value || "").trim(),
       address: (addressInput.value || "").trim(),
+      date_of_birth: (dobInput.value || "").trim(),
     };
 
-    if (!payload.name || !payload.phone || !payload.email) {
-      quickClientError.textContent = 'Name, phone and email are required.';
+    if (!payload.name || !payload.phone || !payload.email || !payload.date_of_birth) {
+      quickClientError.textContent = 'Name, phone, email and date of birth are required.';
       quickClientError.style.display = 'block';
       return;
     }
@@ -454,6 +462,7 @@ document.addEventListener("DOMContentLoaded", function () {
         selectedDiv.style.display = "block";
         searchInput.style.display = "none";
         quickAddClientBtn.style.display = "none";
+        loadClientPolicies(data.client.id);
         const modalEl = document.getElementById('quickAddClientModal');
         const modal = bootstrap.Modal.getInstance(modalEl);
         if (modal) modal.hide();
@@ -468,6 +477,7 @@ document.addEventListener("DOMContentLoaded", function () {
     selectedName.textContent = "{{ client_label|default:'Client selected'|escapejs }}" || "Client selected";
     selectedDiv.style.display = "block";
     searchInput.style.display = "none";
+    quickAddClientBtn.style.display = "none";
   }
 
   ["quick-client-name", "quick-client-phone", "quick-client-email", "quick-client-address"].forEach(function(id) {

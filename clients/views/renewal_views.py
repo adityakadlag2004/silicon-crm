@@ -48,6 +48,15 @@ def quick_add_client_for_renewal(request):
 	if not name or not phone or not email:
 		return JsonResponse({"ok": False, "error": "Name, phone and email are required."}, status=400)
 
+	# The third add-client door, and it used to be the one with no date of
+	# birth at all — the same shared rule as the web form and the app API.
+	from ..forms import validate_dob
+	from django.core.exceptions import ValidationError as _VErr
+	try:
+		dob = validate_dob(payload.get("date_of_birth"))
+	except _VErr as e:
+		return JsonResponse({"ok": False, "error": e.messages[0]}, status=400)
+
 	user_emp = getattr(request.user, "employee", None)
 	client = Client(
 		name=name,
@@ -55,6 +64,7 @@ def quick_add_client_for_renewal(request):
 		email=email or None,
 		address=address or None,
 		pan=pan or None,
+		date_of_birth=dob,
 	)
 
 	if user_emp and user_emp.role == "employee":
