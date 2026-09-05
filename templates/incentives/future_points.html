@@ -5,18 +5,23 @@
 
 {% block content %}
 <style>
-  .fp-year > summary { list-style:none; cursor:pointer; padding:.75rem 1rem; display:flex;
-                       align-items:center; gap:.6rem; font-weight:700; }
-  .fp-year > summary::-webkit-details-marker { display:none; }
-  .fp-year > summary::before { content:"\25B8"; color:var(--ki-text-secondary); font-size:.85rem; }
-  .fp-year[open] > summary::before { content:"\25BE"; }
-  .fp-year > summary .fp-amt { margin-left:auto; font-variant-numeric:tabular-nums; }
-  .fp-year + .fp-year { border-top:1px solid var(--ki-card-border); }
-  .fp-month { font-weight:600; background:var(--ki-bg, #f8f9fa); }
   .fp-head { display:flex; padding:.6rem 1rem; font-weight:700; font-size:.82rem;
              text-transform:uppercase; letter-spacing:.02em; background:#DBEAFE;
              color:var(--ki-dark); }
-  .fp-head .fp-amt { margin-left:auto; }
+  .fp-year > summary, .fp-month > summary { list-style:none; cursor:pointer;
+             display:flex; align-items:center; gap:.6rem; }
+  .fp-year > summary::-webkit-details-marker,
+  .fp-month > summary::-webkit-details-marker { display:none; }
+  .fp-year > summary::before, .fp-month > summary::before {
+             content:"\25B8"; color:var(--ki-text-secondary); font-size:.8rem; }
+  .fp-year[open] > summary::before, .fp-month[open] > summary::before { content:"\25BE"; }
+  .fp-year > summary { padding:.75rem 1rem; font-weight:700; }
+  .fp-year + .fp-year { border-top:1px solid var(--ki-card-border); }
+  .fp-month > summary { padding:.55rem 1rem .55rem 2rem; font-weight:600;
+             background:var(--ki-bg, #f8f9fa); border-top:1px solid var(--ki-card-border); }
+  .fp-amt { margin-left:auto; font-variant-numeric:tabular-nums; }
+  .fp-sub { color:var(--ki-text-secondary); font-weight:500; font-size:.82rem; }
+  .fp-policies { padding:0 1rem 1rem 2rem; }
 </style>
 
 <div class="ki-card mb-3">
@@ -60,64 +65,89 @@
   </div>
   {% for y in data.years %}
   <details class="fp-year" {% if forloop.first %}open{% endif %}>
-    <summary>{{ y.label }}<span class="fp-amt">₹{{ y.points|inr }}</span></summary>
-    <table class="ki-table">
-      <thead>
-        <tr>
-          <th>Month / Policy</th><th>Client</th><th>Year</th>
-          <th class="text-end">Premium (₹)</th><th class="text-end">Points (₹)</th>
-          {% if can_cancel %}<th></th>{% endif %}
-        </tr>
-      </thead>
-      <tbody>
-      {% for m in y.months %}
-        <tr class="fp-month">
-          <td>{{ m.date|date:"M Y" }}</td><td></td><td></td>
-          <td class="text-end">{{ m.amount|inr }}</td>
-          <td class="text-end">{{ m.points|inr }}</td>
-          {% if can_cancel %}<td></td>{% endif %}
-        </tr>
-        {% for r in m.rows %}
-        <tr>
-          <td>
-            {% if r.policy %}
-              <a href="{% url 'clients:policy_detail' r.policy.id %}">{{ r.policy.policy_number }}</a>
-            {% else %}
-              {{ r.policy_number|default:"—" }}
-              <span class="text-muted" style="font-size:.8rem;">(no tracker policy)</span>
-            {% endif %}
-            <div class="text-muted" style="font-size:.8rem;">
-              due {{ r.due|date:"d M Y" }}
-              {% if not target %}· {{ r.employee.user.get_full_name|default:r.employee.user.username }}{% endif %}
-            </div>
-          </td>
-          <td><a href="{% url 'clients:client_profile' r.client.id %}">{{ r.client.name }}</a></td>
-          <td>{{ r.year_index }} of {{ r.sale.policy_years }}</td>
-          <td class="text-end">{{ r.amount|inr }}</td>
-          <td class="text-end">{{ r.estimate|inr }}</td>
-          {% if can_cancel %}
-          <td class="text-end">
-            {% if r.policy %}
-            <form method="post" action="{% url 'clients:policy_cancel' r.policy.id %}" style="margin:0;"
-                  onsubmit="return confirm('Cancel policy {{ r.policy.policy_number|escapejs }}? The remaining years of its points will not be credited.');">
-              {% csrf_token %}
-              <input type="hidden" name="status" value="cancelled">
-              <input type="hidden" name="next" value="{{ request.get_full_path }}">
-              <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm" aria-label="Cancel policy {{ r.policy.policy_number }}">
-                <i class="bi bi-x-circle"></i> Cancel policy
-              </button>
-            </form>
-            {% endif %}
-          </td>
-          {% endif %}
-        </tr>
-        {% endfor %}
-      {% endfor %}
-      </tbody>
-    </table>
+    <summary>
+      {{ y.label }}
+      <span class="fp-sub">{{ y.months|length }} month{{ y.months|length|pluralize }}</span>
+      <span class="fp-amt">₹{{ y.points|inr }}</span>
+    </summary>
+
+    {% for m in y.months %}
+    <details class="fp-month">
+      <summary>
+        {{ m.date|date:"M Y" }}
+        <span class="fp-sub">{{ m.rows|length }} polic{{ m.rows|length|pluralize:"y,ies" }}</span>
+        <span class="fp-amt">₹{{ m.points|inr }}</span>
+      </summary>
+
+      <div class="fp-policies">
+        <div class="ki-table-scroll">
+          <table class="ki-table">
+            <thead>
+              <tr>
+                <th>Policy</th><th>Client</th><th>Year</th><th>Due</th>
+                <th class="text-end">Premium (₹)</th><th class="text-end">Points (₹)</th>
+                {% if can_cancel %}<th>If the policy is gone</th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+            {% for r in m.rows %}
+              <tr>
+                <td>
+                  {% if r.policy %}
+                    <a href="{% url 'clients:policy_detail' r.policy.id %}">{{ r.policy.policy_number }}</a>
+                  {% else %}
+                    {{ r.policy_number|default:"—" }}
+                    <span class="text-muted" style="font-size:.8rem;">(no tracker policy)</span>
+                  {% endif %}
+                  {% if not target %}
+                    <div class="text-muted" style="font-size:.8rem;">{{ r.employee.user.get_full_name|default:r.employee.user.username }}</div>
+                  {% endif %}
+                </td>
+                <td><a href="{% url 'clients:client_profile' r.client.id %}">{{ r.client.name }}</a></td>
+                <td>{{ r.year_index }} of {{ r.sale.policy_years }}</td>
+                <td>{{ r.due|date:"d M Y" }}</td>
+                <td class="text-end">{{ r.amount|inr }}</td>
+                <td class="text-end">{{ r.estimate|inr }}</td>
+                {% if can_cancel %}
+                <td>
+                  {% if r.can_cancel %}
+                  <form method="post" action="{% url 'clients:policy_cancel' r.policy.id %}"
+                        style="margin:0;display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;"
+                        onsubmit="return confirm('Cancel policy {{ r.policy.policy_number|escapejs }}? The remaining years of its points will not be credited.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="status" value="cancelled">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <label class="visually-hidden" for="fpReason{{ r.policy.id }}-{{ r.year_index }}">Reason</label>
+                    <select class="form-select form-select-sm" style="width:auto;" name="reason"
+                            id="fpReason{{ r.policy.id }}-{{ r.year_index }}">
+                      <option value="EMI not paid — policy cancelled">EMI not paid</option>
+                      <option value="Client cancelled the policy">Client cancelled</option>
+                      <option value="Insurer cancelled the policy">Insurer cancelled</option>
+                      <option value="Policy lost">Lost</option>
+                    </select>
+                    <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm"
+                            aria-label="Cancel policy {{ r.policy.policy_number }}">
+                      <i class="bi bi-x-circle"></i> Cancel
+                    </button>
+                  </form>
+                  {% endif %}
+                </td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </details>
+    {% endfor %}
   </details>
   {% endfor %}
 </div>
+<p class="form-text mt-2">
+  Cancelling keeps the policy and its history on the tracker — it only stops the
+  years that have not been credited yet. A year already credited stays credited.
+</p>
 {% else %}
 <div class="ki-card">
   <p class="mb-0 text-muted">

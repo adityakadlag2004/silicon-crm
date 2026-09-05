@@ -15,9 +15,9 @@
         {% if policy.is_expiring_soon %}<span class="ki-tag" style="--c:#B45309;">Expiring ≤30 days</span>{% endif %}
       </div>
     </div>
-    {% if can_delete %}
+    {% if can_delete or can_cancel %}
     <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
-      {% if policy.status == 'cancelled' %}
+      {% if can_cancel %}{% if policy.status == 'cancelled' %}
       <form method="post" action="{% url 'clients:policy_cancel' policy.id %}" style="margin:0;">
         {% csrf_token %}
         <input type="hidden" name="status" value="active">
@@ -36,11 +36,13 @@
           <i class="bi bi-x-circle"></i> Cancel policy
         </button>
       </form>
-      {% endif %}
+      {% endif %}{% endif %}
+      {% if can_delete %}
       <a href="{% url 'clients:policy_delete' policy.id %}" class="ki-btn ki-btn-secondary ki-btn-sm"
          title="Delete this policy — for a sale booked under the wrong product">
         <i class="bi bi-trash"></i> Delete policy
       </a>
+      {% endif %}
     </div>
     {% endif %}
   </div>

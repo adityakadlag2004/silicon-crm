@@ -130,7 +130,8 @@ def policy_list(request):
 @login_required
 def policy_detail(request, policy_id):
     policy = get_object_or_404(
-        InsurancePolicy.objects.select_related("client", "relationship_manager__user"),
+        InsurancePolicy.objects.select_related("client", "relationship_manager__user",
+                                               "source_sale"),
         pk=policy_id)
     claims = policy.claims.select_related("handled_by__user")
     # Every renewal logged against this policy — its collection history.
@@ -151,21 +152,35 @@ def policy_detail(request, policy_id):
         "policy": policy, "claims": claims,
         "renewals": renewals, "renewals_total": renewals_total,
         "can_delete": is_admin(request.user),
+        # Cancelling is not deleting: the employee who sold it may do it too.
+        "can_cancel": is_admin(request.user) or (
+            policy.source_sale_id and policy.source_sale.employee_id
+            == getattr(getattr(request.user, "employee", None), "id", None)),
     })
 
 
-@admin_required
+@login_required
 @require_POST
 def policy_cancel(request, policy_id):
-    """Cancel a policy (or reinstate one) — admin-only, from the tracker or the
-    Future Points page.
+    """Cancel a policy (or reinstate one), from the tracker or Future Points.
 
     Deleting is blocked once a policy has claims or collected renewals, and
-    rightly so; cancelling is what actually happens in the field — the client
-    walks away or the insurer cancels. For a multiyear policy this is also the
-    switch that stops the remaining years' incentive points from ever landing.
+    rightly so; cancelling is what actually happens in the field — the EMIs
+    stop, the insurer cancels, the client walks away. For a multiyear policy
+    this is also the switch that stops the remaining years' incentive points
+    from ever landing.
+
+    Admins may cancel anything; **the employee who sold the policy may cancel
+    their own**. They are the one who gets told it lapsed, and the only points
+    a cancellation takes away are theirs.
     """
-    policy = get_object_or_404(InsurancePolicy.objects.select_related("client"), pk=policy_id)
+    policy = get_object_or_404(
+        InsurancePolicy.objects.select_related("client", "source_sale__employee"),
+        pk=policy_id)
+    seller = getattr(policy.source_sale, "employee", None)
+    if not (is_admin(request.user) or (seller and seller == getattr(request.user, "employee", None))):
+        messages.error(request, "Only an admin, or the employee who sold it, can cancel this policy.")
+        return redirect("clients:policy_detail", policy_id=policy.pk)
     status = request.POST.get("status") or InsurancePolicy.STATUS_CANCELLED
     if status not in dict(InsurancePolicy.STATUS_CHOICES):
         status = InsurancePolicy.STATUS_CANCELLED

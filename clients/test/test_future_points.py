@@ -120,8 +120,20 @@ class PageTests(_Base):
         html = self.client.get(reverse("clients:future_points")).content.decode()
         self.assertIn("FPPOL1", html)
         self.assertIn("FY 27-28", html)
-        # An employee gets no cancel button — this is an admin correction.
-        self.assertNotIn("Cancel policy", html)
+        self.assertIn("Jun 2027", html)
+
+    def test_the_seller_can_cancel_their_own_policy(self):
+        """The employee is the one told the EMIs stopped, and the only points a
+        cancellation takes away are theirs."""
+        _sale, policy = self.sell()
+        self.client.force_login(self.user)
+        self.assertIn("Cancel policy FPPOL1",
+                      self.client.get(reverse("clients:future_points")).content.decode())
+        self.client.post(reverse("clients:policy_cancel", args=[policy.id]),
+                         {"status": "cancelled", "reason": "EMI not paid — policy cancelled"})
+        policy.refresh_from_db()
+        self.assertEqual(policy.status, InsurancePolicy.STATUS_CANCELLED)
+        self.assertIn("EMI not paid", policy.notes)
 
     def test_admin_can_cancel_from_the_page(self):
         _sale, policy = self.sell()
@@ -136,10 +148,21 @@ class PageTests(_Base):
         # (the policy number still shows in the success message, so check the statement)
         self.assertIn("Nothing pending", self.client.get(url).content.decode())
 
-    def test_a_non_admin_cannot_cancel(self):
+    def test_someone_elses_policy_is_not_theirs_to_cancel(self):
         _sale, policy = self.sell()
-        self.client.force_login(self.user)
+        other = User.objects.create_user("fp_other", password="x")
+        Employee.objects.create(user=other, role="employee")
+        self.client.force_login(other)
         self.client.post(reverse("clients:policy_cancel", args=[policy.id]),
                          {"status": "cancelled"})
         policy.refresh_from_db()
         self.assertEqual(policy.status, InsurancePolicy.STATUS_ACTIVE)
+
+    def test_the_months_are_their_own_dropdowns(self):
+        """FY opens into months, a month opens into the policies inside it."""
+        self.sell()
+        self.sell(amount=120000, years=2, start=date(2026, 9, 1), number="FPPOL2")
+        self.client.force_login(self.user)
+        html = self.client.get(reverse("clients:future_points")).content.decode()
+        self.assertEqual(html.count('<details class="fp-year"'), 2)   # FY 27-28, FY 28-29
+        self.assertEqual(html.count('<details class="fp-month"'), 3)  # Jun/Sep 27, Jun 28

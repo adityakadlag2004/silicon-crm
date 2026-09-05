@@ -368,14 +368,20 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `incentives.future_points()`. The `multiyear_incentive_accruals` cron is
   still the only thing that credits them, so the salary check is unchanged —
   the points join the month they land in like any others.
+- Three levels, all native `<details>` — **FY → month → the policies in it**.
+  No JS: the browser already has a disclosure widget.
 - **Cancelling is the policy's status, not a new flag.** A multiyear premium is
-  paid up front, but the policy can still be cancelled — and then years 2..N
+  paid up front, but the EMIs stop and the policy goes — and then years 2..N
   were never earned. `insurance_sync.set_policy_status()` marks the tracker
-  policy `cancelled` (admin-only, `policy_cancel`, from the policy page or the
-  Future Points row) and `incentives.accrual_schedule` reads that status, so
-  nothing further is ever scheduled. **No accrual row needs deleting: a year is
-  only written on the day it falls due.** Reinstating puts the remaining years
-  back.
+  policy `cancelled` (`policy_cancel`, from the policy page or the Future Points
+  row, with a reason that is stamped into `policy.notes`) and
+  `incentives.accrual_schedule` reads that status, so nothing further is ever
+  scheduled. **No accrual row needs deleting: a year is only written on the day
+  it falls due.** Reinstating puts the remaining years back.
+- **Cancelling is not deleting, so it is not admin-only**: an admin may cancel
+  any policy, and **the employee who sold it may cancel their own**. They are
+  the one told the EMIs stopped, and the only points a cancellation takes away
+  are theirs. Deleting a policy stays admin-only.
 - Year 1 is untouched by a cancellation — it was sold, delivered and paid for.
   Un-approving the sale is the tool for taking that back, and it takes
   everything.

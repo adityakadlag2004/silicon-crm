@@ -811,6 +811,17 @@ def future_points(request):
     data = incentives_service.future_points(target)
     upcoming = next((m for y in data["years"] for m in y["months"]), None)
 
+    # Who may cancel each policy: an admin anywhere, and the employee who sold
+    # it on their own rows. The seller is the one told the EMIs stopped and the
+    # policy went, so making them find an admin just delays the correction —
+    # and the only points a cancellation takes away are their own.
+    is_admin = permissions.is_admin(request.user)
+    for year in data["years"]:
+        for month in year["months"]:
+            for row in month["rows"]:
+                row["can_cancel"] = bool(row["policy"]) and (
+                    is_admin or row["employee"] == viewer)
+
     return render(request, "incentives/future_points.html", {
         "crumbs": [{"label": "Sales", "url": reverse("clients:all_sales")},
                    {"label": "Future Points"}],
@@ -824,7 +835,7 @@ def future_points(request):
         ],
         "data": data, "target": target, "employees": employees,
         "can_pick": can_pick, "picked": picked,
-        "can_cancel": permissions.is_admin(request.user),
+        "can_cancel": is_admin or target == viewer,   # is the column worth a header?
         "today": timezone.localdate(),
     })
 
