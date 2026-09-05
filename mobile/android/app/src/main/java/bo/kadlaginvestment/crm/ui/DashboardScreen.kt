@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.net.ApiClient
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Native home screen — data from /clients/api/app/dashboard/. */
@@ -241,24 +243,17 @@ private fun Dashboard(
                 }
             }
 
-            // ── Month-to-date product-wise ──
-            val pm = d.optJSONArray("product_mtd")
-            item { SectionHeader("This month by product (till today)") }
-            if (pm == null || pm.length() == 0) {
-                item { Text("No approved business this month yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13)) }
-            } else {
-                val maxAmt = (0 until pm.length()).maxOf { pm.getJSONObject(it).optDouble("amount", 0.0) }
-                items((0 until pm.length()).map { pm.getJSONObject(it) }) { p ->
-                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(p.optString("name"), fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
-                            Text("${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = rsp(13), fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(Modifier.height(3.dp))
-                        ProgressBar(if (maxAmt > 0) (p.optDouble("amount", 0.0) / maxAmt).toFloat() else 0f)
-                    }
-                }
-            }
+            // ── Product-wise: the month, then today in the same format ──
+            productSection(
+                "This month by product (till today)",
+                d.optJSONArray("product_mtd"),
+                "No approved business this month yet.",
+            )
+            productSection(
+                "Today by product",
+                d.optJSONArray("product_today"),
+                "No approved business logged today.",
+            )
         } else {
             // ── Gamified employee view ──
             val earnings = d.optJSONObject("earnings")
@@ -275,32 +270,45 @@ private fun Dashboard(
                 }
             }
 
-            // My business this month by product
-            val pm = d.optJSONArray("product_mtd")
-            item { SectionHeader("My business this month") }
-            if (pm == null || pm.length() == 0) {
-                item {
-                    Text(
-                        "No approved sales yet this month — add one from the Add Sale tab.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13),
-                    )
-                }
-            } else {
-                val maxAmt = (0 until pm.length()).maxOf { pm.getJSONObject(it).optDouble("amount", 0.0) }
-                items((0 until pm.length()).map { pm.getJSONObject(it) }) { p ->
-                    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(p.optString("name"), fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
-                            Text("${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}", fontSize = rsp(13), fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(Modifier.height(3.dp))
-                        ProgressBar(if (maxAmt > 0) (p.optDouble("amount", 0.0) / maxAmt).toFloat() else 0f)
-                    }
-                }
-            }
+            // My business, this month then today in the same format
+            productSection(
+                "My business this month",
+                d.optJSONArray("product_mtd"),
+                "No approved sales yet this month — add one from the Add Sale tab.",
+            )
+            productSection(
+                "My business today",
+                d.optJSONArray("product_today"),
+                "No approved sales logged today.",
+            )
         }
 
         item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+/** A product-wise breakdown: header, then one bar per product. */
+private fun LazyListScope.productSection(title: String, rows: JSONArray?, empty: String) {
+    item { SectionHeader(title) }
+    if (rows == null || rows.length() == 0) {
+        item {
+            Text(empty, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = rsp(13))
+        }
+        return
+    }
+    val maxAmt = (0 until rows.length()).maxOf { rows.getJSONObject(it).optDouble("amount", 0.0) }
+    items((0 until rows.length()).map { rows.getJSONObject(it) }) { p ->
+        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(p.optString("name"), fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${rupees(p.optDouble("amount", 0.0))} · ${p.optInt("count")}",
+                    fontSize = rsp(13), fontWeight = FontWeight.Bold,
+                )
+            }
+            Spacer(Modifier.height(3.dp))
+            ProgressBar(if (maxAmt > 0) (p.optDouble("amount", 0.0) / maxAmt).toFloat() else 0f)
+        }
     }
 }
 
