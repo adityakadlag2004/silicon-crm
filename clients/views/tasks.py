@@ -243,12 +243,23 @@ def _query_without(request, *drop):
     return gp.urlencode()
 
 
+_VIEW_MODES = ("list", "kanban", "calendar")
+
+
+def _view_mode(request):
+    """Which of the three views to render. Anything unknown means the list."""
+    mode = request.GET.get("view", "list")
+    return mode if mode in _VIEW_MODES else "list"
+
+
 def _list_context(request, active_tab, title):
     """Shared context for the list/kanban/calendar template."""
     return {
         "active_tab": active_tab,
         "page_title": title,
-        "view_mode": request.GET.get("view", "list"),
+        "view_mode": _view_mode(request),
+        # Every other filter rides along when the view links switch view.
+        "view_qs": _query_without(request, "view"),
         "categories": TaskCategory.objects.filter(is_active=True),
         "employees": Employee.objects.filter(active=True).select_related("user"),
         "all_users": User.objects.filter(is_active=True).order_by("username"),
@@ -434,7 +445,14 @@ def _board_ctx(request, qs, limit, collapse=False):
             or t.created_by_id == uid
         )
         t.assignee_label = assignee_label(t)
-    return {"tasks": items, "kanban": _kanban(items), "cal_events": _cal_events(items)}
+    # Only the selected view is rendered, so only build what it needs — the
+    # template used to receive all three and ship the two it wasn't showing.
+    mode = _view_mode(request)
+    return {
+        "tasks": items,
+        "kanban": _kanban(items) if mode == "kanban" else None,
+        "cal_events": _cal_events(items) if mode == "calendar" else None,
+    }
 
 
 @login_required

@@ -1,13 +1,22 @@
-{# List / Kanban / Calendar. Expects `tasks`, `kanban`, `view_mode`, `can_manage_all`. #}
+{% comment %}
+List / Kanban / Calendar. Expects `tasks`, `kanban`, `view_mode`, `can_manage_all`.
+
+Only the selected view is rendered. All three used to ship in every response
+with the other two `hidden`, so each task card was built twice (list + its
+kanban column) and the calendar payload came along regardless — 657 KB and
+about 740 ms of template time on the Tasks page. The view is already a
+server-side parameter (`?view=`), so switching is a link.
+{% endcomment %}
 <div style="display:flex;justify-content:flex-end;margin-bottom:.7rem;">
   <div class="btn-group" role="group" id="tkViewToggle" data-default="{{ view_mode }}">
-    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-view="list"><i class="bi bi-list-task"></i> List</button>
-    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-view="kanban"><i class="bi bi-kanban"></i> Kanban</button>
-    <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" data-view="calendar"><i class="bi bi-calendar3"></i> Calendar</button>
+    <a href="?{% if view_qs %}{{ view_qs }}&{% endif %}view=list" class="ki-btn ki-btn-sm {% if view_mode == 'list' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}"><i class="bi bi-list-task"></i> List</a>
+    <a href="?{% if view_qs %}{{ view_qs }}&{% endif %}view=kanban" class="ki-btn ki-btn-sm {% if view_mode == 'kanban' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}"><i class="bi bi-kanban"></i> Kanban</a>
+    <a href="?{% if view_qs %}{{ view_qs }}&{% endif %}view=calendar" class="ki-btn ki-btn-sm {% if view_mode == 'calendar' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}"><i class="bi bi-calendar3"></i> Calendar</a>
   </div>
 </div>
 
 {# ── List ── #}
+{% if view_mode == "list" %}
 <div class="tk-view" data-view="list">
   {% if tasks %}
     <form id="tkBulkForm" method="post" action="{% url 'clients:task_bulk_status' %}" class="tk-bulk">
@@ -27,8 +36,11 @@
   {% endif %}
 </div>
 
+{% endif %}
+
 {# ── Kanban ── #}
-<div class="tk-view" data-view="kanban" hidden>
+{% if view_mode == "kanban" %}
+<div class="tk-view" data-view="kanban">
   <div class="tk-kanban">
     <div class="tk-col" data-status="pending">
       <div class="tk-col-head"><span>Pending</span><span>{{ kanban.pending|length }}</span></div>
@@ -50,8 +62,11 @@
   <p class="text-muted" style="font-size:.75rem;margin-top:.5rem;"><i class="bi bi-info-circle"></i> Drag a card to another column to change its status.</p>
 </div>
 
+{% endif %}
+
 {# ── Calendar ── #}
-<div class="tk-view" data-view="calendar" hidden>
+{% if view_mode == "calendar" %}
+<div class="tk-view" data-view="calendar">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.6rem;">
     <button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" id="tkCalPrev" aria-label="Previous"><i class="bi bi-chevron-left"></i></button>
     <strong id="tkCalTitle"></strong>
@@ -65,3 +80,4 @@
 </div>
 
 {{ cal_events|json_script:"tkCalData" }}
+{% endif %}

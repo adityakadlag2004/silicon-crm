@@ -154,3 +154,34 @@ class QueryBudgetTests(TestCase):
         slab_queries = [q for q in ctx.captured_queries
                         if "productmarginslab" in q["sql"].lower()]
         self.assertEqual(len(slab_queries), 1, "slabs are re-queried per margin_for call")
+
+    def test_task_board_renders_only_the_selected_view(self):
+        """All three views used to ship in every response, so each card was
+        built twice and the calendar payload rode along unasked."""
+        self._make_tasks(4, "v")
+        http = TestClient()
+        http.force_login(self.admin_user)
+        url = reverse("clients:task_dashboard")
+
+        def html(**params):
+            return http.get(url, params).content.decode()
+
+        # The list: bulk form present, no kanban columns, no calendar payload.
+        # (The calendar *script* always ships; only its data element must not.)
+        list_html = html()
+        self.assertIn('id="tkBulkForm"', list_html)
+        self.assertNotIn('class="tk-kanban"', list_html)
+        self.assertNotIn('id="tkCalData"', list_html)
+
+        kanban_html = html(view="kanban")
+        self.assertIn('class="tk-kanban"', kanban_html)
+        self.assertNotIn('id="tkBulkForm"', kanban_html)
+        self.assertNotIn('id="tkCalData"', kanban_html)
+
+        cal_html = html(view="calendar")
+        self.assertIn('id="tkCalData"', cal_html)
+        self.assertNotIn('class="tk-kanban"', cal_html)
+        self.assertNotIn('id="tkBulkForm"', cal_html)
+
+        # An unknown view must fall back to the list, not render a blank page.
+        self.assertIn('id="tkBulkForm"', html(view="bogus"))
