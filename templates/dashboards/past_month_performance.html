@@ -16,10 +16,22 @@
 
 <div class="ki-metrics-row">
   <div class="ki-metric-card">
-    <div class="ki-metric-label">Total points</div>
+    <div class="ki-metric-label">Points from sales</div>
     <div class="ki-metric-value">{{ total_points }}</div>
     <div class="ki-metric-sub">All products combined</div>
   </div>
+  {% if accrued_points %}
+  <div class="ki-metric-card">
+    <div class="ki-metric-label">Earlier-year policies</div>
+    <div class="ki-metric-value">{{ accrued_points|floatformat:0 }}</div>
+    <div class="ki-metric-sub">{{ accrued_rows|length }} multiyear year{{ accrued_rows|length|pluralize }} credited</div>
+  </div>
+  <div class="ki-metric-card">
+    <div class="ki-metric-label">Total earned</div>
+    <div class="ki-metric-value">{{ earned_points|floatformat:0 }}</div>
+    <div class="ki-metric-sub">Sales + earlier-year</div>
+  </div>
+  {% endif %}
   <div class="ki-metric-card">
     <div class="ki-metric-label">Total amount</div>
     <div class="ki-metric-value">₹{{ total_amount|floatformat:0 }}</div>
@@ -31,6 +43,39 @@
     <div class="ki-metric-sub">With recorded sales</div>
   </div>
 </div>
+
+{% if accrued_rows %}
+<div class="ki-card">
+  <h3 class="ki-section-title" style="margin-top:0;">
+    <i class="bi bi-hourglass-split"></i> Earlier-year policy points
+  </h3>
+  <p class="text-muted mb-2" style="font-size:.86rem;">
+    Later years of multiyear policies sold in an earlier month. The premium was
+    paid up front, so these points arrive on the policy anniversary with no sale
+    behind them — earned this month, but never counted as this month's business.
+  </p>
+  <div class="ki-table-wrap">
+    <table class="ki-table">
+      <thead><tr><th>Client</th><th>Policy year</th><th>Credited</th>
+                 <th class="text-end">Premium slice (₹)</th><th class="text-end">Points</th></tr></thead>
+      <tbody>
+        {% for a in accrued_rows %}
+        <tr>
+          <td>{{ a.sale.client.name }}</td>
+          <td>Year {{ a.year_index }} of {{ a.sale.policy_years }}</td>
+          <td>{{ a.due_date|date:"d M Y" }}</td>
+          <td class="text-end">{{ a.amount|floatformat:0 }}</td>
+          <td class="text-end">{{ a.points|floatformat:0 }}</td>
+        </tr>
+        {% endfor %}
+        <tr style="font-weight:700;">
+          <td colspan="4">Total</td><td class="text-end">{{ accrued_points|floatformat:0 }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 
 <div class="ki-card">
   <div class="ki-flex-row" style="margin-bottom:0.5rem;">

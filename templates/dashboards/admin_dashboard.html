@@ -74,6 +74,18 @@
   <div class="ki-card">
     <h5 class="ki-card-label">Total Points (This Month)</h5>
     <div class="ki-card-value" id="points-counter" data-points="{{ total_points }}">0</div>
+    {% if accrued_points %}
+    <div class="ki-split-note">
+      <span><i class="bi bi-graph-up"></i> Sold this month</span><strong>{{ sales_points|floatformat:0 }}</strong>
+    </div>
+    <div class="ki-split-note ki-split-earlier">
+      <a href="{% url 'clients:future_points' %}">
+        <span><i class="bi bi-hourglass-split"></i> Earlier-year policies</span>
+        <strong>{{ accrued_points|floatformat:0 }}</strong>
+      </a>
+      <div class="ki-split-sub">{{ accrued_rows|length }} multiyear polic{{ accrued_rows|length|pluralize:"y,ies" }} paying a later year — earned this month, not sold this month.</div>
+    </div>
+    {% endif %}
     <div class="ki-card-subtitle">Points by product</div>
     <div class="ki-stat-list">
       {% for item in admin_overall_points_breakup %}

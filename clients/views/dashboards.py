@@ -322,9 +322,15 @@ def admin_dashboard(request):
 
     total_clients = Client.objects.count()
     total_sales = monthly_sales_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    total_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or Decimal("0")
-    total_points += incentives_service.accrued_points(
+    sales_points = monthly_sales_qs.aggregate(total=Sum("points"))["total"] or Decimal("0")
+    # Earlier-year credits from multiyear policies are earned this month but are
+    # NOT this month's selling. Kept as their own figure all the way to the
+    # template: folded into one number they make the month look like it sold
+    # business it did not.
+    accrued_rows = incentives_service.accrued_rows(
         None, date(year, month, 1), date(year, month, monthrange(year, month)[1]))
+    accrued_points = sum((a.points for a in accrued_rows), Decimal("0"))
+    total_points = sales_points + accrued_points
     total_salary_all = Employee.objects.aggregate(total=Sum("salary"))["total"] or Decimal("0")
     admin_points_scale = max(total_points, total_salary_all, Decimal("1"))
     admin_salary_ratio = (total_salary_all / admin_points_scale) * Decimal("100") if admin_points_scale else Decimal("0")
@@ -486,6 +492,9 @@ def admin_dashboard(request):
         "total_clients": Client.objects.filter(created_at__year=year, created_at__month=month).count(),
         "total_sales": total_sales,
         "total_points": total_points,
+        "sales_points": sales_points,
+        "accrued_points": accrued_points,
+        "accrued_rows": accrued_rows,
         "sip": sip_sales,
         "lumpsum": lumsum_sales,
         "life": life_sales,
@@ -600,6 +609,9 @@ def admin_dashboard(request):
         "total_clients": total_clients,
         "total_sales": total_sales,
         "total_points": total_points,
+        "sales_points": sales_points,
+        "accrued_points": accrued_points,
+        "accrued_rows": accrued_rows,
         "total_salary_all": total_salary_all,
         "admin_salary_ratio": admin_salary_ratio,
         "admin_points_ratio": admin_points_ratio,
@@ -803,12 +815,14 @@ def employee_dashboard(request):
     today_sales_qs = monthly_sales_approved.filter(date=today)
 
     total_sales = monthly_sales_approved.aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    total_points = monthly_sales_approved.aggregate(total=Sum("points"))["total"] or Decimal("0")
+    sales_points = monthly_sales_approved.aggregate(total=Sum("points"))["total"] or Decimal("0")
     # Multiyear health policies pay their 2nd/3rd year on the anniversary, with
-    # no sale row behind it — those points are earned this month too.
-    accrued_points = incentives_service.accrued_points(
+    # no sale row behind it — those points are earned this month too, but they
+    # are not this month's selling and are shown as their own line.
+    accrued_rows = incentives_service.accrued_rows(
         emp, date(today.year, today.month, 1), today.replace(day=monthrange(today.year, today.month)[1]))
-    total_points += accrued_points
+    accrued_points = sum((a.points for a in accrued_rows), Decimal("0"))
+    total_points = sales_points + accrued_points
     pending_points = monthly_sales_pending.aggregate(total=Sum("points"))["total"] or Decimal("0")
     salary_points = getattr(emp, "salary", Decimal("0")) or Decimal("0")
     if not isinstance(salary_points, Decimal):
@@ -1111,6 +1125,9 @@ def employee_dashboard(request):
         "my_sales": total_sales, "my_sales_delta": _pct_delta(total_sales, prev_sales),
         "attainment": my_attainment, "target_total": my_target_total,
         "points": total_points, "extra_points": extra_points,
+        # Split out so the KPI can say how much of the month's points came from
+        # earlier years rather than from selling this month.
+        "sales_points": sales_points, "accrued_points": accrued_points,
         "pending_count": monthly_sales_pending.count(),
         # Due today OR already overdue. Keying this on due_date == today read as
         # zero on a day when the only open work was late, which is exactly when
@@ -1134,6 +1151,9 @@ def employee_dashboard(request):
         "total_sales": total_sales,
         "emp_overview": emp_overview,
         "total_points": total_points,
+        "sales_points": sales_points,
+        "accrued_points": accrued_points,
+        "accrued_rows": accrued_rows,
         "salary_points": salary_points,
         "salary_ratio": salary_ratio,
         "points_ratio": points_ratio,

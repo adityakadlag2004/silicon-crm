@@ -81,8 +81,12 @@ dict built in dashboards.employee_dashboard. Styled with shared --ki-* tokens.
     <a class="kpi" style="--k:var(--good)"><span class="lab">Target Attainment</span>
       <span class="val num">{% if o.target_total %}{% if o.attainment > 999 %}999+{% else %}{{ o.attainment|floatformat:0 }}{% endif %}%{% else %}—{% endif %}</span>
       <span class="foot">{% if o.behind %}{{ o.behind|length }} product{{ o.behind|length|pluralize }} behind{% elif o.target_total %}on track everywhere ✓{% else %}no target set{% endif %}</span></a>
-    <a class="kpi" style="--k:var(--info)"><span class="lab">Incentive Points</span><span class="val num">{{ o.points|floatformat:0 }}</span>
-      <span class="foot">{{ o.extra_points|floatformat:0 }} above salary line</span></a>
+    <a class="kpi" {% if o.accrued_points %}href="{% url 'clients:future_points' %}"{% endif %} style="--k:var(--info)"><span class="lab">Incentive Points</span><span class="val num">{{ o.points|floatformat:0 }}</span>
+      {% if o.accrued_points %}
+      <span class="foot">{{ o.sales_points|floatformat:0 }} sold this month + {{ o.accrued_points|floatformat:0 }} from earlier-year policies</span>
+      {% else %}
+      <span class="foot">{{ o.extra_points|floatformat:0 }} above salary line</span>
+      {% endif %}</a>
     <a class="kpi" href="{% url 'clients:all_sales' %}?status=pending" style="--k:var(--warn)"><span class="lab">My Pending Approvals</span><span class="val num">{{ o.pending_count }}</span>
       <span class="foot">{% if o.pending_count %}awaiting admin →{% else %}all clear ✓{% endif %}</span></a>
   </div>

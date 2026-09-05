@@ -470,3 +470,17 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
 .ki-funnel-row .cap { display: flex; justify-content: space-between; gap: .5rem; font-size: .85rem; }
 .ki-funnel-bar { background: var(--ki-card-border); border-radius: 999px; height: 12px; overflow: hidden; margin-top: .3rem; }
 .ki-funnel-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--c, var(--ki-primary)); }
+
+
+/* Points earned this month split by where they came from: business sold now,
+   versus a later year of a multiyear policy sold in an earlier year. One
+   number for both reads as a month that sold more than it did. */
+.ki-split-note { display:flex; align-items:center; gap:.5rem; font-size:.86rem;
+                 padding:.35rem 0; border-top:1px dashed var(--ki-card-border);
+                 color: var(--ki-text-secondary); }
+.ki-split-note strong { margin-left:auto; color: var(--ki-dark); font-variant-numeric: tabular-nums; }
+.ki-split-note a { display:flex; align-items:center; gap:.5rem; width:100%;
+                   color:inherit; text-decoration:none; }
+.ki-split-note a:hover strong { text-decoration:underline; }
+.ki-split-earlier { flex-wrap:wrap; }
+.ki-split-earlier .ki-split-sub { flex-basis:100%; font-size:.78rem; color:var(--ki-text-muted); }

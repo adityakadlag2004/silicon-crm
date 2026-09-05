@@ -253,6 +253,24 @@ def accrued_points(employee, start, end):
     return qs.aggregate(t=Sum("points"))["t"] or ZERO
 
 
+def accrued_rows(employee, start, end):
+    """The multiyear later-year credits that landed in [start, end], detailed.
+
+    ``accrued_points`` gives the figure; this gives the policies behind it, so
+    a dashboard or a month's report can say *which* earlier-year policies paid
+    rather than quietly folding them into this month's selling.
+    """
+    from ..models import IncentiveAccrual
+
+    qs = (IncentiveAccrual.objects
+          .filter(due_date__gte=start, due_date__lte=end)
+          .select_related("sale__client", "employee__user")
+          .order_by("due_date", "id"))
+    if employee is not None:
+        qs = qs.filter(employee=employee)
+    return list(qs)
+
+
 def pending_accruals(employee=None):
     """Later-year points not yet due, soonest first — what's already banked
     for the future without another sale.

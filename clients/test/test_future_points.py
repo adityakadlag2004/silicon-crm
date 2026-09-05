@@ -262,6 +262,65 @@ class TermBoundaryTests(_Base):
             list(IncentiveAccrual.objects.filter(sale=sale).values_list("id", "points")), first)
 
 
+class CreditedThisMonthTests(_Base):
+    """An earlier year landing this month is earned, but it is not this month's
+    selling. Every screen that shows a month's points must say which is which,
+    or a quiet month reads as a good one."""
+
+    def _credit(self, on=None):
+        """A 3-year policy sold two years ago, whose year-2 lands this month."""
+        from django.utils import timezone
+
+        today = on or timezone.localdate()
+        start = date(today.year - 1, today.month, min(today.day, 28))
+        sale, _p = self.sell(amount=90000, years=3, start=start, number="FPCRED")
+        made = inc.issue_due_accruals(sale, on_date=today)
+        self.assertEqual(len(made), 1)
+        return sale, made[0]
+
+    def test_the_employee_dashboard_splits_sold_from_credited(self):
+        _sale, accrual = self._credit()
+        self.client.force_login(self.user)
+        html = self.client.get(reverse("clients:employee_dashboard")).content.decode()
+        self.assertIn("Earlier-year policy points", html)
+        self.assertIn("sold this month", html)
+        self.assertIn(str(int(accrual.points)), html)
+
+    def test_the_admin_dashboard_splits_sold_from_credited(self):
+        self._credit()
+        self.client.force_login(self.admin_user)
+        html = self.client.get(reverse("clients:admin_dashboard")).content.decode()
+        self.assertIn("Earlier-year policies", html)
+        self.assertIn("Sold this month", html)
+
+    def test_the_monthly_report_lists_them_apart_from_the_products(self):
+        _sale, accrual = self._credit()
+        today = accrual.due_date
+        self.client.force_login(self.user)
+        html = self.client.get(reverse("clients:past_month_performance",
+                                       args=[today.year, today.month])).content.decode()
+        self.assertIn("Earlier-year policy points", html)
+        self.assertIn("Points from sales", html)
+        self.assertIn(f"Year {accrual.year_index} of 3", html)
+
+    def test_the_admin_monthly_report_names_who_was_credited(self):
+        self._credit()
+        from django.utils import timezone
+        today = timezone.localdate()
+        self.client.force_login(self.admin_user)
+        html = self.client.get(reverse("clients:admin_past_month_performance",
+                                       args=[today.year, today.month])).content.decode()
+        self.assertIn("Earlier-year policy points", html)
+        self.assertIn("fp_seller", html)
+
+    def test_a_month_with_no_credits_says_nothing_about_them(self):
+        """No noise on the ordinary month: the split only appears when there
+        is something to split."""
+        self.client.force_login(self.user)
+        html = self.client.get(reverse("clients:employee_dashboard")).content.decode()
+        self.assertNotIn("Earlier-year policy points", html)
+
+
 class PageTests(_Base):
     def test_employee_sees_their_own_statement(self):
         self.sell()

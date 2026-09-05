@@ -415,6 +415,16 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - Deleting a policy is still separate and still blocked by claims/renewals
   (`policy_delete_blockers`); cancelling is the answer when the record has to
   stay.
+- **A year landing this month is shown apart from the month's selling.** The
+  credit is earned in that month and counts towards the salary check like any
+  other points — but no sale was made, so folding it into one number makes a
+  quiet month read as a good one. `incentives.accrued_rows(employee, start, end)`
+  gives the policies behind `accrued_points`, and four screens split on it: both
+  dashboards (points card / KPI foot, plus the list of which policies paid), the
+  employee's month report (its own KPI tile + table, never inside the product
+  rows) and the admin's month report (Top Performers stays "sold this month",
+  with earlier-year credits beside it). The Incentive Payout page already split
+  it. The split only renders when there is something to split.
 - **The page is a personal statement.** A plain employee sees only their own
   rows — no employee picker, and `?employee=` is ignored for them, so the URL
   is not a way round it. Admins and managers get the whole firm with a picker.

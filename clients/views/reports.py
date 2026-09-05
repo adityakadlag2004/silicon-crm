@@ -2,7 +2,7 @@
 import json
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
-from calendar import month_name
+from calendar import month_name, monthrange
 from urllib.parse import urlencode
 
 from django.shortcuts import render, redirect
@@ -25,6 +25,7 @@ from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
     Renewal,
 )
+from ..services import incentives
 from .helpers import get_manager_access, _last_n_months, category_name_map, product_mix, product_totals
 
 
@@ -395,6 +396,14 @@ def past_month_performance(request, year, month):
         else:
             prod_row["achieved_percent"] = None
 
+    # Later years of multiyear policies land in this month with no sale behind
+    # them. They are earned, so a month's report that leaves them out understates
+    # what the employee made — but they are not business sold this month, so they
+    # are their own line and never inside the product table.
+    accrued_rows = incentives.accrued_rows(
+        emp, date(year, month, 1), date(year, month, monthrange(year, month)[1]))
+    accrued_points = sum((a.points for a in accrued_rows), Decimal("0"))
+
     context = {
         "year": year,
         "month": month,
@@ -402,6 +411,9 @@ def past_month_performance(request, year, month):
         "products": products,
         "total_points": total_points,
         "total_amount": total_amount,
+        "accrued_rows": accrued_rows,
+        "accrued_points": accrued_points,
+        "earned_points": Decimal(str(total_points)) + accrued_points,
         "products_count": len(products),
         "max_points_product": max_points_product,
     }
@@ -649,6 +661,20 @@ def admin_past_month_performance(request, year, month):
             "employees": employees_for_prod,
         })
 
+    # Earlier-year multiyear credits, per employee. Kept out of `top_performers`
+    # — that table ranks who sold what, and a policy sold two years ago is not
+    # this month's selling — but shown beside it, because it IS money earned and
+    # the payout has to reconcile.
+    accrued_rows = incentives.accrued_rows(
+        None, date(int(year), int(month), 1),
+        date(int(year), int(month), monthrange(int(year), int(month))[1]))
+    accrued_by_emp = {}
+    for a in accrued_rows:
+        row = accrued_by_emp.setdefault(a.employee_id, {
+            "employee": a.employee, "points": Decimal("0"), "count": 0})
+        row["points"] += a.points
+        row["count"] += 1
+
     context = {
         "year": int(year),
         "month": int(month),
@@ -656,6 +682,10 @@ def admin_past_month_performance(request, year, month):
         "products": products,
         "top_performers": top_performers,
         "product_employee_stats": product_employee_stats,
+        "accrued_rows": accrued_rows,
+        "accrued_points": sum((a.points for a in accrued_rows), Decimal("0")),
+        "accrued_by_emp": sorted(accrued_by_emp.values(),
+                                 key=lambda r: r["points"], reverse=True),
     }
     return render(request, "dashboards/admin_past_month_performance.html", context)
 

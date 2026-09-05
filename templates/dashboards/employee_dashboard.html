@@ -155,6 +155,32 @@
     </div>
   </div>
 
+  {% if accrued_rows %}
+  <div class="ki-card">
+    <div class="ki-card-subtitle">Earlier-year policy points (this month)</div>
+    <p class="text-muted mb-2" style="font-size:.82rem;">
+      Later years of multiyear policies sold in an earlier year. Earned this
+      month and counted in your points — but not business sold this month, so
+      they are never in the product figures above.
+    </p>
+    <div class="ki-stat-list">
+      {% for a in accrued_rows %}
+        <div class="ki-stat-item">
+          <span>{{ a.sale.client.name }} · year {{ a.year_index }} of {{ a.sale.policy_years }}
+            <span class="text-muted" style="font-size:.78rem;">{{ a.due_date|date:"d M" }}</span></span>
+          <strong>{{ a.points|floatformat:0 }}</strong>
+        </div>
+      {% endfor %}
+      <div class="ki-stat-item" style="border-top:1px solid var(--ki-card-border);font-weight:700;">
+        <span>Total</span><strong>{{ accrued_points|floatformat:0 }}</strong>
+      </div>
+    </div>
+    <a class="ki-btn ki-btn-secondary ki-btn-sm mt-2" href="{% url 'clients:future_points' %}">
+      <i class="bi bi-hourglass-split"></i> Points still to come
+    </a>
+  </div>
+  {% endif %}
+
   <div class="ki-card">
     <div class="ki-card-subtitle">My Points by product</div>
     <div class="ki-stat-list">
