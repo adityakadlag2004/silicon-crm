@@ -103,6 +103,14 @@ def _apply_client_product_filters(clients_qs, product_filters):
     if not product_filters:
         return clients_qs
 
+    # Nobody picked a product filter, so there is nothing to narrow. Without
+    # this the unfiltered page still read every client id, summed the whole
+    # sales and renewals book, and then re-filtered itself on an IN clause of
+    # all 3,000 ids — the full cost of a filter, to change nothing.
+    if not any(meta["status_value"] or meta["min_value"] or meta["max_value"]
+               for meta in product_filters):
+        return clients_qs
+
     scoped_client_ids = list(clients_qs.values_list("id", flat=True))
     product_ids = [meta["product"].id for meta in product_filters]
     totals_map = _client_product_totals_map(scoped_client_ids, product_ids)

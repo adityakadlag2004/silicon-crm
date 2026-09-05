@@ -125,7 +125,15 @@ class Product(models.Model):
         """
         amount = Decimal(str(amount or 0))
         pt = (policy_type or "").strip() if self.is_health else ""
-        for slab in self.margin_slabs.filter(policy_type=pt):
+        # Filtered and sorted in Python so a prefetch_related("margin_slabs")
+        # is actually used — .filter()/.order_by() here would ignore it and go
+        # back to the database once per call, which is how the margin report
+        # ended up querying slabs per product per bucket.
+        slabs = sorted(
+            (s for s in self.margin_slabs.all() if s.policy_type == pt),
+            key=lambda s: s.min_amount,
+        )
+        for slab in slabs:
             if amount < slab.min_amount:
                 continue
             if slab.max_amount is not None and amount > slab.max_amount:

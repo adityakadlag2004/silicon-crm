@@ -8,6 +8,7 @@ clients, so each test renders the page at two data sizes and asserts the
 query count did not move.
 """
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -18,7 +19,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from clients.models import (
-    Client, Employee, Product, Sale, Task, TaskChecklistItem,
+    Client, Employee, InsurancePolicy, Product, ProductMarginSlab, Sale, Task,
+    TaskChecklistItem,
 )
 
 
@@ -110,3 +112,45 @@ class QueryBudgetTests(TestCase):
         status_map = rows[buyer.id].dynamic_product_status_map
         self.assertTrue(status_map[f"product_{self.product.id}"])
         self.assertContains(resp, "Yes")
+
+    def test_policy_list_is_paginated(self):
+        holder = Client.objects.create(name="Policy Holder", mapped_to=self.admin)
+        today = timezone.localdate()
+        for i in range(60):
+            InsurancePolicy.objects.create(
+                client=holder, policy_number=f"QB{i:04d}",
+                insurance_type=InsurancePolicy.TYPE_HEALTH,
+                start_date=today, end_date=today + timedelta(days=200),
+            )
+        resp, _ = self._get("policy_list")
+        # Was a flat [:300] slice — a 300-row page that still hid the rest.
+        self.assertEqual(len(resp.context["policies"]), 50)
+        self.assertTrue(resp.context["policy_page"].has_next)
+
+    def test_margin_breakdown_reads_slabs_once(self):
+        """margin_for resolves against prefetched slabs. It is called once per
+        product (and per Fresh/Port bucket), so querying inside it meant a slab
+        round trip per call; the prefetch must stay the only one."""
+        from clients.views.reports import _month_margin_breakdown
+        today = timezone.localdate()
+        buyer = Client.objects.create(name="Margin Buyer", mapped_to=self.admin)
+
+        def sell(product):
+            ProductMarginSlab.objects.create(
+                product=product, min_amount=0, max_amount=None, margin_percent=12)
+            Sale.objects.create(
+                client=buyer, employee=self.admin, product=product.name,
+                product_ref=product, amount=Decimal("250000"),
+                status=Sale.STATUS_APPROVED, date=today,
+            )
+
+        sell(self.product)
+        for i in range(4):
+            sell(Product.objects.create(name=f"QB Product {i}", code=f"QBP{i}"))
+
+        _month_margin_breakdown(today.year, today.month)  # warm
+        with CaptureQueriesContext(connection) as ctx:
+            _month_margin_breakdown(today.year, today.month)
+        slab_queries = [q for q in ctx.captured_queries
+                        if "productmarginslab" in q["sql"].lower()]
+        self.assertEqual(len(slab_queries), 1, "slabs are re-queried per margin_for call")

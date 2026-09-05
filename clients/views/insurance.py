@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
@@ -21,6 +22,9 @@ from ..permissions import admin_required, is_admin
 from ..services import insurance_sync
 from .helpers import name_words_q
 from ..templatetags.custom_filters import inr
+
+# A screenful of the renewal work queue.
+POLICIES_PER_PAGE = 50
 
 
 # ─────────────────────────── insurance policies ───────────────────────────
@@ -103,6 +107,12 @@ def policy_list(request):
         parts += [f"{k}={v}" for k, v in params.items()]
         return f"{base}?{'&'.join(parts)}" if parts else base
 
+    # A work queue is read a screenful at a time. This was a flat [:300] slice,
+    # which rendered a 300-row, 300 KB page and still hid whatever came after.
+    policy_page = Paginator(rows, POLICIES_PER_PAGE).get_page(request.GET.get("page"))
+    page_params = request.GET.copy()
+    page_params.pop("page", None)
+
     return render(request, "insurance/policy_list.html", {
         "crumbs": [{"label": "Insurance Tracker"}],
         "kpis": [
@@ -119,7 +129,10 @@ def policy_list(request):
             {"label": "Active Cover", "value": f"₹{inr(agg['cover'] or 0)}", "color": "#0F766E",
              "sub": f"₹{inr(agg['premium'] or 0)} premium"},
         ],
-        "policies": rows[:300],
+        "policies": policy_page,
+        "policy_page": policy_page,
+        # Every other control (tab, status, search) rides along in the page links.
+        "page_qs": page_params.urlencode(),
         "q": q, "status": status, "kind": kind,
         "tabs": tabs, "today": today,
         "statuses": InsurancePolicy.STATUS_CHOICES,

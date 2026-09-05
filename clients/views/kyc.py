@@ -37,6 +37,7 @@ def _is_admin(request):
 
 
 MISSING_PAN_PER_PAGE = 100
+DUPLICATE_GROUPS_PER_PAGE = 25
 
 
 def _missing_pan_qs(request, search=""):
@@ -200,8 +201,18 @@ def client_kyc_issues(request):
         "dob_search": dob_search,
         "today": timezone.localdate().isoformat(),
         "is_admin": is_admin,
-        "duplicate_groups": _duplicate_groups() if is_admin else [],
     }
+    # 149 groups / 306 profiles on production, all rendered at once. Duplicates
+    # are worked through a page at a time like every other queue here; the
+    # header still reports the true total so the backlog stays visible.
+    all_groups = _duplicate_groups() if is_admin else []
+    dup_page = Paginator(all_groups, DUPLICATE_GROUPS_PER_PAGE).get_page(
+        request.GET.get("gpage"))
+    context.update({
+        "duplicate_groups": list(dup_page),
+        "duplicate_page_obj": dup_page,
+        "duplicate_total": len(all_groups),
+    })
     if is_admin:
         context.update(_merge_search_context(request))
     if is_admin:

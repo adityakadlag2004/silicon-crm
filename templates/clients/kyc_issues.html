@@ -238,7 +238,7 @@
   </div>
 
   <div class="ki-card" id="duplicates" style="margin-bottom:1rem;">
-    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-people"></i> Possible duplicate profiles ({{ duplicate_groups|length }})</span></div>
+    <div class="ki-card-header"><span class="ki-card-title"><i class="bi bi-people"></i> Possible duplicate profiles ({{ duplicate_total }})</span></div>
     <div class="ki-card-body">
       <p class="text-muted" style="font-size:.85rem;">
         Profiles sharing a PAN, phone number, or exact name — <strong>but a shared phone can also be two
@@ -287,6 +287,24 @@
         </div>
         {% endif %}
       </form>
+
+      {% if duplicate_page_obj.has_other_pages %}
+      <nav aria-label="Duplicate group pages" class="mt-3">
+        <ul class="pagination justify-content-center" style="margin-bottom:0;">
+          {% if duplicate_page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?gpage={{ duplicate_page_obj.previous_page_number }}#duplicates">&larr; Prev</a></li>
+          {% else %}
+            <li class="page-item disabled"><span class="page-link">&larr; Prev</span></li>
+          {% endif %}
+          <li class="page-item disabled"><span class="page-link">Group page {{ duplicate_page_obj.number }} of {{ duplicate_page_obj.paginator.num_pages }}</span></li>
+          {% if duplicate_page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?gpage={{ duplicate_page_obj.next_page_number }}#duplicates">Next &rarr;</a></li>
+          {% else %}
+            <li class="page-item disabled"><span class="page-link">Next &rarr;</span></li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endif %}
     </div>
   </div>
 

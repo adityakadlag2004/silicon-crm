@@ -798,7 +798,8 @@ def _month_margin_breakdown(year, month):
     margin_percent and margin_amount.
     """
     approved = Sale.objects.filter(status="approved", date__year=year, date__month=month)
-    products = list(Product.objects.all().select_related("parent").in_display_order())
+    products = list(Product.objects.all().select_related("parent")
+                    .prefetch_related("margin_slabs").in_display_order())
     # PPT-priced plans carry a per-sale FYC snapshot, so their margin is summed
     # from the sales, not resolved from a revenue band.
     ppt_ids = set(Product.objects.filter(ppt_rates__isnull=False).values_list("id", flat=True))
