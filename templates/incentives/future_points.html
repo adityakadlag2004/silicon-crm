@@ -158,4 +158,178 @@
   </p>
 </div>
 {% endif %}
+
+
+{% if life %}
+{# ─────────── Life FY ladder — the other thing earned but not yet paid ─────────── #}
+<h2 class="ki-section-title mt-4" id="life-bonus">
+  <i class="bi bi-graph-up-arrow"></i> Life Bonus Status — FY {{ life.fy_label }}
+</h2>
+
+<div class="ki-card mb-3">
+  <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-start;justify-content:space-between;">
+    <p class="text-muted mb-0" style="font-size:.88rem;max-width:74ch;">
+      The prize is decided by the <strong>year's total life business</strong> — whatever
+      level April to March reaches is what is paid, and nothing is deducted for a big
+      month. It is <strong>never released month by month</strong>: a level reached in
+      June is a standing, not a bill, because the year can still climb. It falls due on
+      <strong>1 April {{ life.fy|add:1 }}</strong>, and counts as released only when the
+      cash paid is recorded against a month below.
+      {% if not life.fy_closed %}
+        <span class="ki-tag" style="background:#FEF3C7;color:#92400E;">This year is still open</span>
+      {% endif %}
+    </p>
+    <form method="get" style="display:flex;gap:.5rem;align-items:flex-end;">
+      {% if picked %}<input type="hidden" name="employee" value="{{ picked }}">{% endif %}
+      <div>
+        <label class="form-label" for="fySel" style="font-size:.8rem;">Financial year</label>
+        <select class="form-select" name="fy" id="fySel" onchange="this.form.submit()">
+          {% for y in life.fy_options %}
+            <option value="{{ y }}" {% if y == life.fy %}selected{% endif %}>{{ y }}–{{ y|add:1 }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <noscript><button class="ki-btn ki-btn-secondary" type="submit">Show</button></noscript>
+    </form>
+  </div>
+</div>
+
+{% if life.rows %}
+  {# Everyone's standing — an admin looking at the whole team. #}
+  <div class="ki-table-wrap mb-3">
+    <table class="ki-table">
+      <thead>
+        <tr>
+          <th>Employee</th><th class="text-end">Life sold this FY</th>
+          <th class="text-end">Base paid</th><th class="text-end">Level reached</th>
+          <th class="text-end">Handed over</th><th>Next level</th>
+          <th class="text-end">Still owed</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in life.rows %}
+        <tr>
+          <td><a href="?employee={{ r.employee.id }}&amp;fy={{ life.fy }}#life-bonus">
+            {{ r.employee.user.get_full_name|default:r.employee.user.username }}</a></td>
+          <td class="text-end">₹{{ r.volume|inr }}</td>
+          <td class="text-end">{{ r.base|inr }}</td>
+          <td class="text-end">{% if r.level %}<strong>{{ r.level|inr }}</strong>{% else %}none yet{% endif %}</td>
+          <td class="text-end">{{ r.released|inr }}</td>
+          <td style="font-size:.86rem;">
+            {% if r.next %}₹{{ r.next.gap|inr }} more → ₹{{ r.next.slab.threshold|inr }}
+              <span class="text-muted">(worth {{ r.next.worth|inr }})</span>
+            {% else %}<span class="text-muted">Top level</span>{% endif %}
+          </td>
+          <td class="text-end">
+            {% if r.shortfall %}<strong style="color:#15803D;">{{ r.shortfall|inr }}</strong>
+            {% else %}<span class="text-muted">nil</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th>Total</th><th class="text-end">₹{{ life.totals.volume|inr }}</th>
+          <th class="text-end">{{ life.totals.base|inr }}</th>
+          <th class="text-end">{{ life.totals.level|inr }}</th>
+          <th class="text-end">{{ life.totals.released|inr }}</th>
+          <th></th><th class="text-end">{{ life.totals.shortfall|inr }}</th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <p class="form-text mb-0">Pick a name to open that year month by month, and the policies inside each month.</p>
+{% endif %}
+
+{% if life.detail %}
+  {# One person's year: months open into the policies that built the figure. #}
+  <div class="ki-table-wrap">
+    <div class="fp-head">
+      <span>{{ life.detail.employee.user.get_full_name|default:life.detail.employee.user.username }} — month by month</span>
+      <span class="fp-amt">Life sold (₹)</span>
+    </div>
+    {% for m in life.detail.months %}
+      {% if m.volume or m.paid %}
+      <details class="fp-month">
+        <summary>
+          {{ m.month|month_short }} {{ m.year }}
+          <span class="fp-sub">{{ m.sales|length }} polic{{ m.sales|length|pluralize:"y,ies" }}
+            · running ₹{{ m.running|inr }}{% if m.base %} · base {{ m.base|inr }} pts{% endif %}</span>
+          <span class="fp-amt">₹{{ m.volume|inr }}</span>
+        </summary>
+        <div class="fp-policies">
+          <div class="ki-table-scroll">
+            <table class="ki-table">
+              <thead><tr><th>Client</th><th>Plan</th><th>Policy number</th><th>Date</th>
+                         <th class="text-end">Premium (₹)</th><th class="text-end">Base points</th></tr></thead>
+              <tbody>
+              {% for sale in m.sales %}
+                <tr>
+                  <td><a href="{% url 'clients:client_profile' sale.client.id %}">{{ sale.client.name }}</a></td>
+                  <td>{{ sale.product_ref.name|default:sale.product }}</td>
+                  <td>{{ sale.policy_number|default:"—" }}</td>
+                  <td>{{ sale.date|date:"d M Y" }}</td>
+                  <td class="text-end">{{ sale.amount|inr }}</td>
+                  <td class="text-end">{{ sale.points|inr }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if life.can_record %}
+          <form method="post" action="{% url 'clients:record_bonus_payout' %}"
+                class="d-flex gap-1 align-items-end mt-2" style="flex-wrap:wrap;">
+            {% csrf_token %}
+            <input type="hidden" name="employee" value="{{ life.detail.employee.id }}">
+            <input type="hidden" name="rule" value="{{ life.rule.id }}">
+            <input type="hidden" name="fy" value="{{ life.fy }}">
+            <input type="hidden" name="for_month" value="{{ m.for_month|date:'Y-m-d' }}">
+            <div>
+              <label class="form-label" style="font-size:.78rem;" for="pay-{{ m.year }}-{{ m.month }}">
+                Prize paid by hand for {{ m.month|month_short }} {{ m.year }} (₹)
+              </label>
+              <input class="form-control form-control-sm" style="max-width:130px;"
+                     type="number" min="0" step="1" name="amount" id="pay-{{ m.year }}-{{ m.month }}"
+                     value="{{ m.paid|default_if_none:''|floatformat:'0' }}" placeholder="0">
+            </div>
+            <button class="ki-btn ki-btn-secondary ki-btn-sm" type="submit">Save</button>
+          </form>
+          {% elif m.paid %}
+          <p class="form-text mb-0 mt-2">₹{{ m.paid|inr }} handed over for this month.</p>
+          {% endif %}
+        </div>
+      </details>
+      {% endif %}
+    {% empty %}
+      <p class="text-muted p-3 mb-0">No life business in this financial year.</p>
+    {% endfor %}
+    <div class="fp-head" style="background:transparent;border-top:1px solid var(--ki-card-border);">
+      <span>Year total</span><span class="fp-amt">₹{{ life.detail.volume|inr }}</span>
+    </div>
+  </div>
+  <p class="form-text mt-2">
+    Level reached <strong>₹{{ life.detail.level|inr }}</strong> · handed over
+    {{ life.detail.released|inr }} · still owed
+    <strong>{{ life.detail.shortfall|inr }}</strong>, payable from
+    {{ life.detail.payable_from|date:"d M Y" }}. Nothing is ever clawed back: if the
+    year ends on a lower level than was already paid, the difference stays with the
+    employee.
+  </p>
+{% endif %}
+
+<div class="ki-card mt-3">
+  <h3 class="mb-2" style="font-size:1rem;font-weight:700;">The ladder</h3>
+  <div class="ki-table-wrap">
+    <table class="ki-table">
+      <thead><tr><th>Reach this in the FY</th><th class="text-end">Prize</th>
+                 <th class="text-end">Year total (base + prize)</th></tr></thead>
+      <tbody>
+      {% for row in life.ladder %}
+        <tr><td>₹{{ row.slab.threshold|inr }}</td><td class="text-end">{{ row.slab.payout|inr }}</td>
+            <td class="text-end">{{ row.at_threshold|inr }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

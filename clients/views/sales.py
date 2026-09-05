@@ -5,6 +5,8 @@ from datetime import date
 from decimal import Decimal
 import json
 
+from urllib.parse import urlencode
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -454,60 +456,18 @@ def manage_incentive_rules(request):
 
 @login_required
 def life_bonus_tracker(request):
-    """Every employee's position on the life ladder for one financial year.
+    """Kept as a redirect: the life ladder now sits under Future Points.
 
-    The prize is the rung the year's own volume reaches — nothing is deducted
-    for a big month.
+    Two pages asked the same question — what is owed that has not been paid —
+    and split the employee picker between them. The bookmarks and
+    ``record_bonus_payout``'s return trip still land in the right place.
     """
-    if not permissions.is_admin_or_manager(request.user):
-        messages.error(request, "You do not have permission to view life bonus status.")
-        return redirect("clients:admin_dashboard")
-
-    today = timezone.localdate()
-    try:
-        fy = int(request.GET.get("fy", incentives_service.fy_start_year(today)))
-    except (TypeError, ValueError):
-        fy = incentives_service.fy_start_year(today)
-
-    rule = (IncentiveRule.objects.filter(
-        active=True, slab_mode=IncentiveRule.MODE_BONUS, slabs__isnull=False)
-        .prefetch_related("slabs").distinct().first())
-    if rule is None:
-        messages.error(request, "No ladder-based incentive rule is configured.")
-        return redirect("clients:incentive_structure")
-
-    rows = []
-    totals = {"volume": Decimal("0"), "base": Decimal("0"), "level": Decimal("0"),
-              "released": Decimal("0"), "paid": Decimal("0"), "shortfall": Decimal("0")}
-    for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username"):
-        st = incentives_service.life_bonus_status(rule, e, fy)
-        if not st["volume"]:
-            continue
-        for k in ("volume", "base", "level", "released"):
-            totals[k] += st[k]
-        totals["paid"] += st["paid_manually"]
-        totals["shortfall"] += st["shortfall"]
-        rows.append(st)
-
-    expanded = request.GET.get("employee")
-    detail = next((r for r in rows if str(r["employee"].id) == expanded), None)
-
-    return render(request, "incentives/life_bonus.html", {
-        "crumbs": [{"label": "Admin", "url": reverse("clients:admin_dashboard")},
-                   {"label": "Life Bonus Status"}],
-        "kpis": [
-            {"label": "Life sold this FY", "value": f"₹{inr(totals['volume'])}", "color": "#4338CA"},
-            {"label": "Prize handed over", "value": f"₹{inr(totals['released'])}", "color": "#B45309"},
-            {"label": "Still owed", "value": f"₹{inr(totals['shortfall'])}", "color": "#BE123C",
-             "sub": "payable from 1 Apr " + str(fy + 1)},
-            {"label": "Base paid", "value": f"₹{inr(totals['base'])}", "color": "#15803D"},
-        ],
-        "rule": rule, "rows": rows, "totals": totals, "detail": detail,
-        "fy": fy, "fy_label": f"{fy}–{fy + 1}",
-        "fy_closed": today >= date(fy + 1, 4, 1),
-        "fy_options": list(range(incentives_service.fy_start_year(today), incentives_service.fy_start_year(today) - 4, -1)),
-        "ladder": incentives_service.ladder(rule),
-    })
+    params = {k: v for k, v in (("fy", request.GET.get("fy")),
+                                ("employee", request.GET.get("employee"))) if v}
+    url = reverse("clients:future_points")
+    if params:
+        url += "?" + urlencode(params)
+    return redirect(url + "#life-bonus")
 
 
 @login_required
@@ -529,9 +489,10 @@ def record_bonus_payout(request):
         for_month = date.fromisoformat(request.POST.get("for_month", "")).replace(day=1)
     except ValueError:
         messages.error(request, "Pick the month this payout was for.")
-        return redirect("clients:life_bonus_tracker")
+        return redirect("clients:future_points")
 
-    back = f"{reverse('clients:life_bonus_tracker')}?fy={request.POST.get('fy', '')}&employee={employee.id}"
+    back = (f"{reverse('clients:future_points')}"
+            f"?fy={request.POST.get('fy', '')}&employee={employee.id}#life-bonus")
     if amount <= 0:
         BonusPayout.objects.filter(employee=employee, rule=rule, for_month=for_month).delete()
         messages.success(request, f"Cleared the {for_month:%b %Y} payout for {employee}.")
@@ -778,6 +739,54 @@ def incentive_calculator(request):
     })
 
 
+def _life_ladder_section(request, target, can_pick):
+    """The life FY ladder, for the same person the page is already scoped to.
+
+    Lives under Future Points rather than on a page of its own: both answer
+    "what am I owed that has not been paid yet", and one employee picker should
+    drive both. Returns None when there is no ladder rule to report on.
+    """
+    rule = (IncentiveRule.objects.filter(
+        active=True, slab_mode=IncentiveRule.MODE_BONUS, slabs__isnull=False)
+        .prefetch_related("slabs").distinct().first())
+    if rule is None:
+        return None
+
+    today = timezone.localdate()
+    try:
+        fy = int(request.GET.get("fy", incentives_service.fy_start_year(today)))
+    except (TypeError, ValueError):
+        fy = incentives_service.fy_start_year(today)
+
+    # One person's year when the page is scoped to a person; the roster when an
+    # admin is looking at everyone.
+    detail = incentives_service.life_bonus_status(rule, target, fy) if target else None
+    rows, totals = [], {"volume": Decimal("0"), "base": Decimal("0"), "level": Decimal("0"),
+                        "released": Decimal("0"), "paid": Decimal("0"), "shortfall": Decimal("0")}
+    if can_pick and target is None:
+        for e in Employee.objects.filter(active=True).select_related("user").order_by("user__username"):
+            st = incentives_service.life_bonus_status(rule, e, fy)
+            if not st["volume"]:
+                continue
+            for k in ("volume", "base", "level", "released"):
+                totals[k] += st[k]
+            totals["paid"] += st["paid_manually"]
+            totals["shortfall"] += st["shortfall"]
+            rows.append(st)
+
+    return {
+        "rule": rule, "fy": fy, "fy_label": f"{fy}–{fy + 1}",
+        "fy_closed": today >= date(fy + 1, 4, 1),
+        "fy_options": list(range(incentives_service.fy_start_year(today),
+                                 incentives_service.fy_start_year(today) - 4, -1)),
+        "ladder": incentives_service.ladder(rule),
+        "detail": detail, "rows": rows, "totals": totals,
+        # Recording a hand payment is an incentive-admin act, not something the
+        # employee whose prize it is may do.
+        "can_record": permissions.can(request.user, "manage_incentives"),
+    }
+
+
 @login_required
 def future_points(request):
     """Points already earned that have not landed yet — the multiyear statement.
@@ -810,6 +819,7 @@ def future_points(request):
 
     data = incentives_service.future_points(target)
     upcoming = next((m for y in data["years"] for m in y["months"]), None)
+    life = _life_ladder_section(request, target, can_pick)
 
     # Who may cancel each policy: an admin anywhere, and the employee who sold
     # it on their own rows. The seller is the one told the EMIs stopped and the
@@ -834,6 +844,7 @@ def future_points(request):
              "sub": f"{upcoming['date']:%b %Y}" if upcoming else "nothing pending"},
         ],
         "data": data, "target": target, "employees": employees,
+        "life": life,
         "can_pick": can_pick, "picked": picked,
         "can_cancel": is_admin or target == viewer,   # is the column worth a header?
         "today": timezone.localdate(),

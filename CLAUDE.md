@@ -425,6 +425,17 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   rows) and the admin's month report (Top Performers stays "sold this month",
   with earlier-year credits beside it). The Incentive Payout page already split
   it. The split only renders when there is something to split.
+- **The life FY ladder sits below it on the same page**, not on a separate one:
+  both answer "what is owed that has not been paid yet", and one employee picker
+  should drive both. The roster of everyone's standing renders only for an
+  admin/manager looking at the whole team; an employee sees their own year and
+  no one else's figures, and only a `manage_incentives` holder gets the
+  record-a-payout box. The month rows are `<details>` like the rest of the page
+  and **open into the policies behind the figure** — the old page showed
+  ₹3,10,000 in June and no way to see which policies made it.
+- `life_bonus_status` reads the year's sales in **one query** and groups them in
+  Python (it was twelve monthly aggregates per employee, and the roster calls it
+  per employee). That is also where the per-month policy list comes from.
 - **The page is a personal statement.** A plain employee sees only their own
   rows — no employee picker, and `?employee=` is ignored for them, so the URL
   is not a way round it. Admins and managers get the whole firm with a picker.
@@ -494,9 +505,10 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   on purpose — an accrual is earned points, not a sale, and must never be
   counted as business volume.
 - Admin screens: `/clients/incentives/payout/` (the month's bill, split
-  base / ladder bonus / multiyear, plus dated bonus releases) and
-  `/clients/incentives/life-bonus/` (FY ladder position per employee, month by
-  month, where hand-made payouts get recorded).
+  base / ladder bonus / multiyear, plus dated bonus releases). The FY ladder
+  position lives **under Future Points** now, not on a page of its own —
+  `/clients/incentives/life-bonus/` is a redirect to `…/future-points/#life-bonus`
+  (which `record_bonus_payout` also returns to).
 - `/clients/incentives/calculator/` is the **employee-facing** page (Sales nav,
   no `manage_incentives` needed): plain-language structure, worked examples in
   points, and a what-if. It must never print firm margin/commission figures or

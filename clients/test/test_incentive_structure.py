@@ -722,7 +722,8 @@ class LifeBonusTrackerTests(_Base):
         self.user.is_staff = True
         self.user.save()
         self.client.force_login(self.user)
-        self.url = reverse("clients:life_bonus_tracker")
+        # The ladder lives under Future Points now; the old URL redirects there.
+        self.url = reverse("clients:future_points")
         self.rule = IncentiveRule.objects.get(product_ref=self.life)
 
     def test_status_totals_a_financial_year(self):
@@ -774,14 +775,34 @@ class LifeBonusTrackerTests(_Base):
         self.sell(self.life, 310000, date(2026, 6, 10))
         r = self.client.get(self.url, {"fy": 2026, "employee": self.emp.id})
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.context["detail"]["employee"], self.emp)
-        self.assertEqual(len(r.context["detail"]["months"]), 12)
+        self.assertEqual(r.context["life"]["detail"]["employee"], self.emp)
+        self.assertEqual(len(r.context["life"]["detail"]["months"]), 12)
 
-    def test_employees_cannot_open_it(self):
+    def test_a_month_opens_into_the_policies_behind_it(self):
+        """The old page showed the standing and stopped there — you could see
+        ₹3,10,000 in June and never which policies made it."""
+        sale = self.sell(self.life, 310000, date(2026, 6, 10))
+        r = self.client.get(self.url, {"fy": 2026, "employee": self.emp.id})
+        june = next(m for m in r.context["life"]["detail"]["months"] if m["month"] == 6)
+        self.assertEqual([s.id for s in june["sales"]], [sale.id])
+        self.assertContains(r, sale.client.name)
+
+    def test_the_old_url_still_lands_on_the_ladder(self):
+        r = self.client.get(reverse("clients:life_bonus_tracker"), {"fy": 2026})
+        self.assertRedirects(r, self.url + "?fy=2026#life-bonus")
+
+    def test_an_employee_sees_their_own_standing_but_not_the_roster(self):
+        """Merged into a page every employee may open, so the roster of other
+        people's figures must not come with it."""
+        self.sell(self.life, 310000, date(2026, 6, 10))
         plain = User.objects.create_user("plain2", password="x")
         Employee.objects.create(user=plain, role="employee")
         self.client.force_login(plain)
-        self.assertEqual(self.client.get(self.url).status_code, 302)
+        r = self.client.get(self.url)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["life"]["rows"], [])          # no roster
+        self.assertNotContains(r, "seller")                       # nobody else's name
+        self.assertFalse(r.context["life"]["can_record"])          # cannot record a payout
 
 
 class BonusPayoutNettingTests(_Base):
@@ -1028,9 +1049,9 @@ class AdminTableRenderingTests(_Base):
 
     def test_the_month_strip_only_offers_a_form_where_there_is_business(self):
         self.sell(self.life, 950000, date(2026, 7, 10))
-        html = self.client.get(reverse("clients:life_bonus_tracker"),
+        html = self.client.get(reverse("clients:future_points"),
                                {"fy": 2026, "employee": self.emp.id}).content.decode()
-        # One row has business, so exactly one payment form is drawn.
+        # One month has business, so exactly one payment form is drawn.
         self.assertEqual(html.count('name="for_month"'), 1)
         self.assertIn('value="2026-07-01"', html)
 
@@ -1041,7 +1062,7 @@ class AdminTableRenderingTests(_Base):
         BonusPayout.objects.create(employee=self.emp, rule=rule,
                                    for_month=date(2026, 9, 1), amount=Decimal("2000"))
         self.sell(self.life, 950000, date(2026, 7, 10))
-        html = self.client.get(reverse("clients:life_bonus_tracker"),
+        html = self.client.get(reverse("clients:future_points"),
                                {"fy": 2026, "employee": self.emp.id}).content.decode()
         self.assertEqual(html.count('name="for_month"'), 2)   # July + September
 

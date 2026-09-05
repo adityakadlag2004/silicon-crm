@@ -83,16 +83,26 @@ def life_bonus_status(rule, employee, fy_year):
     the rung, and that rung is what is paid. A month that happens to be large
     changes nothing — there is no monthly deduction anywhere in this.
     """
-    from calendar import monthrange
-    from django.db.models import Sum
+    from django.db.models import Q
 
     from ..models import BonusPayout, Sale
 
     start = date(fy_year, FY_START_MONTH, 1)
     end = date(fy_year + 1, FY_START_MONTH, 1) - _one_day()
 
-    qs = Sale.objects.filter(employee=employee, status=Sale.STATUS_APPROVED,
-                             date__gte=start, date__lte=end).filter(rule_sales_q(rule))
+    # The year's sales, read once. Twelve monthly aggregates was twelve queries
+    # per employee — and this way the sales themselves come back, so a month can
+    # show the policies behind its figure instead of only the figure.
+    sales = list(
+        Sale.objects.filter(employee=employee, status=Sale.STATUS_APPROVED,
+                            date__gte=start, date__lte=end)
+        .filter(rule_sales_q(rule))
+        .select_related("client", "product_ref")
+        .order_by("date", "id")
+    )
+    by_month = {}
+    for sale in sales:
+        by_month.setdefault((sale.date.year, sale.date.month), []).append(sale)
 
     paid_by_month = {
         p.for_month: p.amount
@@ -109,12 +119,10 @@ def life_bonus_status(rule, employee, fy_year):
         m = (FY_START_MONTH - 1 + i) % 12 + 1
         y = fy_year + (1 if m < FY_START_MONTH else 0)
         m_start = date(y, m, 1)
-        m_end = date(y, m, monthrange(y, m)[1])
-        agg = qs.filter(date__gte=m_start, date__lte=m_end).aggregate(
-            vol=Sum("amount"), pts=Sum("points"), bonus=Sum("bonus_points"))
-        vol = agg["vol"] or ZERO
-        bonus = agg["bonus"] or ZERO
-        base = (agg["pts"] or ZERO) - bonus
+        rows = by_month.get((y, m), [])
+        vol = sum((s.amount or ZERO for s in rows), ZERO)
+        bonus = sum((s.bonus_points or ZERO for s in rows), ZERO)
+        base = sum((s.points or ZERO for s in rows), ZERO) - bonus
         recorded = paid_by_month.get(m_start)
         volume += vol
         base_total += base
@@ -123,7 +131,7 @@ def life_bonus_status(rule, employee, fy_year):
             paid_total += recorded
         months.append({"year": y, "month": m, "volume": vol, "base": base,
                        "released": bonus, "running": volume,
-                       "for_month": m_start, "paid": recorded})
+                       "for_month": m_start, "paid": recorded, "sales": rows})
 
     level = bonus_released_for(rule, volume)
     released = released_total + paid_total
