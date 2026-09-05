@@ -231,6 +231,20 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   can see what is outstanding.
 - Not on the app's Add Renewal yet: a phone-entered renewal reads Pending
   until someone edits it on the web.
+- **Blank is chased, not just displayed.** The insurer issues the renewed
+  policy three or four days after the renewal is entered, so the tick is
+  always blank on the day and the Filed/Pending column was the only thing
+  that ever asked again. `renewal_upload_reminders` (CRONJOBS, daily 9 AM)
+  raises **one medium-priority task** — high re-rings every 4h, which is a
+  storm for a filing nudge — for the employee who **entered** the renewal
+  (they are the one waiting on the document; fallback `created_by`, then the
+  client's mapped employee), deduped by `assign_group = "renupl:<renewal>"`.
+  It reads a 4–6 day window so a missed morning doesn't drop a renewal, and
+  never dredges up the historical backlog.
+- **The chase stops by itself**: `signals._close_renewal_upload_task`
+  completes that task when the box is ticked — the tick is saved from the web
+  form, the app and the admin, and only the model sees all three.
+  `clients.test.test_renewal_upload_reminders` pins it.
 
 ## Sale policy filing (the Drive tick on a sale)
 

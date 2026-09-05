@@ -1,7 +1,7 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import Sum, Q
-from .models import Sale, Client, Notification, Employee, Product, AuditLog, Lead, InsuranceClaim, InsurancePolicy, Task
+from .models import Sale, Client, Notification, Employee, Product, AuditLog, Lead, InsuranceClaim, InsurancePolicy, Renewal, Task
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -274,3 +274,23 @@ def _delete_followup_tasks(sender, instance, **kwargs):
 
     kind = followups.LEAD if sender is Lead else followups.CLAIM
     Task.objects.filter(source_kind=kind, source_id=instance.pk).delete()
+
+
+@receiver(post_save, sender=Renewal)
+def _close_renewal_upload_task(sender, instance, **kwargs):
+    """Ticking "policy submitted to Drive" closes the reminder chasing it.
+
+    `renewal_upload_reminders` raises one task four days after a renewal is
+    entered. A reminder that keeps standing after the work is done is the
+    thing people learn to ignore, and the tick is saved from the edit form,
+    the app and the admin — only the model sees all three.
+    """
+    if not instance.policy_doc_submitted:
+        return
+    from django.utils import timezone as _tz
+
+    Task.objects.filter(
+        assign_group=f"renupl:{instance.pk}", is_deleted=False,
+    ).exclude(status=Task.STATUS_COMPLETED).update(
+        status=Task.STATUS_COMPLETED, completed_at=_tz.now(),
+    )

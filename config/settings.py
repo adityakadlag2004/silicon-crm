@@ -185,6 +185,9 @@ CRONJOBS = [
     # mapped employee + admins. Daily 8:15 AM. (The 40+ backlog is the same
     # command's --backlog --apply, run by hand.)
     ('15 8 * * *', 'django.core.management.call_command', ['retirement_alerts']),
+    # Renewals entered 4 days ago with the Drive tick still blank: one task for
+    # the employee who entered them to upload the issued policy. Daily 9 AM.
+    ('0 9 * * *', 'django.core.management.call_command', ['renewal_upload_reminders']),
 ]
 
 
