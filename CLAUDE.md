@@ -399,6 +399,16 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   any policy, and **the employee who sold it may cancel their own**. They are
   the one told the EMIs stopped, and the only points a cancellation takes away
   are theirs. Deleting a policy stays admin-only.
+- **A policy pays for its term and no longer.** The term is what was sold
+  (`policy_years`, 1–3): year 1 lands with the sale and years 2..N on the
+  anniversaries inside the term, so a 3-year policy produces exactly three
+  credit events and a 2-year policy two. `coverage_end()` is the wall — nothing
+  is credited on or after it, running the job daily for a decade adds nothing,
+  and re-running it is a no-op. What happens after the term is a **renewal**,
+  entered as a `Renewal`, and **a renewal carries no points at all** (the model
+  has no points field and no view computes one) — the employee is paid on the
+  sale. `TermBoundaryTests` in `test_future_points` pins the whole mechanism by
+  simulating twelve years of the cron.
 - Year 1 is untouched by a cancellation — it was sold, delivered and paid for.
   Un-approving the sale is the tool for taking that back, and it takes
   everything.

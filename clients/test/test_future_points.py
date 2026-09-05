@@ -187,6 +187,81 @@ class CancellationTests(_Base):
         self.assertEqual(len(inc.accrual_schedule(sale)), 2)
 
 
+class TermBoundaryTests(_Base):
+    """A policy is sold for a term and pays for that term — nothing more.
+
+    Two years sold, two years paid; three sold, three paid. What happens after
+    the term is a *renewal*, which is entered as a Renewal and carries no
+    points at all, so nothing here may keep crediting once the term is up.
+    """
+
+    def _credits(self, sale, years=12):
+        """Every credit the engine would ever issue, running the job monthly
+        for `years` years — the real defence against "extra points continuously"
+        is that re-running it forever changes nothing."""
+        from datetime import timedelta
+
+        day = sale.policy_date
+        end = date(sale.policy_date.year + years, 1, 1)
+        while day < end:
+            inc.issue_due_accruals(sale, on_date=day)
+            day += timedelta(days=15)
+        return list(IncentiveAccrual.objects.filter(sale=sale).order_by("year_index"))
+
+    def test_a_three_year_policy_pays_exactly_three_years(self):
+        sale, _p = self.sell(amount=90000, years=3, start=date(2026, 6, 10))
+        credits = self._credits(sale)
+        self.assertEqual([c.year_index for c in credits], [2, 3])   # year 1 came with the sale
+        self.assertEqual(sale.points, Decimal("600.000"))
+        self.assertEqual(sum((c.points for c in credits), Decimal("0")), Decimal("1200.000"))
+        # The whole premium is credited exactly once, in three slices: the
+        # year-1 slice at sale time plus one slice per later year.
+        self.assertEqual(sale.annual_premium + sum((c.amount for c in credits), Decimal("0")),
+                         sale.amount)
+
+    def test_a_two_year_policy_pays_exactly_two_years(self):
+        sale, _p = self.sell(amount=60000, years=2, start=date(2026, 6, 10))
+        self.assertEqual([c.year_index for c in self._credits(sale)], [2])
+
+    def test_a_single_year_policy_pays_once_and_never_again(self):
+        sale = Sale.objects.create(
+            client=self.customer, employee=self.emp, product=self.health.name,
+            product_ref=self.health, amount=Decimal("30000"), date=date(2026, 6, 10),
+            status=Sale.STATUS_APPROVED, policy_type="fresh", policy_years=1,
+            policy_date=date(2026, 6, 10), policy_number="FPONE")
+        self.assertEqual(self._credits(sale), [])
+
+    def test_nothing_is_ever_credited_after_the_term_ends(self):
+        sale, _p = self.sell(amount=90000, years=3, start=date(2026, 6, 10))
+        credits = self._credits(sale)
+        self.assertEqual(sale.coverage_end(), date(2029, 6, 10))
+        self.assertTrue(all(c.due_date < sale.coverage_end() for c in credits))
+
+    def test_the_renewal_after_the_term_earns_no_points(self):
+        """The client renews when the term ends; that renewal is a Renewal row,
+        and a Renewal carries no points — the employee is paid on the sale."""
+        from clients.models import Renewal
+
+        sale, policy = self.sell(amount=90000, years=3, start=date(2026, 6, 10))
+        self._credits(sale)
+        before = IncentiveAccrual.objects.filter(sale=sale).count()
+        Renewal.objects.create(
+            client=self.customer, employee=self.emp, policy=policy,
+            product_ref=self.health, premium_amount=Decimal("32000"),
+            renewal_date=date(2029, 6, 10), premium_collected_on=date(2029, 6, 5))
+        self._credits(sale, years=14)
+        self.assertEqual(IncentiveAccrual.objects.filter(sale=sale).count(), before)
+        self.assertFalse(hasattr(Renewal, "points"))
+
+    def test_the_job_is_idempotent_however_often_it_runs(self):
+        sale, _p = self.sell(amount=90000, years=3, start=date(2026, 6, 10))
+        self._credits(sale)
+        first = list(IncentiveAccrual.objects.filter(sale=sale).values_list("id", "points"))
+        self._credits(sale)          # run the whole decade again
+        self.assertEqual(
+            list(IncentiveAccrual.objects.filter(sale=sale).values_list("id", "points")), first)
+
+
 class PageTests(_Base):
     def test_employee_sees_their_own_statement(self):
         self.sell()

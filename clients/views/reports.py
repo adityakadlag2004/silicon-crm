@@ -959,8 +959,13 @@ def _month_renewal_breakdown(year, month):
                 return d.replace(year=d.year + n, day=28)
 
         my_slice = Decimal("0")
+        # Sub-products roll up: a multiyear sale naming a specific health plan
+        # is still health business. `_is_health_product` already counts it for
+        # points, so matching the code alone here would pay the employee for a
+        # year the margin report never saw.
         for sale in Sale.objects.filter(
-            policy_years__gt=1, status=Sale.STATUS_APPROVED, product_ref=health
+            Q(product_ref=health) | Q(product_ref__parent=health),
+            policy_years__gt=1, status=Sale.STATUS_APPROVED,
         ).only("amount", "policy_years", "policy_date", "date"):
             base_date = sale.policy_date or sale.date
             for k in range(1, sale.policy_years):  # anniversaries → years 2..N

@@ -215,6 +215,27 @@ class MultiyearRenewalRecognitionTests(TestCase):
             self.assertEqual(health["margin_percent"], Decimal("12.75"))
             self.assertEqual(health["margin_amount"], Decimal("12750.00"))
 
+    def test_a_health_plan_sub_product_rolls_up(self):
+        """A multiyear sale naming a specific health plan is still health
+        business. `_is_health_product` already pays the employee for years
+        2..N of it, so matching the parent code alone here would credit points
+        for a year the margin report never recognised."""
+        import datetime
+        from clients.views.reports import _month_renewal_breakdown
+
+        plan = Product.objects.create(code="HEALTH_PLUS", name="Health Plus",
+                                      parent=self.health)
+        Sale.objects.create(
+            client=self.customer, employee=self.sale.employee, product=plan.name,
+            product_ref=plan, amount=Decimal("150000"), policy_type="fresh",
+            policy_years=3, status=Sale.STATUS_APPROVED,
+            date=datetime.date(2026, 7, 15), policy_date=datetime.date(2026, 7, 15),
+            policy_number="MR2",
+        )
+        rows, _ = _month_renewal_breakdown(2027, 7)
+        health = next(r for r in rows if r["product"] == "Health Insurance")
+        self.assertEqual(health["revenue"], Decimal("150000"))   # 100,000 + 50,000
+
     def test_year_1_is_not_a_renewal(self):
         from clients.views.reports import _month_renewal_breakdown
         rows, _ = _month_renewal_breakdown(2026, 7)  # sale/fresh month
