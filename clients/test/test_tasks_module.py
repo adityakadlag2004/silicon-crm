@@ -942,3 +942,47 @@ class TaskBulkStatusTests(TestCase):
         html = c.get(reverse("clients:task_my")).content.decode()
         self.assertIn('id="tkPickAll"', html)
         self.assertIn(f'name="task_ids" value="{self.mine[0].pk}"', html)
+
+
+class TaskBulkDeleteTests(TestCase):
+    """The select-all bar's Delete button: many tasks to the recycle bin at once."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username="bd_admin", password="pw")
+        Employee.objects.create(user=cls.admin, role="admin", salary=0, active=True)
+        cls.emp_user = User.objects.create_user(username="bd_emp", password="pw")
+        cls.emp = Employee.objects.create(user=cls.emp_user, role="employee",
+                                          salary=0, active=True)
+        # Assigned to the employee but created by the admin: the employee may
+        # work it (so it gets a tick box) yet may not delete it.
+        cls.assigned = Task.objects.create(title="Assigned to me", created_by=cls.admin,
+                                           assigned_to=cls.emp)
+        cls.own = Task.objects.create(title="Mine", created_by=cls.emp_user,
+                                      assigned_to=cls.emp)
+
+    def post(self, user, ids):
+        c = Client()
+        c.force_login(user)
+        return c.post(reverse("clients:task_bulk_delete"),
+                      {"task_ids": [str(i) for i in ids]})
+
+    def test_admin_deletes_many(self):
+        self.post(self.admin, [self.assigned.pk, self.own.pk])
+        for t in (self.assigned, self.own):
+            t.refresh_from_db()
+            self.assertTrue(t.is_deleted)
+            self.assertEqual(t.deleted_by, self.admin)
+
+    def test_employee_cannot_delete_a_task_they_only_work_on(self):
+        self.post(self.emp_user, [self.assigned.pk, self.own.pk])
+        self.assigned.refresh_from_db()
+        self.own.refresh_from_db()
+        self.assertFalse(self.assigned.is_deleted)
+        self.assertTrue(self.own.is_deleted)
+
+    def test_list_page_offers_the_delete_button(self):
+        c = Client()
+        c.force_login(self.emp_user)
+        html = c.get(reverse("clients:task_my")).content.decode()
+        self.assertIn(reverse("clients:task_bulk_delete"), html)

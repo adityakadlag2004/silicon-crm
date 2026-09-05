@@ -28,7 +28,7 @@
   if(bulk){
     var picks = Array.prototype.slice.call(document.querySelectorAll('.tk-pick'));
     var all = document.getElementById('tkPickAll'), count = document.getElementById('tkPickCount');
-    var acts = bulk.querySelectorAll('button[name=status]');
+    var acts = bulk.querySelectorAll('button[type=submit]');
     function sync(){
       var n = picks.filter(function(c){ return c.checked; }).length;
       count.textContent = n + ' selected';
@@ -42,7 +42,10 @@
     picks.forEach(function(c){ c.addEventListener('change', sync); });
     bulk.addEventListener('submit', function(e){
       var n = picks.filter(function(c){ return c.checked; }).length;
-      if(!n || !confirm('Update ' + n + ' task' + (n===1?'':'s') + '?')) e.preventDefault();
+      var del = e.submitter && e.submitter.name === 'bulk_delete';
+      var what = del ? 'Move ' : 'Update ';
+      var tail = del ? ' to Deleted Tasks?' : '?';
+      if(!n || !confirm(what + n + ' task' + (n===1?'':'s') + tail)) e.preventDefault();
     });
     sync();
   }

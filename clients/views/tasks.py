@@ -715,6 +715,29 @@ def task_bulk_status(request):
 
 @login_required
 @require_POST
+def task_bulk_delete(request):
+    """Recycle-bin every task ticked on the list.
+
+    Same door as the bulk status bar, but delete is the narrower permission
+    (`_can_delete`), so a ticked task the user may only work on is skipped
+    rather than silently removed.
+    """
+    ids = request.POST.getlist("task_ids")[:500]
+    deleted = skipped = 0
+    for task in _scoped_qs(request).filter(pk__in=ids):
+        if not _can_delete(request, task):
+            skipped += 1
+        elif not task.is_deleted:   # a sibling in the same group may have taken it already
+            delete_task(task, request.user)
+            deleted += 1
+    messages.success(request, f"{deleted} task{'' if deleted == 1 else 's'} moved to Deleted Tasks.")
+    if skipped:
+        messages.warning(request, f"{skipped} skipped — only the assigner or an admin can delete a task.")
+    return redirect(request.META.get("HTTP_REFERER") or "clients:task_all")
+
+
+@login_required
+@require_POST
 def task_set_priority(request, pk):
     task = _visible_task_or_404(request, pk)
     guard = _guard_edit(request, task)

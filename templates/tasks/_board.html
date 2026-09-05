@@ -17,6 +17,7 @@
       <button type="submit" name="status" value="completed" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check-lg"></i> Mark done</button>
       <button type="submit" name="status" value="in_progress" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-play-fill"></i> In progress</button>
       <button type="submit" name="status" value="pending" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Reopen</button>
+      <button type="submit" name="bulk_delete" value="1" formaction="{% url 'clients:task_bulk_delete' %}" class="ki-btn ki-btn-danger ki-btn-sm"><i class="bi bi-trash"></i> Delete</button>
     </form>
     <div class="tk-list">
       {% for task in tasks %}{% include "tasks/_task_card.html" %}{% endfor %}
