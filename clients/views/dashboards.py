@@ -221,8 +221,7 @@ _PRODUCT_DISPLAY = {"Lumsum": "Lumpsum"}
 def _stacked_category_trend(base_qs, today, months=6):
     """6-month trend for `base_qs` (approved sales), each month split by product
     CATEGORY (sub-products fold into their parent). Returns
-    {prods:[{name,color}], data:[{label, seg:[amount per prod]}], total, best}.
-    ponytail: one group-by query per month; fine for 6, revisit if months grows."""
+    {prods:[{name,color}], data:[{label, seg:[amount per prod]}], total, best}."""
     cat_map = _category_name_map()
     y, m, seq = today.year, today.month, []
     for _ in range(months):
@@ -232,14 +231,27 @@ def _stacked_category_trend(base_qs, today, months=6):
             m, y = 12, y - 1
     seq.reverse()
 
-    per_month, cats = [], {}
-    for (yy, mm) in seq:
-        agg = {}
-        for r in base_qs.filter(date__year=yy, date__month=mm).values("product").annotate(t=Sum("amount")):
-            c = cat_map.get(r["product"], r["product"])
-            agg[c] = agg.get(c, Decimal("0")) + (r["t"] or Decimal("0"))
-            cats[c] = True
-        per_month.append((date(yy, mm, 1).strftime("%b"), agg))
+    # One group-by over the whole window, bucketed in Python — this used to be
+    # one query per month, and the page calls it more than once.
+    window_start = date(seq[0][0], seq[0][1], 1)
+    by_month, cats = {}, {}
+    rows = (
+        base_qs.filter(date__gte=window_start)
+        .annotate(mstart=TruncMonth("date"))
+        .values("mstart", "product")
+        .annotate(t=Sum("amount"))
+    )
+    for r in rows:
+        key = (r["mstart"].year, r["mstart"].month)
+        c = cat_map.get(r["product"], r["product"])
+        agg = by_month.setdefault(key, {})
+        agg[c] = agg.get(c, Decimal("0")) + (r["t"] or Decimal("0"))
+        cats[c] = True
+
+    per_month = [
+        (date(yy, mm, 1).strftime("%b"), by_month.get((yy, mm), {}))
+        for (yy, mm) in seq
+    ]
 
     order = list(Product.objects.filter(name__in=list(cats)).order_by("display_order", "name").values_list("name", flat=True))
     for c in cats:
@@ -929,20 +941,26 @@ def employee_dashboard(request):
         monthly_sales_qs = approved_sales_all.filter(date__year=today.year, date__month=today.month)
         target_employee_ids = list(target_employees().values_list("id", flat=True))
 
+        # Four grouped totals, one query each — the loops below used to run a
+        # separate aggregate per product and per employee×product (~110 queries).
+        today_sales_all = approved_sales_all.filter(date=today)
+        day_by_product = _sum_by_product(today_sales_all, "amount", cat_map)
+        month_by_product = _sum_by_product(monthly_sales_qs, "amount", cat_map)
+        day_by_emp = _sum_by_product(today_sales_all, "amount", cat_map, by_emp=True)
+        month_by_emp = _sum_by_product(monthly_sales_qs, "amount", cat_map, by_emp=True)
+
         for product in products:
-            members = [product] + cat_members.get(product, [])  # category + its sub-products
             # Per-head model: org target = sum of each active employee's target.
             target_value = sum(
                 (_cat_daily_target(eid, product) for eid in target_employee_ids),
                 Decimal("0"),
             )
-            achieved = approved_sales_all.filter(product__in=members, date=today).aggregate(total=Sum("amount"))['total'] or 0
+            achieved = day_by_product.get(product, Decimal("0"))
             progress = (achieved / target_value * 100) if target_value else 0
             overall_daily_progress.append({"product": product, "achieved": achieved, "target": target_value, "progress": progress})
 
         for product in products:
-            members = [product] + cat_members.get(product, [])
-            achieved = monthly_sales_qs.filter(product__in=members).aggregate(total=Sum("amount"))['total'] or 0
+            achieved = month_by_product.get(product, Decimal("0"))
             target_value = sum(
                 (_cat_monthly_target(eid, product) for eid in target_employee_ids),
                 Decimal("0"),
@@ -957,8 +975,7 @@ def employee_dashboard(request):
                 "products": [],
             }
             for product in products:
-                members = [product] + cat_members.get(product, [])
-                achieved = approved_sales_all.filter(employee=e, product__in=members, date=today).aggregate(total=Sum("amount"))['total'] or 0
+                achieved = day_by_emp.get((e.id, product), Decimal("0"))
                 target = _cat_daily_target(e.id, product)
                 progress = (achieved / target * 100) if target else 0
                 emp_entry_daily["products"].append({
@@ -975,13 +992,7 @@ def employee_dashboard(request):
                 "products": [],
             }
             for product in products:
-                members = [product] + cat_members.get(product, [])
-                achieved = approved_sales_all.filter(
-                    employee=e,
-                    product__in=members,
-                    date__year=today.year,
-                    date__month=today.month,
-                ).aggregate(total=Sum("amount"))['total'] or 0
+                achieved = month_by_emp.get((e.id, product), Decimal("0"))
                 target = _cat_monthly_target(e.id, product)
                 progress = (achieved / target * 100) if target else 0
                 emp_entry_monthly["products"].append({

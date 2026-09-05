@@ -107,6 +107,8 @@ def _base_qs():
     return (
         Task.objects.filter(is_deleted=False)
         .select_related("category", "assigned_to__user", "created_by")
+        # Every card renders task.checklist_percent, which walks checklist_items.
+        .prefetch_related("checklist_items")
     )
 
 

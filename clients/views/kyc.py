@@ -94,22 +94,32 @@ def _duplicate_groups():
     groups = []
     seen_ids = set()
 
-    def add_groups(key_fn, label, clients):
-        buckets = defaultdict(list)
-        for c in clients:
-            key = key_fn(c)
-            if key:
-                buckets[key].append(c)
-        for key, members in buckets.items():
-            ids = frozenset(c.id for c in members)
-            if len(members) > 1 and ids not in seen_ids:
-                seen_ids.add(ids)
-                groups.append({"label": label, "key": key, "clients": members})
+    # Scan on values, not model instances: building 3k Client objects (wide
+    # rows, plus the employee/user join) to read three fields was most of this
+    # page. Only the profiles that land in a group get loaded for real.
+    rows = list(Client.objects.values_list("id", "pan", "phone", "name"))
 
-    clients = list(Client.objects.select_related("mapped_to__user"))
-    add_groups(lambda c: re.sub(r"[^A-Z0-9]", "", (c.pan or "").upper()), "Same PAN", clients)
-    add_groups(lambda c: re.sub(r"\D", "", c.phone or "")[-10:] or None, "Same phone", clients)
-    add_groups(lambda c: (c.name or "").strip().upper() or None, "Same name", clients)
+    def add_groups(key_fn, label):
+        buckets = defaultdict(list)
+        for row in rows:
+            key = key_fn(row)
+            if key:
+                buckets[key].append(row[0])
+        for key, member_ids in buckets.items():
+            ids = frozenset(member_ids)
+            if len(member_ids) > 1 and ids not in seen_ids:
+                seen_ids.add(ids)
+                groups.append({"label": label, "key": key, "ids": member_ids})
+
+    add_groups(lambda r: re.sub(r"[^A-Z0-9]", "", (r[1] or "").upper()), "Same PAN")
+    add_groups(lambda r: re.sub(r"\D", "", r[2] or "")[-10:] or None, "Same phone")
+    add_groups(lambda r: (r[3] or "").strip().upper() or None, "Same name")
+
+    by_id = Client.objects.select_related("mapped_to__user").in_bulk(
+        {cid for group in groups for cid in group["ids"]}
+    )
+    for group in groups:
+        group["clients"] = [by_id[cid] for cid in group.pop("ids") if cid in by_id]
 
     # One batched pass for every profile on the page — counting per client here
     # meant thousands of queries once the duplicate list grew.
@@ -142,10 +152,12 @@ def _hygiene_lists():
     """Junk-name profiles (single word) and profiles with no business data —
     the two lists behind 'clean up my client base'."""
     busy_ids = _ids_with_business()
-    single_word = [
-        c for c in Client.objects.select_related("mapped_to__user").order_by("name")
-        if len((c.name or "").strip().split()) <= 1
-    ][:100]
+    # "Two or more words" is <non-space><space><non-space>; excluding that in
+    # SQL beats loading every client to throw nearly all of them away.
+    single_word = list(
+        Client.objects.exclude(name__regex=r"\S\s+\S")
+        .select_related("mapped_to__user").order_by("name")[:100]
+    )
     for c in single_word:
         c.has_business = c.id in busy_ids
     no_business = list(

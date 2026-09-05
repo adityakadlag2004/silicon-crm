@@ -307,7 +307,12 @@ def my_clients(request):
         return redirect("clients:all_clients")
 
     employee = request.user.employee
-    clients_qs = Client.objects.filter(mapped_to=employee).order_by("id")
+    # The list prints mapped_to.user.username — without this it's one query per row.
+    clients_qs = (
+        Client.objects.filter(mapped_to=employee)
+        .select_related("mapped_to__user")
+        .order_by("id")
+    )
 
     q = (request.GET.get("q") or "").strip()
     if q:
@@ -653,13 +658,22 @@ def client_analysis(request):
             ])
         return response
 
-    _attach_client_product_badges(clients, product_filters)
+    # Paginate like every other client list: rendering the whole book was a
+    # 1.4 MB page and ~1.4s of pure template time. Export CSV still gets all.
+    page_obj = Paginator(clients.order_by("id"), PER_PAGE).get_page(request.GET.get("page"))
+    _attach_client_product_badges(page_obj.object_list, product_filters)
+
+    get_params = request.GET.copy()
+    get_params.pop("page", None)
+
     analysis_colspan = 5 + len(product_filters)
     return render(
         request,
         "clients/client_analysis.html",
         {
-            "clients": clients,
+            "clients": page_obj.object_list,
+            "page_obj": page_obj,
+            "base_qs": get_params.urlencode(),
             "product_filters": product_filters,
             "analysis_colspan": analysis_colspan,
         },
