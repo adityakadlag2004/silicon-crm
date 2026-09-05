@@ -16,10 +16,32 @@
       </div>
     </div>
     {% if can_delete %}
-    <a href="{% url 'clients:policy_delete' policy.id %}" class="ki-btn ki-btn-secondary ki-btn-sm"
-       title="Delete this policy — for a sale booked under the wrong product">
-      <i class="bi bi-trash"></i> Delete policy
-    </a>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+      {% if policy.status == 'cancelled' %}
+      <form method="post" action="{% url 'clients:policy_cancel' policy.id %}" style="margin:0;">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="active">
+        <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm"
+                title="Put this policy back on the book">
+          <i class="bi bi-arrow-counterclockwise"></i> Reinstate
+        </button>
+      </form>
+      {% else %}
+      <form method="post" action="{% url 'clients:policy_cancel' policy.id %}" style="margin:0;"
+            onsubmit="return confirm('Mark this policy cancelled? Any remaining years of its incentive points will not be credited.');">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="cancelled">
+        <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm"
+                title="The client left or the insurer cancelled — keeps the record, stops future points">
+          <i class="bi bi-x-circle"></i> Cancel policy
+        </button>
+      </form>
+      {% endif %}
+      <a href="{% url 'clients:policy_delete' policy.id %}" class="ki-btn ki-btn-secondary ki-btn-sm"
+         title="Delete this policy — for a sale booked under the wrong product">
+        <i class="bi bi-trash"></i> Delete policy
+      </a>
+    </div>
     {% endif %}
   </div>
   <div class="ki-rec-summary">

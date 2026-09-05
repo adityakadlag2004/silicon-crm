@@ -376,6 +376,7 @@
               <li><div class="kn-menu-divider"></div></li>
               <li class="kn-menu-section">Incentives</li>
               <li><a class="kn-menu-item" href="{% url 'clients:incentive_calculator' %}"><i class="bi bi-calculator-fill"></i> Incentive Calculator</a></li>
+              <li><a class="kn-menu-item" href="{% url 'clients:future_points' %}"><i class="bi bi-hourglass-split"></i> Future Points</a></li>
               {% if nav.can_incentives %}
                 <li><a class="kn-menu-item" href="{% url 'clients:incentive_structure' %}"><i class="bi bi-diagram-3-fill"></i> Incentive Structure</a></li>
                 <li><a class="kn-menu-item" href="{% url 'clients:incentive_payout' %}"><i class="bi bi-cash-stack"></i> Incentive Payout</a></li>

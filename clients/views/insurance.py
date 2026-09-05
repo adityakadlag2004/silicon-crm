@@ -9,7 +9,8 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.views.decorators.http import require_GET
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_GET, require_POST
 from django.db.models import Case, Count, IntegerField, Q, Sum, When
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -151,6 +152,33 @@ def policy_detail(request, policy_id):
         "renewals": renewals, "renewals_total": renewals_total,
         "can_delete": is_admin(request.user),
     })
+
+
+@admin_required
+@require_POST
+def policy_cancel(request, policy_id):
+    """Cancel a policy (or reinstate one) — admin-only, from the tracker or the
+    Future Points page.
+
+    Deleting is blocked once a policy has claims or collected renewals, and
+    rightly so; cancelling is what actually happens in the field — the client
+    walks away or the insurer cancels. For a multiyear policy this is also the
+    switch that stops the remaining years' incentive points from ever landing.
+    """
+    policy = get_object_or_404(InsurancePolicy.objects.select_related("client"), pk=policy_id)
+    status = request.POST.get("status") or InsurancePolicy.STATUS_CANCELLED
+    if status not in dict(InsurancePolicy.STATUS_CHOICES):
+        status = InsurancePolicy.STATUS_CANCELLED
+    insurance_sync.set_policy_status(policy, status, request.user,
+                                     note=(request.POST.get("reason") or "").strip())
+    messages.success(request, (
+        f"Policy {policy.policy_number} marked {policy.get_status_display()}."
+        + (" Any remaining years of its incentive will not be credited."
+           if status == InsurancePolicy.STATUS_CANCELLED else "")))
+    nxt = request.POST.get("next")
+    return redirect(nxt if nxt and url_has_allowed_host_and_scheme(
+        nxt, allowed_hosts={request.get_host()}) else
+        reverse("clients:policy_detail", args=[policy.pk]))
 
 
 @admin_required

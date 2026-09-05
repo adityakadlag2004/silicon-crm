@@ -14,6 +14,7 @@ urlpatterns = [
     path("sales/all/", sales.all_sales, name="all_sales"),
     path("incentives/calculator/", sales.incentive_calculator, name="incentive_calculator"),
     path("incentives/payout/", sales.incentive_payout, name="incentive_payout"),
+    path("incentives/future-points/", sales.future_points, name="future_points"),
     path("incentives/life-bonus/", sales.life_bonus_tracker, name="life_bonus_tracker"),
     path("incentives/bonus-payout/record/", sales.record_bonus_payout, name="record_bonus_payout"),
     path("incentives/", sales.incentive_structure, name="incentive_structure"),

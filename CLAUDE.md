@@ -355,6 +355,36 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `insurance_renewal` **calendar feed** (`services/calendar_feed.py`). Move it
   onto `InsurancePolicy.end_date` when the calendar next gets touched.
 
+## Future points (the multiyear statement)
+
+- `/clients/incentives/future-points/` is what an employee is owed but has not
+  been paid yet: the later years of every multiyear health policy they sold,
+  as a total, then one line per **financial year**, opening into the **months**
+  the instalments fall due in. An employee sees their own; an admin/manager
+  opens on the whole firm and can pick a person.
+- **Nothing new is stored.** The rows are derived by
+  `incentives.pending_accruals()` (now firm-wide when `employee=None`, and each
+  row carries the policy, the client and the policy number) and grouped by
+  `incentives.future_points()`. The `multiyear_incentive_accruals` cron is
+  still the only thing that credits them, so the salary check is unchanged —
+  the points join the month they land in like any others.
+- **Cancelling is the policy's status, not a new flag.** A multiyear premium is
+  paid up front, but the policy can still be cancelled — and then years 2..N
+  were never earned. `insurance_sync.set_policy_status()` marks the tracker
+  policy `cancelled` (admin-only, `policy_cancel`, from the policy page or the
+  Future Points row) and `incentives.accrual_schedule` reads that status, so
+  nothing further is ever scheduled. **No accrual row needs deleting: a year is
+  only written on the day it falls due.** Reinstating puts the remaining years
+  back.
+- Year 1 is untouched by a cancellation — it was sold, delivered and paid for.
+  Un-approving the sale is the tool for taking that back, and it takes
+  everything.
+- Deleting a policy is still separate and still blocked by claims/renewals
+  (`policy_delete_blockers`); cancelling is the answer when the record has to
+  stay.
+- `clients.test.test_future_points` pins the statement, the cancellation and
+  the page.
+
 ## Employee incentive (points = rupees)
 
 - `services/incentives.py` owns the maths — `quote()` is the single

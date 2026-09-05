@@ -147,6 +147,26 @@ def life_bonus_status(rule, employee, fy_year):
     }
 
 
+def policy_cancelled(sale):
+    """True when the sale's tracker policy has been cancelled.
+
+    A multiyear premium is paid up front, but the insurer can still cancel or
+    the client can walk away — and then years 2..N were never earned. The
+    tracker policy is where that is recorded, so it is read here rather than
+    stored a second time: cancel the policy and the later years stop being
+    scheduled at all. Nothing needs deleting, because an accrual row is only
+    written on the day its year falls due.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+
+    from ..models import InsurancePolicy
+
+    try:
+        return sale.policy.status == InsurancePolicy.STATUS_CANCELLED
+    except ObjectDoesNotExist:
+        return False
+
+
 def accrual_schedule(sale):
     """[(year_index, due_date, slice)] for a multiyear health policy's later years.
 
@@ -159,6 +179,8 @@ def accrual_schedule(sale):
 
     years = sale.policy_years or 1
     if years < 2 or sale.status != Sale.STATUS_APPROVED or not sale._is_health_product():
+        return []
+    if policy_cancelled(sale):
         return []
     basis = sale.renewal_basis
     if not basis:
@@ -214,16 +236,23 @@ def accrued_points(employee, start, end):
     return qs.aggregate(t=Sum("points"))["t"] or ZERO
 
 
-def pending_accruals(employee):
+def pending_accruals(employee=None):
     """Later-year points not yet due, soonest first — what's already banked
-    for the future without another sale."""
-    from ..models import IncentiveAccrual, Sale
+    for the future without another sale.
+
+    ``employee=None`` reads the whole firm, which is how an admin sees the
+    liability the book is carrying. Each row names the policy it hangs off, so
+    a cancellation has something to cancel.
+    """
+    from ..models import Sale
 
     today = _today()
     rows = []
-    sales = (Sale.objects.filter(employee=employee, status=Sale.STATUS_APPROVED,
-                                 policy_years__gt=1)
-             .select_related("client", "product_ref").prefetch_related("accruals"))
+    sales = (Sale.objects.filter(status=Sale.STATUS_APPROVED, policy_years__gt=1)
+             .select_related("client", "product_ref", "employee__user", "policy")
+             .prefetch_related("accruals"))
+    if employee is not None:
+        sales = sales.filter(employee=employee)
     for sale in sales:
         if not sale._is_health_product():
             continue
@@ -233,9 +262,44 @@ def pending_accruals(employee):
             if due <= today or year_index in done:
                 continue
             q = quote(rule, amount, policy_type=sale.policy_type or "fresh", is_health=True)
-            rows.append({"sale": sale, "year_index": year_index, "due": due,
+            rows.append({"sale": sale, "employee": sale.employee,
+                         "client": sale.client,
+                         "policy": getattr(sale, "policy", None),
+                         "policy_number": sale.policy_number,
+                         "year_index": year_index, "due": due,
                          "amount": amount, "estimate": q["total"]})
-    return sorted(rows, key=lambda r: r["due"])
+    return sorted(rows, key=lambda r: (r["due"], r["sale"].id))
+
+
+def future_points(employee=None):
+    """Pending later-year points as a statement: total, then FY, then month.
+
+    The shape an adviser's own commission statement uses — one line per
+    financial year that opens into the months inside it — because the two
+    questions are "how much is still coming" and "which month does it land in".
+    """
+    years = {}
+    total = ZERO
+    for row in pending_accruals(employee):
+        total += row["estimate"]
+        fy = fy_start_year(row["due"])
+        year = years.setdefault(fy, {"fy_year": fy, "label": f"FY {fy % 100}-{(fy + 1) % 100:02d}",
+                                     "points": ZERO, "amount": ZERO, "months": {}})
+        year["points"] += row["estimate"]
+        year["amount"] += row["amount"]
+        key = (row["due"].year, row["due"].month)
+        month = year["months"].setdefault(key, {"date": row["due"].replace(day=1),
+                                                "points": ZERO, "amount": ZERO, "rows": []})
+        month["points"] += row["estimate"]
+        month["amount"] += row["amount"]
+        month["rows"].append(row)
+    out = []
+    for fy in sorted(years):
+        year = years[fy]
+        year["months"] = [year["months"][k] for k in sorted(year["months"])]
+        out.append(year)
+    return {"total": total, "years": out,
+            "count": sum(len(m["rows"]) for y in out for m in y["months"])}
 
 
 def _today():

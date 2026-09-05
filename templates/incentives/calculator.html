@@ -309,34 +309,14 @@
   <h3 class="mb-1" style="font-size:1.05rem;font-weight:700;">
     <i class="bi bi-hourglass-split" style="color:var(--ki-primary);"></i> Points already coming to you
   </h3>
-  <p class="text-muted mb-3" style="font-size:.88rem;">
+  <p class="text-muted mb-2" style="font-size:.88rem;">
     Later years of multiyear health policies you have already sold. The client has
-    paid; these points arrive on their own, on the date shown. You do not need to
+    paid; these points arrive on their own, on the anniversary. You do not need to
     sell anything or collect anything for them.
   </p>
-  <div class="ki-table-wrap">
-    <table class="ki-table">
-      <thead>
-        <tr><th>Client</th><th>Policy year</th><th class="text-end">That year's premium</th>
-            <th>Arrives on</th><th class="text-end">Points (about)</th></tr>
-      </thead>
-      <tbody>
-      {% for a in pending_accruals %}
-        <tr>
-          <td>{{ a.sale.client }}</td>
-          <td>Year {{ a.year_index }} of {{ a.sale.policy_years }}</td>
-          <td class="text-end">₹{{ a.amount|inr }}</td>
-          <td>{{ a.due|date:"d M Y" }}</td>
-          <td class="text-end">{{ a.estimate|inr }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <p class="form-text mb-0 mt-2">
-    Shown at today's rate for a policy standing on its own — the actual points follow
-    whatever step your month has reached when they arrive.
-  </p>
+  <a class="ki-btn ki-btn-secondary" href="{% url 'clients:future_points' %}{% if can_pick %}?employee={{ target.id }}{% endif %}">
+    <i class="bi bi-list-ol"></i> See all {{ pending_accruals|length }} — year by year, month by month
+  </a>
 </div>
 {% endif %}
 

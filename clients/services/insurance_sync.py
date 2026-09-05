@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.utils import timezone
+
 from ..models import InsurancePolicy, Renewal, Sale
 
 # Product identity → tracker insurance_type.
@@ -138,6 +140,24 @@ def policy_delete_blockers(policy):
     if renewals:
         blockers.append(f"{renewals} renewal(s) collected against it")
     return blockers
+
+
+def set_policy_status(policy, status, actor, *, note="") -> None:
+    """Mark a policy cancelled (or put it back on the book).
+
+    Cancelling is the honest answer to "this policy is gone" when deleting is
+    not: the claims and the premium already collected against it have to stay.
+    For a **multiyear** health policy it is also what stops the later years'
+    incentive points — ``incentives.accrual_schedule`` reads this status, so
+    nothing further is ever scheduled, and no accrual row needs deleting
+    because a year is only written on the day it falls due.
+    """
+    policy.status = status
+    if note:
+        stamp = f"{timezone.localdate():%d %b %Y}: {policy.get_status_display()} — {note}"
+        policy.notes = f"{policy.notes}\n{stamp}".strip()
+    policy._audit_actor = actor      # picked up by the AuditLog signal
+    policy.save(update_fields=["status", "notes"])
 
 
 def delete_policy(policy, actor, *, with_sale=False) -> list:

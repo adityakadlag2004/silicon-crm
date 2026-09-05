@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Future Points{% endblock %}
+{% block page_title %}Future Points{% endblock %}
+
+{% block content %}
+<style>
+  .fp-year > summary { list-style:none; cursor:pointer; padding:.75rem 1rem; display:flex;
+                       align-items:center; gap:.6rem; font-weight:700; }
+  .fp-year > summary::-webkit-details-marker { display:none; }
+  .fp-year > summary::before { content:"\25B8"; color:var(--ki-text-secondary); font-size:.85rem; }
+  .fp-year[open] > summary::before { content:"\25BE"; }
+  .fp-year > summary .fp-amt { margin-left:auto; font-variant-numeric:tabular-nums; }
+  .fp-year + .fp-year { border-top:1px solid var(--ki-card-border); }
+  .fp-month { font-weight:600; background:var(--ki-bg, #f8f9fa); }
+  .fp-head { display:flex; padding:.6rem 1rem; font-weight:700; font-size:.82rem;
+             text-transform:uppercase; letter-spacing:.02em; background:#DBEAFE;
+             color:var(--ki-dark); }
+  .fp-head .fp-amt { margin-left:auto; }
+</style>
+
+<div class="ki-card mb-3">
+  <div style="display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between;">
+    <div>
+      <div class="ki-card-subtitle" style="margin:0;">Total future points</div>
+      <div style="font-size:1.8rem;font-weight:800;">₹{{ data.total|inr }}</div>
+      <div class="text-muted" style="font-size:.86rem;">
+        {% if target %}{{ target.user.get_full_name|default:target.user.username }}{% else %}Whole team{% endif %}
+        · later years of multiyear health policies already sold
+      </div>
+    </div>
+    {% if can_pick %}
+    <form method="get" style="display:flex;gap:.5rem;align-items:flex-end;">
+      <div>
+        <label class="form-label" for="fpEmp" style="font-size:.8rem;">Employee</label>
+        <select class="form-select" name="employee" id="fpEmp" onchange="this.form.submit()">
+          <option value="">Everyone</option>
+          {% for e in employees %}
+            <option value="{{ e.id }}" {% if picked == e.id|stringformat:"s" %}selected{% endif %}>
+              {{ e.user.get_full_name|default:e.user.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <noscript><button class="ki-btn ki-btn-secondary" type="submit">Go</button></noscript>
+    </form>
+    {% endif %}
+  </div>
+  <p class="form-text mb-0 mt-2">
+    The client has already paid these premiums, so nothing has to be sold or collected
+    for these points to arrive — each instalment is credited on the policy anniversary
+    shown, and counts in the month it lands like any other points. Figures are at
+    today's rate; the actual credit follows whatever step that month has reached.
+  </p>
+</div>
+
+{% if data.years %}
+<div class="ki-table-wrap">
+  <div class="fp-head">
+    <span>Financial Year (FY)</span><span class="fp-amt">Due Points (₹)</span>
+  </div>
+  {% for y in data.years %}
+  <details class="fp-year" {% if forloop.first %}open{% endif %}>
+    <summary>{{ y.label }}<span class="fp-amt">₹{{ y.points|inr }}</span></summary>
+    <table class="ki-table">
+      <thead>
+        <tr>
+          <th>Month / Policy</th><th>Client</th><th>Year</th>
+          <th class="text-end">Premium (₹)</th><th class="text-end">Points (₹)</th>
+          {% if can_cancel %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+      {% for m in y.months %}
+        <tr class="fp-month">
+          <td>{{ m.date|date:"M Y" }}</td><td></td><td></td>
+          <td class="text-end">{{ m.amount|inr }}</td>
+          <td class="text-end">{{ m.points|inr }}</td>
+          {% if can_cancel %}<td></td>{% endif %}
+        </tr>
+        {% for r in m.rows %}
+        <tr>
+          <td>
+            {% if r.policy %}
+              <a href="{% url 'clients:policy_detail' r.policy.id %}">{{ r.policy.policy_number }}</a>
+            {% else %}
+              {{ r.policy_number|default:"—" }}
+              <span class="text-muted" style="font-size:.8rem;">(no tracker policy)</span>
+            {% endif %}
+            <div class="text-muted" style="font-size:.8rem;">
+              due {{ r.due|date:"d M Y" }}
+              {% if not target %}· {{ r.employee.user.get_full_name|default:r.employee.user.username }}{% endif %}
+            </div>
+          </td>
+          <td><a href="{% url 'clients:client_profile' r.client.id %}">{{ r.client.name }}</a></td>
+          <td>{{ r.year_index }} of {{ r.sale.policy_years }}</td>
+          <td class="text-end">{{ r.amount|inr }}</td>
+          <td class="text-end">{{ r.estimate|inr }}</td>
+          {% if can_cancel %}
+          <td class="text-end">
+            {% if r.policy %}
+            <form method="post" action="{% url 'clients:policy_cancel' r.policy.id %}" style="margin:0;"
+                  onsubmit="return confirm('Cancel policy {{ r.policy.policy_number|escapejs }}? The remaining years of its points will not be credited.');">
+              {% csrf_token %}
+              <input type="hidden" name="status" value="cancelled">
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm" aria-label="Cancel policy {{ r.policy.policy_number }}">
+                <i class="bi bi-x-circle"></i> Cancel policy
+              </button>
+            </form>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endfor %}
+</div>
+{% else %}
+<div class="ki-card">
+  <p class="mb-0 text-muted">
+    Nothing pending. Future points appear here when a multiyear health policy is
+    sold — years 2 and 3 of its premium are credited on each anniversary.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

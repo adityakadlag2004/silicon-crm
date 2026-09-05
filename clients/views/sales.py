@@ -779,6 +779,57 @@ def incentive_calculator(request):
 
 
 @login_required
+def future_points(request):
+    """Points already earned that have not landed yet — the multiyear statement.
+
+    A 2- or 3-year health premium is paid up front but credited one year at a
+    time, so an employee's real standing includes years that arrive without
+    another sale. This is that liability read the way an adviser's own
+    commission statement reads it: a total, then one line per financial year,
+    opening into the months the points fall due in.
+
+    Nothing here is a new mechanism — ``incentives.pending_accruals`` derives
+    every row from the sale and its policy, and the ``multiyear_incentive_accruals``
+    cron is still what credits them. The salary check they are measured against
+    is unchanged: these points join the month they land in, like any other.
+    """
+    viewer = getattr(request.user, "employee", None)
+    can_pick = permissions.is_admin_or_manager(request.user)
+    employees = (Employee.objects.select_related("user").filter(active=True)
+                 .order_by("user__username") if can_pick else [])
+
+    # An admin opens this to see what the whole book is carrying; an employee
+    # can only ever see their own.
+    target = None if can_pick else viewer
+    picked = request.GET.get("employee") or ""
+    if can_pick and picked:
+        target = Employee.objects.filter(pk=picked).select_related("user").first()
+    if not can_pick and viewer is None:
+        messages.error(request, "Your account is not mapped to an employee.")
+        return redirect("clients:dashboard")
+
+    data = incentives_service.future_points(target)
+    upcoming = next((m for y in data["years"] for m in y["months"]), None)
+
+    return render(request, "incentives/future_points.html", {
+        "crumbs": [{"label": "Sales", "url": reverse("clients:all_sales")},
+                   {"label": "Future Points"}],
+        "kpis": [
+            {"label": "Total future points", "value": f"₹{inr(data['total'])}", "color": "#4338CA"},
+            {"label": "Instalments due", "value": data["count"], "color": "#0F766E",
+             "sub": f"across {len(data['years'])} financial year{'' if len(data['years']) == 1 else 's'}"},
+            {"label": "Next release", "color": "#15803D",
+             "value": f"₹{inr(upcoming['points'])}" if upcoming else "—",
+             "sub": f"{upcoming['date']:%b %Y}" if upcoming else "nothing pending"},
+        ],
+        "data": data, "target": target, "employees": employees,
+        "can_pick": can_pick, "picked": picked,
+        "can_cancel": permissions.is_admin(request.user),
+        "today": timezone.localdate(),
+    })
+
+
+@login_required
 def incentive_structure(request):
     """The incentive structure, explained — plus a what-if calculator.
 
