@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Health EMI Plans{% endblock %}
+{% block page_title %}Health EMI Plans{% endblock %}
+{% block content %}
+
+{% comment %}
+  Derived from the sales book, nothing stored: a sale carries its date, term
+  and premium, so the instalment plan is computed at read time. The state tabs
+  are the primary control — collecting and finished are different questions.
+{% endcomment %}
+<div class="ki-showbar" style="gap:.4rem;">
+  {% for t in tabs %}
+    <a href="{{ t.url }}" class="ki-btn ki-btn-sm {% if t.active %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">
+      {{ t.label }} <span class="text-muted">({{ t.count }})</span>
+    </a>
+  {% endfor %}
+</div>
+
+<form method="get" class="ki-showbar">
+  {% if state %}<input type="hidden" name="state" value="{{ state }}">{% endif %}
+  <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm"
+         style="max-width:300px;" placeholder="Client or policy number…">
+  <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit"><i class="bi bi-search"></i> Search</button>
+  {% if q %}<a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% if state %}?state={{ state }}{% else %}?{% endif %}">Reset</a>{% endif %}
+  <span class="right">{{ rows|length }} plan{{ rows|length|pluralize }}</span>
+</form>
+
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr>
+      <th>Client</th><th>Policy</th><th class="num">Premium</th><th class="num">Monthly EMI</th>
+      <th>EMI Period</th><th>Progress</th><th>Next due</th><th>Sold by</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td data-label="Client">
+          <div style="display:flex;align-items:center;gap:.6rem;min-width:0;">
+            <span class="ki-mono ki-mono-sm" style="--c:{{ r.sale.client.name|monocolor }};">{{ r.sale.client.name|monogram }}</span>
+            <div style="min-width:0;">
+              <a href="{% url 'clients:client_profile' r.sale.client.id %}" class="name-link">{{ r.sale.client.name }}</a>
+              <div class="text-muted small">Sold {{ r.sale.date|date:"d M Y" }} · {{ r.sale.policy_years }}-year</div>
+            </div>
+          </div>
+        </td>
+        <td data-label="Policy">
+          {% if r.sale.policy %}
+            <a href="{% url 'clients:policy_detail' r.sale.policy.id %}" class="name-link">{{ r.sale.policy_number|mask_pan }}</a>
+          {% else %}
+            {{ r.sale.policy_number|mask_pan|default:"—" }}
+          {% endif %}
+        </td>
+        <td data-label="Premium" class="num">₹{{ r.sale.amount|inr }}</td>
+        <td data-label="Monthly EMI" class="num">₹{{ r.monthly|inr }}</td>
+        <td data-label="EMI Period">
+          {{ r.start|date:"M Y" }} <span class="text-muted">→</span> {{ r.end|date:"M Y" }}
+          <div class="text-muted small">{{ r.months }} instalments, due the 5th</div>
+        </td>
+        <td data-label="Progress">
+          {{ r.paid }}/{{ r.months }} paid
+          {% if r.pending %}<div class="text-muted small">{{ r.pending }} to collect</div>{% endif %}
+        </td>
+        <td data-label="Next due">
+          {% if r.next_due and r.state == 'live' %}
+            {{ r.next_due|date:"d M Y" }}
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td data-label="Sold by">{{ r.sale.employee.user.get_full_name|default:r.sale.employee.user.username }}</td>
+        <td data-label="Status">
+          <span class="ki-tag" style="--c:{% if r.state == 'live' %}#15803D{% elif r.state == 'stopped' %}#BE123C{% else %}#57534E{% endif %};">
+            {% if r.state == 'live' %}Live{% elif r.state == 'stopped' %}Stopped{% else %}Completed{% endif %}
+          </span>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="9">
+        <div class="ki-empty"><i class="bi bi-calendar2-check"></i>
+          No health policies on EMI here. A plan appears when a multiyear health
+          sale is approved with an EMI term.
+        </div>
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

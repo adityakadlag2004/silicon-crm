@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from ..models import InsuranceClaim, InsurancePolicy, Sale
 from ..permissions import admin_required, is_admin
-from ..services import insurance_sync
+from ..services import insurance_sync, sales as sales_service
 from .helpers import name_words_q
 from ..templatetags.custom_filters import inr
 
@@ -137,6 +137,76 @@ def policy_list(request):
         "tabs": tabs, "today": today,
         "statuses": InsurancePolicy.STATUS_CHOICES,
         "types": InsurancePolicy.TYPE_CHOICES,
+    })
+
+
+@login_required
+def emi_list(request):
+    """Health policies sold on EMI — who is still paying, and who has finished.
+
+    Read straight off the sales book: a sale carries the date, the term and the
+    full premium, so the instalment plan is derived by
+    ``services.sales.emi_schedule`` rather than kept in a second table that
+    could disagree with it. The state tabs are the primary control, as on the
+    tracker — "still collecting" and "done" are two different questions.
+    """
+    sales = (
+        Sale.objects.filter(emi_months__gt=0, status=Sale.STATUS_APPROVED)
+        .filter(Q(product_ref__code="HEALTH_INS")
+                | Q(product_ref__parent__code="HEALTH_INS")
+                | Q(product__iexact="Health Insurance"))
+        .select_related("client", "employee__user", "product_ref", "policy")
+    )
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        sales = sales.filter(Q(policy_number__icontains=q) | name_words_q("client__name", q))
+
+    today = timezone.localdate()
+    rows = [r for r in (sales_service.emi_schedule(s, today) for s in sales) if r]
+
+    counts = {"live": 0, "completed": 0, "stopped": 0}
+    for r in rows:
+        counts[r["state"]] += 1
+
+    state = request.GET.get("state", "")
+    if state not in counts:
+        state = ""
+    if state:
+        rows = [r for r in rows if r["state"] == state]
+
+    # Live plans are a collection queue — soonest instalment first. Finished
+    # ones are an archive, so they read newest-first.
+    live = sorted((r for r in rows if r["state"] == "live"), key=lambda r: r["next_due"])
+    rest = sorted((r for r in rows if r["state"] != "live"), key=lambda r: r["end"], reverse=True)
+    rows = live + rest
+
+    outstanding = sum((r["monthly"] or 0) * r["pending"] for r in live)
+    base = reverse("clients:emi_list")
+
+    def tab(key, label):
+        url = f"{base}?state={key}" if key else base
+        if q:
+            url += ("&" if "?" in url else "?") + f"q={q}"
+        return {"key": key, "label": label,
+                "count": sum(counts.values()) if not key else counts[key],
+                "url": url, "active": state == key}
+
+    return render(request, "insurance/emi_list.html", {
+        "crumbs": [{"label": "Insurance Tracker", "url": reverse("clients:policy_list")},
+                   {"label": "Health EMI"}],
+        "kpis": [
+            {"label": "EMI plans", "value": sum(counts.values()), "color": "#4338CA",
+             "url": tab("", "")["url"], "active": not state},
+            {"label": "Live", "value": counts["live"], "color": "#15803D",
+             "url": tab("live", "")["url"], "active": state == "live"},
+            {"label": "Completed", "value": counts["completed"], "color": "#57534E",
+             "url": tab("completed", "")["url"], "active": state == "completed"},
+            {"label": "Outstanding", "value": f"₹{inr(outstanding)}", "color": "#B45309",
+             "sub": "instalments still to collect"},
+        ],
+        "rows": rows, "q": q, "state": state, "today": today,
+        "tabs": [tab("", "All"), tab("live", "Live"), tab("completed", "Completed"),
+                 tab("stopped", "Stopped")],
     })
 
 

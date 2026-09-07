@@ -9,7 +9,7 @@ Points themselves are computed by ``Sale.compute_points()`` (invoked from
 including the sibling-recompute that keeps slab/campaign payouts consistent
 after any status change.
 """
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.utils import timezone
 
@@ -137,6 +137,50 @@ def emi_due_sale_ids(today, employee=None):
                    employee)
     return [s.pk for s in qs
             if s.date and emi_window_contains(s, today.year, today.month)]
+
+
+# Instalments are due on the 5th, starting the month AFTER the sale — the same
+# schedule the emi_reminders cron chases.
+EMI_DUE_DAY = 5
+
+
+def emi_due_date(sale, index):
+    """Due date of the (0-based) `index`-th instalment of a sale's EMI plan."""
+    month = sale.date.month + 1 + index
+    return date(sale.date.year + (month - 1) // 12, (month - 1) % 12 + 1, EMI_DUE_DAY)
+
+
+def emi_schedule(sale, today=None):
+    """The EMI timeframe and progress of one sale, or None if it isn't on EMI.
+
+    Derived, never stored: the sale already carries the date, the term and the
+    full premium, so a second record of the same plan could only go stale. The
+    state is what the EMI page's tabs read — a plan is live until its last
+    instalment has fallen due, and `stopped` when the tracker policy is no
+    longer active (which is usually *why* the EMIs ended).
+    """
+    from . import incentives
+
+    months = sale.emi_months or 0
+    if not (months and sale.date):
+        return None
+    today = today or timezone.localdate()
+    paid = sum(1 for i in range(months) if emi_due_date(sale, i) <= today)
+    if incentives.policy_stopped(sale):
+        state = "stopped"
+    else:
+        state = "completed" if paid >= months else "live"
+    return {
+        "sale": sale,
+        "months": months,
+        "paid": paid,
+        "pending": months - paid,
+        "start": emi_due_date(sale, 0),
+        "end": emi_due_date(sale, months - 1),
+        "next_due": emi_due_date(sale, paid) if paid < months else None,
+        "monthly": (sale.amount / months) if sale.amount else None,
+        "state": state,
+    }
 
 
 def snapshot_ppt_margin(sale):
