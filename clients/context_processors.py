@@ -95,6 +95,7 @@ _CRUMB_SECTIONS = [
     ("business_", "Reports", None),
     ("net_", "Reports", None),
     ("monthly_business_report", "Reports", None),
+    ("daily_business_report", "Reports", None),
     ("employee_past_performance", "Reports", None),
     ("admin_past_performance", "Reports", None),
     ("admin_past_month_performance", "Reports", None),

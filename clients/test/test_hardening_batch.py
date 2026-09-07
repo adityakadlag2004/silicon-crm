@@ -131,3 +131,42 @@ class ClientStatusSyncTests(TestCase):
         client.reassign_to(None)
         client.refresh_from_db()
         self.assertEqual(client.status, "Unmapped")
+
+
+class DailyBusinessReportTests(TestCase):
+    """The daily sheet is the monthly one scoped to a single date."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from decimal import Decimal
+        from datetime import date, timedelta
+        from clients.models import Product, Sale
+        user = User.objects.create_user(username="dbr_admin", password="x")
+        cls.user = user
+        emp = Employee.objects.create(user=user, role="admin", salary=0, active=True)
+        Product.objects.get_or_create(name="SIP", defaults={"code": "SIP", "display_order": 1})
+        c = Client.objects.create(name="DBR C")
+        cls.day = date(2026, 5, 12)
+        Sale.objects.create(client=c, employee=emp, product="SIP", amount=Decimal("1111"),
+                            status="approved", date=cls.day)
+        Sale.objects.create(client=c, employee=emp, product="SIP", amount=Decimal("2222"),
+                            status="approved", date=cls.day + timedelta(days=1))
+
+    def setUp(self):
+        self.http = TestClient()
+        self.http.force_login(self.user)
+
+    def test_day_shows_only_that_days_sales(self):
+        resp = self.http.get(reverse("clients:daily_business_report"), {"date": "2026-05-12"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "1111")
+        self.assertNotContains(resp, "2222")
+        self.assertContains(resp, "12 May 2026")
+
+    def test_garbage_date_falls_back_to_today(self):
+        resp = self.http.get(reverse("clients:daily_business_report"), {"date": "banana"})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_month_view_still_covers_the_whole_month(self):
+        resp = self.http.get(reverse("clients:monthly_business_report"), {"month": 5, "year": 2026})
+        self.assertContains(resp, "3333")

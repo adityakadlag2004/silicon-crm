@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Monthly Business Report – {{ month_name }} {{ sel_year }}{% endblock %}
+{% block title %}{% if daily %}Daily{% else %}Monthly{% endif %} Business Report – {{ period_label }}{% endblock %}
 {% block page_title %}Business Report{% endblock %}
 
 {% block extra_css %}
@@ -12,14 +12,21 @@
 
 {% block content %}
   <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-    <h4 class="ki-section-title mb-0"><i class="bi bi-bar-chart-line"></i> Monthly Business Report</h4>
+    <h4 class="ki-section-title mb-0"><i class="bi bi-bar-chart-line"></i> {% if daily %}Daily{% else %}Monthly{% endif %} Business Report</h4>
     <button class="ki-btn ki-btn-sm ki-btn-secondary" onclick="window.print()">
       <i class="bi bi-printer"></i> Print / PDF
     </button>
   </div>
 
-  <!-- Month / Year selector -->
+  <!-- Period selector -->
   <form method="get" class="row g-2 align-items-end mb-4 no-print">
+    {% if daily %}
+    <div class="col-auto">
+      <label class="form-label mb-0 small" for="rep-date">Date</label>
+      <input type="date" id="rep-date" name="date" value="{{ sel_date|date:'Y-m-d' }}"
+             class="form-control form-control-sm" onchange="this.form.submit()">
+    </div>
+    {% else %}
     <div class="col-auto">
       <label class="form-label mb-0 small">Month</label>
       <select name="month" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Month">
@@ -36,11 +43,12 @@
         {% endfor %}
       </select>
     </div>
+    {% endif %}
   </form>
 
   <div class="ki-card">
     <div class="ki-card-label">
-      <i class="bi bi-calendar-month"></i> {{ month_name }} {{ sel_year }} – Business Summary
+      <i class="bi bi-calendar-{% if daily %}day{% else %}month{% endif %}"></i> {{ period_label }} – Business Summary
     </div>
     <div class="ki-table-wrap">
         <table class="ki-table report-table">
@@ -71,7 +79,7 @@
               {% endif %}
             </tr>
             {% empty %}
-            <tr><td colspan="{{ products|length|add:3 }}" class="text-center text-muted py-3">No approved sales for this month.</td></tr>
+            <tr><td colspan="{{ products|length|add:3 }}" class="text-center text-muted py-3">No approved sales for this {% if daily %}day{% else %}month{% endif %}.</td></tr>
             {% endfor %}
           </tbody>
           {% if rows %}

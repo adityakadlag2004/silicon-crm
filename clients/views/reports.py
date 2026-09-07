@@ -691,21 +691,31 @@ def admin_past_month_performance(request, year, month):
 
 
 @login_required
-def monthly_business_report(request):
+def monthly_business_report(request, mode="month"):
+    """The same sheet for a month or for a single day (`mode="day"`)."""
     emp = getattr(request.user, "employee", None)
     if not permissions.is_admin_or_manager(request.user):
         return HttpResponseForbidden("Access denied")
 
     today = date.today()
-    try:
-        sel_month = int(request.GET.get("month", today.month))
-        sel_year = int(request.GET.get("year", today.year))
-    except (TypeError, ValueError):
-        sel_month, sel_year = today.month, today.year
-    if not 1 <= sel_month <= 12:
-        sel_month = today.month
-
-    approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
+    daily = mode == "day"
+    sel_date = today
+    if daily:
+        try:
+            sel_date = date.fromisoformat(request.GET.get("date", ""))
+        except ValueError:
+            sel_date = today
+        sel_month, sel_year = sel_date.month, sel_date.year
+        approved = Sale.objects.filter(status="approved", date=sel_date)
+    else:
+        try:
+            sel_month = int(request.GET.get("month", today.month))
+            sel_year = int(request.GET.get("year", today.year))
+        except (TypeError, ValueError):
+            sel_month, sel_year = today.month, today.year
+        if not 1 <= sel_month <= 12:
+            sel_month = today.month
+        approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
 
     # Top-level products only. The life plan catalogue alone is ~40 sub-products,
     # and a column per plan makes this sheet unreadable — a sub-product's sales
@@ -776,6 +786,9 @@ def monthly_business_report(request):
         "sel_month": sel_month,
         "sel_year": sel_year,
         "month_name": month_name[sel_month],
+        "daily": daily,
+        "sel_date": sel_date,
+        "period_label": sel_date.strftime("%d %b %Y") if daily else f"{month_name[sel_month]} {sel_year}",
     }
     return render(request, "reports/monthly_business_report.html", context)
 
