@@ -31,8 +31,13 @@
       </div>
       {% endif %}
       <div class="col-md-6">
-        <label class="form-label" for="{{ form.assigned_to.id_for_label }}">Assigned To</label>
+        <label class="form-label" for="{{ form.assigned_to.id_for_label }}">Assigned To (owner)</label>
         {{ form.assigned_to }}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="{{ form.collaborators.id_for_label }}">Shared with</label>
+        {{ form.collaborators }}
+        <div class="form-text">{{ form.collaborators.help_text }} Ctrl/Cmd-click to pick more than one.</div>
       </div>
       <div class="col-md-3">
         <label class="form-label" for="{{ form.data_received.id_for_label }}">Data Received?</label>

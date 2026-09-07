@@ -52,7 +52,7 @@ from ..services.tasks import (
     notify_mentions,
     notify_task,
 )
-from .helpers import parse_date_param
+from .helpers import parse_date_param, query_without
 
 # Priority order used for the "Priority" sort (Critical first).
 _PRIORITY_RANK = Case(
@@ -235,14 +235,6 @@ def _apply_filters(qs, request):
     return qs
 
 
-def _query_without(request, *drop):
-    """Current query string with the given params removed (for tab links)."""
-    gp = request.GET.copy()
-    for key in drop:
-        gp.pop(key, None)
-    return gp.urlencode()
-
-
 _VIEW_MODES = ("list", "kanban", "calendar")
 
 
@@ -259,13 +251,13 @@ def _list_context(request, active_tab, title):
         "page_title": title,
         "view_mode": _view_mode(request),
         # Every other filter rides along when the view links switch view.
-        "view_qs": _query_without(request, "view"),
+        "view_qs": query_without(request, "view"),
         "categories": TaskCategory.objects.filter(is_active=True),
         "employees": Employee.objects.filter(active=True).select_related("user"),
         "all_users": User.objects.filter(is_active=True).order_by("username"),
         "saved_filters": SavedTaskFilter.objects.filter(user=request.user),
         "current_query": request.META.get("QUERY_STRING", ""),
-        "base_query": _query_without(request, "status", "page"),
+        "base_query": query_without(request, "status", "page"),
         "statuses": Task.STATUS_CHOICES,
         "priorities": Task.PRIORITY_CHOICES,
         "can_manage_all": _can_manage_all(request),

@@ -795,7 +795,7 @@ def employee_dashboard(request):
     # The pipeline panel is separate on purpose: it lists the leads with
     # *nothing* dated, which is exactly what a calendar cannot show.
     pipeline_rows, pipeline_total = lead_service.needs_attention(
-        Lead.objects.select_related("assigned_to__user").filter(assigned_to=emp))
+        Lead.objects.select_related("assigned_to__user").filter(Lead.team_q(emp)))
 
     cat_map = _category_name_map()
     products = _rollup_product_names(

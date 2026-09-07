@@ -52,7 +52,7 @@
       {% for lead in col.leads %}
         <a class="ki-board-card" href="{% url 'clients:lead_detail' lead.id %}">
           <div class="nm">{{ lead.customer_name }}</div>
-          <div class="mt">{{ lead.assigned_to.user.username }} · {{ lead.days_in_stage }}d here</div>
+          <div class="mt">{{ lead.assigned_to.user.username }}{% for e in lead.collaborators.all %} + {{ e.user.username }}{% endfor %} · {{ lead.days_in_stage }}d here</div>
         </a>
       {% empty %}
         <div class="text-muted small">Empty.</div>

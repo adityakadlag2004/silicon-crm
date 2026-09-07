@@ -8,12 +8,59 @@ from datetime import timedelta
 
 from django.db import transaction
 from django.db.models import Count, Min, Q
+from django.urls import reverse
 from django.utils import timezone
 
-from ..models import Client, Lead, LeadStageEvent, Task
+from ..models import Client, Lead, LeadRemark, LeadStageEvent, Task
 from . import followups
 
 VALID_STAGES = dict(Lead.STAGE_CHOICES)
+
+
+def notify_team(lead, actor, title, body):
+    """Tell everyone else working this lead what just happened.
+
+    A lead shared between two people is only actually shared if each one hears
+    what the other did — otherwise both ring the same client on the same
+    morning, which is worse than one person owning it. The actor is skipped:
+    nobody needs a notification about their own action.
+    """
+    from .tasks import create_notification
+
+    link = reverse("clients:lead_detail", args=[lead.pk])
+    actor_id = getattr(actor, "id", None)
+    sent = 0
+    for emp in lead.team():
+        if emp.user_id and emp.user_id != actor_id:
+            if create_notification(emp.user, title, body, link=link, event=None):
+                sent += 1
+    return sent
+
+
+def add_remark(lead, text, user=None):
+    """Log a remark and tell the rest of the lead's team about it.
+
+    Both write paths (the web page and the app) call this — a note only one of
+    two people can see is how the pair drift apart.
+    """
+    remark = LeadRemark.objects.create(lead=lead, text=(text or "")[:2000], created_by=user)
+    by = getattr(user, "username", None) or "Someone"
+    notify_team(lead, user, f"Note on {lead.customer_name}", f"{by}: {remark.text[:180]}")
+    return remark
+
+
+def schedule_followup(lead, when, note="", actor=None):
+    """Book a follow-up on a lead; the rest of its team is told it is booked.
+
+    The task itself still rings the lead's OWNER — `followups._owner` decides
+    that — but a collaborator who does not know a call is already dated is a
+    collaborator who books a second one.
+    """
+    task = followups.schedule(followups.LEAD, lead, when, note=note, actor=actor)
+    local = timezone.localtime(when)
+    notify_team(lead, actor, f"Follow-up booked — {lead.customer_name}",
+                f"{local:%d %b, %H:%M}" + (f" · {note}" if note else ""))
+    return task
 
 
 def set_stage(lead, stage, user=None, note=""):
@@ -46,6 +93,8 @@ def set_stage(lead, stage, user=None, note=""):
     lead.is_discarded = False
     lead.lost_reason = ""
     lead.save(update_fields=["stage", "stage_changed_at", "is_discarded", "lost_reason", "updated_at"])
+    notify_team(lead, user, f"{lead.customer_name} → {event.to_label}",
+                note or f"Moved from {event.from_label} to {event.to_label}.")
     return event
 
 
@@ -65,6 +114,8 @@ def mark_lost(lead, user=None, reason=""):
     lead.save(update_fields=["is_discarded", "lost_reason", "updated_at"])
     followups.cancel_open(followups.LEAD, lead.pk, actor=user,
                          reason="Lead marked lost — follow-up cancelled.")
+    notify_team(lead, user, f"{lead.customer_name} marked lost",
+                reason or f"Lost at {lead.get_stage_display()}.")
     return event
 
 
@@ -158,6 +209,8 @@ def convert_to_client(lead, user=None):
     # rather than ringing a phone about work nobody will do.
     followups.cancel_open(followups.LEAD, lead.pk, actor=user,
                          reason=f"Lead converted to client #{client.id}.")
+    notify_team(lead, user, f"{lead.customer_name} converted",
+                f"Now client #{client.id}.")
     return client
 
 
@@ -176,7 +229,7 @@ def needs_attention(qs, *, stale_days=14, limit=12):
     how long it has sat there.
     """
     live = qs.filter(is_discarded=False, stage__in=Lead.STAGE_HOT).select_related(
-        "assigned_to__user")
+        "assigned_to__user").prefetch_related("collaborators__user")
 
     chased = set(
         Task.objects.filter(
@@ -199,6 +252,8 @@ def needs_attention(qs, *, stale_days=14, limit=12):
             "stage_color": Lead.STAGE_COLORS.get(lead.stage, "#6B7280"),
             "owner": (lead.assigned_to.user.username
                       if lead.assigned_to and lead.assigned_to.user_id else ""),
+            "shared_with": [e.user.username for e in lead.collaborators.all()
+                            if e.user_id and e.pk != lead.assigned_to_id],
             "days_in_stage": days,
             "no_followup": unchased,
             "stalled": stalled,

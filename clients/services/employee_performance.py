@@ -113,7 +113,7 @@ def snapshot(emp, today=None):
     }
 
     # ---- pipeline ---------------------------------------------------------
-    lead_qs = Lead.objects.filter(assigned_to=emp)
+    lead_qs = Lead.objects.filter(Lead.team_q(emp))
     lead_total = lead_qs.count()
     won = lead_qs.filter(is_discarded=False, stage=Lead.STAGE_ORDER).count()
     attention_rows, attention_total = lead_service.needs_attention(lead_qs, limit=5)

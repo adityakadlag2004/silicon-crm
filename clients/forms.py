@@ -574,6 +574,7 @@ class LeadForm(forms.ModelForm):
             "expenses",
             "notes",
             "assigned_to",
+            "collaborators",
             "stage",
         ]
         widgets = {
@@ -581,19 +582,30 @@ class LeadForm(forms.ModelForm):
             "income": forms.NumberInput(attrs={"step": "0.01"}),
             "expenses": forms.NumberInput(attrs={"step": "0.01"}),
             "notes": forms.Textarea(attrs={"rows": 3}),
+            "collaborators": forms.SelectMultiple(attrs={"size": 5}),
         }
         help_texts = {
             "stage": "Where this lead already stands. Most new leads are Suspects.",
+            "collaborators": (
+                "Anyone else working this lead with the owner. They see it "
+                "everywhere the owner does and are told about every move on it."
+            ),
         }
 
     def __init__(self, *args, **kwargs):
         user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         self.fields["assigned_to"].queryset = Employee.objects.filter(active=True)
+        self.fields["collaborators"].queryset = (
+            Employee.objects.filter(active=True).select_related("user").order_by("user__username")
+        )
+        self.fields["collaborators"].required = False
         if self.instance.pk:
             del self.fields["stage"]
 
         if user and hasattr(user, "employee") and getattr(user.employee, "role", "") == "employee":
+            # The owner is fixed for a plain employee, but bringing a colleague
+            # onto their own lead is the point of sharing — that stays open.
             self.fields["assigned_to"].initial = user.employee
             self.fields["assigned_to"].disabled = True
 
@@ -605,6 +617,19 @@ class LeadForm(forms.ModelForm):
                 widget.attrs.setdefault("class", "form-select")
             else:
                 widget.attrs.setdefault("class", "form-control")
+
+    def clean_collaborators(self):
+        """The owner is on the team by definition — never also a collaborator.
+
+        Left in, they get every notification twice and show up twice in the
+        team list. `assigned_to` is disabled for a plain employee, so read the
+        owner off the instance when the field isn't in cleaned_data.
+        """
+        picked = self.cleaned_data.get("collaborators")
+        owner = self.cleaned_data.get("assigned_to") or getattr(self.instance, "assigned_to", None)
+        if picked is None or owner is None:
+            return picked
+        return [e for e in picked if e.pk != owner.pk]
 
 
 class LeadFamilyMemberForm(forms.ModelForm):

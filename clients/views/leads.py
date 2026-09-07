@@ -24,7 +24,6 @@ from .. import permissions
 from ..models import (
     Employee,
     Lead,
-    LeadRemark,
     Product,
     Sale,
     Task,
@@ -36,20 +35,29 @@ from ..forms import (
 )
 from ..services import followups
 from ..services import leads as lead_service
-from .helpers import _lead_queryset_for_request, name_words_q
+from .helpers import _lead_queryset_for_request, name_words_q, query_without
 
 PER_PAGE = 25
 
 
-def _stage_kpis(counts, active=""):
-    """The SPANCO strip — six tiles, each one the filter for its stage."""
+def _stage_kpis(request, counts, active=""):
+    """The SPANCO strip — six tiles, each one the filter for its stage.
+
+    A tile switches the stage and NOTHING else: it carries the employee, the
+    search and the dates already applied. Built from a bare
+    `?stage=…` these tiles silently reset the picked employee back to the whole
+    team every time somebody looked at another stage.
+    """
+    keep = query_without(request, "stage", "page")
+    base = f"{reverse('clients:lead_management')}?{keep}&" if keep else (
+        f"{reverse('clients:lead_management')}?")
     return [
         {
             "label": label,
             "value": counts.get(stage, 0),
             "color": Lead.STAGE_COLORS[stage],
             "sub": Lead.STAGE_HELP[stage],
-            "url": f"{reverse('clients:lead_management')}?stage={stage}",
+            "url": f"{base}stage={stage}",
             "active": stage == active,
         }
         for stage, label in Lead.STAGE_CHOICES
@@ -64,8 +72,10 @@ def _apply_lead_filters(request, qs, can_see_all):
         qs = qs.filter(name_words_q("customer_name", search_term))
 
     assigned_to = request.GET.get("assigned_to", "")
-    if assigned_to and can_see_all:
-        qs = qs.filter(assigned_to_id=assigned_to)
+    if assigned_to and can_see_all and assigned_to.isdigit():
+        # "Show me this person's leads" means the ones they own AND the ones
+        # they were brought onto — a shared lead is theirs to work either way.
+        qs = qs.filter(Lead.team_q(int(assigned_to)))
 
     data_received = request.GET.get("data_received", "")
     if data_received == "yes":
@@ -93,7 +103,7 @@ def lead_management(request):
 
     view_mode = request.GET.get("view", "open")
     if view_mode == "mine" and emp:
-        scoped = base_qs.filter(assigned_to=emp, is_discarded=False)
+        scoped = base_qs.filter(Lead.team_q(emp), is_discarded=False)
     elif view_mode == "won":
         scoped = base_qs.filter(is_discarded=False, stage=Lead.STAGE_ORDER)
     elif view_mode == "lost":
@@ -115,11 +125,13 @@ def lead_management(request):
         "open": base_qs.filter(is_discarded=False).exclude(stage=Lead.STAGE_ORDER).count(),
         "won": base_qs.filter(is_discarded=False, stage=Lead.STAGE_ORDER).count(),
         "lost": base_qs.filter(is_discarded=True).count(),
-        "mine": base_qs.filter(assigned_to=emp, is_discarded=False).count() if emp else 0,
+        "mine": base_qs.filter(Lead.team_q(emp), is_discarded=False).count() if emp else 0,
     }
 
     return render(request, "clients/leads/lead_management.html", {
-        "kpis": _stage_kpis(lead_service.stage_counts(scoped), stage_filter),
+        "kpis": _stage_kpis(request, lead_service.stage_counts(scoped), stage_filter),
+        # The tabs switch the view and keep everything else, same as the tiles.
+        "tab_qs": query_without(request, "view", "page"),
         "leads": page_obj,
         "page_obj": page_obj,
         "page_range": range(
@@ -173,7 +185,7 @@ def lead_board(request):
             {"label": "Leads", "url": reverse("clients:lead_management")},
             {"label": "Pipeline Board"},
         ],
-        "kpis": _stage_kpis({c["stage"]: c["count"] for c in columns}),
+        "kpis": _stage_kpis(request, {c["stage"]: c["count"] for c in columns}),
         "columns": columns,
         "search_term": request.GET.get("q", "").strip(),
         "employees": (
@@ -197,7 +209,7 @@ def lead_pipeline_report(request):
         scope = "mine"
         if not emp:
             return HttpResponseForbidden()
-        qs = qs.filter(assigned_to=emp)
+        qs = qs.filter(Lead.team_q(emp))
 
     stages = lead_service.funnel(qs)
     total = qs.count()
@@ -366,7 +378,7 @@ def lead_add_followup(request, lead_id):
         messages.error(request, "Invalid date/time format.")
         return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
 
-    followups.schedule(followups.LEAD, lead, when_dt, note=note, actor=request.user)
+    lead_service.schedule_followup(lead, when_dt, note=note, actor=request.user)
     messages.success(request, "Follow-up added — it will ring on the phone as a task.")
     return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
 
@@ -379,7 +391,7 @@ def lead_add_remark(request, lead_id):
     if not text:
         messages.error(request, "Remark cannot be empty.")
         return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
-    LeadRemark.objects.create(lead=lead, text=text, created_by=request.user)
+    lead_service.add_remark(lead, text, user=request.user)
     messages.success(request, "Remark added.")
     return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
 
@@ -411,6 +423,7 @@ def lead_create(request):
                 lead.created_by = request.user
                 lead.stage_changed_at = timezone.now()
                 lead.save()
+                form.save_m2m()          # collaborators — commit=False skips it
 
                 family_formset.instance = lead
                 interest_formset.instance = lead
@@ -453,6 +466,7 @@ def lead_update(request, lead_id):
                 if hasattr(request.user, "employee") and getattr(request.user.employee, "role", "") == "employee":
                     lead.assigned_to = request.user.employee
                 lead.save()
+                form.save_m2m()          # collaborators — commit=False skips it
                 family_formset.save()
                 interest_formset.save()
             messages.success(request, "Lead updated successfully.")

@@ -1119,7 +1119,7 @@ def app_notifications_read(request):
 
 from django.db import transaction  # noqa: E402
 
-from ..models import Lead, LeadInterest, LeadRemark, Task  # noqa: E402
+from ..models import Lead, LeadInterest, Task  # noqa: E402
 from ..services import followups as followups_service  # noqa: E402
 from ..services import leads as lead_service  # noqa: E402
 
@@ -1129,7 +1129,7 @@ def _lead_qs(request):
     emp = _emp(request)
     qs = Lead.objects.select_related("assigned_to__user").prefetch_related("interests__product")
     if emp and emp.role == "employee":
-        qs = qs.filter(assigned_to=emp)
+        qs = qs.filter(Lead.team_q(emp))
     return qs
 
 
@@ -1246,6 +1246,11 @@ def app_lead_detail(request, lead_id):
         "assigned_to": (
             lead.assigned_to.user.get_full_name() or lead.assigned_to.user.username
         ) if lead.assigned_to_id and lead.assigned_to.user_id else "",
+        # Everyone working the lead, owner first — the phone scopes to shared
+        # leads too, so showing only the owner would read as somebody else's.
+        "team": [
+            e.user.get_full_name() or e.user.username for e in lead.team() if e.user_id
+        ],
         "interests": [
             {
                 "id": i.id,
@@ -1311,9 +1316,9 @@ def _followup_note(task):
 def app_lead_followup(request, lead_id):
     """Schedule a follow-up on a lead from the phone.
 
-    Same one line of work the web form does — `followups.schedule` owns it, so
-    this rings, lands on the calendar and shows on the Tasks screen exactly
-    like every other follow-up.
+    Same one line of work the web form does — `leads.schedule_followup` owns
+    it, so this rings, lands on the calendar, shows on the Tasks screen and
+    tells the rest of the lead's team, exactly like every other follow-up.
     """
     lead = get_object_or_404(_lead_qs(request), pk=lead_id)
     try:
@@ -1333,9 +1338,8 @@ def app_lead_followup(request, lead_id):
         return JsonResponse({"ok": False, "error": "Pick a follow-up date and time."},
                             status=400)
 
-    task = followups_service.schedule(
-        followups_service.LEAD, lead,
-        timezone.make_aware(when, timezone.get_current_timezone()),
+    task = lead_service.schedule_followup(
+        lead, timezone.make_aware(when, timezone.get_current_timezone()),
         note=(body.get("note") or "").strip(), actor=request.user)
     return JsonResponse({"ok": True, "id": task.pk})
 
@@ -1456,7 +1460,7 @@ def app_lead_remark(request, lead_id):
         text = ""
     if not text:
         return JsonResponse({"ok": False, "error": "Remark text required."}, status=400)
-    LeadRemark.objects.create(lead=lead, text=text[:2000], created_by=request.user)
+    lead_service.add_remark(lead, text, user=request.user)
     return JsonResponse({"ok": True})
 
 

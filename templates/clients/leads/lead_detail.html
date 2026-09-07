@@ -12,6 +12,9 @@
       <div class="ki-tags">
         <span class="ki-tag ki-tag-solid" style="--c:{{ lead.stage_color }};">{{ lead.get_stage_display }}</span>
         <span class="ki-tag" style="--c:var(--ki-text-secondary);">{{ lead.assigned_to.user.username }}</span>
+        {% for e in lead.collaborators.all %}
+          <span class="ki-tag" style="--c:#0369A1;" title="Working this lead with the owner">+ {{ e.user.username }}</span>
+        {% endfor %}
         {% if lead.is_discarded %}<span class="ki-tag" style="--c:#BE123C;">Lost</span>{% endif %}
         {% if lead.converted_client %}<span class="ki-tag ki-tag-solid" style="--c:#15803D;">Converted</span>{% endif %}
       </div>
@@ -33,6 +36,7 @@
   <div class="ki-rec-summary">
     <div class="ki-sum-item"><span class="k">Phone</span><span class="v">{{ lead.phone|default:"—" }}</span></div>
     <div class="ki-sum-item"><span class="k">Email</span><span class="v">{{ lead.email|default:"—" }}</span></div>
+    <div class="ki-sum-item"><span class="k">Worked by</span><span class="v">{% for e in lead.team %}{{ e.user.username }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></div>
     <div class="ki-sum-item"><span class="k">In this stage</span><span class="v">{{ lead.days_in_stage }} days</span></div>
     <div class="ki-sum-item"><span class="k">Updated</span><span class="v">{{ lead.updated_at|date:"d M Y H:i" }}</span></div>
   </div>

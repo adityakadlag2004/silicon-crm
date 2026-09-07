@@ -66,12 +66,16 @@
   </div>
 </form>
 
+{% comment %}
+Each tab switches the view and keeps every other filter (tab_qs) — switching
+tab must never reset the employee the way the stage tiles used to.
+{% endcomment %}
 <div class="d-flex gap-2 mb-3 flex-wrap">
-  <a class="ki-btn ki-btn-sm {% if view_mode == 'open' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=open">In Pipeline ({{ tab_counts.open }})</a>
-  <a class="ki-btn ki-btn-sm {% if view_mode == 'won' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=won">Ordered ({{ tab_counts.won }})</a>
-  <a class="ki-btn ki-btn-sm {% if view_mode == 'lost' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=lost">Lost ({{ tab_counts.lost }})</a>
+  <a class="ki-btn ki-btn-sm {% if view_mode == 'open' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?{% if tab_qs %}{{ tab_qs }}&{% endif %}view=open">In Pipeline ({{ tab_counts.open }})</a>
+  <a class="ki-btn ki-btn-sm {% if view_mode == 'won' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?{% if tab_qs %}{{ tab_qs }}&{% endif %}view=won">Ordered ({{ tab_counts.won }})</a>
+  <a class="ki-btn ki-btn-sm {% if view_mode == 'lost' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?{% if tab_qs %}{{ tab_qs }}&{% endif %}view=lost">Lost ({{ tab_counts.lost }})</a>
   {% if show_mine_tab %}
-    <a class="ki-btn ki-btn-sm {% if view_mode == 'mine' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?view=mine">My Leads ({{ tab_counts.mine }})</a>
+    <a class="ki-btn ki-btn-sm {% if view_mode == 'mine' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?{% if tab_qs %}{{ tab_qs }}&{% endif %}view=mine">My Leads ({{ tab_counts.mine }})</a>
   {% endif %}
 </div>
 
@@ -99,7 +103,10 @@
               </span>
             </div>
           </td>
-          <td>{{ lead.assigned_to.user.username }}</td>
+          <td>
+            {{ lead.assigned_to.user.username }}
+            {% for e in lead.collaborators.all %}<div class="text-muted small">+ {{ e.user.username }}</div>{% endfor %}
+          </td>
           <td>
             <span class="ki-tag" style="--c:{{ lead.stage_color }};">{{ lead.get_stage_display }}</span>
             {% if lead.is_discarded %}<span class="ki-tag" style="--c:#BE123C;">Lost</span>{% endif %}

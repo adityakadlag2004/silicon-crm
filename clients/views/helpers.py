@@ -40,6 +40,19 @@ def name_words_q(field, query):
     return q
 
 
+def query_without(request, *drop):
+    """The current query string with `drop` params removed.
+
+    Every tab / tile that switches ONE filter builds its link from this, so
+    switching a stage keeps the employee, the search and the dates that were
+    already applied instead of silently widening back to the whole team.
+    """
+    gp = request.GET.copy()
+    for key in drop:
+        gp.pop(key, None)
+    return gp.urlencode()
+
+
 def get_manager_access():
     return ManagerAccessConfig.current()
 
@@ -100,10 +113,12 @@ def _lead_queryset_for_request(request):
     qs = Lead.objects.select_related("assigned_to__user").prefetch_related(
         "interests__product",
         "family_members",
+        # The list prints who else is on each lead — one query, not one per row.
+        "collaborators__user",
     )
     emp = getattr(request.user, "employee", None)
     if emp and getattr(emp, "role", "") == "employee":
-        qs = qs.filter(assigned_to=emp)
+        qs = qs.filter(Lead.team_q(emp))
     return qs
 
 

@@ -3,6 +3,7 @@
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 from ..utils.phone_utils import clean_phone
@@ -87,6 +88,16 @@ class Lead(models.Model):
         related_name="leads",
         help_text="Employee responsible for this lead",
     )
+    # A lead is often worked by two people — the one who sourced it and the one
+    # who knows the product. `assigned_to` stays the single owner (conversion
+    # maps the client to them, and a follow-up rings their phone); collaborators
+    # see the lead everywhere the owner does and hear about every move on it.
+    collaborators = models.ManyToManyField(
+        Employee,
+        blank=True,
+        related_name="collaborating_leads",
+        help_text="Other employees working this lead alongside the owner.",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -121,6 +132,25 @@ class Lead(models.Model):
 
     def __str__(self):
         return f"{self.customer_name} ({self.assigned_to})"
+
+    @staticmethod
+    def team_q(emp):
+        """Leads `emp` owns OR is a collaborator on — the one scoping rule.
+
+        A pk subquery rather than a `collaborators=` join: OR-ing across a
+        many-to-many join multiplies rows, and every caller here counts,
+        paginates or aggregates the result.
+        """
+        emp_id = getattr(emp, "pk", emp)
+        return Q(assigned_to_id=emp_id) | Q(
+            pk__in=Lead.objects.filter(collaborators__id=emp_id).values("pk")
+        )
+
+    def team(self):
+        """Everyone working this lead — owner first, then collaborators."""
+        people = [self.assigned_to] if self.assigned_to_id else []
+        people += [e for e in self.collaborators.all() if e.pk != self.assigned_to_id]
+        return people
 
     @property
     def stage_index(self):

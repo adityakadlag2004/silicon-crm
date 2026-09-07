@@ -25,7 +25,7 @@ Needs: pipeline_rows, pipeline_total (services.leads.needs_attention).
         <tr>
           <td><a href="{% url 'clients:lead_detail' r.lead.id %}">{{ r.lead.customer_name }}</a></td>
           <td><span class="ki-tag" style="--c:{{ r.stage_color }};">{{ r.stage_label }}</span></td>
-          <td>{{ r.owner|default:"—" }}</td>
+          <td>{{ r.owner|default:"—" }}{% for name in r.shared_with %}<div class="text-muted small">+ {{ name }}</div>{% endfor %}</td>
           <td>{% if r.days_in_stage is not None %}{{ r.days_in_stage }}d{% else %}—{% endif %}</td>
           <td>
             {% if r.no_followup %}<span class="ki-tag" style="--c:#BE123C;">No follow-up</span>{% endif %}
