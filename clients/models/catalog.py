@@ -65,6 +65,12 @@ class Product(models.Model):
         help_text="Business margin % applied to this product's renewal premium (only used for renewal-tracked products).",
     )
     is_active = models.BooleanField(default=True)
+    show_in_reports = models.BooleanField(
+        default=True,
+        help_text="Show this product as a column on the daily/monthly business report. "
+                  "Turn it off for a product nobody reads on that sheet — the sales "
+                  "themselves are unaffected.",
+    )
     archived_at = models.DateTimeField(null=True, blank=True)
     archived_reason = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

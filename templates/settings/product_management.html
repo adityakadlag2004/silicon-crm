@@ -111,6 +111,7 @@
           <th>Renewal Margin %</th>
           <th>Margin Slabs</th>
           <th>Order</th>
+          <th>On Report</th>
           <th>Status</th>
           <th>Archived Reason</th>
           <th>Actions</th>
@@ -135,6 +136,7 @@
             </button>
           </td>
           <td>{{ product.display_order }}</td>
+          <td>{% if product.show_in_reports %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
           <td>
             {% if product.archived_at %}
               <span class="badge bg-secondary">Archived</span>
@@ -160,6 +162,7 @@
                 data-margin-percent="{{ product.margin_percent }}"
                 data-renewal-margin-percent="{{ product.renewal_margin_percent }}"
                 data-display-order="{{ product.display_order }}"
+                data-show-in-reports="{{ product.show_in_reports|yesno:"1," }}"
                 data-parent-id="{{ product.parent_id|default:'' }}"
                aria-label="Edit">
                 <i class="bi bi-pencil"></i>
@@ -247,6 +250,12 @@
           <div>
             <label class="form-label">Display Order</label>
             <input type="number" class="form-control" name="display_order" value="0" aria-label="Display Order">
+          </div>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" name="show_in_reports" id="add_show_in_reports" value="1" checked>
+            <label class="form-check-label" for="add_show_in_reports">
+              Show on daily / monthly business report
+            </label>
           </div>
         </div>
         <div class="modal-footer">
@@ -361,6 +370,12 @@
           <div>
             <label class="form-label">Display Order</label>
             <input type="number" class="form-control" name="display_order" id="edit_display_order" aria-label="Display Order">
+          </div>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" name="show_in_reports" id="edit_show_in_reports" value="1">
+            <label class="form-check-label" for="edit_show_in_reports">
+              Show on daily / monthly business report
+            </label>
           </div>
         </div>
         <div class="modal-footer">
@@ -517,6 +532,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('edit_margin_percent').value = btn.getAttribute('data-margin-percent') || '0';
     document.getElementById('edit_renewal_margin_percent').value = btn.getAttribute('data-renewal-margin-percent') || '0';
     document.getElementById('edit_display_order').value = btn.getAttribute('data-display-order') || '0';
+    document.getElementById('edit_show_in_reports').checked = btn.getAttribute('data-show-in-reports') === '1';
     document.getElementById('edit_parent_id').value = btn.getAttribute('data-parent-id') || '';
     document.getElementById('edit_renewal_margin_wrap').style.display =
       (btn.getAttribute('data-renewal-tracked') || 'no') === 'yes' ? '' : 'none';

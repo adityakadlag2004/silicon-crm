@@ -23,7 +23,7 @@ from django.utils.timezone import now
 from .. import permissions
 from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
-    Renewal,
+    Renewal, Client,
 )
 from ..services import incentives
 from .helpers import get_manager_access, _last_n_months, category_name_map, product_mix, product_totals
@@ -722,8 +722,15 @@ def monthly_business_report(request, mode="month"):
     # roll up into its category (Term Plan -> Life Insurance).
     cat_map = category_name_map()
     products = list(
-        Product.objects.filter(is_active=True, parent__isnull=True)
+        Product.objects.filter(is_active=True, parent__isnull=True, show_in_reports=True)
         .order_by("display_order", "name")
+        .values_list("name", flat=True)
+    )
+    # Products switched off for this sheet (Product Management). Their sales are
+    # untouched — the column just isn't printed, including for a retired
+    # category that would otherwise be re-added below because it has business.
+    hidden = set(
+        Product.objects.filter(parent__isnull=True, show_in_reports=False)
         .values_list("name", flat=True)
     )
 
@@ -742,7 +749,7 @@ def monthly_business_report(request, mode="month"):
     # sub-product never does, because cat_map folds it into its parent.
     for product_name in sorted(used_products | used_ref_products):
         category = cat_map.get(product_name, product_name)
-        if category and category not in products:
+        if category and category not in products and category not in hidden:
             products.append(category)
     employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
 
@@ -757,10 +764,25 @@ def monthly_business_report(request, mode="month"):
         r["employee_id"]: r["total"] or Decimal("0")
         for r in approved.values("employee_id").annotate(total=Sum("points"))
     }
+    # Accounts opened in the window. Client has no created_by, so the credit
+    # goes to whoever the client is mapped to — which is also the figure the
+    # firm reads this row for ("whose book grew").
+    # ponytail: re-mapping a client moves its credit to the new employee; add
+    # Client.created_by if that ever matters.
+    new_clients = Client.objects.filter(mapped_to__isnull=False)
+    if daily:
+        new_clients = new_clients.filter(created_at__date=sel_date)
+    else:
+        new_clients = new_clients.filter(created_at__year=sel_year, created_at__month=sel_month)
+    accounts_by_emp = {
+        r["mapped_to"]: r["total"]
+        for r in new_clients.values("mapped_to").order_by().annotate(total=Count("id"))
+    }
 
     rows = []
     grand = {p: Decimal("0") for p in products}
     grand["points"] = Decimal("0")
+    grand_accounts = 0
 
     for e in employees:
         product_vals = []
@@ -770,7 +792,10 @@ def monthly_business_report(request, mode="month"):
             grand[p] += total
         pts = points_by_emp.get(e.id, Decimal("0"))
         grand["points"] += pts
-        rows.append({"employee": e, "product_vals": product_vals, "points": pts})
+        accounts = accounts_by_emp.get(e.id, 0)
+        grand_accounts += accounts
+        rows.append({"employee": e, "product_vals": product_vals,
+                     "points": pts, "accounts": accounts})
 
     grand_vals = [grand[p] for p in products]
     months = [(i, month_name[i]) for i in range(1, 13)]
@@ -781,6 +806,7 @@ def monthly_business_report(request, mode="month"):
         "products": products,
         "grand_vals": grand_vals,
         "grand_points": grand["points"],
+        "grand_accounts": grand_accounts,
         "months": months,
         "years": years,
         "sel_month": sel_month,

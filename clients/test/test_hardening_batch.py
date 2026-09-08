@@ -170,3 +170,58 @@ class DailyBusinessReportTests(TestCase):
     def test_month_view_still_covers_the_whole_month(self):
         resp = self.http.get(reverse("clients:monthly_business_report"), {"month": 5, "year": 2026})
         self.assertContains(resp, "3333")
+
+
+class ReportAccountsAndProductToggleTests(TestCase):
+    """The business sheet counts accounts opened, and a product can be hidden."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from decimal import Decimal
+        from datetime import date
+        from clients.models import Product, Sale
+        user = User.objects.create_user(username="rat_admin", password="x")
+        cls.user = user
+        cls.emp = Employee.objects.create(user=user, role="admin", salary=0, active=True)
+        cls.shown = Product.objects.create(name="Shown Prod", code="SHOWN", display_order=1)
+        cls.hidden = Product.objects.create(name="Hidden Prod", code="HIDDEN", display_order=2,
+                                            show_in_reports=False)
+        c = Client.objects.create(name="RAT C", mapped_to=cls.emp)
+        cls.day = date(2026, 4, 9)
+        Sale.objects.create(client=c, employee=cls.emp, product="Shown Prod", product_ref=cls.shown,
+                            amount=Decimal("4444"), status="approved", date=cls.day)
+        Sale.objects.create(client=c, employee=cls.emp, product="Hidden Prod", product_ref=cls.hidden,
+                            amount=Decimal("5555"), status="approved", date=cls.day)
+
+    def setUp(self):
+        self.http = TestClient()
+        self.http.force_login(self.user)
+
+    def _month(self):
+        return self.http.get(reverse("clients:monthly_business_report"), {"month": 4, "year": 2026})
+
+    def test_hidden_product_is_not_a_column(self):
+        resp = self._month()
+        self.assertContains(resp, "Shown Prod")
+        self.assertNotContains(resp, "Hidden Prod")
+        self.assertNotContains(resp, "5555")
+
+    def test_accounts_opened_counted_for_the_period(self):
+        from django.utils import timezone as tz
+        from datetime import datetime
+        c2 = Client.objects.create(name="RAT C2", mapped_to=self.emp)
+        Client.objects.filter(pk__in=[c2.pk]).update(
+            created_at=tz.make_aware(datetime(2026, 4, 9, 10, 0)))
+        # The other client was created "now", so only one lands in April 2026.
+        resp = self.http.get(reverse("clients:daily_business_report"), {"date": "2026-04-09"})
+        self.assertContains(resp, "<th>Accounts</th>", html=False)
+        self.assertEqual(resp.context["rows"][0]["accounts"], 1)
+        self.assertEqual(resp.context["grand_accounts"], 1)
+
+    def test_unmapped_client_credits_nobody(self):
+        from django.utils import timezone as tz
+        from datetime import datetime
+        c3 = Client.objects.create(name="RAT C3")
+        Client.objects.filter(pk=c3.pk).update(created_at=tz.make_aware(datetime(2026, 4, 9, 11, 0)))
+        resp = self.http.get(reverse("clients:daily_business_report"), {"date": "2026-04-09"})
+        self.assertEqual(resp.context["grand_accounts"], 0)

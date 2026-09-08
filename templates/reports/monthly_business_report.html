@@ -57,6 +57,7 @@
               <th>#</th>
               <th>Employee</th>
               {% for p in products %}<th>{{ p }}</th>{% endfor %}
+              <th>Accounts</th>
               <th>Points</th>
             </tr>
           </thead>
@@ -72,6 +73,11 @@
                   <td>{{ val|floatformat:0 }}</td>
                 {% endif %}
               {% endfor %}
+              {% if r.accounts == 0 %}
+                <td class="zero">–</td>
+              {% else %}
+                <td>{{ r.accounts }}</td>
+              {% endif %}
               {% if r.points == 0 %}
                 <td class="zero">–</td>
               {% else %}
@@ -79,7 +85,7 @@
               {% endif %}
             </tr>
             {% empty %}
-            <tr><td colspan="{{ products|length|add:3 }}" class="text-center text-muted py-3">No approved sales for this {% if daily %}day{% else %}month{% endif %}.</td></tr>
+            <tr><td colspan="{{ products|length|add:4 }}" class="text-center text-muted py-3">No approved sales for this {% if daily %}day{% else %}month{% endif %}.</td></tr>
             {% endfor %}
           </tbody>
           {% if rows %}
@@ -94,6 +100,11 @@
                   <td>{{ val|floatformat:0 }}</td>
                 {% endif %}
               {% endfor %}
+              {% if grand_accounts == 0 %}
+                <td class="zero">–</td>
+              {% else %}
+                <td>{{ grand_accounts }}</td>
+              {% endif %}
               {% if grand_points == 0 %}
                 <td class="zero">–</td>
               {% else %}
