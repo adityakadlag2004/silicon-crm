@@ -17,4 +17,9 @@ urlpatterns = [
     path("leads/<int:lead_id>/add-remark/", leads.lead_add_remark, name="lead_add_remark"),
     path("leads/<int:lead_id>/", leads.lead_detail, name="lead_detail"),
     path("leads/<int:lead_id>/edit/", leads.lead_update, name="lead_update"),
+    path("leads/<int:lead_id>/documents/upload/", leads.lead_document_upload, name="lead_document_upload"),
+    path("leads/<int:lead_id>/documents/<str:file_id>/", leads.lead_document, name="lead_document"),
+    path("leads/<int:lead_id>/documents/<str:file_id>/delete/", leads.lead_document_delete, name="lead_document_delete"),
+    path("leads/<int:lead_id>/drive-folder/", leads.lead_drive_folder, name="lead_drive_folder"),
+    path("leads/<int:lead_id>/drive-folder/delete/", leads.lead_drive_folder_delete, name="lead_drive_folder_delete"),
 ]

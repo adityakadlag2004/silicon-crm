@@ -2375,3 +2375,61 @@ def app_report_monthly(request):
             ).annotate(amount=Sum("amount"), points=Sum("points")).order_by("-amount")
         ]
     return JsonResponse(data)
+
+
+@login_required
+def app_lead_documents(request, lead_id):
+    """GET: the lead's files in Drive. POST (multipart `document`): upload one.
+
+    Kept off `app_lead_detail` so a slow Drive never holds up the lead itself.
+    Viewing/downloading goes through the web proxy (`clients:lead_document`).
+    """
+    from django.template.defaultfilters import filesizeformat
+
+    lead = get_object_or_404(_lead_qs(request), pk=lead_id)
+    if request.method == "POST":
+        f = request.FILES.get("document")
+        if not f:
+            return JsonResponse({"ok": False, "error": "No file received."}, status=400)
+        err = lead_service.upload_document(lead, f, request.user)
+        if err:
+            return JsonResponse({"ok": False, "error": err}, status=400)
+        return JsonResponse({"ok": True})
+    files, err = lead_service.documents(lead)
+    return JsonResponse({
+        "has_folder": bool(lead.drive_folder_id),
+        "can_delete_folder": permissions.is_admin_or_manager(request.user),
+        "error": err or "",
+        "files": [
+            {
+                "id": f["id"],
+                "name": f.get("name", ""),
+                "size_label": filesizeformat(f["size"]) if f.get("size") else "",
+                "modified": (f.get("modifiedTime") or "")[:10],
+                "url": f"/clients/leads/{lead.id}/documents/{f['id']}/",
+            }
+            for f in files
+        ],
+    })
+
+
+@login_required
+@require_POST
+def app_lead_document_delete(request, lead_id):
+    """{"file_id": "…"} deletes one file; {"folder": true} deletes the whole
+    Drive folder and everything in it (admins/managers only)."""
+    lead = get_object_or_404(_lead_qs(request), pk=lead_id)
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+    except Exception:
+        body = {}
+    if body.get("folder"):
+        if not permissions.is_admin_or_manager(request.user):
+            return JsonResponse(
+                {"ok": False, "error": "Only an admin or manager can delete the folder."}, status=403)
+        err = lead_service.delete_folder(lead, request.user)
+    else:
+        err = lead_service.delete_document(lead, str(body.get("file_id") or ""), request.user)
+    if err:
+        return JsonResponse({"ok": False, "error": err}, status=400)
+    return JsonResponse({"ok": True})

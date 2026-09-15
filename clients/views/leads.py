@@ -289,6 +289,7 @@ def lead_detail(request, lead_id):
         }
         for index, (stage, label) in enumerate(Lead.STAGE_CHOICES)
     ]
+    documents, documents_error = lead_service.documents(lead)
 
     return render(request, "clients/leads/lead_detail.html", {
         "crumbs": [
@@ -305,6 +306,9 @@ def lead_detail(request, lead_id):
         "open_task_statuses": Task.OPEN_STATUSES,
         "remarks": lead.remarks.select_related("created_by").order_by("-created_at"),
         "stage_events": lead.stage_events.select_related("created_by")[:50],
+        "documents": documents,
+        "documents_error": documents_error,
+        "can_delete_drive_folder": permissions.is_admin_or_manager(request.user),
     })
 
 
@@ -560,3 +564,85 @@ def lead_bulk_import(request):
         "employees": active_employees,
         "stages": Lead.STAGE_CHOICES,
     })
+
+
+# ── Documents (quotations) — files live in Drive under "Leads/<name> (#id)" ──
+
+def _back_to_lead(lead_id):
+    return redirect(reverse("clients:lead_detail", args=[lead_id]) + "#lead-documents")
+
+
+@login_required
+@require_POST
+def lead_document_upload(request, lead_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    files = request.FILES.getlist("document")
+    if not files:
+        messages.error(request, "Choose a file to upload.")
+        return _back_to_lead(lead.id)
+    errors = [e for e in (lead_service.upload_document(lead, f, request.user) for f in files) if e]
+    for err in errors:
+        messages.error(request, err)
+    if len(errors) < len(files):
+        messages.success(request, f"{len(files) - len(errors)} document(s) uploaded.")
+    return _back_to_lead(lead.id)
+
+
+@login_required
+def lead_document(request, lead_id, file_id):
+    """Stream a lead's file out of Drive — inline to view, ?download=1 to save."""
+    from django.http import Http404
+    from django.utils.http import content_disposition_header
+    from ..services.google_drive import stream_file
+
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    doc = lead_service.find_document(lead, file_id)
+    if doc is None:
+        raise Http404("No such document on this lead.")
+    try:
+        data, mime = stream_file(file_id)
+    except Exception:
+        # Google Docs/Sheets have no bytes to download — open those in Drive.
+        messages.error(request, f"Could not fetch “{doc['name']}” from Drive.")
+        return _back_to_lead(lead.id)
+    resp = HttpResponse(data, content_type=mime or "application/octet-stream")
+    resp["Content-Disposition"] = content_disposition_header(
+        bool(request.GET.get("download")), doc["name"])
+    return resp
+
+
+@login_required
+@require_POST
+def lead_document_delete(request, lead_id, file_id):
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    err = lead_service.delete_document(lead, file_id, request.user)
+    messages.error(request, err) if err else messages.success(request, "Document deleted.")
+    return _back_to_lead(lead.id)
+
+
+@login_required
+def lead_drive_folder(request, lead_id):
+    """Open the lead's folder in Google Drive, creating it on first click."""
+    from ..services.google_drive import DriveNotConfigured
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    try:
+        folder_id = lead_service.ensure_folder(lead)
+    except DriveNotConfigured as e:
+        messages.error(request, str(e))
+        return _back_to_lead(lead.id)
+    except Exception:
+        messages.error(request, "Could not create the Drive folder.")
+        return _back_to_lead(lead.id)
+    return redirect(f"https://drive.google.com/drive/folders/{folder_id}")
+
+
+@login_required
+@require_POST
+def lead_drive_folder_delete(request, lead_id):
+    """Permanently delete the folder and every file in it. Admins/managers only."""
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    if not permissions.is_admin_or_manager(request.user):
+        return HttpResponseForbidden("Only an admin or manager can delete a lead's Drive folder.")
+    err = lead_service.delete_folder(lead, request.user)
+    messages.error(request, err) if err else messages.success(request, "Drive folder deleted.")
+    return _back_to_lead(lead.id)

@@ -49,6 +49,87 @@ def add_remark(lead, text, user=None):
     return remark
 
 
+# ── Documents (quotations and papers) ──────────────────────────────────────
+# Drive is the record: files are listed straight from the lead's folder, so a
+# quotation dropped into the folder from Drive itself shows up here too. Every
+# function returns an error string instead of raising — Drive being down must
+# never take the lead page with it.
+
+def documents(lead):
+    """(files, error). Files as Drive returns them; [] when there is no folder."""
+    if not lead.drive_folder_id:
+        return [], None
+    from .google_drive import DriveNotConfigured, list_files
+    try:
+        return list_files(lead.drive_folder_id), None
+    except DriveNotConfigured as e:
+        return [], str(e)
+    except Exception:
+        return [], "Could not read this lead's Drive folder."
+
+
+def ensure_folder(lead):
+    """The lead's Drive folder id, creating "Leads/<name> (#id)" on first use. Raises."""
+    if not lead.drive_folder_id:
+        from .google_drive import get_or_create_lead_folder
+        lead.drive_folder_id = get_or_create_lead_folder(lead.customer_name, lead.pk)
+        lead.save(update_fields=["drive_folder_id"])
+    return lead.drive_folder_id
+
+
+def upload_document(lead, uploaded_file, user=None):
+    """Upload one file into the lead's folder. Returns an error string or None."""
+    from .google_drive import DriveNotConfigured, upload_file
+    try:
+        upload_file(ensure_folder(lead), uploaded_file.name,
+                    uploaded_file.content_type, uploaded_file)
+    except DriveNotConfigured as e:
+        return str(e)
+    except Exception:
+        return f"Could not upload “{uploaded_file.name}”. Please try again."
+    add_remark(lead, f"Uploaded document: {uploaded_file.name}", user=user)
+    return None
+
+
+def find_document(lead, file_id):
+    """The file if it sits in this lead's folder, else None.
+
+    The download/delete endpoints take a Drive file id from the URL; without
+    this check they would stream or delete any file the Drive account can see.
+    """
+    files, _err = documents(lead)
+    return next((f for f in files if f["id"] == file_id), None)
+
+
+def delete_document(lead, file_id, user=None):
+    """Delete one of the lead's files from Drive. Returns an error string or None."""
+    doc = find_document(lead, file_id)
+    if doc is None:
+        return "That file is not in this lead's folder."
+    from .google_drive import delete_file
+    if not delete_file(file_id):
+        return f"Could not delete “{doc['name']}”."
+    add_remark(lead, f"Deleted document: {doc['name']}", user=user)
+    return None
+
+
+def delete_folder(lead, user=None):
+    """Permanently delete the lead's Drive folder and all its files. Error string or None."""
+    if not lead.drive_folder_id:
+        return None
+    from .google_drive import DriveNotConfigured, delete_folder as drive_delete_folder
+    try:
+        drive_delete_folder(lead.drive_folder_id)
+    except DriveNotConfigured as e:
+        return str(e)
+    except Exception:
+        return "Could not delete the Drive folder. Please try again."
+    lead.drive_folder_id = ""
+    lead.save(update_fields=["drive_folder_id"])
+    add_remark(lead, "Deleted the lead's Drive folder and its documents.", user=user)
+    return None
+
+
 def schedule_followup(lead, when, note="", actor=None):
     """Book a follow-up on a lead; the rest of its team is told it is booked.
 

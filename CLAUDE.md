@@ -737,6 +737,26 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   (`/clients/leads/?stage=x`, `/clients/leads/<id>/`) into the native
   `LeadsScreen` via the overlay string `leads:<id|stage>`.
 
+## Lead documents (quotations) live in Drive
+
+- Each lead's files sit in Drive under **`Leads/<name> (#id)`**, created on the
+  first upload or "Open in Drive" click. `Lead.drive_folder_id` (migration
+  0132) is stored because a renamed lead keeps its folder.
+- **Drive is the record — there is no document table.** Files are listed live
+  from the folder (`services/leads.documents`), so a quotation dropped into the
+  folder from Drive itself shows up too. The web lead page and
+  `/api/app/leads/<id>/documents/` both read it; the app loads it in its own
+  request so a slow Drive never holds up the lead.
+- **A file id from the URL must be in the lead's folder** (`find_document`)
+  before it is streamed or deleted — otherwise the proxy would serve any file
+  the Drive account can see. Viewing/downloading goes through
+  `clients:lead_document` (`?download=1` = attachment) on both web and phone.
+- Upload/delete log a lead remark, so the rest of the lead's team hears.
+- **Delete Drive folder** is permanent (no Drive trash) and admin/manager only;
+  deleting a single file is open to anyone on the lead. Deleting a *lead* does
+  not touch its folder.
+- `clients.test.test_lead_documents` pins all of it.
+
 ## Date of birth, and the two alerts it drives
 
 - `Client.date_of_birth` is **mandatory on every client added from 2026-09-04

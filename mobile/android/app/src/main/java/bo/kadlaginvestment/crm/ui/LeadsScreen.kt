@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -315,12 +316,56 @@ private fun LeadDetail(
     var correcting by remember { mutableStateOf(false) }
     var productMenuOpen by remember { mutableStateOf(false) }
     var reloadKey by remember { mutableIntStateOf(0) }
+    var docs by remember { mutableStateOf<JSONObject?>(null) }
+    var docsKey by remember { mutableIntStateOf(0) }
+    var uploading by remember { mutableStateOf(false) }
+    // The question to ask, and the body to post once the user says yes.
+    var confirmDelete by remember { mutableStateOf<Pair<String, JSONObject>?>(null) }
 
     LaunchedEffect(leadId, reloadKey) {
         when (val r = ApiClient.get("/clients/api/app/leads/$leadId/")) {
             is ApiClient.Result.Ok -> data = r.json
             is ApiClient.Result.NotLoggedIn -> onSessionExpired()
             is ApiClient.Result.Error -> error = r.message
+        }
+    }
+
+    // Documents come out of the lead's Drive folder in their own request, so
+    // a slow Drive never holds up the lead itself.
+    LaunchedEffect(leadId, docsKey) {
+        when (val r = ApiClient.get("/clients/api/app/leads/$leadId/documents/")) {
+            is ApiClient.Result.Ok -> docs = r.json
+            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+            is ApiClient.Result.Error -> docs = JSONObject().put("error", r.message)
+        }
+    }
+
+    val attacher = rememberAttacher { uri ->
+        uploading = true
+        Thread {
+            val why = uploadUri(context, uri, "/clients/api/app/leads/$leadId/documents/")
+            uploading = false
+            AppMessage.show(why ?: "Document uploaded")
+            docsKey++
+        }.start()
+    }
+
+    /** Straight into Downloads with the session cookie — the same hand-off
+     * WebActivity makes for report exports. */
+    fun download(path: String, name: String) {
+        try {
+            val url = bo.kadlaginvestment.crm.BackendClient.BASE_URL + path + "?download=1"
+            val req = android.app.DownloadManager.Request(Uri.parse(url))
+                .addRequestHeader("Cookie", android.webkit.CookieManager.getInstance().getCookie(url) ?: "")
+                .setTitle(name)
+                .setNotificationVisibility(
+                    android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
+            (context.getSystemService(android.content.Context.DOWNLOAD_SERVICE)
+                as android.app.DownloadManager).enqueue(req)
+            AppMessage.show("Downloading $name…")
+        } catch (e: Exception) {
+            AppMessage.show("Could not start the download")
         }
     }
 
@@ -583,6 +628,75 @@ private fun LeadDetail(
             enabled = followupAt.isNotBlank(),
             modifier = Modifier.fillMaxWidth().heightIn(min = rdp(52)),
         ) { Text("Schedule follow-up", fontSize = rsp(15)) }
+
+        // ── Documents: quotations and papers in the lead's Drive folder ──
+        val files = docs?.optJSONArray("files")
+        SectionTitle("Documents (${files?.length() ?: 0})")
+        docs?.optString("error")?.takeIf { it.isNotBlank() }?.let {
+            Text(it, color = StatusRed, fontSize = rsp(12))
+        }
+        ActionRow(Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { if (!uploading) attacher.takePhoto() }) {
+                Text(if (uploading) "Uploading…" else "Take photo", fontSize = rsp(13))
+            }
+            OutlinedButton(onClick = { if (!uploading) attacher.pickFile() }) {
+                Text("Choose file", fontSize = rsp(13))
+            }
+        }
+        if (docs != null && (files?.length() ?: 0) == 0) {
+            Text(
+                "No documents yet — upload the quotations sent to this lead.",
+                fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        for (i in 0 until (files?.length() ?: 0)) {
+            val f = files!!.getJSONObject(i)
+            val name = f.optString("name")
+            val path = f.optString("url")
+            Column(Modifier.fillMaxWidth().padding(vertical = rdp(2))) {
+                Text(name, fontSize = rsp(13), fontWeight = FontWeight.SemiBold)
+                Text(
+                    listOf(f.optString("size_label"), f.optString("modified"))
+                        .filter { it.isNotBlank() }.joinToString(" · "),
+                    fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ActionRow {
+                    TextButton(onClick = { bo.kadlaginvestment.crm.WebActivity.open(context, path) }) {
+                        Text("View", fontSize = rsp(13))
+                    }
+                    TextButton(onClick = { download(path, name) }) {
+                        Text("Download", fontSize = rsp(13))
+                    }
+                    TextButton(onClick = {
+                        confirmDelete = "Delete “$name” from Drive?" to
+                            JSONObject().put("file_id", f.optString("id"))
+                    }) { Text("Delete", fontSize = rsp(13), color = StatusRed) }
+                }
+            }
+        }
+        if (docs?.optBoolean("has_folder") == true && docs?.optBoolean("can_delete_folder") == true) {
+            OutlinedButton(onClick = {
+                confirmDelete = "Permanently delete this lead's Drive folder and every file in it? " +
+                    "This cannot be undone." to JSONObject().put("folder", true)
+            }) { Text("Delete Drive folder", fontSize = rsp(13), color = StatusRed) }
+        }
+        confirmDelete?.let { (question, body) ->
+            AlertDialog(
+                onDismissRequest = { confirmDelete = null },
+                title = { Text("Delete?", fontSize = rsp(18), fontWeight = FontWeight.Bold) },
+                text = { Text(question, fontSize = rsp(14)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmDelete = null
+                        post("/clients/api/app/leads/$leadId/documents/delete/", body,
+                             then = { AppMessage.show("Deleted"); docsKey++ })
+                    }) { Text("Delete", fontSize = rsp(14), color = StatusRed) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = null }) { Text("Cancel", fontSize = rsp(14)) }
+                },
+            )
+        }
 
         SectionTitle("Remarks")
         OutlinedTextField(

@@ -116,26 +116,61 @@ def get_or_create_client_folder(client_name: str, client_id: int) -> tuple[str, 
     return folder_id, _folder_url(folder_id)
 
 
+def get_or_create_folder(parent_id: str, name: str) -> str:
+    """Folder id of `name` under `parent_id`, created on first use."""
+    service = _service()
+    existing = _find_subfolder(service, parent_id, name)
+    if existing:
+        return existing
+    created = service.files().create(
+        body={"name": name, "mimeType": _FOLDER_MIME, "parents": [parent_id]},
+        fields="id",
+        supportsAllDrives=True,
+    ).execute()
+    return created["id"]
+
+
 def get_or_create_tasks_root() -> str:
     """Return the folder id of the shared "CRM Tasks" folder under the Drive root.
 
     Task attachments and voice notes live here (one flat folder is enough — each
     file name is prefixed with the task id). Created on first use.
     """
-    service = _service()
-    root_id = _root_folder_id()
-    folder_name = "CRM Tasks"
+    return get_or_create_folder(_root_folder_id(), "CRM Tasks")
 
-    existing = _find_subfolder(service, root_id, folder_name)
-    if existing:
-        return existing
 
-    created = service.files().create(
-        body={"name": folder_name, "mimeType": _FOLDER_MIME, "parents": [root_id]},
-        fields="id",
+def get_or_create_lead_folder(lead_name: str, lead_id: int) -> str:
+    """Folder id for one lead's documents: "Leads/<name> (#<id>)" under the root."""
+    leads_root = get_or_create_folder(_root_folder_id(), "Leads")
+    return get_or_create_folder(leads_root, f"{lead_name} (#{lead_id})")
+
+
+def list_files(folder_id: str) -> list[dict]:
+    """Files directly inside a folder, newest first: [{id, name, mimeType, size, modifiedTime}]."""
+    resp = _service().files().list(
+        q=f"'{folder_id}' in parents and trashed = false",
+        fields="files(id, name, mimeType, size, modifiedTime)",
+        orderBy="modifiedTime desc",
+        # ponytail: first 200 only; page with nextPageToken if a lead ever holds more.
+        pageSize=200,
         supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
     ).execute()
-    return created["id"]
+    return resp.get("files", [])
+
+
+def delete_folder(folder_id: str) -> None:
+    """Permanently delete a folder and everything in it (no Drive trash).
+
+    A folder that is already gone counts as deleted. Any other failure raises.
+    """
+    from googleapiclient.errors import HttpError
+
+    try:
+        _service().files().delete(fileId=folder_id, supportsAllDrives=True).execute()
+    except HttpError as e:
+        if e.resp.status != 404:
+            raise
 
 
 def upload_file(parent_id: str, filename: str, mime: str, fileobj) -> tuple[str, str]:

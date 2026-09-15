@@ -116,6 +116,9 @@ class Lead(models.Model):
         related_name="source_lead",
         help_text="Client created from this lead via conversion",
     )
+    # Quotations and papers live in Drive under "Leads/<name> (#id)". The id is
+    # stored because a renamed lead keeps its folder. Blank = no folder yet.
+    drive_folder_id = models.CharField(max_length=100, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

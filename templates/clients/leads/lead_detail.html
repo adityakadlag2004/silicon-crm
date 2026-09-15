@@ -164,6 +164,51 @@
         <i class="bi bi-alarm"></i> A follow-up is a task: it rings on the phone at its due time.
       </div>
     </div>
+
+    {# ── Documents: quotations and papers, stored in the lead's Drive folder ── #}
+    <div class="ki-card mb-3" id="lead-documents">
+      <div class="ki-card-label d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span><i class="bi bi-folder2-open"></i> Documents &amp; Quotations</span>
+        <span class="d-flex gap-2 flex-wrap">
+          <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_drive_folder' lead.id %}" target="_blank" rel="noopener"><i class="bi bi-google"></i> Open in Drive</a>
+          {% if lead.drive_folder_id and can_delete_drive_folder %}
+          <form method="post" action="{% url 'clients:lead_drive_folder_delete' lead.id %}" class="d-inline" onsubmit="return confirm('Permanently delete this lead\'s Drive folder and every file in it? This cannot be undone.');">
+            {% csrf_token %}
+            <button type="submit" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);"><i class="bi bi-trash"></i> Delete Drive folder</button>
+          </form>
+          {% endif %}
+        </span>
+      </div>
+      <form method="post" enctype="multipart/form-data" action="{% url 'clients:lead_document_upload' lead.id %}" class="p-3 d-flex gap-2 flex-wrap align-items-center">
+        {% csrf_token %}
+        <input type="file" name="document" multiple required class="form-control form-control-sm" style="max-width:360px;" aria-label="Choose documents to upload" />
+        <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary"><i class="bi bi-upload"></i> Upload</button>
+      </form>
+      {% if documents_error %}<div class="alert alert-warning small mx-3">{{ documents_error }}</div>{% endif %}
+      <div class="ki-table-wrap">
+        <table class="ki-table mb-0">
+          <thead><tr><th>File</th><th>Size</th><th>Modified</th><th style="width:110px;"></th></tr></thead>
+          <tbody>
+            {% for d in documents %}
+              <tr>
+                <td class="small"><a href="{% url 'clients:lead_document' lead.id d.id %}" target="_blank" rel="noopener">{{ d.name }}</a></td>
+                <td class="small text-nowrap">{% if d.size %}{{ d.size|filesizeformat }}{% else %}—{% endif %}</td>
+                <td class="small text-nowrap">{{ d.modifiedTime|slice:":10" }}</td>
+                <td class="text-end text-nowrap">
+                  <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_document' lead.id d.id %}?download=1" aria-label="Download {{ d.name }}" title="Download"><i class="bi bi-download"></i></a>
+                  <form method="post" action="{% url 'clients:lead_document_delete' lead.id d.id %}" class="d-inline" onsubmit="return confirm('Delete {{ d.name|escapejs }} from Drive?');">
+                    {% csrf_token %}
+                    <button type="submit" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);" aria-label="Delete {{ d.name }}" title="Delete"><i class="bi bi-trash"></i></button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="4" class="text-center text-muted small py-3">No documents yet — upload the quotations sent to this lead.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="col-lg-5">
