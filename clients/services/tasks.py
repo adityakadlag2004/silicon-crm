@@ -94,10 +94,19 @@ def delete_task(task, actor):
 
     The assigner sees one row for "Mansi +2 others"; deleting it must not leave
     two live copies behind. Returns the number of rows deleted.
+
+    Deleting an instance of a repeating task also stops its series. A rule with
+    no end date generates a fresh instance every night, so without this the only
+    way to stop one was to find the instance and switch its Repeat to "No
+    repeat" — deleting it just produced another one tomorrow, forever.
     """
     rows = list(group_siblings(task)) if task.assign_group else [task]
     if task.pk not in [t.pk for t in rows]:
         rows.append(task)
+    rule = task.recurring_rule
+    if rule and rule.is_active:
+        rule.is_active = False
+        rule.save(update_fields=["is_active"])
     for t in rows:
         t.is_deleted = True
         t.deleted_at = timezone.now()

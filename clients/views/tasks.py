@@ -1019,11 +1019,14 @@ def task_delete(request, pk):
     if not _can_delete(request, task):
         return HttpResponseForbidden("You cannot delete this task.")
     # Deletes the whole assignment group — one visible row, one delete.
+    repeat = task.recurring_rule.get_frequency_display().lower() if task.recurring_rule_id else ""
     n = delete_task(task, request.user)
     messages.success(
         request,
         f"Task #{task.pk} moved to Deleted Tasks."
-        + (f" ({n} assignees)" if n > 1 else ""),
+        + (f" ({n} assignees)" if n > 1 else "")
+        # Say the series stopped, or nobody knows whether it will be back tomorrow.
+        + (f" The {repeat} repeat was stopped." if repeat else ""),
     )
     return redirect("clients:task_dashboard")
 

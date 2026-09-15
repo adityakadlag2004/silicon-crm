@@ -87,6 +87,24 @@ class RecurrenceTests(_Base):
         self.assertEqual(rule.occurrences_created, 3)
         self.assertFalse(rule.is_active)
 
+    def test_deleting_an_instance_stops_the_series(self):
+        """A never-ending rule must die with its task — deleting used to leave
+        the rule generating a fresh instance every night, forever."""
+        start = timezone.localdate() - timedelta(days=2)
+        rule = self._make_rule("daily", start)   # end_type defaults to "never"
+        generate_recurring()
+        task = Task.objects.filter(recurring_rule=rule, is_deleted=False).first()
+
+        resp = self.c("admin").post(reverse("clients:task_delete", args=[task.pk]), follow=True)
+        self.assertEqual(resp.status_code, 200)
+
+        rule.refresh_from_db()
+        self.assertFalse(rule.is_active)
+        # And the cron stops producing instances.
+        live = Task.objects.filter(recurring_rule=rule, is_deleted=False).count()
+        generate_recurring()
+        self.assertEqual(Task.objects.filter(recurring_rule=rule, is_deleted=False).count(), live)
+
     def test_create_form_spawns_rule(self):
         resp = self.c("admin").post(reverse("clients:task_create"), {
             "title": "Weekly report", "priority": "medium",
