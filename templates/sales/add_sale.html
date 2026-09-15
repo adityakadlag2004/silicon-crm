@@ -137,6 +137,11 @@
             <i class="bi bi-hash"></i> The insurer's policy number — links this sale to its policy on the tracker.
           </small>
         </div>
+        <div class="col-md-6" id="policy-insurer-group" style="display:none;">
+          <label for="id_insurer" class="form-label fw-semibold">Policy Company <span class="text-danger">*</span></label>
+          {{ form.insurer }}
+          {% if form.insurer.errors %}<div class="text-danger small mt-1">{{ form.insurer.errors|striptags }}</div>{% endif %}
+        </div>
         <div class="col-12" id="policy-doc-group" style="display:none;">
           <div class="form-check">
             <input class="form-check-input" type="checkbox" name="policy_doc_submitted"
@@ -391,6 +396,13 @@ document.addEventListener("DOMContentLoaded", function () {
         policyNumGroup.style.display = isInsurance ? "block" : "none";
         if (policyNumInput) policyNumInput.required = isInsurance;
         if (!isInsurance && policyNumInput) policyNumInput.value = "";
+      }
+      const insurerGroup = document.getElementById("policy-insurer-group");
+      const insurerInput = document.getElementById("id_insurer");
+      if (insurerGroup) {
+        insurerGroup.style.display = isInsurance ? "block" : "none";
+        if (insurerInput) insurerInput.required = isInsurance;
+        if (!isInsurance && insurerInput) insurerInput.value = "";
       }
     const policyDocGroup = document.getElementById("policy-doc-group");
     if (policyDocGroup) {

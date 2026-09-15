@@ -70,6 +70,11 @@
       {% if form.policy_number.errors %}<div class="text-danger small mt-1">{{ form.policy_number.errors|striptags }}</div>{% endif %}
       <small class="form-text text-muted"><i class="bi bi-hash"></i> The insurer's policy number — links this sale to its policy on the tracker.</small>
     </div>
+    <div class="mb-3" id="policy-insurer-group" {% if not sale.is_insurance %}style="display:none;"{% endif %}>
+      <label for="id_insurer" class="form-label fw-semibold">Policy Company <span class="text-danger">*</span></label>
+      {{ form.insurer }}
+      {% if form.insurer.errors %}<div class="text-danger small mt-1">{{ form.insurer.errors|striptags }}</div>{% endif %}
+    </div>
     <div class="mb-3" id="multiyear-group" style="display:none;">
       <label for="id_policy_years" class="form-label fw-semibold">Policy term</label>
       {{ form.policy_years }}
@@ -155,6 +160,12 @@ document.addEventListener("DOMContentLoaded", function () {
     if (policyNumGroup) {
       policyNumGroup.style.display = isInsurance ? "block" : "none";
       if (policyNumInput) policyNumInput.required = isInsurance;
+    }
+    const insurerGroup = document.getElementById("policy-insurer-group");
+    const insurerInput = document.getElementById("id_insurer");
+    if (insurerGroup) {
+      insurerGroup.style.display = isInsurance ? "block" : "none";
+      if (insurerInput) insurerInput.required = isInsurance;
     }
 
     // Multiyear + EMI: Health only; EMI shows only for a multiyear (>=2y) term.

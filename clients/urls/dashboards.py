@@ -8,6 +8,7 @@ urlpatterns = [
     path("admin/employees/", dashboards.employee_management, name="employee_management"),
     path("admin/firm-settings/", dashboards.firm_settings_page, name="firm_settings"),
     path("admin/products/", dashboards.product_management_page, name="product_management"),
+    path("admin/products/<int:parent_id>/", dashboards.product_management_page, name="product_subproducts"),
     path("admin/targets/", dashboards.target_management, name="target_management"),
     path("admin/audit-log/", audit.audit_log, name="audit_log"),
     path("dashboard/employee/", dashboards.employee_dashboard, name="employee_dashboard"),

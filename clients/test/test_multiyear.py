@@ -73,7 +73,7 @@ class MultiyearFormTests(TestCase):
     def test_health_keeps_multiyear_and_emi(self):
         from clients.forms import AdminSaleForm
         f = AdminSaleForm(data=self._data("Health Insurance", policy_type="fresh",
-                                          policy_date="2026-07-20", policy_number="X1"))
+                                          policy_date="2026-07-20", policy_number="X1", insurer="Star Health"))
         self.assertTrue(f.is_valid(), f.errors)
         self.assertEqual(f.cleaned_data["policy_years"], 3)
         self.assertEqual(f.cleaned_data["emi_months"], 5)
@@ -89,7 +89,7 @@ class MultiyearFormTests(TestCase):
         from clients.forms import AdminSaleForm
         f = AdminSaleForm(data=self._data("Health Insurance", policy_years="1",
                                           policy_type="fresh", policy_date="2026-07-20",
-                                          policy_number="X2"))
+                                          policy_number="X2", insurer="Star Health"))
         self.assertTrue(f.is_valid(), f.errors)
         self.assertEqual(f.cleaned_data["emi_months"], 0)  # EMI dropped without multiyear
 

@@ -10,6 +10,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseForbidden
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.timezone import now
 from django.db.models import Sum, Q, Count
@@ -1233,10 +1234,13 @@ def firm_settings_page(request):
 
 
 @login_required
-def product_management_page(request):
+def product_management_page(request, parent_id=None):
     admin_emp = getattr(request.user, "employee", None)
     if not permissions.is_admin(request.user):
         return HttpResponseForbidden("Admins only.")
+    # The page lists main products; a main product's own page (parent_id) lists
+    # its sub-products. Every action returns to the page it was posted from.
+    parent = get_object_or_404(Product, pk=parent_id, parent__isnull=True) if parent_id else None
 
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip()
@@ -1282,7 +1286,7 @@ def product_management_page(request):
 
             if not name:
                 messages.error(request, "Product name is required.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             try:
                 display_order_val = int(display_order) if display_order not in (None, "") else 0
@@ -1294,16 +1298,16 @@ def product_management_page(request):
 
             if Product.objects.filter(name__iexact=name).exists():
                 messages.error(request, f"Product '{name}' already exists.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             if Product.objects.filter(code=code).exists():
                 messages.error(request, f"Product code '{code}' already exists.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             parent, parent_err = _resolve_parent()
             if parent_err:
                 messages.error(request, parent_err)
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             Product.objects.create(
                 name=name,
@@ -1317,7 +1321,7 @@ def product_management_page(request):
                 is_active=True,
             )
             messages.success(request, f"Product '{name}' added.")
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         if action == "bulk_add":
             names = request.POST.getlist("bulk_name")
@@ -1367,7 +1371,7 @@ def product_management_page(request):
                 messages.error(request, err)
             if not added and not errors:
                 messages.error(request, "Nothing to add — enter at least one product name.")
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         if action == "update":
             product_id = request.POST.get("product_id")
@@ -1381,7 +1385,7 @@ def product_management_page(request):
 
             if not name:
                 messages.error(request, "Product name is required.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             try:
                 display_order_val = int(display_order) if display_order not in (None, "") else product.display_order
@@ -1393,16 +1397,16 @@ def product_management_page(request):
 
             if Product.objects.exclude(pk=product.pk).filter(name__iexact=name).exists():
                 messages.error(request, f"Product '{name}' already exists.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             if Product.objects.exclude(pk=product.pk).filter(code=code).exists():
                 messages.error(request, f"Product code '{code}' already exists.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             parent, parent_err = _resolve_parent(self_pk=product.pk)
             if parent_err:
                 messages.error(request, parent_err)
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             product.name = name
             product.code = code
@@ -1420,7 +1424,7 @@ def product_management_page(request):
                 "updated_at",
             ])
             messages.success(request, f"Product '{name}' updated.")
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         if action == "archive":
             product_id = request.POST.get("product_id")
@@ -1428,7 +1432,7 @@ def product_management_page(request):
             product = get_object_or_404(Product, pk=product_id)
             product.archive(reason=reason)
             messages.success(request, f"Product '{product.name}' archived.")
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         if action == "restore":
             product_id = request.POST.get("product_id")
@@ -1438,7 +1442,7 @@ def product_management_page(request):
             product.archived_reason = ""
             product.save(update_fields=["is_active", "archived_at", "archived_reason", "updated_at"])
             messages.success(request, f"Product '{product.name}' restored.")
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         if action == "add_margin_slab":
             product = get_object_or_404(Product, pk=request.POST.get("product_id"))
@@ -1447,7 +1451,7 @@ def product_management_page(request):
                 policy_type = ""
             elif policy_type not in {"fresh", "port"}:
                 messages.error(request, "Select Fresh or Port for Health Insurance margin slabs.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             min_amount = _parse_amount(request.POST.get("min_amount"), default=None)
             max_amount = _parse_amount(request.POST.get("max_amount"), default=None)
@@ -1455,10 +1459,10 @@ def product_management_page(request):
 
             if min_amount is None or margin_percent is None:
                 messages.error(request, "Min amount and margin % are required for a slab.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
             if max_amount is not None and max_amount < min_amount:
                 messages.error(request, "Max amount cannot be less than min amount.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             overlap = ProductMarginSlab.objects.filter(
                 product=product, policy_type=policy_type
@@ -1469,7 +1473,7 @@ def product_management_page(request):
             )
             if overlap.exists():
                 messages.error(request, "This revenue range overlaps an existing slab for the same type.")
-                return redirect("clients:product_management")
+                return redirect(request.path)
 
             ProductMarginSlab.objects.create(
                 product=product,
@@ -1479,14 +1483,14 @@ def product_management_page(request):
                 margin_percent=margin_percent,
             )
             messages.success(request, f"Margin slab added for '{product.name}'.")
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         if action == "delete_margin_slab":
             slab = get_object_or_404(ProductMarginSlab, pk=request.POST.get("slab_id"))
             pname = slab.product.name
             slab.delete()
             messages.success(request, f"Margin slab removed from '{pname}'.")
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         if action == "toggle_mdrt":
             fs = FirmSettings.get_settings()
@@ -1498,7 +1502,7 @@ def product_management_page(request):
                 fs.mdrt_active_year = this_year
                 messages.success(request, f"MDRT active for {this_year} — MDRT rates apply to new sales until 1 January.")
             fs.save(update_fields=["mdrt_active_year", "updated_at"])
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         if action == "set_active_life_plans":
             # Bulk "tick what you sell": the checked plans become active, the
@@ -1517,32 +1521,34 @@ def product_management_page(request):
                         plan.save(update_fields=["is_active", "archived_at",
                                                  "archived_reason", "updated_at"])
                 messages.success(request, f"{len(checked)} life-insurance plan(s) marked active.")
-            return redirect("clients:product_management")
+            return redirect(request.path)
 
         messages.error(request, "Unsupported action.")
-        return redirect("clients:product_management")
+        return redirect(request.path)
 
-    life_parent = Product.objects.filter(code="LIFE_INS").first()
-    life_plan_ids = set(
-        Product.objects.filter(parent__code="LIFE_INS").values_list("id", flat=True)
-    )
-    # Life plans get their own picker below; keep them out of the main table.
     products = (
-        Product.objects.exclude(id__in=life_plan_ids)
+        Product.objects.filter(parent=parent)          # parent=None → main products
+        .annotate(sub_count=Count("children"))
         .order_by("display_order", "name")
-        .select_related("parent")
         .prefetch_related("margin_slabs")
     )
-    life_plans = (
-        Product.objects.filter(parent__code="LIFE_INS").order_by("name")
-        if life_parent else []
-    )
+    # Life plans get their own tick-what-you-sell picker instead of the table.
+    life_plans = []
+    if parent and parent.code == "LIFE_INS":
+        life_plans = list(parent.children.order_by("name"))
+        products = products.none()
     # Categories a (sub-)product may sit under: top-level products only.
-    categories = [p for p in products if not p.parent_id]
+    categories = Product.objects.filter(parent__isnull=True).order_by("display_order", "name")
     return render(
         request,
         "settings/product_management.html",
         {
+            "parent": parent,
+            # Main page keeps the derived crumb; a sub-product page links back.
+            **({"crumbs": [
+                {"label": "Products", "url": reverse("clients:product_management")},
+                {"label": parent.name},
+            ]} if parent else {}),
             "products": products,
             "categories": categories,
             "life_plans": life_plans,

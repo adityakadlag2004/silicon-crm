@@ -78,6 +78,14 @@ class SaleToPolicyTests(TestCase):
         sales_service.reject_sale(sale, self.admin.user, "duplicate")
         self.assertFalse(InsurancePolicy.objects.filter(source_sale=sale).exists())
 
+    def test_sale_insurer_becomes_the_policy_company(self):
+        sale = self._sale(insurer="Star Health ", policy_number="STAR1")
+        sales_service.finalize_new_sale(sale, self.admin.user, auto_approve=True)
+        self.assertEqual(sale.policy.insurer, "Star Health")
+        # Copied from the sale, not curated — rejecting still removes it.
+        sales_service.reject_sale(sale, self.admin.user, "duplicate")
+        self.assertFalse(InsurancePolicy.objects.filter(source_sale=sale).exists())
+
     def test_rejecting_keeps_a_curated_policy_but_detaches_it(self):
         sale = self._sale()
         sales_service.finalize_new_sale(sale, self.admin.user, auto_approve=True)

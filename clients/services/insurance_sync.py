@@ -78,7 +78,7 @@ def sync_policy_from_sale(sale: Sale) -> InsurancePolicy | None:
         defaults={
             "client": sale.client,
             "policy_number": number,
-            "insurer": "",
+            "insurer": (sale.insurer or "").strip(),
             "insurance_type": kind,
             "status": InsurancePolicy.STATUS_ACTIVE,
         },
@@ -94,6 +94,8 @@ def sync_policy_from_sale(sale: Sale) -> InsurancePolicy | None:
         policy.plan_name = sale.product_ref.name
     if (sale.policy_number or "").strip():
         policy.policy_number = number
+    if (sale.insurer or "").strip():
+        policy.insurer = sale.insurer.strip()
     policy.premium_amount = sale.amount or 0
     policy.sum_insured = sale.cover_amount or 0
     policy.start_date = start
@@ -115,7 +117,9 @@ def unsync_policy_for_sale(sale: Sale) -> None:
     policy = InsurancePolicy.objects.filter(source_sale=sale).first()
     if not policy:
         return
-    untouched = (not policy.insurer) and policy.policy_number in (
+    # An insurer copied from the sale form isn't curation; one typed on the
+    # tracker is.
+    untouched = policy.insurer in ("", (sale.insurer or "").strip()) and policy.policy_number in (
         f"SALE-{sale.pk}", (sale.policy_number or "").strip())
     if untouched:
         policy.delete()

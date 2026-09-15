@@ -90,6 +90,9 @@ class Sale(models.Model):
     # Health/Life in the sale forms — it's what links this sale to its policy
     # on the Insurance Tracker and to future renewals of the same policy.
     policy_number = models.CharField(max_length=60, blank=True, db_index=True)
+    # The insurance company that issued it (Health/Life only, mandatory in the
+    # sale forms). Copied onto the tracker policy's `insurer` on sync.
+    insurer = models.CharField("Policy company", max_length=120, blank=True)
     # Ticked when the policy document is filed in the client's Drive folder.
     # Blank means not filed — same tick as Renewal.policy_doc_submitted, and it
     # must never default True or the "not uploaded" chase is silently over.

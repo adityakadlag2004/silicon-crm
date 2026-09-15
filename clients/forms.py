@@ -193,6 +193,10 @@ class SalePolicyTypeMixin:
                 "The insurer's policy number from the document. Links this sale "
                 "to its policy on the Insurance Tracker."
             )
+        if "insurer" in self.fields:
+            self.fields["insurer"].required = False
+            self.fields["insurer"].widget.attrs.update(
+                {"class": "form-control", "placeholder": "e.g. ICICI Lombard"})
 
     def clean(self):
         cleaned_data = super().clean()
@@ -256,6 +260,13 @@ class SalePolicyTypeMixin:
                                    "Enter the policy number from the policy document.")
             else:
                 cleaned_data["policy_number"] = ""
+        if "insurer" in self.fields:
+            if _is_insurance_product_name(product):
+                cleaned_data["insurer"] = (cleaned_data.get("insurer") or "").strip()
+                if not cleaned_data["insurer"]:
+                    self.add_error("insurer", "Enter the policy company.")
+            else:
+                cleaned_data["insurer"] = ""
         # The Drive tick only means anything for a policy document.
         if "policy_doc_submitted" in self.fields and not _is_insurance_product_name(product):
             cleaned_data["policy_doc_submitted"] = False
@@ -295,7 +306,7 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "policy_doc_submitted", "policy_years", "emi_months"]
+        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "insurer", "policy_doc_submitted", "policy_years", "emi_months"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),
@@ -322,7 +333,7 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
 
     class Meta:
         model = Sale
-        fields = ["product", "ppt", "amount", "policy_type", "date", "policy_date", "policy_number", "policy_years", "emi_months"]
+        fields = ["product", "ppt", "amount", "policy_type", "date", "policy_date", "policy_number", "insurer", "policy_years", "emi_months"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),

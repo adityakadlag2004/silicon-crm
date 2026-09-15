@@ -38,7 +38,7 @@ class SalePolicyUploadTests(TestCase):
             "product": self.health.name, "amount": "20000",
             "cover_amount": "500000", "policy_type": "fresh",
             "date": "2026-05-10", "policy_date": "2026-05-10",
-            "policy_number": "UPL900", "policy_years": 1, "emi_months": 0,
+            "policy_number": "UPL900", "insurer": "Star Health", "policy_years": 1, "emi_months": 0,
         }
         data.update(extra)
         self.client.force_login(self.user)

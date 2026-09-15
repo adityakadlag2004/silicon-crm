@@ -348,7 +348,7 @@ class AddSaleRejectionTests(_WorkflowSetup):
             "cover_amount": "",
             "date": date.today().isoformat(),
             "policy_date": date.today().isoformat(),
-            "policy_number": "LI-REJ-1",
+            "policy_number": "LI-REJ-1", "insurer": "Star Health",
             "policy_years": "1",
             "emi_months": "0",
         }

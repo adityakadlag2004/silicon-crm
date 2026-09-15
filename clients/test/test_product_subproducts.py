@@ -91,6 +91,22 @@ class SubProductMarginTests(TestCase):
         self.assertFalse(Product.objects.filter(name="").exists())
         self.assertEqual(Product.objects.filter(name="Life Insurance").count(), 1)
 
+    def test_product_management_lists_mains_and_opens_their_subproducts(self):
+        self.client.force_login(self.user)
+        fd = Product.objects.create(name="Fixed Deposit", code="FD_T")
+        Product.objects.create(name="Bank FD", code="BANK_FD_T", parent=fd)
+        main = self.client.get(reverse("clients:product_management"))
+        self.assertContains(main, reverse("clients:product_subproducts", args=[fd.pk]))
+        self.assertNotContains(main, "Bank FD")                  # sub-product not listed
+        sub = self.client.get(reverse("clients:product_subproducts", args=[fd.pk]))
+        self.assertContains(sub, "Bank FD")
+        # A sub-product has no page of its own; actions return to the page posted from.
+        term = self.client.get(reverse("clients:product_subproducts", args=[self.term.pk]))
+        self.assertEqual(term.status_code, 404)
+        url = reverse("clients:product_subproducts", args=[fd.pk])
+        resp = self.client.post(url, {"action": "archive", "product_id": fd.pk})
+        self.assertRedirects(resp, url, fetch_redirect_response=False)
+
     def test_two_step_choices(self):
         mains = [v for v, _ in _main_product_choices()]
         self.assertIn("Life Insurance", mains)          # category is a main option
@@ -102,7 +118,7 @@ class SubProductMarginTests(TestCase):
         data = {
             "client": self.client_obj.pk, "amount": "50000",
             "date": "2026-07-10", "policy_date": "2026-07-10",
-            "policy_number": "P1", "policy_type": "",
+            "policy_number": "P1", "insurer": "Star Health", "policy_type": "",
         }
         data.update(over)
         return data

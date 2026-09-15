@@ -44,7 +44,9 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   entry forms (`_sale_products` / `_subproduct_choices`, `app_sale_meta`) and
   the renewal forms (`RenewalForm`, `EditRenewalForm`, `app_renewal_meta`)
   may drop `.main()`. Product Management is the third exception: it is the
-  catalog editor, so it shows the tree.
+  catalog editor — `/admin/products/` lists main products, and each opens its
+  own sub-product page (`product_subproducts`, where Life's plan picker +
+  MDRT toggle live). Every action redirects back to the page it was posted from.
 - **Restricting a picker is only half the change — the matching behind it has
   to roll up, or a category selection silently covers nothing.** Both halves
   are done: incentive rules already matched `product_ref__parent_id`
@@ -88,6 +90,11 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `insurance_sync` and `link_renewal_to_policy`, and only the model covers all
   four. `link_renewal_to_policy` used to merely strip, which the Android
   screens' client-side uppercasing was accidentally masking.
+- Health/Life sales also require the **policy company** (`Sale.insurer`,
+  migration 0131) on the web forms; sync copies it to `InsurancePolicy.insurer`.
+  The app API accepts `insurer` but doesn't require it — the Android Add Sale
+  screen has no field yet. A policy whose insurer only came from its sale
+  still counts as untouched, so un-approving removes it.
 - An approved Health/Life **sale** auto-creates one `InsurancePolicy`
   (idempotent, linked via `InsurancePolicy.source_sale`), start date = the
   sale's `policy_date`. Un-approving/rejecting removes it unless someone has

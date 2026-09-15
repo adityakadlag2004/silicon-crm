@@ -222,7 +222,7 @@ class RenewalFilingChecklistTests(TestCase):
             "client": self.customer.id, "product_ref": self.health.id,
             "renewal_date": "2026-05-10", "frequency": Renewal.FREQUENCY_YEARLY,
             "premium_amount": "15000", "premium_collected_on": "2026-05-10",
-            "employee": self.emp.id, "policy_number": "CHK900",
+            "employee": self.emp.id, "policy_number": "CHK900", "insurer": "Star Health",
         }
         data.update(extra)
         self.client.force_login(self.user)

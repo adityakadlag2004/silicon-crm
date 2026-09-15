@@ -95,7 +95,7 @@ class PageRenderTests(TestCase):
         self.client.force_login(admin_user)
 
     def test_product_management_shows_picker_and_mdrt(self):
-        resp = self.client.get(reverse("clients:product_management"))
+        resp = self.client.get(reverse("clients:product_subproducts", args=[self.plan.parent_id]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "MDRT Status")
         self.assertContains(resp, "Life Insurance Plans")

@@ -402,7 +402,7 @@ def app_sale_create(request):
     # Policy date + number: mandatory for Health/Life, meaningless otherwise.
     # Same rule as the web sale forms — the sale date is the approval day, and
     # renewals must be measured from the policy's own commencement date.
-    policy_date, policy_number = None, ""
+    policy_date, policy_number, insurer = None, "", ""
     if product.is_insurance:
         # App builds before v4.23 have no such fields and omit the keys
         # entirely. Telling those users to "enter the policy date" points at a
@@ -429,6 +429,8 @@ def app_sale_create(request):
                 {"ok": False, "error": "Enter the policy number from the policy document."},
                 status=400,
             )
+        # Optional here: app builds without a Policy Company field omit it.
+        insurer = str(body.get("insurer") or "").strip()[:120]
 
     # Multiyear + EMI apply to Health only (EMI needs a multiyear term).
     try:
@@ -453,7 +455,7 @@ def app_sale_create(request):
     sale = Sale(
         client=client, employee=sale_emp, product=product.name, product_ref=product,
         amount=amount, cover_amount=cover_amount, policy_type=policy_type, ppt=ppt,
-        policy_date=policy_date, policy_number=policy_number,
+        policy_date=policy_date, policy_number=policy_number, insurer=insurer,
         policy_years=policy_years, emi_months=emi_months,
     )
 
