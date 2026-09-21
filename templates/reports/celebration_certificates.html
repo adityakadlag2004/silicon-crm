@@ -6,36 +6,79 @@
   <title>Certificates – {{ period_label }}</title>
   {% comment %}
   Standalone on purpose: no app chrome, so each certificate prints alone on
-  one A4 landscape sheet. Colours are fixed (not theme tokens) because this is
-  paper, not screen.
+  one A4 landscape sheet. Colours are the firm's brand (the logo's red, yellow
+  and white), not the app theme — this is paper, not screen.
+  print-color-adjust keeps the bands; browsers drop backgrounds by default.
   {% endcomment %}
   <style>
     @page { size: A4 landscape; margin: 0; }
-    * { box-sizing: border-box; }
-    body { margin: 0; background: #eee; font-family: Georgia, "Times New Roman", serif; color: #1f2937; }
-    .bar { position: sticky; top: 0; background: #1f2937; color: #fff; padding: 10px 16px;
+    :root { --red: #DC2A1C; --yellow: #FDC904; --ink: #1f2937; --muted: #6b7280; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { margin: 0; background: #e5e5e5; font-family: Georgia, "Times New Roman", serif; color: var(--ink); }
+    .bar { position: sticky; top: 0; z-index: 1; background: var(--ink); color: #fff; padding: 10px 16px;
            display: flex; justify-content: space-between; align-items: center; font-family: system-ui, sans-serif; }
-    .bar button { background: #E5B740; border: 0; padding: 8px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; }
-    .cert { width: 297mm; height: 210mm; max-width: 100%; margin: 16px auto; background: #fffdf7;
-            padding: 14mm; page-break-after: always; break-after: page; }
-    .frame { height: 100%; border: 3px solid #B8860B; outline: 1px solid #B8860B; outline-offset: -9px;
-             display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 10mm; }
-    .logo { height: 30mm; max-width: 100%; }
-    .kind { font-size: 34pt; margin: 6mm 0 2mm; color: #B8860B; }
-    .award { font-size: 22pt; font-style: italic; margin-bottom: 8mm; }
-    .presented { font-size: 13pt; color: #6b7280; }
-    .name { font-size: 40pt; font-weight: 700; margin: 4mm 0; border-bottom: 1px solid #B8860B; padding: 0 12mm 2mm; }
-    .detail { font-size: 15pt; margin-top: 4mm; }
-    .period { margin-top: 10mm; font-size: 13pt; color: #6b7280; }
+    .bar button { background: var(--yellow); border: 0; padding: 8px 16px; border-radius: 6px; font-weight: 700; cursor: pointer; }
+
+    .cert { width: 297mm; height: 210mm; max-width: 100%; margin: 16px auto; background: #fff; overflow: hidden;
+            display: flex; flex-direction: column; position: relative;
+            page-break-after: always; break-after: page; box-shadow: 0 4px 18px rgba(0,0,0,.15); }
+
+    /* Header: logo on white over the logo's own yellow + red bars */
+    .head { text-align: center; padding: 6mm 0 4mm; }
+    .logo { height: 30mm; max-width: 80%; }
+    .stripes { height: 5mm; background: linear-gradient(var(--yellow) 0 60%, var(--red) 60% 100%); }
+
+    /* Body, framed by corner brackets */
+    .body { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; text-align: center; padding: 4mm 28mm; }
+    .corner { position: absolute; width: 22mm; height: 22mm; border: 0 solid var(--red); }
+    .corner::after { content: ""; position: absolute; width: 12mm; height: 12mm; border: 0 solid var(--yellow); }
+    .tl { top: 6mm; left: 10mm; border-top-width: 2.5mm; border-left-width: 2.5mm; }
+    .tr { top: 6mm; right: 10mm; border-top-width: 2.5mm; border-right-width: 2.5mm; }
+    .bl { bottom: 4mm; left: 10mm; border-bottom-width: 2.5mm; border-left-width: 2.5mm; }
+    .br { bottom: 4mm; right: 10mm; border-bottom-width: 2.5mm; border-right-width: 2.5mm; }
+    .tl::after { top: 2mm; left: 2mm; border-top-width: 1.2mm; border-left-width: 1.2mm; }
+    .tr::after { top: 2mm; right: 2mm; border-top-width: 1.2mm; border-right-width: 1.2mm; }
+    .bl::after { bottom: 2mm; left: 2mm; border-bottom-width: 1.2mm; border-left-width: 1.2mm; }
+    .br::after { bottom: 2mm; right: 2mm; border-bottom-width: 1.2mm; border-right-width: 1.2mm; }
+
+    .kind { font-size: 36pt; letter-spacing: .18em; text-transform: uppercase; color: var(--red); font-weight: 700; line-height: 1; }
+    .kind-sub { font-size: 15pt; letter-spacing: .5em; text-transform: uppercase; color: var(--muted); margin: 2mm 0 6mm; }
+    .award { display: inline-block; background: var(--yellow); color: var(--ink); font-size: 15pt; font-weight: 700;
+             padding: 2mm 9mm; border-radius: 999px; letter-spacing: .04em; }
+    .presented { font-size: 12pt; font-style: italic; color: var(--muted); margin-top: 6mm; }
+    .name { font-size: 42pt; font-weight: 700; font-style: italic; margin: 1mm 0 0; padding: 0 14mm 2mm;
+            border-bottom: 1mm solid var(--yellow); }
+    .detail { font-size: 14pt; margin-top: 4mm; }
+
+    /* Footer: signature, seal, month — then the red band */
+    .foot { display: flex; justify-content: space-between; align-items: flex-end; padding: 0 30mm 5mm; }
+    .sign { width: 62mm; text-align: center; font-size: 11pt; color: var(--muted); }
+    .sign .line { border-top: 1px solid var(--ink); padding-top: 1.5mm; }
+    .sign .val { font-size: 13pt; color: var(--ink); margin-bottom: 1.5mm; min-height: 6mm; }
+    .seal { width: 28mm; height: 28mm; border-radius: 50%; background: var(--red); color: #fff;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 1.6mm solid var(--yellow); box-shadow: 0 0 0 .6mm var(--red); font-family: system-ui, sans-serif; }
+    .seal .star { font-size: 16pt; color: var(--yellow); line-height: 1; }
+    .seal .txt { font-size: 6.5pt; font-weight: 700; letter-spacing: .12em; margin-top: 1mm; }
+    .band { background: var(--red); color: #fff; text-align: center; font-family: system-ui, sans-serif;
+            font-size: 9.5pt; letter-spacing: .25em; text-transform: uppercase; padding: 3mm 0;
+            border-top: 2mm solid var(--yellow); }
+
     .empty { text-align: center; padding: 60px 16px; font-family: system-ui, sans-serif; }
     @media print {
       body { background: #fff; }
       .bar { display: none; }
-      .cert { margin: 0; }
+      .cert { margin: 0; box-shadow: none; }
     }
     @media (max-width: 700px) {
-      .cert { height: auto; padding: 16px; }
-      .logo { height: 60px; } .kind { font-size: 24pt; } .name { font-size: 26pt; } .award { font-size: 16pt; }
+      .cert { height: auto; }
+      .body { padding: 24px 20px; }
+      .corner { display: none; }
+      .logo { height: 50px; } .kind { font-size: 20pt; } .kind-sub { font-size: 10pt; letter-spacing: .3em; }
+      .name { font-size: 24pt; padding: 0 8px 4px; } .award { font-size: 12pt; }
+      .foot { padding: 16px; gap: 8px; } .sign { width: auto; flex: 1; font-size: 9pt; }
+      .seal { width: 64px; height: 64px; flex: none; }
     }
   </style>
 </head>
@@ -46,15 +89,30 @@
   </div>
   {% for a in awards %}
   <div class="cert">
-    <div class="frame">
+    <header class="head">
       <img class="logo" src="{% static 'admin/img/logo.png' %}" alt="Kadlag Investment">
-      <div class="kind">Certificate of Achievement</div>
+    </header>
+    <div class="stripes"></div>
+
+    <main class="body">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+      <div class="kind">Certificate</div>
+      <div class="kind-sub">of Achievement</div>
       <div class="award">{{ a.title }}</div>
       <div class="presented">proudly presented to</div>
       <div class="name">{{ a.name }}</div>
       <div class="detail">{{ a.detail }}</div>
-      <div class="period">{{ period_label }}</div>
-    </div>
+    </main>
+
+    <footer>
+      <div class="foot">
+        <div class="sign"><div class="val"></div><div class="line">Authorised Signatory</div></div>
+        <div class="seal" aria-hidden="true"><span class="star">★</span><span class="txt">EXCELLENCE</span></div>
+        <div class="sign"><div class="val">{{ period_label }}</div><div class="line">Month of Award</div></div>
+      </div>
+      <div class="band">Kadlag Investment · Celebrating Excellence</div>
+    </footer>
   </div>
   {% empty %}
   <p class="empty">No winners for {{ period_label }} yet.</p>
