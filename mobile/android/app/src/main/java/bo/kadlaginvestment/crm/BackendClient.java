@@ -15,7 +15,7 @@ import java.nio.charset.StandardCharsets;
  */
 public final class BackendClient {
 
-    public static final String BASE_URL = "https://bo.kadlaginvestment.com";
+    public static final String BASE_URL = "http://10.0.2.2:8000";
     private static final String TAG = "BackendClient";
 
     private BackendClient() {}

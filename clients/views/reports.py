@@ -690,31 +690,18 @@ def admin_past_month_performance(request, year, month):
     return render(request, "dashboards/admin_past_month_performance.html", context)
 
 
-@login_required
-def monthly_business_report(request, mode="month"):
-    """The same sheet for a month or for a single day (`mode="day"`)."""
-    emp = getattr(request.user, "employee", None)
-    if not permissions.is_admin_or_manager(request.user):
-        return HttpResponseForbidden("Access denied")
+def business_report_sheet(sel_date=None, sel_year=None, sel_month=None):
+    """The Business Report grid, for one day (`sel_date`) or one month.
 
-    today = date.today()
-    daily = mode == "day"
-    sel_date = today
+    One row per active employee, one column per reportable main product, plus
+    accounts opened and points; grand totals alongside. Shared by the web page
+    and the app's Daily Report — the roll-up rules below are fiddly enough that
+    a second copy of them would drift.
+    """
+    daily = sel_date is not None
     if daily:
-        try:
-            sel_date = date.fromisoformat(request.GET.get("date", ""))
-        except ValueError:
-            sel_date = today
-        sel_month, sel_year = sel_date.month, sel_date.year
         approved = Sale.objects.filter(status="approved", date=sel_date)
     else:
-        try:
-            sel_month = int(request.GET.get("month", today.month))
-            sel_year = int(request.GET.get("year", today.year))
-        except (TypeError, ValueError):
-            sel_month, sel_year = today.month, today.year
-        if not 1 <= sel_month <= 12:
-            sel_month = today.month
         approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
 
     # Top-level products only. The life plan catalogue alone is ~40 sub-products,
@@ -797,18 +784,45 @@ def monthly_business_report(request, mode="month"):
         rows.append({"employee": e, "product_vals": product_vals,
                      "points": pts, "accounts": accounts})
 
-    grand_vals = [grand[p] for p in products]
-    months = [(i, month_name[i]) for i in range(1, 13)]
-    years = list(range(today.year - 3, today.year + 1))
-
-    context = {
-        "rows": rows,
+    return {
         "products": products,
-        "grand_vals": grand_vals,
+        "rows": rows,
+        "grand_vals": [grand[p] for p in products],
         "grand_points": grand["points"],
         "grand_accounts": grand_accounts,
-        "months": months,
-        "years": years,
+    }
+
+
+@login_required
+def monthly_business_report(request, mode="month"):
+    """The same sheet for a month or for a single day (`mode="day"`)."""
+    if not permissions.is_admin_or_manager(request.user):
+        return HttpResponseForbidden("Access denied")
+
+    today = date.today()
+    daily = mode == "day"
+    sel_date = today
+    if daily:
+        try:
+            sel_date = date.fromisoformat(request.GET.get("date", ""))
+        except ValueError:
+            sel_date = today
+        sel_month, sel_year = sel_date.month, sel_date.year
+        sheet = business_report_sheet(sel_date=sel_date)
+    else:
+        try:
+            sel_month = int(request.GET.get("month", today.month))
+            sel_year = int(request.GET.get("year", today.year))
+        except (TypeError, ValueError):
+            sel_month, sel_year = today.month, today.year
+        if not 1 <= sel_month <= 12:
+            sel_month = today.month
+        sheet = business_report_sheet(sel_year=sel_year, sel_month=sel_month)
+
+    context = {
+        **sheet,
+        "months": [(i, month_name[i]) for i in range(1, 13)],
+        "years": list(range(today.year - 3, today.year + 1)),
         "sel_month": sel_month,
         "sel_year": sel_year,
         "month_name": month_name[sel_month],

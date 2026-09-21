@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,11 +36,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import bo.kadlaginvestment.crm.net.ApiClient
 import org.json.JSONObject
+import java.text.NumberFormat
+import java.util.Locale
 
 /** Reports hub: a menu of report screens. Native screens open in-place;
  * complex financial tools open their web page. */
@@ -55,6 +63,7 @@ fun ReportsHub(
     when (sub) {
         "overview" -> { BackHandler { sub = null }; ReportsScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired, onOpenWeb = onOpenWeb); return }
         "monthly" -> { BackHandler { sub = null }; MonthlyReportScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired); return }
+        "daily" -> { BackHandler { sub = null }; DailyReportScreen(modifier, onBack = { sub = null }, onSessionExpired = onSessionExpired); return }
         "employee" -> {
             BackHandler { sub = null }
             ReportsScreen(
@@ -74,6 +83,7 @@ fun ReportsHub(
             item { ReportCard("📊", "Business Overview", "Trend by product, mix & leaderboard — 6M to 5Y") { sub = "overview" } }
             if (isManagerPlus) {
                 item { ReportCard("👤", "Employee Performance", "One member's months, product-wise") { sub = "employee" } }
+                item { ReportCard("📅", "Daily Report", "One day’s sheet — employee × product, ready to screenshot") { sub = "daily" } }
                 item { ReportCard("🧾", "Monthly Report", "Product-wise + employee-wise for a month") { sub = "monthly" } }
                 item { Spacer(Modifier.height(4.dp)); Text("Detailed tools (open on web)", fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold) }
                 item { ReportCard("💹", "Business Analytics", "Revenue vs expenses, margins", web = true) { onOpenWeb("/clients/reports/business-analytics/") } }
@@ -211,6 +221,151 @@ private fun MonthlyReportScreen(
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
+        }
+    }
+}
+
+// ── Daily report ─────────────────────────────────────────────────────────────
+
+private val grouped: NumberFormat = NumberFormat.getIntegerInstance(Locale("en", "IN"))
+
+/** The web sheet's own convention: a zero prints as a dash, not as "0". */
+private fun sheetCell(v: Double): String = if (v == 0.0) "\u2013" else grouped.format(v)
+
+/**
+ * The web Daily Business Report, on a phone: one row per active employee, one
+ * column per product with business, then accounts opened and points.
+ *
+ * Built to be screenshotted and sent to the team group, which is why it is a
+ * grid and not a list of cards — the whole day fits in one image. The server
+ * drops product columns that are empty for the day (a daily sheet is sparse,
+ * and seven columns on a phone are seven unreadable ones); wide days still
+ * scroll sideways rather than squeezing.
+ */
+@Composable
+private fun DailyReportScreen(
+    modifier: Modifier,
+    onBack: () -> Unit,
+    onSessionExpired: () -> Unit,
+) {
+    val context = LocalContext.current
+    var day by remember { mutableStateOf("") }       // "" = today, the server decides
+    var data by remember { mutableStateOf<JSONObject?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(day, reloadKey) {
+        data = null
+        when (val r = ApiClient.get("/clients/api/app/reports/daily/?date=$day")) {
+            is ApiClient.Result.Ok -> data = r.json
+            is ApiClient.Result.NotLoggedIn -> onSessionExpired()
+            is ApiClient.Result.Error -> error = r.message
+        }
+    }
+
+    if (error != null) { ErrorBox(error!!, modifier) { error = null; reloadKey++ }; return }
+
+    Column(modifier.fillMaxSize().padding(horizontal = rdp(16))) {
+        ReportHeader("Daily Report", onBack)
+
+        val d = data
+        OutlinedButton(
+            onClick = { pickDate(context, d?.optString("date") ?: "") { day = it } },
+            modifier = Modifier.padding(bottom = rdp(8)),
+        ) {
+            Text(d?.optString("date_label") ?: "Pick a date", fontSize = rsp(13))
+        }
+
+        if (d == null) { LoadingBox(); return }
+
+        val products = d.optJSONArray("products")
+        val columns = (0 until (products?.length() ?: 0)).map { products!!.getString(it) }
+        val rows = d.optJSONArray("rows")
+        val totals = d.optJSONObject("totals")
+        val empty = d.optInt("empty_columns")
+
+        if (columns.isEmpty() && (totals?.optInt("accounts") ?: 0) == 0) {
+            Text(
+                "No approved sales and no accounts opened on this day.",
+                fontSize = rsp(13), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return
+        }
+
+        // Named inside the sheet, so a cropped screenshot still says which day.
+        Text(
+            "Business Report \u00b7 ${d.optString("date_label")}",
+            fontSize = rsp(12), fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = rdp(4)),
+        )
+
+        Column(
+            Modifier.weight(1f)
+                .verticalScroll(rememberScrollState())
+                .horizontalScroll(rememberScrollState()),
+        ) {
+            SheetRow("Employee", columns + listOf("Accounts", "Points"), bold = true)
+            for (i in 0 until (rows?.length() ?: 0)) {
+                val r = rows!!.getJSONObject(i)
+                val values = r.optJSONArray("values")
+                SheetRow(
+                    r.optString("name"),
+                    columns.indices.map { sheetCell(values?.optDouble(it, 0.0) ?: 0.0) }
+                        + listOf(
+                            if (r.optInt("accounts") == 0) "\u2013" else "${r.optInt("accounts")}",
+                            sheetCell(r.optDouble("points", 0.0)),
+                        ),
+                )
+            }
+            if (totals != null) {
+                val tv = totals.optJSONArray("values")
+                SheetRow(
+                    "Grand Total",
+                    columns.indices.map { sheetCell(tv?.optDouble(it, 0.0) ?: 0.0) }
+                        + listOf(
+                            if (totals.optInt("accounts") == 0) "\u2013" else "${totals.optInt("accounts")}",
+                            sheetCell(totals.optDouble("points", 0.0)),
+                        ),
+                    bold = true,
+                )
+            }
+        }
+
+        if (empty > 0) {
+            Text(
+                "$empty other product${if (empty == 1) "" else "s"} had no business \u2014 columns hidden.",
+                fontSize = rsp(10), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = rdp(6)),
+            )
+        }
+    }
+}
+
+/** One line of the sheet. Cells are a fixed width so the columns line up down
+ * the page; nothing here may fillMaxWidth, the row lives inside a horizontal
+ * scroll and would measure as infinitely wide. */
+@Composable
+private fun SheetRow(label: String, values: List<String>, bold: Boolean = false) {
+    Row(
+        Modifier.padding(vertical = rdp(5)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.widthIn(min = rdp(104), max = rdp(104)),
+            fontSize = rsp(11),
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
+            maxLines = 2,
+        )
+        values.forEach { v ->
+            Text(
+                v,
+                modifier = Modifier.widthIn(min = rdp(62), max = rdp(62)),
+                fontSize = rsp(11),
+                fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+            )
         }
     }
 }

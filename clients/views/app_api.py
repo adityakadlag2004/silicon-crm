@@ -30,7 +30,7 @@ from ..services import calls as calls_service
 from ..services import sales as sales_service
 from ..utils.phone_utils import digits10
 from .helpers import get_manager_access, name_words_q, product_mix
-from .reports import business_overview_data
+from .reports import business_overview_data, business_report_sheet
 
 
 def _emp(request):
@@ -2375,6 +2375,51 @@ def app_report_monthly(request):
             ).annotate(amount=Sum("amount"), points=Sum("points")).order_by("-amount")
         ]
     return JsonResponse(data)
+
+
+@login_required
+@require_GET
+def app_report_daily(request):
+    """The web Daily Business Report, shaped for a phone screenshot.
+
+    Same sheet and the same roll-up (`business_report_sheet`) — but a single
+    day's sheet is sparse, and seven product columns on a 390dp screen leave
+    nothing legible in a screenshot. Columns with no business anywhere on the
+    day are dropped (counted in `empty_columns`); no figure changes. Every
+    active employee keeps their row, zeros included: "who booked nothing today"
+    is half of what this sheet is read for.
+    """
+    if not permissions.is_admin_or_manager(request.user):
+        return JsonResponse({"ok": False, "error": "Not allowed."}, status=403)
+
+    today = timezone.localdate()
+    try:
+        sel_date = date.fromisoformat(request.GET.get("date", ""))
+    except ValueError:
+        sel_date = today
+
+    sheet = business_report_sheet(sel_date=sel_date)
+    keep = [i for i, total in enumerate(sheet["grand_vals"]) if total]
+    return JsonResponse({
+        "date": sel_date.isoformat(),
+        "date_label": sel_date.strftime("%d %b %Y"),
+        "products": [sheet["products"][i] for i in keep],
+        "empty_columns": len(sheet["products"]) - len(keep),
+        "rows": [
+            {
+                "name": r["employee"].user.get_full_name() or r["employee"].user.username,
+                "values": [_money(r["product_vals"][i]) for i in keep],
+                "accounts": r["accounts"],
+                "points": _money(r["points"]),
+            }
+            for r in sheet["rows"]
+        ],
+        "totals": {
+            "values": [_money(sheet["grand_vals"][i]) for i in keep],
+            "accounts": sheet["grand_accounts"],
+            "points": _money(sheet["grand_points"]),
+        },
+    })
 
 
 @login_required

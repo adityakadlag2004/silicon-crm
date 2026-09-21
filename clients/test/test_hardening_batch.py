@@ -3,6 +3,8 @@ password validation, status sync.
 
 Run: venv_new/bin/python manage.py test clients.test.test_hardening_batch -v 2
 """
+from datetime import date
+
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import Client as TestClient, TestCase
@@ -170,6 +172,44 @@ class DailyBusinessReportTests(TestCase):
     def test_month_view_still_covers_the_whole_month(self):
         resp = self.http.get(reverse("clients:monthly_business_report"), {"month": 5, "year": 2026})
         self.assertContains(resp, "3333")
+
+    # The app serves the same sheet through `business_report_sheet`, so these
+    # pin the shaping the phone needs — not a second copy of the aggregation.
+
+    def test_app_serves_the_same_day(self):
+        resp = self.http.get(reverse("clients:app_report_daily"), {"date": "2026-05-12"})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["date_label"], "12 May 2026")
+        self.assertEqual(data["products"], ["SIP"])
+        self.assertEqual(data["totals"]["values"], [1111.0])
+        # One row per active employee, zeros included.
+        self.assertEqual([r["name"] for r in data["rows"]], ["dbr_admin"])
+        self.assertEqual(data["rows"][0]["values"], [1111.0])
+
+    def test_app_hides_product_columns_with_no_business(self):
+        """Seven columns on a 390dp screen are seven unreadable ones."""
+        from clients.models import Product
+        reportable = Product.objects.filter(
+            is_active=True, parent__isnull=True, show_in_reports=True
+        ).count()
+        self.assertGreater(reportable, 1, "catalog has only the one product with business")
+        data = self.http.get(reverse("clients:app_report_daily"), {"date": "2026-05-12"}).json()
+        self.assertEqual(data["products"], ["SIP"])
+        self.assertEqual(data["empty_columns"], reportable - 1)
+
+    def test_app_garbage_date_falls_back_to_today(self):
+        resp = self.http.get(reverse("clients:app_report_daily"), {"date": "banana"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["date"], date.today().isoformat())
+
+    def test_app_daily_is_admin_or_manager_only(self):
+        """The web page is; the phone is a real door onto the same figures."""
+        other = User.objects.create_user(username="dbr_emp", password="x")
+        Employee.objects.create(user=other, role="employee", salary=0, active=True)
+        http = TestClient()
+        http.force_login(other)
+        self.assertEqual(http.get(reverse("clients:app_report_daily")).status_code, 403)
 
 
 class ReportAccountsAndProductToggleTests(TestCase):
