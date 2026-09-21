@@ -86,7 +86,8 @@ class ReportCelebrationTests(TestCase):
 
     def test_certificates_page(self):
         resp = self._get(self.admin, "clients:celebration_certificates")
-        self.assertContains(resp, "Certificate of Achievement")
+        self.assertContains(resp, "of Achievement")
+        self.assertContains(resp, "Authorised Signatory")  # the footer
         self.assertContains(resp, "admin/img/logo")
         self.assertContains(resp, "Star of the Month")
         self.assertContains(resp, "3 months running")
