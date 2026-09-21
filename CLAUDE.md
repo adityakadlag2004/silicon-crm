@@ -536,6 +536,26 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   raw percentages — `services.incentives.explain()` renders everything in
   points. `/clients/incentives/` is the admin structure page.
 
+## Monthly celebration (Business Report)
+
+- `services/business_report.py` owns the Business Report **sheet** (web month/day
+  report + the app's Daily Report) and the **celebration** read off it, so a
+  winner can never disagree with the table. Admin-only; managers see the table.
+- Awards: top per product (ties share it; 🔥 "N months running" walks back up
+  to 12 months), Star of the Month (points), most accounts, most improved
+  (points vs last month — points, because rupees across SIP and premiums don't
+  add up), and **Target Champions**.
+- Targets for a **closed** month come from `MonthlyTargetHistory` (what
+  `close_month` recorded), for the **open** month from the live
+  `EmployeeTarget`s on the Targets page; an old month with no history credits
+  nobody. Achieved = the sheet's approved, category-rolled figure, which is what
+  the Targets page measures too.
+- `awards()` is the one flat list behind both the printable certificates
+  (`celebration_certificates`, standalone A4 page) and the month-end push
+  (`celebration_announce`, CRONJOBS 10 AM on the 2nd — a day's grace for
+  month-end approvals; deduped per recipient by title).
+- `clients.test.test_report_celebration` pins it.
+
 ## Financial planner
 
 - `services/financial_plan.py` is a port of

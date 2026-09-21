@@ -188,6 +188,9 @@ CRONJOBS = [
     # Renewals entered 4 days ago with the Drive tick still blank: one task for
     # the employee who entered them to upload the issued policy. Daily 9 AM.
     ('0 9 * * *', 'django.core.management.call_command', ['renewal_upload_reminders']),
+    # Last month's celebration winners, pushed to every active employee. 10 AM
+    # on the 2nd — a day's grace for month-end sales awaiting approval.
+    ('0 10 2 * *', 'django.core.management.call_command', ['celebration_announce']),
 ]
 
 

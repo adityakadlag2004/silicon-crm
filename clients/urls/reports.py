@@ -10,6 +10,7 @@ urlpatterns = [
     path("past-performance/<int:year>/<int:month>/", reports.past_month_performance, name="past_month_performance"),
     path("reports/business-overview/", reports.business_overview, name="business_overview"),
     path("reports/monthly-business/", reports.monthly_business_report, name="monthly_business_report"),
+    path("reports/monthly-business/certificates/", reports.celebration_certificates, name="celebration_certificates"),
     path("reports/daily-business/", reports.monthly_business_report, {"mode": "day"}, name="daily_business_report"),
     path("reports/business-analytics/", reports.business_analytics, name="business_analytics"),
 ]

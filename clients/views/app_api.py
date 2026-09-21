@@ -30,7 +30,8 @@ from ..services import calls as calls_service
 from ..services import sales as sales_service
 from ..utils.phone_utils import digits10
 from .helpers import get_manager_access, name_words_q, product_mix
-from .reports import business_overview_data, business_report_sheet
+from ..services import business_report
+from .reports import business_overview_data
 
 
 def _emp(request):
@@ -2382,7 +2383,7 @@ def app_report_monthly(request):
 def app_report_daily(request):
     """The web Daily Business Report, shaped for a phone screenshot.
 
-    Same sheet and the same roll-up (`business_report_sheet`) — but a single
+    Same sheet and the same roll-up (`business_report.sheet`) — but a single
     day's sheet is sparse, and seven product columns on a 390dp screen leave
     nothing legible in a screenshot. Columns with no business anywhere on the
     day are dropped (counted in `empty_columns`); no figure changes. Every
@@ -2398,7 +2399,7 @@ def app_report_daily(request):
     except ValueError:
         sel_date = today
 
-    sheet = business_report_sheet(sel_date=sel_date)
+    sheet = business_report.sheet(sel_date=sel_date)
     keep = [i for i, total in enumerate(sheet["grand_vals"]) if total]
     return JsonResponse({
         "date": sel_date.isoformat(),

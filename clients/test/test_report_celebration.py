@@ -1,4 +1,5 @@
-"""Monthly Business Report's celebration section: top performer per product, admin-only."""
+"""Monthly Business Report celebration: winners, streaks, target champions,
+certificates and the month-end announcement — all admin-only on the web."""
 from datetime import date
 from decimal import Decimal
 
@@ -6,7 +7,9 @@ from django.contrib.auth.models import User
 from django.test import Client as TestClient, TestCase
 from django.urls import reverse
 
-from clients.models import Client, Employee, Product, Sale
+from clients.models import (Client, Employee, EmployeeTarget, MonthlyTargetHistory,
+                            Notification, Product, Sale)
+from clients.services import business_report
 
 
 class ReportCelebrationTests(TestCase):
@@ -15,12 +18,12 @@ class ReportCelebrationTests(TestCase):
         cls.admin = User.objects.create_user("cel_admin", password="x", first_name="Asha")
         cls.mgr = User.objects.create_user("cel_mgr", password="x", first_name="Ravi")
         cls.other = User.objects.create_user("cel_emp", password="x", first_name="Neha")
-        a = Employee.objects.create(user=cls.admin, role="admin", salary=0, active=True)
+        cls.a = a = Employee.objects.create(user=cls.admin, role="admin", salary=0, active=True)
         m = Employee.objects.create(user=cls.mgr, role="manager", salary=0, active=True)
         e = Employee.objects.create(user=cls.other, role="employee", salary=0, active=True)
-        sip = Product.objects.create(name="Cel SIP", code="CELSIP", display_order=1)
+        cls.sip = sip = Product.objects.create(name="Cel SIP", code="CELSIP", display_order=1)
         Product.objects.create(name="Cel Empty", code="CELEMPTY", display_order=2)
-        c = Client.objects.create(name="Cel C", mapped_to=a)
+        cls.c = c = Client.objects.create(name="Cel C", mapped_to=a)
         d = date(2026, 4, 9)
         for emp, amt, pts in ((a, "3000", 50), (m, "3000", 40), (e, "1000", 10)):
             s = Sale.objects.create(client=c, employee=emp, product="Cel SIP", product_ref=sip,
@@ -31,6 +34,15 @@ class ReportCelebrationTests(TestCase):
             s = Sale.objects.create(client=c, employee=emp, product="Cel SIP", product_ref=sip,
                                     amount=Decimal(amt), status="approved", date=date(2026, 3, 5))
             Sale.objects.filter(pk=s.pk).update(points=pts)
+        # February: Asha on top again -> a three-month run by April.
+        Sale.objects.create(client=c, employee=a, product="Cel SIP", product_ref=sip,
+                            amount=Decimal("100"), status="approved", date=date(2026, 2, 3))
+        # April's targets as close_month recorded them: Neha hit her only one,
+        # Asha hit SIP but not her other target.
+        for emp, prod, t in ((a, "Cel SIP", "2500"), (a, "Cel Empty", "100"), (e, "Cel SIP", "1000")):
+            MonthlyTargetHistory.objects.create(employee=emp, product=prod, year=2026, month=4,
+                                                target_value=Decimal(t))
+        cls.m, cls.e = m, e
 
     def _get(self, user, url="clients:monthly_business_report", params=None):
         http = TestClient()
@@ -43,7 +55,7 @@ class ReportCelebrationTests(TestCase):
         top = cel["products"][0]
         self.assertEqual((top["product"], top["amount"]), ("Cel SIP", Decimal("3000")))
         self.assertEqual(sorted(top["names"]), ["Asha", "Ravi"])
-        self.assertEqual(top["repeat"], ["Asha"])  # topped SIP in March as well
+        self.assertEqual(top["streaks"], {"Asha": 3, "Ravi": 1})  # Feb, Mar, Apr
 
     def test_star_improved_and_team_change(self):
         cel = self._get(self.admin).context["celebration"]
@@ -55,7 +67,37 @@ class ReportCelebrationTests(TestCase):
 
     def test_january_compares_with_previous_december(self):
         resp = self._get(self.admin, params={"month": 1, "year": 2026})
-        self.assertEqual(resp.context["prev_month_name"], "December")
+        self.assertEqual(resp.context["celebration"]["prev_month_name"], "December")
+
+    def test_target_champions_from_closed_month_history(self):
+        t = self._get(self.admin).context["celebration"]["targets"]
+        self.assertEqual([(c["name"], c["all"]) for c in t], [("Neha", True), ("Asha", False)])
+        self.assertEqual(t[1]["hits"], [{"product": "Cel SIP", "pct": 120}])
+
+    def test_open_month_reads_live_targets(self):
+        today = date.today()
+        Sale.objects.create(client=self.c, employee=self.m, product="Cel SIP", product_ref=self.sip,
+                            amount=Decimal("600"), status="approved", date=today)
+        EmployeeTarget.objects.create(employee=self.m, product="Cel SIP", target_value=Decimal("500"))
+        t = business_report.celebration(today.year, today.month)["targets"]
+        self.assertEqual([c["name"] for c in t], ["Ravi"])
+        # A past month with no recorded history credits nobody against today's targets.
+        self.assertEqual(business_report.month_targets(2026, 3), {})
+
+    def test_certificates_page(self):
+        resp = self._get(self.admin, "clients:celebration_certificates")
+        self.assertContains(resp, "Certificate of Achievement")
+        self.assertContains(resp, "Star of the Month")
+        self.assertContains(resp, "3 months running")
+        self.assertContains(resp, "Target Champion")
+        self.assertEqual(self._get(self.mgr, "clients:celebration_certificates").status_code, 403)
+
+    def test_announce_reaches_everyone_once(self):
+        self.assertEqual(business_report.announce(2026, 4), 3)
+        n = Notification.objects.get(recipient=self.other, title="🎉 April 2026 celebration")
+        self.assertIn("Star of the Month: Asha", n.body)
+        self.assertEqual(business_report.announce(2026, 4), 0)  # re-run sends nothing
+        self.assertEqual(business_report.announce(2025, 6), 0)  # no winners, no push
 
     def test_manager_does_not_see_it(self):
         resp = self._get(self.mgr)

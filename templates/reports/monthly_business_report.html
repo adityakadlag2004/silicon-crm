@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}{% if daily %}Daily{% else %}Monthly{% endif %} Business Report – {{ period_label }}{% endblock %}
 {% block page_title %}Business Report{% endblock %}
 
@@ -120,7 +121,13 @@
 
   {% if celebration %}
   <div class="ki-card mt-4">
-    <div class="ki-card-label"><i class="bi bi-trophy"></i> Celebration – {{ period_label }}</div>
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="ki-card-label mb-0"><i class="bi bi-trophy"></i> Celebration – {{ period_label }}</div>
+      <a class="ki-btn ki-btn-sm ki-btn-secondary no-print" target="_blank" rel="noopener"
+         href="{% url 'clients:celebration_certificates' %}?month={{ sel_month }}&year={{ sel_year }}">
+        <i class="bi bi-award"></i> Print certificates
+      </a>
+    </div>
     {% if celebration.star or celebration.accounts or celebration.improved %}
     <div class="ki-kpis mt-2">
       {% if celebration.star %}
@@ -141,11 +148,11 @@
       <div class="ki-kpi" style="--c:#2563EB;">
         <div class="l">🚀 Most Improved</div>
         <div class="v cel-name">{{ celebration.improved.names|join:", " }}</div>
-        <div class="sub">+{{ celebration.improved.amount|floatformat:0 }} points vs {{ prev_month_name }}</div>
+        <div class="sub">+{{ celebration.improved.amount|floatformat:0 }} points vs {{ celebration.prev_month_name }}</div>
       </div>
       {% endif %}
       <div class="ki-kpi" style="--c:#7C3AED;">
-        <div class="l">🏢 Team vs {{ prev_month_name }}</div>
+        <div class="l">🏢 Team vs {{ celebration.prev_month_name }}</div>
         <div class="v">{% if celebration.points_change is None %}–{% else %}{% if celebration.points_change > 0 %}+{% endif %}{{ celebration.points_change }}%{% endif %}</div>
         <div class="sub">points{% if celebration.accounts_change is not None %} · accounts {% if celebration.accounts_change > 0 %}+{% endif %}{{ celebration.accounts_change }}%{% endif %}</div>
       </div>
@@ -159,16 +166,34 @@
           {% for c in celebration.products %}
           <tr>
             <td>{{ c.product }}</td>
-            <td style="text-align:left">🎉 {% for n in c.names %}{{ n }}{% if n in c.repeat %} <span class="ki-tag" style="--c:#B45309;">🔥 again</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+            <td style="text-align:left">🎉 {% for n in c.names %}{{ n }}{% with run=c.streaks|get_item:n %}{% if run > 1 %} <span class="ki-tag" style="--c:#B45309;">🔥 {{ run }} months running</span>{% endif %}{% endwith %}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
             <td>{{ c.amount|floatformat:0 }}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-    <p class="small text-muted mt-2 mb-0">🔥 again = also top in this product in {{ prev_month_name }}.</p>
     {% else %}
     <p class="text-muted mb-0">No approved sales this month yet.</p>
+    {% endif %}
+
+    <h6 class="mt-4 mb-2">🎯 Target Champions</h6>
+    {% if celebration.targets %}
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead><tr><th>Employee</th><th>Targets hit</th></tr></thead>
+        <tbody>
+          {% for t in celebration.targets %}
+          <tr>
+            <td>{{ t.name }}{% if t.all %} <span class="ki-tag" style="--c:#15803D;">🏆 every target</span>{% endif %}</td>
+            <td style="text-align:left; white-space:normal">{% for h in t.hits %}{{ h.product }} {{ h.pct }}%{% if not forloop.last %} · {% endif %}{% endfor %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0 small">Nobody has reached a monthly target yet (targets are set on the Targets page).</p>
     {% endif %}
   </div>
   {% endif %}

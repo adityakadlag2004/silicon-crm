@@ -23,9 +23,9 @@ from django.utils.timezone import now
 from .. import permissions
 from ..models import (
     Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
-    Renewal, Client,
+    Renewal,
 )
-from ..services import incentives
+from ..services import business_report, incentives
 from .helpers import get_manager_access, _last_n_months, category_name_map, product_mix, product_totals
 
 
@@ -690,107 +690,14 @@ def admin_past_month_performance(request, year, month):
     return render(request, "dashboards/admin_past_month_performance.html", context)
 
 
-def business_report_sheet(sel_date=None, sel_year=None, sel_month=None):
-    """The Business Report grid, for one day (`sel_date`) or one month.
-
-    One row per active employee, one column per reportable main product, plus
-    accounts opened and points; grand totals alongside. Shared by the web page
-    and the app's Daily Report — the roll-up rules below are fiddly enough that
-    a second copy of them would drift.
-    """
-    daily = sel_date is not None
-    if daily:
-        approved = Sale.objects.filter(status="approved", date=sel_date)
-    else:
-        approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
-
-    # Top-level products only. The life plan catalogue alone is ~40 sub-products,
-    # and a column per plan makes this sheet unreadable — a sub-product's sales
-    # roll up into its category (Term Plan -> Life Insurance).
-    cat_map = category_name_map()
-    products = list(
-        Product.objects.filter(is_active=True, parent__isnull=True, show_in_reports=True)
-        .order_by("display_order", "name")
-        .values_list("name", flat=True)
-    )
-    # Products switched off for this sheet (Product Management). Their sales are
-    # untouched — the column just isn't printed, including for a retired
-    # category that would otherwise be re-added below because it has business.
-    hidden = set(
-        Product.objects.filter(parent__isnull=True, show_in_reports=False)
-        .values_list("name", flat=True)
-    )
-
-    used_products = set(
-        approved.exclude(product="")
-        .values_list("product", flat=True)
-        .distinct()
-    )
-    used_ref_products = set(
-        approved.filter(product_ref__isnull=False)
-        .values_list("product_ref__name", flat=True)
-        .distinct()
-    )
-
-    # A retired category with sales this month still needs its column; a
-    # sub-product never does, because cat_map folds it into its parent.
-    for product_name in sorted(used_products | used_ref_products):
-        category = cat_map.get(product_name, product_name)
-        if category and category not in products and category not in hidden:
-            products.append(category)
-    employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
-
-    # Pre-aggregate amounts grouped by (employee, product) and points by employee.
-    # Replaces an N×M loop of per-cell `.aggregate(Sum)` calls with two queries.
-    amount_by_emp_product = {}
-    for r in approved.values("employee_id", "product").annotate(total=Sum("amount")):
-        key = (r["employee_id"], cat_map.get(r["product"], r["product"]))
-        amount_by_emp_product[key] = (amount_by_emp_product.get(key, Decimal("0"))
-                                      + (r["total"] or Decimal("0")))
-    points_by_emp = {
-        r["employee_id"]: r["total"] or Decimal("0")
-        for r in approved.values("employee_id").annotate(total=Sum("points"))
-    }
-    # Accounts opened in the window. Client has no created_by, so the credit
-    # goes to whoever the client is mapped to — which is also the figure the
-    # firm reads this row for ("whose book grew").
-    # ponytail: re-mapping a client moves its credit to the new employee; add
-    # Client.created_by if that ever matters.
-    new_clients = Client.objects.filter(mapped_to__isnull=False)
-    if daily:
-        new_clients = new_clients.filter(created_at__date=sel_date)
-    else:
-        new_clients = new_clients.filter(created_at__year=sel_year, created_at__month=sel_month)
-    accounts_by_emp = {
-        r["mapped_to"]: r["total"]
-        for r in new_clients.values("mapped_to").order_by().annotate(total=Count("id"))
-    }
-
-    rows = []
-    grand = {p: Decimal("0") for p in products}
-    grand["points"] = Decimal("0")
-    grand_accounts = 0
-
-    for e in employees:
-        product_vals = []
-        for p in products:
-            total = amount_by_emp_product.get((e.id, p), Decimal("0"))
-            product_vals.append(total)
-            grand[p] += total
-        pts = points_by_emp.get(e.id, Decimal("0"))
-        grand["points"] += pts
-        accounts = accounts_by_emp.get(e.id, 0)
-        grand_accounts += accounts
-        rows.append({"employee": e, "product_vals": product_vals,
-                     "points": pts, "accounts": accounts})
-
-    return {
-        "products": products,
-        "rows": rows,
-        "grand_vals": [grand[p] for p in products],
-        "grand_points": grand["points"],
-        "grand_accounts": grand_accounts,
-    }
+def _sel_month(request, today):
+    """(year, month) from ?year=&month=, falling back to this month."""
+    try:
+        sel_month = int(request.GET.get("month", today.month))
+        sel_year = int(request.GET.get("year", today.year))
+    except (TypeError, ValueError):
+        return today.year, today.month
+    return sel_year, sel_month if 1 <= sel_month <= 12 else today.month
 
 
 @login_required
@@ -808,16 +715,10 @@ def monthly_business_report(request, mode="month"):
         except ValueError:
             sel_date = today
         sel_month, sel_year = sel_date.month, sel_date.year
-        sheet = business_report_sheet(sel_date=sel_date)
+        sheet = business_report.sheet(sel_date=sel_date)
     else:
-        try:
-            sel_month = int(request.GET.get("month", today.month))
-            sel_year = int(request.GET.get("year", today.year))
-        except (TypeError, ValueError):
-            sel_month, sel_year = today.month, today.year
-        if not 1 <= sel_month <= 12:
-            sel_month = today.month
-        sheet = business_report_sheet(sel_year=sel_year, sel_month=sel_month)
+        sel_year, sel_month = _sel_month(request, today)
+        sheet = business_report.sheet(sel_year=sel_year, sel_month=sel_month)
 
     context = {
         **sheet,
@@ -830,55 +731,23 @@ def monthly_business_report(request, mode="month"):
         "sel_date": sel_date,
         "period_label": sel_date.strftime("%d %b %Y") if daily else f"{month_name[sel_month]} {sel_year}",
     }
-    # Celebration, admin-only: read off the sheet itself (and last month's),
-    # so it can never disagree with the table above it.
     if not daily and permissions.is_admin(request.user):
-        py, pm = (sel_year, sel_month - 1) if sel_month > 1 else (sel_year - 1, 12)
-        context["celebration"] = celebration(sheet, business_report_sheet(sel_year=py, sel_month=pm))
-        context["prev_month_name"] = month_name[pm]
+        context["celebration"] = business_report.celebration(sel_year, sel_month, sheet)
     return render(request, "reports/monthly_business_report.html", context)
 
 
-def _leaders(rows, value):
-    """The highest positive value(row) and everyone tied on it; None if nobody scored."""
-    top = max((value(r) for r in rows), default=0)
-    if top <= 0:
-        return None
-    return {"amount": top,
-            "names": [r["employee"].user.get_full_name() or r["employee"].user.username
-                      for r in rows if value(r) == top]}
-
-
-def _pct_change(cur, prev):
-    return round((cur - prev) * 100 / prev) if prev else None
-
-
-def celebration(sheet, prev):
-    """The month's winners: top performer per product (flagging anyone who also
-    topped it last month), star by points, most accounts opened, most improved
-    on points, and the firm's month against the one before."""
-    prev_top = {}
-    for i, p in enumerate(prev["products"]):
-        lead = _leaders(prev["rows"], lambda r: r["product_vals"][i])
-        if lead:
-            prev_top[p] = set(lead["names"])
-    products = []
-    for i, p in enumerate(sheet["products"]):
-        lead = _leaders(sheet["rows"], lambda r: r["product_vals"][i])
-        if lead:
-            lead["product"] = p
-            lead["repeat"] = [n for n in lead["names"] if n in prev_top.get(p, ())]
-            products.append(lead)
-    prev_points = {r["employee"].pk: r["points"] for r in prev["rows"]}
-    return {
-        "products": products,
-        "star": _leaders(sheet["rows"], lambda r: r["points"]),
-        "accounts": _leaders(sheet["rows"], lambda r: r["accounts"]),
-        "improved": _leaders(sheet["rows"],
-                             lambda r: r["points"] - prev_points.get(r["employee"].pk, 0)),
-        "points_change": _pct_change(sheet["grand_points"], prev["grand_points"]),
-        "accounts_change": _pct_change(sheet["grand_accounts"], prev["grand_accounts"]),
-    }
+@login_required
+def celebration_certificates(request):
+    """One printable certificate per person per award for the month. Admin-only,
+    like the celebration section it prints."""
+    if not permissions.is_admin(request.user):
+        return HttpResponseForbidden("Admins only.")
+    sel_year, sel_month = _sel_month(request, date.today())
+    cel = business_report.celebration(sel_year, sel_month)
+    return render(request, "reports/celebration_certificates.html", {
+        "awards": business_report.awards(cel),
+        "period_label": f"{month_name[sel_month]} {sel_year}",
+    })
 
 
 # ---------------- Business Analytics (margin) ----------------
