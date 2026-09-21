@@ -12,6 +12,7 @@ from decimal import Decimal
 from django.db.models import Count, Sum
 
 from ..models import Client, Employee, EmployeeTarget, MonthlyTargetHistory, Product, Sale
+from ..templatetags.custom_filters import indian_number
 from ..views.helpers import category_name_map
 
 
@@ -248,11 +249,11 @@ def awards(cel):
                              ("improved", "Most Improved", "more points than last month")):
         lead = cel[key]
         for n in (lead["names"] if lead else ()):
-            out.append({"title": title, "name": n, "detail": f"{lead['amount']:,.0f} {unit}"})
+            out.append({"title": title, "name": n, "detail": f"{indian_number(lead['amount'], 0)} {unit}"})
     for w in cel["products"]:
         for n in w["names"]:
             run = w["streaks"][n]
-            detail = f"₹{w['amount']:,.0f} business"
+            detail = f"₹{indian_number(w['amount'], 0)} business"
             if run > 1:
                 detail += f" · {run} months running"
             out.append({"title": f"Top in {w['product']}", "name": n, "detail": detail})
