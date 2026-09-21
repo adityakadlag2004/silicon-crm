@@ -87,6 +87,7 @@ class ReportCelebrationTests(TestCase):
     def test_certificates_page(self):
         resp = self._get(self.admin, "clients:celebration_certificates")
         self.assertContains(resp, "Certificate of Achievement")
+        self.assertContains(resp, "admin/img/logo")
         self.assertContains(resp, "Star of the Month")
         self.assertContains(resp, "3 months running")
         self.assertContains(resp, "Target Champion")
