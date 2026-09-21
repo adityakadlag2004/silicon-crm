@@ -6,6 +6,7 @@
 <style>
   .report-table th, .report-table td { text-align: right; vertical-align: middle; white-space: nowrap; font-size: .85rem; }
   .report-table th:first-child, .report-table td:first-child { text-align: left; }
+  .cel-name { font-size: 1.05rem; line-height: 1.25; white-space: normal; }
   .report-table tfoot td { font-weight: 700; background: var(--ki-body); }
 </style>
 {% endblock %}
@@ -116,4 +117,59 @@
         </table>
     </div>
   </div>
+
+  {% if celebration %}
+  <div class="ki-card mt-4">
+    <div class="ki-card-label"><i class="bi bi-trophy"></i> Celebration – {{ period_label }}</div>
+    {% if celebration.star or celebration.accounts or celebration.improved %}
+    <div class="ki-kpis mt-2">
+      {% if celebration.star %}
+      <div class="ki-kpi" style="--c:#E5B740;">
+        <div class="l">🌟 Star of the Month</div>
+        <div class="v cel-name">{{ celebration.star.names|join:", " }}</div>
+        <div class="sub">{{ celebration.star.amount|floatformat:0 }} points</div>
+      </div>
+      {% endif %}
+      {% if celebration.accounts %}
+      <div class="ki-kpi" style="--c:#15803D;">
+        <div class="l">🤝 Most Accounts Opened</div>
+        <div class="v cel-name">{{ celebration.accounts.names|join:", " }}</div>
+        <div class="sub">{{ celebration.accounts.amount }} new client{{ celebration.accounts.amount|pluralize }}</div>
+      </div>
+      {% endif %}
+      {% if celebration.improved %}
+      <div class="ki-kpi" style="--c:#2563EB;">
+        <div class="l">🚀 Most Improved</div>
+        <div class="v cel-name">{{ celebration.improved.names|join:", " }}</div>
+        <div class="sub">+{{ celebration.improved.amount|floatformat:0 }} points vs {{ prev_month_name }}</div>
+      </div>
+      {% endif %}
+      <div class="ki-kpi" style="--c:#7C3AED;">
+        <div class="l">🏢 Team vs {{ prev_month_name }}</div>
+        <div class="v">{% if celebration.points_change is None %}–{% else %}{% if celebration.points_change > 0 %}+{% endif %}{{ celebration.points_change }}%{% endif %}</div>
+        <div class="sub">points{% if celebration.accounts_change is not None %} · accounts {% if celebration.accounts_change > 0 %}+{% endif %}{{ celebration.accounts_change }}%{% endif %}</div>
+      </div>
+    </div>
+    {% endif %}
+    {% if celebration.products %}
+    <div class="ki-table-wrap">
+      <table class="ki-table report-table">
+        <thead><tr><th>Product</th><th>Top Performer</th><th>Business</th></tr></thead>
+        <tbody>
+          {% for c in celebration.products %}
+          <tr>
+            <td>{{ c.product }}</td>
+            <td style="text-align:left">🎉 {% for n in c.names %}{{ n }}{% if n in c.repeat %} <span class="ki-tag" style="--c:#B45309;">🔥 again</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+            <td>{{ c.amount|floatformat:0 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="small text-muted mt-2 mb-0">🔥 again = also top in this product in {{ prev_month_name }}.</p>
+    {% else %}
+    <p class="text-muted mb-0">No approved sales this month yet.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 {% endblock %}

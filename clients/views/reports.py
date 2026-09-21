@@ -830,7 +830,55 @@ def monthly_business_report(request, mode="month"):
         "sel_date": sel_date,
         "period_label": sel_date.strftime("%d %b %Y") if daily else f"{month_name[sel_month]} {sel_year}",
     }
+    # Celebration, admin-only: read off the sheet itself (and last month's),
+    # so it can never disagree with the table above it.
+    if not daily and permissions.is_admin(request.user):
+        py, pm = (sel_year, sel_month - 1) if sel_month > 1 else (sel_year - 1, 12)
+        context["celebration"] = celebration(sheet, business_report_sheet(sel_year=py, sel_month=pm))
+        context["prev_month_name"] = month_name[pm]
     return render(request, "reports/monthly_business_report.html", context)
+
+
+def _leaders(rows, value):
+    """The highest positive value(row) and everyone tied on it; None if nobody scored."""
+    top = max((value(r) for r in rows), default=0)
+    if top <= 0:
+        return None
+    return {"amount": top,
+            "names": [r["employee"].user.get_full_name() or r["employee"].user.username
+                      for r in rows if value(r) == top]}
+
+
+def _pct_change(cur, prev):
+    return round((cur - prev) * 100 / prev) if prev else None
+
+
+def celebration(sheet, prev):
+    """The month's winners: top performer per product (flagging anyone who also
+    topped it last month), star by points, most accounts opened, most improved
+    on points, and the firm's month against the one before."""
+    prev_top = {}
+    for i, p in enumerate(prev["products"]):
+        lead = _leaders(prev["rows"], lambda r: r["product_vals"][i])
+        if lead:
+            prev_top[p] = set(lead["names"])
+    products = []
+    for i, p in enumerate(sheet["products"]):
+        lead = _leaders(sheet["rows"], lambda r: r["product_vals"][i])
+        if lead:
+            lead["product"] = p
+            lead["repeat"] = [n for n in lead["names"] if n in prev_top.get(p, ())]
+            products.append(lead)
+    prev_points = {r["employee"].pk: r["points"] for r in prev["rows"]}
+    return {
+        "products": products,
+        "star": _leaders(sheet["rows"], lambda r: r["points"]),
+        "accounts": _leaders(sheet["rows"], lambda r: r["accounts"]),
+        "improved": _leaders(sheet["rows"],
+                             lambda r: r["points"] - prev_points.get(r["employee"].pk, 0)),
+        "points_change": _pct_change(sheet["grand_points"], prev["grand_points"]),
+        "accounts_change": _pct_change(sheet["grand_accounts"], prev["grand_accounts"]),
+    }
 
 
 # ---------------- Business Analytics (margin) ----------------
