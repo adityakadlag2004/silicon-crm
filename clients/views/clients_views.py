@@ -555,6 +555,8 @@ def client_profile(request, client_id):
         "policies_cover": sum((p.sum_insured or 0) for p in policies),
         "policies_premium": sum((p.premium_amount or 0) for p in policies),
         "policies_renewals": sum(p.renewal_count for p in policies),
+        # Policies held elsewhere — ours to remind about, never our business.
+        "external_policies": client.external_policies.all(),
         "portfolio": portfolio,
         "sales_total_amount": sales_summary.get("total_amount") or 0,
         "sales_total_points": sales_summary.get("total_points") or 0,

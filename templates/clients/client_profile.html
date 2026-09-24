@@ -120,6 +120,7 @@
 <div class="ki-rtabs" id="profileTabs">
   <button class="ki-rtab active" data-tab="overview">Overview</button>
   <button class="ki-rtab" data-tab="insurance">Health &amp; Life ({{ insurance_policies|length }})</button>
+  <button class="ki-rtab" data-tab="external">External ({{ external_policies|length }})</button>
   <button class="ki-rtab" data-tab="portfolio">Portfolio</button>
   <button class="ki-rtab" data-tab="work">Work ({{ open_tasks|length }})</button>
   <button class="ki-rtab" data-tab="history">History</button>
@@ -288,6 +289,45 @@
           is added against a policy the tracker doesn't know yet.
         </div>
       {% endif %}
+    </div>
+
+    {% comment %}
+      Policies the client holds that we did not sell. Tagged on every row so
+      they can never be read as our book; the dates drive reminder tasks.
+    {% endcomment %}
+    <div data-panel="external" class="ki-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">
+        <h3 class="ki-section-title" style="margin-top:0;">External Policies ({{ external_policies|length }})</h3>
+        <a href="{% url 'clients:external_policy_add' %}?client={{ client.id }}" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-plus-lg"></i> Add External Policy</a>
+      </div>
+      {% for p in external_policies %}
+        <div class="ki-card mb-2" style="padding:.75rem 1rem;">
+          <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem;">
+            <a href="{% url 'clients:external_policy_detail' p.id %}" class="name-link fw-bold">{{ p.policy_number|default:"No number" }}</a>
+            <span class="ki-tag ki-tag-solid" style="--c:#C2410C;">External Policy</span>
+            <span class="ki-tag" style="--c:#4338CA;">{{ p.get_policy_type_display }}</span>
+            <span class="ki-tag" style="--c:{% if p.status == 'active' %}#15803D{% elif p.status == 'paid_up' %}#0369A1{% elif p.status == 'lapsed' %}#BE123C{% else %}#57534E{% endif %};">{{ p.get_status_display }}</span>
+          </div>
+          <div class="text-muted small mt-1">{{ p.insurer }}{% if p.plan_name %} · {{ p.plan_name }}{% endif %}</div>
+          <div class="ki-fields mt-2">
+            <div class="info-row"><span class="info-label">Sum Assured</span><span class="info-value">₹{{ p.sum_assured|inr }}</span></div>
+            <div class="info-row"><span class="info-label">Premium</span><span class="info-value">₹{{ p.premium_amount|inr }} {% if p.is_renewable %}per renewal{% else %}{{ p.get_premium_frequency_display|lower }}{% endif %}</span></div>
+            {% with e=p.next_event %}
+            <div class="info-row"><span class="info-label">Next Due</span><span class="info-value">{% if e %}{{ e.date|date:"d M Y" }} · {{ e.label }}{% else %}—{% endif %}</span></div>
+            {% endwith %}
+            {% if p.maturity_date %}
+            <div class="info-row"><span class="info-label">{{ p.maturity_label }}</span><span class="info-value">{{ p.maturity_date|date:"d M Y" }}{% if p.maturity_amount %} · ₹{{ p.maturity_amount|inr }}{% endif %}</span></div>
+            {% endif %}
+          </div>
+        </div>
+      {% empty %}
+        <div class="ki-empty">
+          <i class="bi bi-shield-plus"></i>
+          No external policies recorded. Add the policies this client holds
+          elsewhere, and they will be reminded before each premium, maturity and
+          pension date.
+        </div>
+      {% endfor %}
     </div>
 
     {% if open_tasks %}

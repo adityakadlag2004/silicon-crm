@@ -1,0 +1,7 @@
+{# One labelled field of the external policy form. Expects `f`; optional `col`, `cls`. #}
+<div class="{{ col|default:'col-md-6' }} {{ cls }}">
+  <label class="form-label fw-semibold" for="{{ f.id_for_label }}">{{ f.label }}{% if f.field.required %} <span class="text-danger">*</span>{% endif %}</label>
+  {{ f }}
+  {% if f.help_text %}<div class="form-text">{{ f.help_text }}</div>{% endif %}
+  {% if f.errors %}<div class="text-danger small mt-1">{{ f.errors|striptags }}</div>{% endif %}
+</div>

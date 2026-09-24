@@ -227,6 +227,44 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - `clients.test.test_insurance_tracker_views` pins the tabs, the scoping, the
   ordering and the profile.
 
+## External policies (what the client holds elsewhere)
+
+- `ExternalPolicy` (migration 0133) is a policy the client holds that the firm
+  **did not sell** — an old LIC endowment, a pension plan, a health cover bought
+  elsewhere. `/clients/insurance/external/` (Insurance menu → External Policies,
+  and a button on the tracker); the client profile has an **External** tab.
+- **A separate table, never a flag on `InsurancePolicy`.** The tracker is the
+  firm's own book: its KPIs, `renewal_reminders`, renewal linking and duplicate
+  checks, claims and the multiyear incentive gate all read `InsurancePolicy`. An
+  outside policy belongs in none of them, and a flag would need a guard in each.
+- **Tagged wherever it surfaces**: list rows, the detail header ("External Policy
+  · not sold by us"), the profile tab, and every reminder task — titled
+  `External Policy · …`, body opening `EXTERNAL POLICY — … NOT sold by us`, and
+  `source_kind = "extpolicy"` so the agenda/calendar badge reads "External
+  Policy" (`calendar_feed.TASK_KIND_LABELS`).
+- **Dates are derived, never stored** (`ExternalPolicy.events(start, end)`):
+  premiums every `premium_frequency` months from `start_date` until the PPT ends
+  (else the maturity); money-back every `payout_every_years`; maturity =
+  `start_date + policy_term`, written by `save()` only so it can be queried.
+  Health/motor are **renewable**: "Renewal due" every `policy_term or 1` years,
+  indefinitely. Paid-up stops the premiums, not the maturity; lapsed, surrendered
+  and matured produce nothing. A pension plan's maturity is its vesting. Dates
+  anchor on the start date, so 31 Jan never slides to the 28th.
+- `external_policy_reminders` (CRONJOBS, daily 8:50): one **medium** task per
+  event for the client's mapped employee (fallback: whoever added the policy),
+  raised once the event is inside 30 days — a window, not an exact day, so a
+  missed morning or a newly added policy still gets it — rung then and again at
+  7 days. Deduped by `assign_group = "xpol:<policy>:<kind>:<yyyymmdd>"`.
+  Quarterly premiums wait until 7 days out; **monthly premiums get no task**
+  (insurers only take monthly mode on auto-debit).
+- One record per (client, policy number) — a DB `UniqueConstraint`, so one
+  policy is never reminded twice. Deleting (admin, or whoever added it) takes
+  its reminder tasks with it (`signals._delete_followup_tasks`).
+- Not on the Android app yet: the reminder tasks reach the phone, the records
+  don't.
+- `clients.test.test_external_policies` pins the schedule, the form, the tagging
+  and the reminders.
+
 ## Renewal filing checklist
 
 - `Renewal.policy_doc_submitted` (migration 0125) is one tick: "Renewal policy

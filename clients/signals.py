@@ -1,7 +1,7 @@
 from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 from django.db.models import Sum, Q
-from .models import Sale, Client, Notification, Employee, Product, AuditLog, Lead, InsuranceClaim, InsurancePolicy, Renewal, Task
+from .models import Sale, Client, Notification, Employee, Product, AuditLog, Lead, ExternalPolicy, InsuranceClaim, InsurancePolicy, Renewal, Task
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -266,13 +266,15 @@ def _audit_log_client_delete(sender, instance, **kwargs):
 
 @receiver(post_delete, sender=Lead)
 @receiver(post_delete, sender=InsuranceClaim)
+@receiver(post_delete, sender=ExternalPolicy)
 def _delete_followup_tasks(sender, instance, **kwargs):
     """A follow-up is a Task pointed at a record by source_kind/source_id, not
     a child row, so nothing cascades when that record is deleted. Without this
     a deleted lead leaves its follow-ups behind to ring on someone's phone."""
     from .services import followups
 
-    kind = followups.LEAD if sender is Lead else followups.CLAIM
+    kind = {Lead: followups.LEAD, InsuranceClaim: followups.CLAIM}.get(
+        sender, ExternalPolicy.TASK_SOURCE)
     Task.objects.filter(source_kind=kind, source_id=instance.pk).delete()
 
 

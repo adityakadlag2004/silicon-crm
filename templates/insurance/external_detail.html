@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}External Policy{% endblock %}
+{% block page_title %}External Policy{% endblock %}
+{% block content %}
+
+<div class="ki-rec">
+  <div class="ki-rec-top">
+    <span class="ki-mono" style="--c:{{ policy.insurer|monocolor }};">{{ policy.insurer|monogram }}</span>
+    <div class="ki-rec-head">
+      <h2 class="ki-rec-title">{{ policy.client.name }} — {{ policy.get_policy_type_display }}</h2>
+      <div class="ki-tags">
+        <span class="ki-tag ki-tag-solid" style="--c:#C2410C;"><i class="bi bi-box-arrow-in-down-right"></i> External Policy · not sold by us</span>
+        {% if policy.policy_number %}<span class="ki-tag" style="--c:var(--ki-text-secondary);">{{ policy.policy_number }}</span>{% endif %}
+        <span class="ki-tag" style="--c:{% if policy.status == 'active' %}#15803D{% elif policy.status == 'paid_up' %}#0369A1{% elif policy.status == 'lapsed' %}#BE123C{% else %}#57534E{% endif %};">{{ policy.get_status_display }}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+      <a href="{% url 'clients:external_policy_edit' policy.id %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+      {% if can_delete %}
+      <form method="post" action="{% url 'clients:external_policy_delete' policy.id %}" style="margin:0;"
+            onsubmit="return confirm('Delete this external policy? Its reminder tasks are removed too.');">
+        {% csrf_token %}
+        <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-trash"></i> Delete</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  <div class="ki-rec-summary">
+    <div class="ki-sum-item"><span class="k">Insurer</span><span class="v">{{ policy.insurer }}</span></div>
+    <div class="ki-sum-item"><span class="k">Plan</span><span class="v">{{ policy.plan_name|default:"—" }}</span></div>
+    <div class="ki-sum-item"><span class="k">Client</span><span class="v"><a href="{% url 'clients:client_profile' policy.client.id %}">{{ policy.client.name }}</a></span></div>
+  </div>
+</div>
+
+<div class="ki-rec-layout">
+  <div>
+    <div class="ki-card">
+      <h3 class="ki-section-title" style="margin-top:0;">Policy Details</h3>
+      <div class="ki-fields">
+        <div class="ki-field"><span class="k">Policy Number</span><span class="v">{{ policy.policy_number|default:"—" }}</span></div>
+        <div class="ki-field"><span class="k">Type</span><span class="v">{{ policy.get_policy_type_display }}</span></div>
+        <div class="ki-field"><span class="k">Sum Assured</span><span class="v">₹{{ policy.sum_assured|inr }}</span></div>
+        <div class="ki-field"><span class="k">Premium</span><span class="v">₹{{ policy.premium_amount|inr }} {% if policy.is_renewable %}per renewal{% else %}{{ policy.get_premium_frequency_display|lower }}{% endif %}</span></div>
+        <div class="ki-field"><span class="k">Commencement</span><span class="v">{{ policy.start_date|date:"d M Y" }}</span></div>
+        {% if policy.is_renewable %}
+        <div class="ki-field"><span class="k">Renews Every</span><span class="v">{{ policy.policy_term|default:1 }} year{{ policy.policy_term|default:1|pluralize }}</span></div>
+        {% else %}
+        <div class="ki-field"><span class="k">Premium Paying Term</span><span class="v">{% if policy.premium_paying_term %}{{ policy.premium_paying_term }} years{% else %}—{% endif %}</span></div>
+        <div class="ki-field"><span class="k">Policy Term</span><span class="v">{% if policy.policy_term %}{{ policy.policy_term }} years{% else %}—{% endif %}</span></div>
+        <div class="ki-field"><span class="k">{{ policy.maturity_label }}</span><span class="v">{{ policy.maturity_date|date:"d M Y"|default:"—" }}</span></div>
+        <div class="ki-field"><span class="k">Expected Maturity Value</span><span class="v">{% if policy.maturity_amount %}₹{{ policy.maturity_amount|inr }}{% else %}—{% endif %}</span></div>
+        <div class="ki-field"><span class="k">Bonus Accrued</span><span class="v">{% if policy.bonus_accrued %}₹{{ policy.bonus_accrued|inr }}{% else %}—{% endif %}</span></div>
+        {% if policy.payout_every_years %}
+        <div class="ki-field"><span class="k">Money Back</span><span class="v">₹{{ policy.payout_amount|inr }} every {{ policy.payout_every_years }} years</span></div>
+        {% endif %}
+        {% endif %}
+        {% if policy.policy_type == 'pension' %}
+        <div class="ki-field"><span class="k">Pension</span><span class="v">{% if policy.pension_amount %}₹{{ policy.pension_amount|inr }} {{ policy.get_pension_frequency_display|default:""|lower }}{% else %}—{% endif %}</span></div>
+        {% endif %}
+        <div class="ki-field"><span class="k">Nominee</span><span class="v">{{ policy.nominee_name|default:"—" }}{% if policy.nominee_relationship %} ({{ policy.nominee_relationship }}){% endif %}</span></div>
+        <div class="ki-field"><span class="k">Added By</span><span class="v">{{ policy.created_by.get_full_name|default:policy.created_by.username|default:"—" }} · {{ policy.created_at|date:"d M Y" }}</span></div>
+      </div>
+      {% if policy.notes %}<p style="margin-top:.9rem;white-space:pre-wrap;">{{ policy.notes }}</p>{% endif %}
+    </div>
+
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;">Coming up — next 2 years ({{ schedule|length }})</h3>
+      <div class="ki-table-wrap">
+        <table class="ki-dtable">
+          <thead><tr><th>Date</th><th>Event</th><th class="num">Amount</th></tr></thead>
+          <tbody>
+            {% for e in schedule %}
+            <tr>
+              <td>{{ e.date|date:"d M Y" }}</td>
+              <td>{{ e.label }}</td>
+              <td class="num">{% if e.amount %}₹{{ e.amount|inr }}{% else %}—{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3"><div class="ki-empty"><i class="bi bi-calendar"></i>
+              {% if policy.status == 'active' or policy.status == 'paid_up' %}Nothing falls due in the next two years.{% else %}This policy is {{ policy.get_status_display|lower }} — nothing more is reminded.{% endif %}
+            </div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ki-card mt-3">
+      <h3 class="ki-section-title" style="margin-top:0;">Reminder tasks ({{ reminders|length }})</h3>
+      <div class="ki-table-wrap">
+        <table class="ki-dtable">
+          <thead><tr><th>Task</th><th>Assigned To</th><th>Due</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for t in reminders %}
+            <tr>
+              <td><a href="{% url 'clients:task_detail' t.pk %}" class="name-link">{{ t.title }}</a></td>
+              <td>{% if t.assigned_to %}{{ t.assigned_to.user.get_full_name|default:t.assigned_to.user.username }}{% else %}—{% endif %}</td>
+              <td>{{ t.due_date|date:"d M Y"|default:"—" }}</td>
+              <td>{{ t.get_status_display }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4"><div class="ki-empty">None yet — one is raised 30 days before each date above.</div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="ki-related">
+    <h6>Related Modules</h6>
+    <a class="ki-rel-row" href="{% url 'clients:client_profile' policy.client.id %}">Client <span class="n">1</span><span class="add">›</span></a>
+    <a class="ki-rel-row" href="{% url 'clients:external_policy_list' %}">External Policies <span class="add">›</span></a>
+    <a class="ki-rel-row" href="{% url 'clients:external_policy_add' %}?client={{ policy.client.id }}">Add another for this client <span class="add">+</span></a>
+  </div>
+</div>
+{% endblock %}

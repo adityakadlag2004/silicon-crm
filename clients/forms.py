@@ -853,3 +853,87 @@ class ClaimForm(forms.ModelForm):
         for name, field in self.fields.items():
             css = "form-select" if isinstance(field.widget, (forms.Select, forms.SelectMultiple)) else "form-control"
             field.widget.attrs.setdefault("class", css)
+
+
+class ExternalPolicyForm(forms.ModelForm):
+    """Add or edit a policy the client holds elsewhere.
+
+    One form for every type; the page shows only the sections a type uses and
+    ``clean()`` blanks the rest, so switching Endowment → Health can't leave a
+    maturity date behind to be reminded about.
+    """
+
+    class Meta:
+        from .models import ExternalPolicy
+        model = ExternalPolicy
+        fields = [
+            "client", "policy_type", "insurer", "plan_name", "policy_number", "status",
+            "sum_assured", "premium_amount", "premium_frequency", "start_date",
+            "premium_paying_term", "policy_term", "maturity_amount", "bonus_accrued",
+            "payout_every_years", "payout_amount", "pension_amount", "pension_frequency",
+            "nominee_name", "nominee_relationship", "notes",
+        ]
+        widgets = {
+            # Picked by the page's search box — a <select> of every client is
+            # thousands of options.
+            "client": forms.HiddenInput(),
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+        labels = {
+            "start_date": "Commencement date",
+            "sum_assured": "Sum assured / insured (₹)",
+            "premium_amount": "Premium (₹)",
+            "premium_paying_term": "Premium paying term (years)",
+            "policy_term": "Policy term (years)",
+            "maturity_amount": "Expected maturity value (₹)",
+            "bonus_accrued": "Bonus accrued to date (₹)",
+            "payout_every_years": "Money back every (years)",
+            "payout_amount": "Money back amount (₹)",
+            "pension_amount": "Pension amount (₹)",
+        }
+        help_texts = {
+            "policy_term": "Health & motor: how often it renews (usually 1). Others: years to "
+                           "maturity — the maturity date is worked out from it. Whole life: "
+                           "years to age 100.",
+            "maturity_amount": "Sum assured plus bonuses, as the policy or the insurer states it.",
+        }
+
+    # Optional on the page, 0 in the table — a figure nobody knows yet.
+    AMOUNTS = ("sum_assured", "premium_amount", "maturity_amount", "bonus_accrued",
+               "payout_amount", "pension_amount")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, field in self.fields.items():
+            css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
+            field.widget.attrs.setdefault("class", css)
+        for name in self.AMOUNTS:
+            self.fields[name].required = False
+
+    def clean_policy_number(self):
+        # Normalised before the unique check sees it, the way save() stores it.
+        return (self.cleaned_data.get("policy_number") or "").strip().upper()
+
+    def clean(self):
+        from .models import ExternalPolicy
+        d = super().clean()
+        kind = d.get("policy_type")
+        unused = []
+        if kind in ExternalPolicy.RENEWABLE:
+            unused = ["premium_paying_term", "maturity_amount", "bonus_accrued",
+                      "payout_every_years", "payout_amount"]
+            d["premium_frequency"] = 12
+        if kind != ExternalPolicy.TYPE_PENSION:
+            unused += ["pension_amount", "pension_frequency"]
+        for name in unused:
+            d[name] = None
+        for name in self.AMOUNTS:
+            d[name] = d.get(name) or 0
+        ppt, term = d.get("premium_paying_term"), d.get("policy_term")
+        if ppt and term and ppt > term:
+            self.add_error("premium_paying_term", "Can't be longer than the policy term.")
+        every = d.get("payout_every_years")
+        if every and term and every >= term:
+            self.add_error("payout_every_years", "Must fall inside the policy term.")
+        return d

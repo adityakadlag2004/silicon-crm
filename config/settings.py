@@ -177,6 +177,10 @@ CRONJOBS = [
     # end_date, ringing push + auto call-task to the client's mapped employee.
     # Daily 8:45 AM.
     ('45 8 * * *', 'django.core.management.call_command', ['renewal_reminders']),
+    # External policies (held by clients, not sold by us): a task 30 days before
+    # each premium / renewal / money-back / maturity / vesting, rung again at 7.
+    # Daily 8:50 AM.
+    ('50 8 * * *', 'django.core.management.call_command', ['external_policy_reminders']),
     # Client birthdays: one task per client per year (wish them, send the
     # valuation report, review the plan) for the mapped employee + admins.
     # Daily 8:05 AM.

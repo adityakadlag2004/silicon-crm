@@ -31,6 +31,7 @@ from .clients import (  # noqa: F401
 from .insurance import (  # noqa: F401
     ClaimActivity,
     ClaimDocument,
+    ExternalPolicy,
     InsuranceClaim,
     InsurancePolicy,
 )

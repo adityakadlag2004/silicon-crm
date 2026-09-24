@@ -167,7 +167,7 @@ class ClientProfileShowsTheBookTests(TestCase):
         strip = html[html.index('id="profileTabs"'):]
         strip = strip[:strip.index("</div>")]
         self.assertNotIn("data-panel", strip)
-        self.assertEqual(strip.count("data-tab="), 5)
+        self.assertEqual(strip.count("data-tab="), 6)   # + External
 
     def test_the_tab_lists_only_health_and_life(self):
         InsurancePolicy.objects.create(

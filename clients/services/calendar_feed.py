@@ -156,7 +156,7 @@ def _call_followups(employee, start, end, employee_id=None):
 
 # A lead/claim follow-up is a Task, so the badge has to say which — otherwise
 # every commitment on the agenda reads "Task" and the pipeline is invisible.
-TASK_KIND_LABELS = {"lead": "Lead", "claim": "Claim"}
+TASK_KIND_LABELS = {"lead": "Lead", "claim": "Claim", "extpolicy": "External Policy"}
 
 
 def _tasks(employee, start, end, employee_id=None):

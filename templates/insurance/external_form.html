@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{% if policy %}Edit{% else %}Add{% endif %} External Policy{% endblock %}
+{% block page_title %}{% if policy %}Edit{% else %}Add{% endif %} External Policy{% endblock %}
+{% block content %}
+
+<div class="ki-card" style="max-width:860px;">
+  <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
+    <span class="ki-tag ki-tag-solid" style="--c:#C2410C;"><i class="bi bi-box-arrow-in-down-right"></i> External Policy</span>
+    <span class="text-muted small">A policy the client holds that we did not sell — kept so they can be
+      reminded before every premium, maturity and pension date. Never counted as our business.</span>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+
+    <h3 class="ki-section-title" style="margin-top:0;">Client</h3>
+    <div class="row g-3">
+      <div class="col-12 position-relative">
+        <label class="form-label fw-semibold" for="xp-client-search">Client <span class="text-danger">*</span></label>
+        {{ form.client }}
+        <div id="xp-picked" style="display:flex;align-items:center;gap:.5rem;" {% if not picked %}hidden{% endif %}>
+          <span class="ki-tag" style="--c:#4338CA;"><i class="bi bi-person-check"></i> <span id="xp-picked-name">{{ picked.name }}</span></span>
+          <button type="button" id="xp-change" class="ki-btn ki-btn-secondary ki-btn-sm">Change</button>
+        </div>
+        <input type="search" id="xp-client-search" class="form-control" autocomplete="off"
+               placeholder="Type the client's name, phone or email…" {% if picked %}hidden{% endif %}>
+        <div id="xp-client-results" class="list-group position-absolute shadow-sm"
+             style="z-index:1000;max-height:240px;overflow-y:auto;left:.75rem;right:.75rem;"></div>
+        {% if form.client.errors %}<div class="text-danger small mt-1">Pick the client this policy belongs to.</div>{% endif %}
+      </div>
+    </div>
+
+    <h3 class="ki-section-title mt-4">Policy</h3>
+    <div class="row g-3">
+      {% include "insurance/_xp_field.html" with f=form.policy_type %}
+      {% include "insurance/_xp_field.html" with f=form.status %}
+      {% include "insurance/_xp_field.html" with f=form.insurer %}
+      {% include "insurance/_xp_field.html" with f=form.plan_name %}
+      {% include "insurance/_xp_field.html" with f=form.policy_number %}
+      {% include "insurance/_xp_field.html" with f=form.start_date %}
+    </div>
+
+    <h3 class="ki-section-title mt-4">Cover &amp; premium</h3>
+    <div class="row g-3">
+      {% include "insurance/_xp_field.html" with f=form.sum_assured %}
+      {% include "insurance/_xp_field.html" with f=form.premium_amount %}
+      {% include "insurance/_xp_field.html" with f=form.premium_frequency cls="xp-life" %}
+      {% include "insurance/_xp_field.html" with f=form.policy_term %}
+    </div>
+
+    <div class="xp-life">
+      <h3 class="ki-section-title mt-4">Premium term, maturity &amp; bonus</h3>
+      <div class="row g-3">
+        {% include "insurance/_xp_field.html" with f=form.premium_paying_term %}
+        {% include "insurance/_xp_field.html" with f=form.maturity_amount %}
+        {% include "insurance/_xp_field.html" with f=form.bonus_accrued %}
+      </div>
+      <h3 class="ki-section-title mt-4">Money back / survival benefit <span class="text-muted small fw-normal">(if any)</span></h3>
+      <div class="row g-3">
+        {% include "insurance/_xp_field.html" with f=form.payout_every_years %}
+        {% include "insurance/_xp_field.html" with f=form.payout_amount %}
+      </div>
+    </div>
+
+    <div class="xp-pension">
+      <h3 class="ki-section-title mt-4">Pension</h3>
+      <p class="text-muted small mb-2">The pension starts at vesting — commencement date + policy term.</p>
+      <div class="row g-3">
+        {% include "insurance/_xp_field.html" with f=form.pension_amount %}
+        {% include "insurance/_xp_field.html" with f=form.pension_frequency %}
+      </div>
+    </div>
+
+    <h3 class="ki-section-title mt-4">Nominee &amp; notes</h3>
+    <div class="row g-3">
+      {% include "insurance/_xp_field.html" with f=form.nominee_name %}
+      {% include "insurance/_xp_field.html" with f=form.nominee_relationship %}
+      {% include "insurance/_xp_field.html" with f=form.notes col="col-12" %}
+    </div>
+
+    <div class="d-flex gap-2 justify-content-end mt-4">
+      <a href="{{ back }}" class="ki-btn ki-btn-secondary"><i class="bi bi-x-lg"></i> Cancel</a>
+      <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save External Policy</button>
+    </div>
+  </form>
+</div>
+
+{{ renewable|json_script:"xp-renewable" }}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  // Show only the sections the chosen type uses; the server blanks the rest.
+  const typeSel = document.getElementById("id_policy_type");
+  const renewable = JSON.parse(document.getElementById("xp-renewable").textContent);
+  function sync() {
+    const t = typeSel.value;
+    document.querySelectorAll(".xp-life").forEach(el => { el.hidden = renewable.includes(t); });
+    document.querySelectorAll(".xp-pension").forEach(el => { el.hidden = t !== "pension"; });
+  }
+  typeSel.addEventListener("change", sync);
+  sync();
+
+  // Client picker — the same search the renewal form uses.
+  const idField = document.getElementById("id_client");
+  const search = document.getElementById("xp-client-search");
+  const results = document.getElementById("xp-client-results");
+  const picked = document.getElementById("xp-picked");
+  const pickedName = document.getElementById("xp-picked-name");
+  let timer;
+  search.addEventListener("input", function () {
+    clearTimeout(timer);
+    const q = search.value.trim();
+    if (q.length < 2) { results.innerHTML = ""; return; }
+    timer = setTimeout(function () {
+      fetch("{% url 'clients:search_clients' %}?q=" + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(function (data) {
+          results.innerHTML = "";
+          (data.results || []).forEach(function (c) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "list-group-item list-group-item-action py-2";
+            b.textContent = c.text;
+            b.onclick = function () {
+              idField.value = c.id;
+              pickedName.textContent = c.text;
+              picked.hidden = false;
+              search.hidden = true;
+              results.innerHTML = "";
+            };
+            results.appendChild(b);
+          });
+          if (!results.children.length) {
+            results.innerHTML = '<div class="list-group-item text-muted py-2">No matching client</div>';
+          }
+        });
+    }, 250);
+  });
+  document.getElementById("xp-change").addEventListener("click", function () {
+    idField.value = "";
+    picked.hidden = true;
+    search.hidden = false;
+    search.value = "";
+    search.focus();
+  });
+});
+</script>
+{% endblock %}

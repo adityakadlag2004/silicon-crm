@@ -17,9 +17,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import InsuranceClaim, InsurancePolicy, Sale
+from ..forms import ExternalPolicyForm
+from ..models import Client, ExternalPolicy, InsuranceClaim, InsurancePolicy, Sale
 from ..permissions import admin_required, is_admin
-from ..services import insurance_sync, sales as sales_service
+from ..services import followups, insurance_sync, sales as sales_service
 from .helpers import name_words_q
 from ..templatetags.custom_filters import inr
 
@@ -605,3 +606,178 @@ def claim_delete_document(request, doc_id):
     doc.delete()
     messages.success(request, "Document removed.")
     return redirect("clients:claim_detail", claim_id=claim_id)
+
+
+# ─────────────────────────── external policies ───────────────────────────
+
+# How far ahead the dashboard's "Coming up" queue reads.
+EXTERNAL_UPCOMING_DAYS = 60
+
+
+def _can_delete_external(user, policy):
+    return is_admin(user) or policy.created_by_id == user.id
+
+
+@login_required
+def external_policy_list(request):
+    """Policies our clients hold elsewhere, and what falls due on them next.
+
+    Read one type at a time, like the tracker. "Coming up" is the work queue:
+    every premium, renewal, money-back, maturity and vesting in the next 60
+    days, read off each live policy's schedule — nothing to keep up to date.
+    """
+    book = ExternalPolicy.objects.select_related("client")
+    kind = request.GET.get("type", "")
+    if kind not in dict(ExternalPolicy.TYPE_CHOICES):
+        kind = ""
+    if kind:
+        book = book.filter(policy_type=kind)
+
+    today = timezone.localdate()
+    year_out = today + timedelta(days=365)
+    # ponytail: every live policy is walked in Python for the queue and tiles —
+    # fine for a few thousand; store a next-due column if the book outgrows that.
+    live = list(book.filter(status__in=ExternalPolicy.LIVE_STATUSES))
+    upcoming = sorted(
+        (e for p in live for e in p.events(today, today + timedelta(days=EXTERNAL_UPCOMING_DAYS))),
+        key=lambda e: e["date"])
+    maturing = [p for p in live if p.maturity_date and today <= p.maturity_date <= year_out]
+
+    rows = book
+    q = (request.GET.get("q") or "").strip()
+    if q:
+        rows = rows.filter(
+            Q(policy_number__icontains=q) | name_words_q("client__name", q)
+            | Q(insurer__icontains=q) | Q(plan_name__icontains=q))
+    status = request.GET.get("status", "")
+    if status == "live":
+        rows = rows.filter(status__in=ExternalPolicy.LIVE_STATUSES)
+    elif status in dict(ExternalPolicy.STATUS_CHOICES):
+        rows = rows.filter(status=status)
+    else:
+        status = ""
+    only_maturing = request.GET.get("maturing") == "1"
+    if only_maturing:
+        rows = rows.filter(status__in=ExternalPolicy.LIVE_STATUSES,
+                           maturity_date__range=(today, year_out)).order_by("maturity_date")
+    else:
+        rows = rows.annotate(_live=Case(
+            When(status__in=ExternalPolicy.LIVE_STATUSES, then=0),
+            default=1, output_field=IntegerField(),
+        )).order_by("_live", "client__name", "start_date")
+
+    page = Paginator(rows, POLICIES_PER_PAGE).get_page(request.GET.get("page"))
+    page_params = request.GET.copy()
+    page_params.pop("page", None)
+
+    base = reverse("clients:external_policy_list")
+
+    def tab_url(**params):
+        """Keep the selected type when a tile is clicked."""
+        parts = [f"type={kind}"] if kind else []
+        parts += [f"{k}={v}" for k, v in params.items()]
+        return f"{base}?{'&'.join(parts)}" if parts else base
+
+    per_type = dict(ExternalPolicy.objects.values_list("policy_type").annotate(n=Count("id")))
+    tabs = [{"label": "All", "count": sum(per_type.values()), "url": base, "active": not kind}]
+    tabs += [{"label": label, "count": per_type.get(key, 0), "url": f"{base}?type={key}",
+              "active": kind == key}
+             for key, label in ExternalPolicy.TYPE_CHOICES if per_type.get(key) or kind == key]
+
+    return render(request, "insurance/external_list.html", {
+        "crumbs": [{"label": "Insurance Tracker", "url": reverse("clients:policy_list")},
+                   {"label": "External Policies"}],
+        "kpis": [
+            {"label": "External Policies", "value": book.count(), "color": "#4338CA",
+             "url": tab_url(), "active": not status and not only_maturing},
+            {"label": "In Force", "value": len(live), "color": "#15803D",
+             "url": tab_url(status="live"), "active": status == "live"},
+            {"label": "Sum Assured", "value": f"₹{inr(sum(p.sum_assured for p in live))}",
+             "color": "#0F766E", "sub": "policies in force"},
+            {"label": "Due ≤30 days", "color": "#B45309", "url": "#upcoming",
+             "value": sum(1 for e in upcoming if (e["date"] - today).days <= 30)},
+            {"label": "Maturing ≤1 yr", "value": len(maturing), "color": "#7E22CE",
+             "url": tab_url(maturing=1), "active": only_maturing,
+             "sub": f"₹{inr(sum(p.maturity_value for p in maturing))} expected"},
+        ],
+        "policies": page, "page_qs": page_params.urlencode(),
+        "upcoming": upcoming, "upcoming_days": EXTERNAL_UPCOMING_DAYS,
+        "q": q, "status": status, "kind": kind, "tabs": tabs, "today": today,
+    })
+
+
+@login_required
+def external_policy_detail(request, policy_id):
+    policy = get_object_or_404(
+        ExternalPolicy.objects.select_related("client", "created_by"), pk=policy_id)
+    today = timezone.localdate()
+    schedule = policy.events(today, today + timedelta(days=2 * 365))
+    return render(request, "insurance/external_detail.html", {
+        "crumbs": [
+            {"label": "Insurance Tracker", "url": reverse("clients:policy_list")},
+            {"label": "External Policies", "url": reverse("clients:external_policy_list")},
+            {"label": policy.policy_number or f"#{policy.pk}"},
+        ],
+        "kpis": [
+            {"label": "Sum Assured", "value": f"₹{inr(policy.sum_assured)}", "color": "#15803D"},
+            {"label": "Premium", "value": f"₹{inr(policy.premium_amount)}", "color": "#B45309",
+             "sub": ("per renewal" if policy.is_renewable
+                     else policy.get_premium_frequency_display())},
+            {"label": "Next Due", "color": "#0369A1",
+             "value": f"{schedule[0]['date']:%d %b %Y}" if schedule else "—",
+             "sub": schedule[0]["label"] if schedule else "nothing in 2 years"},
+            {"label": policy.maturity_label, "color": "#7E22CE",
+             "value": f"{policy.maturity_date:%d %b %Y}" if policy.maturity_date else "—",
+             "sub": (f"₹{inr(policy.maturity_amount)} expected"
+                     if policy.maturity_amount else None)},
+        ],
+        "policy": policy, "schedule": schedule,
+        "reminders": followups.for_source(ExternalPolicy.TASK_SOURCE, policy.pk)[:20],
+        "can_delete": _can_delete_external(request.user, policy),
+    })
+
+
+@login_required
+def external_policy_form(request, policy_id=None):
+    """Add an external policy (``?client=<id>`` pre-picks the client) or edit one."""
+    policy = get_object_or_404(ExternalPolicy, pk=policy_id) if policy_id else None
+    if request.method == "POST":
+        form = ExternalPolicyForm(request.POST, instance=policy)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            if policy is None:
+                obj.created_by = request.user
+            obj.save()
+            messages.success(request, f"External policy {'updated' if policy else 'added'} "
+                                      f"for {obj.client.name}.")
+            return redirect("clients:external_policy_detail", policy_id=obj.pk)
+    else:
+        form = ExternalPolicyForm(instance=policy,
+                                  initial={"client": request.GET.get("client")} if not policy else None)
+    cid = str(form["client"].value() or "")
+    back = (reverse("clients:external_policy_detail", args=[policy.pk]) if policy
+            else reverse("clients:external_policy_list"))
+    return render(request, "insurance/external_form.html", {
+        "crumbs": [
+            {"label": "Insurance Tracker", "url": reverse("clients:policy_list")},
+            {"label": "External Policies", "url": reverse("clients:external_policy_list")},
+            {"label": "Edit" if policy else "Add"},
+        ],
+        "form": form, "policy": policy, "back": back,
+        "picked": Client.objects.filter(pk=cid).first() if cid.isdigit() else None,
+        "renewable": ExternalPolicy.RENEWABLE,
+    })
+
+
+@login_required
+@require_POST
+def external_policy_delete(request, policy_id):
+    """Admin, or whoever added it. Its reminder tasks go with it (signals)."""
+    policy = get_object_or_404(ExternalPolicy.objects.select_related("client"), pk=policy_id)
+    if not _can_delete_external(request.user, policy):
+        messages.error(request, "Only an admin, or whoever added it, can delete this policy.")
+        return redirect("clients:external_policy_detail", policy_id=policy.pk)
+    client = policy.client
+    policy.delete()
+    messages.success(request, f"External policy removed from {client.name}'s record.")
+    return redirect("clients:client_profile", client_id=client.pk)

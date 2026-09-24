@@ -15,6 +15,10 @@
       {{ t.label }} <span class="text-muted">({{ t.count }})</span>
     </a>
   {% endfor %}
+  {# Policies clients hold elsewhere live on their own page — never in this book's figures. #}
+  <span class="right">
+    <a href="{% url 'clients:external_policy_list' %}" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-box-arrow-in-down-right"></i> External Policies</a>
+  </span>
 </div>
 
 <form method="get" class="ki-showbar">
