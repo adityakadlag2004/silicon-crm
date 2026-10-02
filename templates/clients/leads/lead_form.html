@@ -84,7 +84,8 @@
               {{ f.id }}
               {% if f.non_field_errors %}<div class="alert alert-danger py-1 px-2 small">{{ f.non_field_errors }}</div>{% endif %}
               <div class="mb-2"><label class="form-label" for="{{ f.product.id_for_label }}">Product</label>{{ f.product }}</div>
-              <div class="mb-2"><label class="form-label" for="{{ f.amount.id_for_label }}">Indicative amount (₹)</label>{{ f.amount }}</div>
+              <div class="mb-2"><label class="form-label" for="{{ f.amount.id_for_label }}">Amount (₹)</label>{{ f.amount }}<div class="form-text">Yearly premium · monthly SIP · or the amount to invest.</div></div>
+              <div class="mb-2"><label class="form-label" for="{{ f.cover_amount.id_for_label }}">Cover / sum assured (₹)</label>{{ f.cover_amount }}<div class="form-text">Insurance only — shown, never counted as the lead's value.</div></div>
               <div class="mb-2"><label class="form-label" for="{{ f.note.id_for_label }}">What they asked for</label>{{ f.note }}</div>
               {% if interest_formset.can_delete %}
                 <div class="d-flex justify-content-between align-items-center">
@@ -142,7 +143,8 @@
     <div class="border rounded p-3 h-100">
       {{ interest_formset.empty_form.id }}
       <div class="mb-2"><label class="form-label">Product</label>{{ interest_formset.empty_form.product }}</div>
-      <div class="mb-2"><label class="form-label">Indicative amount (₹)</label>{{ interest_formset.empty_form.amount }}</div>
+      <div class="mb-2"><label class="form-label">Amount (₹)</label>{{ interest_formset.empty_form.amount }}<div class="form-text">Yearly premium · monthly SIP · or the amount to invest.</div></div>
+      <div class="mb-2"><label class="form-label">Cover / sum assured (₹)</label>{{ interest_formset.empty_form.cover_amount }}<div class="form-text">Insurance only — shown, never counted as the lead's value.</div></div>
       <div class="mb-2"><label class="form-label">What they asked for</label>{{ interest_formset.empty_form.note }}</div>
       {% if interest_formset.can_delete %}
         <div class="d-flex justify-content-between align-items-center">

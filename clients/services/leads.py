@@ -7,11 +7,12 @@ goes unrecorded and the funnel starts lying.
 from datetime import timedelta
 
 from django.db import transaction
-from django.db.models import Count, Min, Q
+from django.db.models import Case, Count, DecimalField, F, Min, Q, Sum, When
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import Client, Lead, LeadRemark, LeadStageEvent, Task
+from .. import permissions
+from ..models import Client, Employee, Lead, LeadInterest, LeadRemark, LeadStageEvent, Task
 from . import followups
 
 VALID_STAGES = dict(Lead.STAGE_CHOICES)
@@ -173,16 +174,34 @@ def set_stage(lead, stage, user=None, note=""):
     lead.stage_changed_at = timezone.now()
     lead.is_discarded = False
     lead.lost_reason = ""
-    lead.save(update_fields=["stage", "stage_changed_at", "is_discarded", "lost_reason", "updated_at"])
+    # A lead that moved is being worked, so any request to drop it is moot.
+    withdrawn = _close_loss_request(lead, user, "Withdrawn — the lead moved stage.")
+    lead.save(update_fields=["stage", "stage_changed_at", "is_discarded", "lost_reason",
+                             "updated_at", *withdrawn])
     notify_team(lead, user, f"{lead.customer_name} → {event.to_label}",
                 note or f"Moved from {event.from_label} to {event.to_label}.")
     return event
 
 
+def can_decide_loss(user):
+    return permissions.is_admin_or_manager(user)
+
+
 def mark_lost(lead, user=None, reason=""):
-    """Park a lead. The stage it died at is kept — that is the weak point."""
+    """Park a lead. The stage it died at is kept — that is the weak point.
+
+    A premium lead (`Lead.LOSS_SIGNOFF_TIERS`) dropped by anyone but an admin
+    or manager is NOT lost: the drop becomes a request for sign-off and the
+    request's event is returned (`to_stage == LOSS_REQUESTED`). The rule lives
+    here because both the web view and the app call this — a guard in either
+    one alone leaves the other door open. `user=None` is the system (seeds,
+    commands) and is never asked.
+    """
     if lead.is_discarded:
         return None
+    if user is not None and not can_decide_loss(user) and lead.needs_loss_signoff:
+        return request_loss(lead, user, reason)
+    _close_loss_request(lead, user, "Approved — lead marked lost.", done=True)
     event = LeadStageEvent.objects.create(
         lead=lead,
         from_stage=lead.stage,
@@ -192,11 +211,113 @@ def mark_lost(lead, user=None, reason=""):
     )
     lead.is_discarded = True
     lead.lost_reason = (reason or "")[:255]
-    lead.save(update_fields=["is_discarded", "lost_reason", "updated_at"])
+    lead.save(update_fields=["is_discarded", "lost_reason", "loss_requested_at",
+                             "loss_requested_by", "updated_at"])
     followups.cancel_open(followups.LEAD, lead.pk, actor=user,
                          reason="Lead marked lost — follow-up cancelled.")
     notify_team(lead, user, f"{lead.customer_name} marked lost",
                 reason or f"Lost at {lead.get_stage_display()}.")
+    return event
+
+
+LOSS_TASK_PREFIX = "lossreq:"
+
+
+def _deciders(exclude_user=None):
+    """Every active admin and manager — the people who can sign off a loss."""
+    return [
+        e for e in Employee.objects.filter(active=True, role__in=["admin", "manager"])
+        .select_related("user")
+        if e.user_id and e.user_id != getattr(exclude_user, "id", None)
+    ]
+
+
+def request_loss(lead, user, reason=""):
+    """Ask an admin/manager to agree before a premium lead is dropped.
+
+    One task per decider as a group (each closes their own copy), pointed at
+    the lead like a follow-up so it shows on the lead and dies with it. Medium
+    priority: it is a decision to make today, not an alarm. A second request
+    while one is waiting is a no-op (None) — double taps and offline replays.
+    """
+    if lead.loss_requested_at:
+        return None
+    event = LeadStageEvent.objects.create(
+        lead=lead, from_stage=lead.stage, to_stage=LeadStageEvent.LOSS_REQUESTED,
+        note=reason, created_by=user if (user and user.is_authenticated) else None,
+    )
+    lead.loss_requested_at = timezone.now()
+    lead.loss_requested_by = user if (user and user.is_authenticated) else None
+    lead.save(update_fields=["loss_requested_at", "loss_requested_by", "updated_at"])
+
+    from .tasks import notify_task
+    from ..templatetags.custom_filters import inr
+    by = getattr(user, "username", None) or "Someone"
+    title = f"Sign off: drop {lead.customer_name}?"
+    body = "\n".join([
+        f"{by} wants to mark this lead lost.",
+        f"Reason: {reason or '(none given)'}",
+        f"Lead size: ₹{inr(lead.total_value)} a year · {lead.get_stage_display()}",
+        "Approve on the lead page (Mark lost) or keep it in the pipeline.",
+        reverse("clients:lead_detail", args=[lead.pk]),
+    ])
+    today = timezone.localdate()
+    for emp in _deciders(exclude_user=user) or [None]:
+        task = Task.objects.create(
+            title=title[:255], description=body, category=followups.category(),
+            priority=Task.PRIORITY_MEDIUM, created_by=followups.system_user(),
+            assigned_to=emp, client=lead.converted_client, due_date=today,
+            source_kind=followups.LEAD, source_id=lead.pk,
+            assign_group=f"{LOSS_TASK_PREFIX}{event.pk}",
+        )
+        notify_task(task, user, title, f"{by}: {reason or 'no reason given'}", event="assigned")
+    notify_team(lead, user, f"{lead.customer_name} — loss sent for sign-off",
+                reason or "Waiting for an admin or manager to agree.")
+    return event
+
+
+def _close_loss_request(lead, user, why, done=False):
+    """Clear a pending loss request and close its sign-off tasks.
+
+    Returns the fields it changed so the caller can save them in its own
+    write; [] when nothing was pending.
+    """
+    if not lead.loss_requested_at:
+        return []
+    from .tasks import log_activity
+    from ..models import TaskActivity
+    for task in Task.objects.filter(
+        source_kind=followups.LEAD, source_id=lead.pk, is_deleted=False,
+        assign_group__startswith=LOSS_TASK_PREFIX, status__in=Task.OPEN_STATUSES,
+    ):
+        task.status = Task.STATUS_COMPLETED if done else Task.STATUS_CANCELLED
+        task.save(update_fields=["status", "updated_at"])
+        log_activity(task, user, TaskActivity.STATUS_CHANGED, why)
+    lead.loss_requested_at = None
+    lead.loss_requested_by = None
+    return ["loss_requested_at", "loss_requested_by"]
+
+
+def decline_loss(lead, user, note=""):
+    """A decider keeps the lead in the pipeline. Logged, and the team is told."""
+    if not lead.loss_requested_at:
+        return None
+    requester = lead.loss_requested_by
+    fields = _close_loss_request(lead, user, "Declined — lead stays in the pipeline.", done=True)
+    lead.save(update_fields=[*fields, "updated_at"])
+    event = LeadStageEvent.objects.create(
+        lead=lead, from_stage=lead.stage, to_stage=lead.stage,
+        note="Loss declined" + (f": {note}" if note else " — keep working it."),
+        created_by=user if (user and user.is_authenticated) else None,
+    )
+    notify_team(lead, user, f"Keep working {lead.customer_name}",
+                note or "The request to drop this lead was declined.")
+    if requester and requester.id != getattr(user, "id", None) and not any(
+            e.user_id == requester.id for e in lead.team()):
+        from .tasks import create_notification
+        create_notification(requester, f"Keep working {lead.customer_name}",
+                            note or "The request to drop this lead was declined.",
+                            link=reverse("clients:lead_detail", args=[lead.pk]), event=None)
     return event
 
 
@@ -245,6 +366,120 @@ def funnel(qs):
         })
         previous_reached = reached or None
     return out
+
+
+def value_expr():
+    """A lead's yearly value in SQL: interest amounts summed, a SIP's ×12.
+
+    The twin of `LeadInterest.annual_value` — change both or neither.
+    """
+    codes = LeadInterest.MONTHLY_CODES
+    monthly = (Q(interests__product__code__in=codes)
+               | Q(interests__product__parent__code__in=codes))
+    return Sum(Case(
+        When(monthly, then=F("interests__amount") * 12),
+        default=F("interests__amount"),
+        output_field=DecimalField(max_digits=16, decimal_places=2),
+    ))
+
+
+def with_value(qs):
+    """Annotate `deal_value` — the yearly value `Lead.total_value` reads."""
+    return qs.annotate(deal_value=value_expr())
+
+
+# Size filters, read off the same tiers as the chips: each is "this tier and
+# everything bigger", so "High & up" is the Premium + High one-click view.
+SIZES = {
+    key: (label if i == 0 else f"{label} & up", floor)
+    for i, (floor, key, label, _c) in enumerate(Lead.VALUE_TIERS) if floor
+}
+SIZES["none"] = ("No amount", None)
+
+
+def filter_size(qs, size):
+    """Narrow `qs` to a `SIZES` band; anything else leaves it alone.
+
+    A pk subquery rather than filtering an annotation in place: the callers
+    go on to count, group and aggregate the result, and an aggregate filter
+    would ride along into all of them.
+    """
+    if size not in SIZES:
+        return qs
+    floor = SIZES[size][1]
+    valued = with_value(Lead.objects.all())
+    valued = (valued.filter(Q(deal_value__isnull=True) | Q(deal_value=0)) if floor is None
+              else valued.filter(deal_value__gte=floor))
+    return qs.filter(pk__in=valued.values("pk"))
+
+
+def stage_values(qs):
+    """{stage: {value, forecast}} for the leads in `qs`, in one query.
+
+    The caller picks the leads — live ones for a forecast, the lost tab for
+    what was lost where. Forecast is value × `Lead.STAGE_PROBABILITY`.
+    `pipeline` is the open pipeline (everything before Order); Order is
+    booked business, reported on its own so it never inflates what is still
+    to win.
+    """
+    rows = qs.values("stage").order_by().annotate(v=value_expr())
+    out = {s: {"value": 0.0, "forecast": 0.0} for s in Lead.STAGE_SEQUENCE}
+    for row in rows:
+        if row["stage"] in out:
+            v = float(row["v"] or 0)
+            out[row["stage"]] = {"value": v,
+                                 "forecast": v * Lead.STAGE_PROBABILITY[row["stage"]]}
+    open_stages = Lead.STAGE_SEQUENCE[:-1]
+    out["pipeline"] = {
+        "value": sum(out[s]["value"] for s in open_stages),
+        "forecast": sum(out[s]["forecast"] for s in open_stages),
+    }
+    return out
+
+
+PREMIUM_QUIET_DAYS = 7
+
+
+def quiet_premium_leads(qs=None, days=PREMIUM_QUIET_DAYS):
+    """Live premium leads nobody has touched in `days`.
+
+    Touched = moved stage, got a remark, or had a follow-up opened, closed or
+    rescheduled inside the window; an open follow-up means someone is on it.
+    Order is excluded (booked — convert it) and so is a lead waiting on a
+    loss sign-off (a manager has it). Small by construction: premium only.
+    """
+    cutoff = timezone.now() - timedelta(days=days)
+    floor = SIZES["premium"][1]
+    leads = list(
+        with_value(qs if qs is not None else Lead.objects.all())
+        .filter(is_discarded=False, loss_requested_at__isnull=True,
+                stage_changed_at__lt=cutoff, deal_value__gte=floor)
+        .exclude(stage=Lead.STAGE_ORDER)
+        .select_related("assigned_to__user")
+    )
+    ids = [lead.pk for lead in leads]
+    lead_tasks = Task.objects.filter(source_kind=followups.LEAD, source_id__in=ids,
+                                     is_deleted=False)
+    busy = set(lead_tasks.filter(status__in=Task.OPEN_STATUSES).values_list("source_id", flat=True))
+    busy |= set(lead_tasks.filter(updated_at__gte=cutoff).values_list("source_id", flat=True))
+    busy |= set(LeadRemark.objects.filter(lead_id__in=ids, created_at__gte=cutoff)
+                .values_list("lead_id", flat=True))
+    return [lead for lead in leads if lead.pk not in busy]
+
+
+# How a lead list can be ordered. Value is the default: the list exists to
+# work the biggest business first, and a lead with no amount captured sinks
+# to the bottom rather than floating above every real one.
+SORTS = {
+    "value": ("Highest value", [F("deal_value").desc(nulls_last=True), "-stage_changed_at"]),
+    "oldest": ("Oldest lead", ["created_at"]),
+    "recent": ("Recently moved", ["-stage_changed_at", "-updated_at"]),
+}
+
+
+def ordered(qs, sort):
+    """`with_value(qs)` in a `SORTS` order; an unknown key means value."""
+    return with_value(qs).order_by(*SORTS.get(sort, SORTS["value"])[1])
 
 
 def stage_counts(qs):
@@ -367,7 +602,7 @@ def board(qs, *, stages=None, per_stage=8, stale_days=14):
 
     stages = stages or BOARD_STAGES
     live = list(
-        qs.filter(is_discarded=False, stage__in=stages)
+        with_value(qs.filter(is_discarded=False, stage__in=stages))
         .select_related("assigned_to__user")
         .order_by("stage_changed_at")
     )
@@ -402,8 +637,9 @@ def board(qs, *, stages=None, per_stage=8, stale_days=14):
                 "stalled": bool(lead.stage_changed_at and lead.stage_changed_at < cutoff),
             })
         # Unchased first — they are the reason to look at this screen — then
-        # the one that has sat longest.
-        rows.sort(key=lambda r: (r["followups"] > 0, -(r["days_in_stage"] or 0)))
+        # the biggest business, then the one that has sat longest.
+        rows.sort(key=lambda r: (r["followups"] > 0, -r["lead"].total_value,
+                                 -(r["days_in_stage"] or 0)))
         pages.append({
             "stage": stage,
             "label": VALID_STAGES.get(stage, stage),

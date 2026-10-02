@@ -18,6 +18,7 @@
 
 <form method="get" class="mb-3">
   <input type="hidden" name="view" value="{{ view_mode }}" />
+  {% if size_filter %}<input type="hidden" name="size" value="{{ size_filter }}" />{% endif %}
   <div class="row g-2 align-items-end">
     <div class="col-sm-3">
       <label class="form-label small text-muted mb-0" for="lead-q">Search</label>
@@ -63,6 +64,14 @@
   <div class="mt-2 d-flex gap-2">
     <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit">Apply Filters</button>
     <a class="ki-btn ki-btn-secondary ki-btn-sm" href="?view={{ view_mode }}">Clear</a>
+    <div class="ms-auto d-flex align-items-center gap-2">
+      <label class="small text-muted text-nowrap mb-0" for="lead-sort">Sort by</label>
+      <select name="sort" id="lead-sort" class="form-select form-select-sm" onchange="this.form.submit()">
+        {% for value, label in sorts %}
+          <option value="{{ value }}" {% if sort == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
   </div>
 </form>
 
@@ -77,6 +86,29 @@ tab must never reset the employee the way the stage tiles used to.
   {% if show_mine_tab %}
     <a class="ki-btn ki-btn-sm {% if view_mode == 'mine' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?{% if tab_qs %}{{ tab_qs }}&{% endif %}view=mine">My Leads ({{ tab_counts.mine }})</a>
   {% endif %}
+</div>
+
+{% comment %}
+Size chips filter the list (and keep every other filter, like the tabs). The
+legend under them says what each colour means; the total is the open pipeline
+in the current filter, and its forecast.
+{% endcomment %}
+<div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+  <span class="small text-muted">Size:</span>
+  <a class="ki-btn ki-btn-sm {% if not size_filter %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?{{ size_qs }}">All sizes</a>
+  {% for value, label in sizes %}
+    <a class="ki-btn ki-btn-sm {% if size_filter == value %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}" href="?{% if size_qs %}{{ size_qs }}&{% endif %}size={{ value }}">{{ label }}</a>
+  {% endfor %}
+  {% if view_mode == 'open' or view_mode == 'mine' %}
+    <span class="ms-auto small"><strong>Open pipeline ₹{{ pipeline.value|compact_inr }}</strong> <span class="text-muted">· forecast ₹{{ pipeline.forecast|compact_inr }}</span></span>
+  {% endif %}
+</div>
+<div class="ki-tags small align-items-center">
+  <span class="text-muted">Lead size, a year:</span>
+  {% for floor, key, label, color in value_tiers %}
+    <span class="ki-tag{% if key == 'premium' %} ki-tag-solid{% endif %}" style="--c:{{ color }};">{{ label }}{% if floor %} ≥ ₹{{ floor|compact_inr }}{% endif %}</span>
+  {% endfor %}
+  <span class="text-muted">· a SIP counts ×12, cover never counts</span>
 </div>
 
 <div class="ki-card ki-table-wrap mb-4">
@@ -100,6 +132,7 @@ tab must never reset the employee the way the stage tiles used to.
               <span>
                 <a class="fw-semibold" href="{% url 'clients:lead_detail' lead.id %}">{{ lead.customer_name }}</a>
                 <div class="text-muted small">{{ lead.phone|mask_phone|default:"—" }}</div>
+                <div class="ki-tags mb-0 mt-1">{% include "clients/leads/_lead_chips.html" %}</div>
               </span>
             </div>
           </td>
@@ -114,7 +147,7 @@ tab must never reset the employee the way the stage tiles used to.
           </td>
           <td class="small">
             {% for interest in lead.interests.all %}
-              <div>{{ interest.label }}{% if interest.amount %} <span class="text-muted">₹{{ interest.amount|floatformat:0 }}</span>{% endif %}</div>
+              <div>{{ interest.label }}{% if interest.amount %} <span class="text-muted">₹{{ interest.amount|inr }}{% if interest.is_monthly %}/mo{% endif %}</span>{% endif %}{% if interest.cover_amount %} <span class="text-muted">· cover ₹{{ interest.cover_amount|compact_inr }}</span>{% endif %}</div>
             {% empty %}
               <span class="text-muted">Not captured yet</span>
             {% endfor %}

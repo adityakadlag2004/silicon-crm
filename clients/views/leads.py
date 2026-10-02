@@ -24,6 +24,7 @@ from .. import permissions
 from ..models import (
     Employee,
     Lead,
+    LeadStageEvent,
     Product,
     Sale,
     Task,
@@ -35,18 +36,30 @@ from ..forms import (
 )
 from ..services import followups
 from ..services import leads as lead_service
+from ..templatetags.custom_filters import compact_inr
 from .helpers import _lead_queryset_for_request, name_words_q, query_without
 
 PER_PAGE = 25
 
 
-def _stage_kpis(request, counts, active=""):
+def _value_line(v, forecast=None):
+    """"₹38L · exp ₹19L" — a stage's value and, where it means something, its forecast."""
+    if not v:
+        return "No amounts yet"
+    return f"₹{compact_inr(v)}" + (f" · exp ₹{compact_inr(forecast)}" if forecast else "")
+
+
+def _stage_kpis(request, counts, active="", values=None, lost=False):
     """The SPANCO strip — six tiles, each one the filter for its stage.
 
     A tile switches the stage and NOTHING else: it carries the employee, the
     search and the dates already applied. Built from a bare
     `?stage=…` these tiles silently reset the picked employee back to the whole
     team every time somebody looked at another stage.
+
+    With `values` (`services.leads.stage_values`) each tile says what is
+    standing there in rupees, and — for an open stage — the forecast. A lost
+    lead has no forecast, and Order is booked, so neither gets one.
     """
     keep = query_without(request, "stage", "page")
     base = f"{reverse('clients:lead_management')}?{keep}&" if keep else (
@@ -56,7 +69,11 @@ def _stage_kpis(request, counts, active=""):
             "label": label,
             "value": counts.get(stage, 0),
             "color": Lead.STAGE_COLORS[stage],
-            "sub": Lead.STAGE_HELP[stage],
+            "sub": (
+                _value_line(values[stage]["value"],
+                            None if lost or stage == Lead.STAGE_ORDER else values[stage]["forecast"])
+                if values else Lead.STAGE_HELP[stage]
+            ),
             "url": f"{base}stage={stage}",
             "active": stage == active,
         }
@@ -82,6 +99,10 @@ def _apply_lead_filters(request, qs, can_see_all):
         qs = qs.filter(data_received=True)
     elif data_received == "no":
         qs = qs.filter(data_received=False)
+
+    # Lead size (Premium / High & up / …) — a pk subquery, so the counts and
+    # sums taken off this queryset stay plain.
+    qs = lead_service.filter_size(qs, request.GET.get("size", ""))
 
     for key, lookup in (("date_from", "gte"), ("date_to", "lte")):
         raw = request.GET.get(key, "")
@@ -115,7 +136,12 @@ def lead_management(request):
     stage_filter = request.GET.get("stage", "")
     leads_qs = scoped.filter(stage=stage_filter) if stage_filter in dict(Lead.STAGE_CHOICES) else scoped
 
-    paginator = Paginator(leads_qs.order_by("-stage_changed_at", "-updated_at"), PER_PAGE)
+    sort = request.GET.get("sort", "")
+    sort = sort if sort in lead_service.SORTS else "value"
+    leads_qs = lead_service.ordered(leads_qs, sort).select_related(
+        "assigned_to__user", "converted_client",
+    ).prefetch_related("interests__product", "collaborators__user")
+    paginator = Paginator(leads_qs, PER_PAGE)
     page_obj = paginator.get_page(request.GET.get("page", 1))
 
     get_params = request.GET.copy()
@@ -128,8 +154,14 @@ def lead_management(request):
         "mine": base_qs.filter(Lead.team_q(emp), is_discarded=False).count() if emp else 0,
     }
 
+    values = lead_service.stage_values(scoped)
     return render(request, "clients/leads/lead_management.html", {
-        "kpis": _stage_kpis(request, lead_service.stage_counts(scoped), stage_filter),
+        "kpis": _stage_kpis(request, lead_service.stage_counts(scoped), stage_filter,
+                            values=values, lost=view_mode == "lost"),
+        "pipeline": values["pipeline"],
+        "sizes": [(key, label) for key, (label, _floor) in lead_service.SIZES.items()],
+        "size_filter": request.GET.get("size", ""),
+        "size_qs": query_without(request, "size", "page"),
         # The tabs switch the view and keep everything else, same as the tiles.
         "tab_qs": query_without(request, "view", "page"),
         "leads": page_obj,
@@ -141,6 +173,9 @@ def lead_management(request):
         "search_term": request.GET.get("q", "").strip(),
         "stages": Lead.STAGE_CHOICES,
         "stage_filter": stage_filter,
+        "sort": sort,
+        "sorts": [(key, label) for key, (label, _order) in lead_service.SORTS.items()],
+        "value_tiers": Lead.VALUE_TIERS,
         "view_mode": view_mode,
         "tab_counts": tab_counts,
         "show_mine_tab": bool(emp),
@@ -164,10 +199,14 @@ def lead_board(request):
         request, _lead_queryset_for_request(request).filter(is_discarded=False), can_see_all,
     )
 
+    # Biggest business at the top of each column, and the cap keeps the
+    # biggest — the board is for deciding where the day's effort goes.
     by_stage = {stage: [] for stage in Lead.STAGE_SEQUENCE}
-    for lead in qs.order_by("stage_changed_at")[:400]:
+    for lead in lead_service.ordered(qs, "value").prefetch_related("collaborators__user")[:400]:
         by_stage.get(lead.stage, by_stage[Lead.STAGE_SUSPECT]).append(lead)
 
+    # Read off the whole filtered board, not the capped 400 on screen.
+    values = lead_service.stage_values(qs)
     columns = [
         {
             "stage": stage,
@@ -176,6 +215,8 @@ def lead_board(request):
             "color": Lead.STAGE_COLORS[stage],
             "leads": by_stage[stage],
             "count": len(by_stage[stage]),
+            "value": values[stage]["value"],
+            "forecast": values[stage]["forecast"] if stage != Lead.STAGE_ORDER else 0,
         }
         for stage, label in Lead.STAGE_CHOICES
     ]
@@ -187,6 +228,9 @@ def lead_board(request):
         ],
         "kpis": _stage_kpis(request, {c["stage"]: c["count"] for c in columns}),
         "columns": columns,
+        "pipeline": values["pipeline"],
+        "sizes": [(key, label) for key, (label, _floor) in lead_service.SIZES.items()],
+        "size_filter": request.GET.get("size", ""),
         "search_term": request.GET.get("q", "").strip(),
         "employees": (
             Employee.objects.filter(active=True).select_related("user").order_by("user__username")
@@ -212,6 +256,11 @@ def lead_pipeline_report(request):
         qs = qs.filter(Lead.team_q(emp))
 
     stages = lead_service.funnel(qs)
+    values = lead_service.stage_values(qs.filter(is_discarded=False))
+    for row in stages:
+        row["value"] = values[row["stage"]]["value"]
+        row["probability"] = round(Lead.STAGE_PROBABILITY[row["stage"]] * 100)
+        row["forecast"] = values[row["stage"]]["forecast"] if row["stage"] != Lead.STAGE_ORDER else 0
     total = qs.count()
     won = qs.filter(is_discarded=False, stage=Lead.STAGE_ORDER).count()
     lost = qs.filter(is_discarded=True).count()
@@ -262,6 +311,10 @@ def lead_pipeline_report(request):
             {"label": "Won (Order)", "value": won, "color": "#15803D"},
             {"label": "Lost", "value": lost, "color": "#BE123C"},
             {"label": "Win rate", "value": f"{round(won / total * 100, 1) if total else 0}%", "color": "#0369A1"},
+            {"label": "Open pipeline", "value": f"₹{compact_inr(values['pipeline']['value'])}",
+             "color": "#A16207", "sub": "a year, Suspect → Conclusion"},
+            {"label": "Forecast", "value": f"₹{compact_inr(values['pipeline']['forecast'])}",
+             "color": "#7C3AED", "sub": "value × each stage's chance of booking"},
         ],
         "scope": scope,
         "can_see_team": can_see_team,
@@ -309,6 +362,11 @@ def lead_detail(request, lead_id):
         "documents": documents,
         "documents_error": documents_error,
         "can_delete_drive_folder": permissions.is_admin_or_manager(request.user),
+        "can_decide_loss": lead_service.can_decide_loss(request.user),
+        "loss_request": (
+            lead.stage_events.filter(to_stage=LeadStageEvent.LOSS_REQUESTED).first()
+            if lead.loss_requested_at else None
+        ),
     })
 
 
@@ -334,9 +392,28 @@ def lead_set_stage(request, lead_id):
 @require_POST
 def lead_discard(request, lead_id):
     lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
-    lead_service.mark_lost(lead, user=request.user, reason=(request.POST.get("reason") or "").strip())
-    messages.info(request, f"{lead.customer_name} marked lost at {lead.get_stage_display()}.")
+    event = lead_service.mark_lost(lead, user=request.user,
+                                   reason=(request.POST.get("reason") or "").strip())
+    if event and event.to_stage == LeadStageEvent.LOSS_REQUESTED:
+        messages.info(request, f"{lead.customer_name} is a Premium lead — an admin or manager "
+                               "has been asked to sign off before it is dropped.")
+    elif lead.loss_requested_at:
+        messages.info(request, f"{lead.customer_name} is already waiting for a sign-off.")
+    else:
+        messages.info(request, f"{lead.customer_name} marked lost at {lead.get_stage_display()}.")
     return redirect(request.META.get("HTTP_REFERER", "clients:lead_management"))
+
+
+@login_required
+@require_POST
+def lead_decline_loss(request, lead_id):
+    """An admin/manager keeps a premium lead the owner asked to drop."""
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    if not lead_service.can_decide_loss(request.user):
+        return HttpResponseForbidden("Only an admin or manager can decide a loss request.")
+    if lead_service.decline_loss(lead, request.user, (request.POST.get("note") or "").strip()):
+        messages.success(request, f"{lead.customer_name} stays in the pipeline; the team has been told.")
+    return redirect("clients:lead_detail", lead_id=lead.id)
 
 
 @login_required

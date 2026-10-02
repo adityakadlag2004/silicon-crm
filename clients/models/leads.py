@@ -65,6 +65,37 @@ class Lead(models.Model):
         STAGE_ORDER: "#15803D",
     }
 
+    # How big the lead is, read off the summed interest amounts (`total_value`).
+    # Highest first; the first floor a lead clears is its tier. Rupee floors,
+    # not percentiles: "Premium" must mean the same thing on every screen and
+    # every employee's list, however small that list is.
+    VALUE_TIERS = [
+        (500000, "premium", "Premium", "#A16207"),
+        (100000, "high", "High", "#15803D"),
+        (25000, "mid", "Mid", "#0369A1"),
+        (0, "small", "Small", "#6B7280"),
+    ]
+    # The chance a lead standing here is booked — what turns the pipeline's
+    # value into a forecast (`services.leads.stage_values`). Rough on purpose:
+    # a forecast is for comparing this month with last, not for promising.
+    STAGE_PROBABILITY = {
+        STAGE_SUSPECT: 0.05,
+        STAGE_PROSPECT: 0.10,
+        STAGE_APPROACH: 0.25,
+        STAGE_NEGOTIATION: 0.50,
+        STAGE_CONCLUSION: 0.80,
+        STAGE_ORDER: 1.0,
+    }
+    # Dropping a lead this big needs an admin or manager to agree
+    # (`services.leads.mark_lost`). The owner asks; a manager decides.
+    LOSS_SIGNOFF_TIERS = {"premium"}
+    # Days since the lead entered the system. An old lead is a cold one.
+    AGE_BANDS = [
+        (90, "old", "#BE123C"),
+        (30, "aging", "#B45309"),
+        (0, "fresh", "#6B7280"),
+    ]
+
     customer_name = models.CharField(max_length=255)
     phone = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
@@ -115,6 +146,14 @@ class Lead(models.Model):
         on_delete=models.SET_NULL,
         related_name="source_lead",
         help_text="Client created from this lead via conversion",
+    )
+    # A loss waiting for a manager's sign-off (LOSS_SIGNOFF_TIERS). Set by
+    # `mark_lost` when an employee drops a premium lead; cleared when a manager
+    # approves (the lead is lost), declines, or the lead moves stage.
+    loss_requested_at = models.DateTimeField(null=True, blank=True)
+    loss_requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
     )
     # Quotations and papers live in Drive under "Leads/<name> (#id)". The id is
     # stored because a renamed lead keeps its folder. Blank = no folder yet.
@@ -187,6 +226,54 @@ class Lead(models.Model):
     def is_won(self):
         return self.stage == self.STAGE_ORDER and not self.is_discarded
 
+    @property
+    def total_value(self):
+        """What the lead is worth a year: its interests' `annual_value`s, summed.
+
+        Reads the `deal_value` annotation when the list carries one
+        (`services.leads.with_value`, which is what lets a list sort on it),
+        otherwise the interests themselves.
+        """
+        if hasattr(self, "deal_value"):
+            return self.deal_value or 0
+        return sum(i.annual_value for i in self.interests.all())
+
+    @property
+    def value_tier(self):
+        """{key, label, color} for `total_value`, or None when no amount was captured."""
+        value = self.total_value
+        if not value:
+            return None
+        for floor, key, label, color in self.VALUE_TIERS:
+            if value >= floor:
+                return {"key": key, "label": label, "color": color}
+
+    @property
+    def forecast_value(self):
+        """`total_value` weighted by the chance its stage is booked."""
+        return float(self.total_value) * self.STAGE_PROBABILITY.get(self.stage, 0)
+
+    @property
+    def needs_loss_signoff(self):
+        tier = self.value_tier
+        return bool(tier and tier["key"] in self.LOSS_SIGNOFF_TIERS)
+
+    @property
+    def age_days(self):
+        """Days since the lead was added — its age in the system, not in its stage."""
+        return (timezone.now() - self.created_at).days
+
+    @property
+    def age_label(self):
+        days = self.age_days
+        return f"{days}d" if days < 60 else f"{days // 30}mo"
+
+    @property
+    def age_band(self):
+        """(key, color) for `age_days`."""
+        days = self.age_days
+        return next((key, color) for floor, key, color in self.AGE_BANDS if days >= floor)
+
 
 class LeadStageEvent(models.Model):
     """One recorded SPANCO move — what makes the funnel measurable.
@@ -196,6 +283,8 @@ class LeadStageEvent(models.Model):
     """
 
     LOST = "lost"
+    # A premium lead an employee asked to drop, waiting on a manager.
+    LOSS_REQUESTED = "loss_requested"
 
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="stage_events")
     from_stage = models.CharField(max_length=20, blank=True)
@@ -214,6 +303,8 @@ class LeadStageEvent(models.Model):
     def label_for(stage):
         if stage == LeadStageEvent.LOST:
             return "Lost"
+        if stage == LeadStageEvent.LOSS_REQUESTED:
+            return "Loss requested"
         return dict(Lead.STAGE_CHOICES).get(stage, stage or "—")
 
     @property
@@ -241,7 +332,15 @@ class LeadInterest(models.Model):
     amount = models.DecimalField(
         max_digits=14, decimal_places=2, null=True, blank=True,
         validators=[MinValueValidator(0)],
-        help_text="Indicative premium / SIP / cover being discussed. Optional.",
+        help_text="Yearly premium for insurance, the monthly instalment for a SIP, "
+                  "else the amount to invest. Optional.",
+    )
+    # Cover is not business: a ₹1 crore term cover on a ₹15,000 premium is a
+    # ₹15,000 lead. Kept apart from `amount` the way Sale keeps cover_amount.
+    cover_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Sum assured / cover being discussed (insurance). Not counted as value.",
     )
     note = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -256,6 +355,21 @@ class LeadInterest(models.Model):
     @property
     def label(self):
         return self.product.name if self.product_id else (self.note or "Other")
+
+    # A SIP's amount is the monthly instalment; ×12 puts it on the same
+    # yearly footing as a premium or a lump sum. `services.leads.value_expr`
+    # is the SQL twin of this — change both or neither.
+    MONTHLY_CODES = {"SIP"}
+
+    @property
+    def is_monthly(self):
+        p = self.product
+        return bool(p and (p.code in self.MONTHLY_CODES
+                           or (p.parent_id and p.parent.code in self.MONTHLY_CODES)))
+
+    @property
+    def annual_value(self):
+        return (self.amount or 0) * (12 if self.is_monthly else 1)
 
 
 class LeadRemark(models.Model):

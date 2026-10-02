@@ -12,6 +12,7 @@ urlpatterns = [
     path("leads/<int:lead_id>/stage/", leads.lead_set_stage, name="lead_set_stage"),
     path("leads/<int:lead_id>/discard/", leads.lead_discard, name="lead_discard"),
     path("leads/<int:lead_id>/undiscard/", leads.lead_undiscard, name="lead_undiscard"),
+    path("leads/<int:lead_id>/decline-loss/", leads.lead_decline_loss, name="lead_decline_loss"),
     path("leads/<int:lead_id>/convert/", leads.lead_convert_to_client, name="lead_convert_to_client"),
     path("leads/<int:lead_id>/add-followup/", leads.lead_add_followup, name="lead_add_followup"),
     path("leads/<int:lead_id>/add-remark/", leads.lead_add_remark, name="lead_add_remark"),

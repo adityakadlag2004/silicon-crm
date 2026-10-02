@@ -1,0 +1,11 @@
+{% load custom_filters %}{% comment %}
+A lead's size and age, as chips — shared by the list, the board and the detail
+header. Size is the summed interest amounts (Lead.total_value), coloured by
+Lead.VALUE_TIERS; age is days since the lead was added, coloured by
+Lead.AGE_BANDS. "No amount" is shown on purpose: it is the nudge to capture one.
+"Drop requested" marks a premium lead waiting on a manager's sign-off.
+{% endcomment %}{% with tier=lead.value_tier band=lead.age_band %}
+{% if tier %}<span class="ki-tag{% if tier.key == 'premium' %} ki-tag-solid{% endif %}" style="--c:{{ tier.color }};" title="{{ tier.label }} lead · ₹{{ lead.total_value|inr }} across its needs">{% if tier.key == 'premium' %}★ {% endif %}₹{{ lead.total_value|compact_inr }}</span>{% else %}<span class="ki-tag" style="--c:#9CA3AF;" title="No amount captured on its needs yet">No amount</span>{% endif %}
+<span class="ki-tag" style="--c:{{ band.1 }};" title="Added {{ lead.created_at|date:'d M Y' }}">{{ lead.age_label }} old</span>
+{% if lead.loss_requested_at %}<span class="ki-tag ki-tag-solid" style="--c:#BE123C;" title="The owner asked to drop it; an admin or manager has to agree">Drop requested</span>{% endif %}
+{% endwith %}

@@ -659,9 +659,11 @@ class LeadInterestForm(forms.ModelForm):
 
     class Meta:
         model = LeadInterest
-        fields = ["product", "amount", "note"]
-        labels = {"amount": "Indicative amount (₹)", "note": "What they asked for"}
-        widgets = {"amount": forms.NumberInput(attrs={"step": "0.01", "min": "0"})}
+        fields = ["product", "amount", "cover_amount", "note"]
+        labels = {"amount": "Amount (₹)", "cover_amount": "Cover / sum assured (₹)",
+                  "note": "What they asked for"}
+        widgets = {"amount": forms.NumberInput(attrs={"step": "0.01", "min": "0"}),
+                   "cover_amount": forms.NumberInput(attrs={"step": "1", "min": "0"})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -677,7 +679,8 @@ class LeadInterestForm(forms.ModelForm):
         cleaned = super().clean()
         # A row is either a real product interest or nothing at all; a bare
         # amount with no product would be an untraceable number.
-        if not cleaned.get("product") and (cleaned.get("amount") or cleaned.get("note")):
+        if not cleaned.get("product") and (cleaned.get("amount") or cleaned.get("cover_amount")
+                                           or cleaned.get("note")):
             raise forms.ValidationError("Pick a product for this requirement, or clear the row.")
         return cleaned
 

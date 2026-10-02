@@ -17,6 +17,7 @@
         {% endfor %}
         {% if lead.is_discarded %}<span class="ki-tag" style="--c:#BE123C;">Lost</span>{% endif %}
         {% if lead.converted_client %}<span class="ki-tag ki-tag-solid" style="--c:#15803D;">Converted</span>{% endif %}
+        {% include "clients/leads/_lead_chips.html" %}
       </div>
     </div>
     <div class="ki-rec-actions">
@@ -41,6 +42,28 @@
     <div class="ki-sum-item"><span class="k">Updated</span><span class="v">{{ lead.updated_at|date:"d M Y H:i" }}</span></div>
   </div>
 </div>
+
+{% if loss_request %}
+<div class="alert alert-warning d-flex flex-wrap gap-2 align-items-center">
+  <div class="me-auto">
+    <strong>{{ lead.loss_requested_by.username|default:"Someone" }} asked to drop this Premium lead</strong>
+    on {{ lead.loss_requested_at|date:"d M, H:i" }}{% if loss_request.note %} — “{{ loss_request.note }}”{% endif %}.
+    {% if not can_decide_loss %}An admin or manager has to agree; until then it stays in the pipeline.{% endif %}
+  </div>
+  {% if can_decide_loss %}
+    <form method="post" action="{% url 'clients:lead_discard' lead.id %}" class="d-inline">
+      {% csrf_token %}
+      <input type="hidden" name="reason" value="{{ loss_request.note }}" />
+      <button type="submit" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);">Approve — mark lost</button>
+    </form>
+    <form method="post" action="{% url 'clients:lead_decline_loss' lead.id %}" class="d-flex gap-2">
+      {% csrf_token %}
+      <input type="text" name="note" class="form-control form-control-sm" placeholder="Why keep it? (optional)" aria-label="Why keep it" />
+      <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary text-nowrap">Keep working it</button>
+    </form>
+  {% endif %}
+</div>
+{% endif %}
 
 {# ── SPANCO stepper ── #}
 <div class="ki-card mb-3">
@@ -108,16 +131,17 @@
       </div>
       <div class="ki-table-wrap">
         <table class="ki-table mb-0">
-          <thead><tr><th>Product</th><th>Indicative amount</th><th>Notes</th></tr></thead>
+          <thead><tr><th>Product</th><th>Amount</th><th>Cover</th><th>Notes</th></tr></thead>
           <tbody>
             {% for interest in interests %}
               <tr>
                 <td class="fw-semibold">{{ interest.label }}</td>
-                <td>{% if interest.amount %}Rs {{ interest.amount|floatformat:0 }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if interest.amount %}₹{{ interest.amount|inr }}{% if interest.is_monthly %} <span class="text-muted small">/month · ₹{{ interest.annual_value|compact_inr }} a year</span>{% endif %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if interest.cover_amount %}₹{{ interest.cover_amount|inr }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
                 <td class="small text-muted">{{ interest.note|default:"—" }}</td>
               </tr>
             {% empty %}
-              <tr><td colspan="3" class="text-center text-muted small py-3">
+              <tr><td colspan="4" class="text-center text-muted small py-3">
                 Nothing captured yet — add only the products this lead actually needs.
               </td></tr>
             {% endfor %}

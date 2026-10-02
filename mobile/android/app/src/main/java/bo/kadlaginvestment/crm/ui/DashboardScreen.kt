@@ -332,6 +332,15 @@ private fun PipelineStages(p: JSONObject, onOpenWeb: (String) -> Unit) {
                     Text("All leads →", fontSize = rsp(13))
                 }
             }
+            // Open pipeline in rupees and its forecast (value × each stage's
+            // chance of booking) — the number to compare month on month.
+            if (p.optDouble("value", 0.0) > 0) {
+                Text(
+                    "${p.optString("value_label")} open · forecast ${p.optString("forecast_label")}",
+                    fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = rdp(6)),
+                )
+            }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(rdp(8)),
@@ -368,6 +377,9 @@ private fun StageChip(st: JSONObject, onClick: () -> Unit) {
             st.optString("label").substringBefore(" /"),
             fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (st.optDouble("value", 0.0) > 0) {
+            Text(st.optString("value_label"), fontSize = rsp(10), color = tint, fontWeight = FontWeight.SemiBold)
+        }
     }
 }
 
@@ -469,6 +481,8 @@ private fun BoardLeadCard(l: JSONObject, onClick: () -> Unit) {
                         if (owner.isNotBlank()) " · $owner" else "",
                     fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(rdp(4)))
+                LeadSizeChips(l)
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 if (chased) {

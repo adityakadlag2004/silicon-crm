@@ -795,6 +795,61 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   (`/clients/leads/?stage=x`, `/clients/leads/<id>/`) into the native
   `LeadsScreen` via the overlay string `leads:<id|stage>`.
 
+## Lead size and age (the chips, and value-first lists)
+
+- Every lead row — web list, web board, detail header, app list, app detail,
+  app home board — wears two chips: **size** (`Lead.total_value`, a year) and
+  **age** (`Lead.age_days`, days since it was *added*, not since its stage
+  moved — `days_in_stage` already says that).
+- **Size is yearly business, and comparable.** `LeadInterest.amount` is the
+  premium a year for insurance, the **monthly** instalment for a SIP (counted
+  ×12, `LeadInterest.MONTHLY_CODES`), else the amount to invest. **Cover is
+  `cover_amount` and never counts** — a ₹1 crore term cover on a ₹15,000
+  premium is a ₹15,000 lead. `LeadInterest.annual_value` (Python) and
+  `services.leads.value_expr` (SQL) are twins: change both or neither.
+- **Derived, never stored.** `with_value` annotates `deal_value` so a list can
+  sort on it; `total_value` reads the annotation or falls back to the
+  interests. Tiers (`Lead.VALUE_TIERS`: Premium ≥ ₹5L, High ≥ ₹1L, Mid ≥ ₹25K,
+  Small) and age bands (`Lead.AGE_BANDS`: amber past 30 days, red past 90) are
+  rupee/day floors, not percentiles, so "Premium" means the same on everyone's
+  list. "No amount" is shown on purpose — it is the nudge to capture one.
+- **Lists open highest value first** (`SORTS` / `ordered`; unvalued leads sink),
+  with Oldest lead and Recently moved as the alternatives. **Size filters**
+  (`SIZES` / `filter_size`) are "this tier and up" — High & up is the Premium +
+  High one-click view — and live in `_apply_lead_filters`, so the list, its
+  stage tiles and the board all honour them; the app's stage counts do too. A
+  pk subquery, so counts and sums taken off the result stay plain.
+- **Value and forecast per stage** (`stage_values`, one query): value ×
+  `Lead.STAGE_PROBABILITY` (5/10/25/50/80%). The caller picks the leads; the
+  open pipeline is Suspect → Conclusion — Order is booked, never "to win". On
+  the list's stage tiles, the board's column heads, the pipeline report and the
+  app home card. It is a weighted pipeline, **not** a this-month forecast:
+  leads carry no expected-close date, and inventing one per lead is the next
+  step if month-bound forecasting is wanted.
+- **Premium leads ring when ignored.** `premium_lead_alerts` (CRONJOBS, daily
+  9:10) gives the owner one **HIGH** follow-up task due 10:00 for each premium
+  lead untouched for 7 days — no stage move, remark or follow-up activity
+  (`quiet_premium_leads`). It is a lead follow-up, so the open task is the
+  dedup, closing it counts as activity, and lost/converted cancels it. HIGH on
+  purpose: there are few premium leads, and losing one quietly is expensive.
+- **Dropping a premium lead needs sign-off.** `mark_lost` is the gate (both
+  doors call it): an employee's drop of a `LOSS_SIGNOFF_TIERS` lead becomes
+  `request_loss` — `Lead.loss_requested_at/_by` (migration 0134), a
+  `loss_requested` stage event, and one medium task per active admin/manager
+  (`assign_group "lossreq:<event>"`, source = the lead). A decider approves by
+  marking it lost (web banner / app button) or `decline_loss`; a stage move
+  withdraws it. `user=None` (seeds, commands) is never asked. The app answers
+  `requested: true` with a `message`, which the lead screen shows.
+- `fix_lead_wealth_targets` (manual, dry run by default) re-files the
+  pre-SPANCO "Wealth" *targets* (≥ ₹1L) that migration 0119 put on SIP onto
+  Lumpsum — ×12 would have valued a ₹1 crore target at ₹12 crore.
+- The app's requirement card opens an editor (amount / cover / note); the
+  phone could not enter an amount at all before, and `app_lead_interest` now
+  writes only the fields it is sent — re-picking a product used to blank it.
+- The web partial is `leads/_lead_chips.html`; the app's is `LeadSizeChips`,
+  which maps the tier/band **keys** onto theme colours for dark mode.
+- `clients.test.test_lead_value` pins all of it.
+
 ## Lead documents (quotations) live in Drive
 
 - Each lead's files sit in Drive under **`Leads/<name> (#id)`**, created on the
@@ -1126,7 +1181,7 @@ signal there is, since the app is self-hosted with no Play Console.
 
 - (none currently — `monthly_snapshot` + `MonthlyIncentive` deleted 2026-07-16;
   the admin incentive report always computes live from `Sale` now)
-- Manual tools (intentionally not in CRONJOBS): `fix_phone_floats`,
+- Manual tools (intentionally not in CRONJOBS): `fix_phone_floats`, `fix_lead_wealth_targets`,
   `prod_readiness_check`, `recompute_client_holdings`,
   `backfill_insurance_policies`, `retirement_alerts --backlog`,
   `seed_demo_tasks_links`, `seed_demo_crm`, `seed_life_rates`, `seed_health_slabs`,

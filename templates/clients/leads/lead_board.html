@@ -16,7 +16,7 @@
 </div>
 
 <form method="get" class="row g-2 align-items-end mb-3">
-  <div class="col-sm-4">
+  <div class="col-sm-3">
     <label class="form-label small text-muted mb-0" for="board-q">Search</label>
     <input type="search" id="board-q" name="q" value="{{ search_term }}" class="form-control form-control-sm" placeholder="Customer name" />
   </div>
@@ -31,6 +31,15 @@
     </select>
   </div>
   {% endif %}
+  <div class="col-sm-2">
+    <label class="form-label small text-muted mb-0" for="board-size">Size</label>
+    <select name="size" id="board-size" class="form-select form-select-sm">
+      <option value="">All sizes</option>
+      {% for value, label in sizes %}
+        <option value="{{ value }}" {% if size_filter == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
   <div class="col-sm-3 d-flex gap-2">
     <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit">Apply</button>
     <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:lead_board' %}">Clear</a>
@@ -38,8 +47,10 @@
 </form>
 
 {% if capped %}
-  <div class="alert alert-warning small">Showing the 400 oldest-waiting leads. Filter by employee or search to narrow the board.</div>
+  <div class="alert alert-warning small">Showing the 400 highest-value leads. Filter by employee or search to narrow the board.</div>
 {% endif %}
+
+<div class="small mb-2"><strong>Open pipeline ₹{{ pipeline.value|compact_inr }}</strong> <span class="text-muted">· forecast ₹{{ pipeline.forecast|compact_inr }} (value × each stage's chance of booking)</span></div>
 
 <div class="ki-board">
   {% for col in columns %}
@@ -48,11 +59,13 @@
         <span class="t">{{ col.label }}</span>
         <span class="n">{{ col.count }}</span>
       </div>
+      <div class="val">{% if col.value %}₹{{ col.value|compact_inr }}{% if col.forecast %} <span>· exp ₹{{ col.forecast|compact_inr }}</span>{% endif %}{% else %}<span>No amounts yet</span>{% endif %}</div>
       <div class="hint">{{ col.help }}</div>
       {% for lead in col.leads %}
         <a class="ki-board-card" href="{% url 'clients:lead_detail' lead.id %}">
           <div class="nm">{{ lead.customer_name }}</div>
           <div class="mt">{{ lead.assigned_to.user.username }}{% for e in lead.collaborators.all %} + {{ e.user.username }}{% endfor %} · {{ lead.days_in_stage }}d here</div>
+          <div class="ki-tags mb-0 mt-1">{% include "clients/leads/_lead_chips.html" %}</div>
         </a>
       {% empty %}
         <div class="text-muted small">Empty.</div>

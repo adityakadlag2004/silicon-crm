@@ -41,11 +41,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -153,6 +156,11 @@ private fun LeadList(
     onSessionExpired: () -> Unit,
 ) {
     var stage by remember(initialStage) { mutableStateOf(initialStage) }
+    // Highest value first by default: the list is for working the biggest
+    // business first. Saveable, so rotating doesn't reset the order.
+    var sort by rememberSaveable { mutableStateOf("value") }
+    // "" = every size; otherwise a band from /lead-meta/ ("high" = High & up).
+    var size by rememberSaveable { mutableStateOf("") }
     var q by remember { mutableStateOf("") }
     var rows by remember { mutableStateOf(listOf<JSONObject>()) }
     var counts by remember { mutableStateOf<JSONObject?>(null) }
@@ -163,11 +171,11 @@ private fun LeadList(
     var localReload by remember { mutableIntStateOf(0) }
     val stageOrder = remember(meta) { meta.stageList().map { it.first } }
 
-    LaunchedEffect(stage, q, page, reloadKey, localReload) {
+    LaunchedEffect(stage, sort, size, q, page, reloadKey, localReload) {
         loading = true
         error = null
         if (q.isNotEmpty()) delay(350)
-        val path = "/clients/api/app/leads/?stage=$stage&page=$page&q=" +
+        val path = "/clients/api/app/leads/?stage=$stage&sort=$sort&size=$size&page=$page&q=" +
             java.net.URLEncoder.encode(q, "UTF-8")
         when (val r = ApiClient.get(path)) {
             is ApiClient.Result.Ok -> {
@@ -198,6 +206,26 @@ private fun LeadList(
                 Chip("$label ${c?.optInt(value) ?: ""}".trim(), stage == value) { stage = value; page = 1 }
             }
             Chip("Lost ${c?.optInt("lost") ?: ""}".trim(), stage == "lost") { stage = "lost"; page = 1 }
+        }
+        Spacer(Modifier.height(rdp(6)))
+        // Size bands, then sort orders — one scrolling row, both served by
+        // /lead-meta/ like the stages. Tapping the selected band clears it.
+        val sizes = meta.optJSONArray("sizes")
+        val sorts = meta.optJSONArray("sorts")
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(rdp(6)),
+        ) {
+            for (i in 0 until (sizes?.length() ?: 0)) {
+                val o = sizes!!.getJSONObject(i)
+                val v = o.optString("value")
+                Chip(o.optString("label"), size == v) { size = if (size == v) "" else v; page = 1 }
+            }
+            for (i in 0 until (sorts?.length() ?: 0)) {
+                val o = sorts!!.getJSONObject(i)
+                val v = o.optString("value")
+                Chip("↕ ${o.optString("label")}", sort == v) { sort = v; page = 1 }
+            }
         }
         Spacer(Modifier.height(rdp(8)))
 
@@ -253,6 +281,8 @@ private fun LeadList(
                                         fontSize = rsp(11), color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
+                                Spacer(Modifier.height(rdp(4)))
+                                LeadSizeChips(l)
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 LeadStagePill(
@@ -285,6 +315,97 @@ private fun LeadList(
     }
 }
 
+/** A lead's size and age as two pills — the server's `_lead_size` fields.
+ * Tier and band arrive as keys and are mapped onto theme colours here, so
+ * dark mode gets its own shades. Shared with the home screen's board. */
+@Composable
+fun LeadSizeChips(l: JSONObject) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val tier = l.optString("value_tier")
+    val tierColor = when (tier) {
+        "premium" -> MaterialTheme.colorScheme.secondary
+        "high" -> StatusGreen
+        "mid" -> if (isSystemInDarkTheme()) Color(0xFF60A5FA) else Color(0xFF0369A1)
+        else -> muted
+    }
+    val ageColor = when (l.optString("age_band")) {
+        "old" -> StatusRed
+        "aging" -> StatusAmber
+        else -> muted
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(rdp(6))) {
+        Pill(
+            when {
+                tier.isBlank() -> "No amount"
+                tier == "premium" -> "★ ${l.optString("value_label")}"
+                else -> l.optString("value_label")
+            },
+            tierColor,
+        )
+        Pill("${l.optString("age_label")} old", ageColor)
+        if (l.optBoolean("loss_requested")) Pill("Drop requested", StatusRed)
+    }
+}
+
+/** Amount, cover and note for one requirement. The amount is a premium a
+ * year, a SIP a month, else what is to be invested — the label says which,
+ * because the server counts a SIP ×12 when it sizes the lead. */
+@Composable
+private fun InterestEditor(
+    p: JSONObject,
+    onDismiss: () -> Unit,
+    onSave: (amount: String, cover: String, note: String) -> Unit,
+) {
+    fun initial(key: String) = p.optDouble(key, 0.0).takeIf { it > 0 }
+        ?.let { java.math.BigDecimal(it).stripTrailingZeros().toPlainString() } ?: ""
+    var amount by remember { mutableStateOf(initial("amount")) }
+    var cover by remember { mutableStateOf(initial("cover_amount")) }
+    var note by remember { mutableStateOf(p.optString("note")) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(p.optString("label")) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(rdp(8))) {
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = moneyInput(it) },
+                    label = {
+                        Text(
+                            when {
+                                p.optBoolean("monthly") -> "SIP a month (₹)"
+                                p.optBoolean("insurance") -> "Premium a year (₹)"
+                                else -> "Amount (₹)"
+                            }
+                        )
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (p.optBoolean("insurance")) {
+                    OutlinedTextField(
+                        value = cover,
+                        onValueChange = { cover = moneyInput(it) },
+                        label = { Text("Cover / sum assured (₹)") },
+                        supportingText = { Text("Shown on the lead, never counted as its value") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("What they asked for") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = { Button(onClick = { onSave(amount, cover, note) }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
 @Composable
 private fun LeadStagePill(stageLabel: String, lost: Boolean, converted: Boolean) {
     val (color, label) = when {
@@ -315,6 +436,8 @@ private fun LeadDetail(
     var followupNote by remember { mutableStateOf("") }
     var correcting by remember { mutableStateOf(false) }
     var productMenuOpen by remember { mutableStateOf(false) }
+    // The requirement being edited (amount / cover / note), or null.
+    var editing by remember { mutableStateOf<JSONObject?>(null) }
     var reloadKey by remember { mutableIntStateOf(0) }
     var docs by remember { mutableStateOf<JSONObject?>(null) }
     var docsKey by remember { mutableIntStateOf(0) }
@@ -387,7 +510,11 @@ private fun LeadDetail(
                     // network and swap the lead for an error box.
                     if (r.json.optBoolean("queued")) {
                         AppMessage.show("No signal — saved on the phone, it will sync.")
-                    } else then()
+                    } else {
+                        // e.g. a premium lead's drop went to a manager instead.
+                        r.json.optString("message").takeIf { it.isNotBlank() }?.let { AppMessage.show(it) }
+                        then()
+                    }
                 is ApiClient.Result.NotLoggedIn -> onSessionExpired()
                 is ApiClient.Result.Error -> actionError = r.message
             }
@@ -410,6 +537,7 @@ private fun LeadDetail(
                 d.optInt("converted_client_id") > 0,
             )
         }
+        LeadSizeChips(d)
 
         val phone = d.optString("phone")
         ActionRow {
@@ -438,6 +566,42 @@ private fun LeadDetail(
         }
 
         actionError?.let { Text(it, color = StatusRed, fontSize = rsp(13), fontWeight = FontWeight.SemiBold) }
+        // A premium lead its owner asked to drop: it stays live until an
+        // admin or manager agrees (`services.leads.mark_lost`).
+        d.optJSONObject("loss_request")?.let { req ->
+            Card(colors = CardDefaults.cardColors(containerColor = StatusAmber.copy(alpha = 0.14f))) {
+                Column(Modifier.fillMaxWidth().padding(rdp(12)), verticalArrangement = Arrangement.spacedBy(rdp(6))) {
+                    Text(
+                        "${req.optString("by").ifBlank { "Someone" }} asked to drop this Premium lead · ${req.optString("at")}",
+                        fontSize = rsp(13), fontWeight = FontWeight.SemiBold,
+                    )
+                    if (req.optString("reason").isNotBlank()) {
+                        Text("“${req.optString("reason")}”", fontSize = rsp(12))
+                    }
+                    if (d.optBoolean("can_decide_loss")) {
+                        ActionRow {
+                            OutlinedButton(onClick = {
+                                post(
+                                    "/clients/api/app/leads/$leadId/action/",
+                                    JSONObject().put("action", "discard").put("reason", req.optString("reason")),
+                                )
+                            }) { Text("Approve — mark lost") }
+                            Button(onClick = {
+                                post(
+                                    "/clients/api/app/leads/$leadId/action/",
+                                    JSONObject().put("action", "decline_loss").put("note", stageNote),
+                                )
+                            }) { Text("Keep working it") }
+                        }
+                    } else {
+                        Text(
+                            "An admin or manager has to agree. Until then it stays in the pipeline.",
+                            fontSize = rsp(12), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
         if (d.optInt("converted_client_id") > 0) {
             Text(
                 "Converted to client #${d.optInt("converted_client_id")}",
@@ -511,7 +675,10 @@ private fun LeadDetail(
         }
         for (i in 0 until (interests?.length() ?: 0)) {
             val p = interests!!.getJSONObject(i)
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Card(
+                modifier = Modifier.clickable { editing = p },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            ) {
                 Row(
                     Modifier.fillMaxWidth().padding(rdp(12)),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -520,12 +687,15 @@ private fun LeadDetail(
                     Column(Modifier.weight(1f)) {
                         Text(p.optString("label"), fontWeight = FontWeight.SemiBold, fontSize = rsp(14))
                         val amount = p.optDouble("amount", 0.0)
-                        if (amount > 0) {
-                            Text(
-                                rupees(amount), fontSize = rsp(12),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        val cover = p.optDouble("cover_amount", 0.0)
+                        Text(
+                            listOfNotNull(
+                                if (amount > 0) rupees(amount) + if (p.optBoolean("monthly")) " a month" else "" else "Tap to add the amount",
+                                if (cover > 0) "cover ${rupees(cover)}" else null,
+                            ).joinToString(" · "),
+                            fontSize = rsp(12),
+                            color = if (amount > 0) MaterialTheme.colorScheme.onSurfaceVariant else StatusAmber,
+                        )
                         if (p.optString("note").isNotEmpty()) {
                             Text(
                                 p.optString("note"), fontSize = rsp(11),
@@ -560,6 +730,17 @@ private fun LeadDetail(
                         },
                     )
                 }
+            }
+        }
+
+        editing?.let { p ->
+            InterestEditor(p, onDismiss = { editing = null }) { amount, cover, note ->
+                editing = null
+                post(
+                    "/clients/api/app/leads/$leadId/interest/",
+                    JSONObject().put("product_id", p.optInt("product_id"))
+                        .put("amount", amount).put("cover_amount", cover).put("note", note),
+                )
             }
         }
 

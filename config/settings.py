@@ -192,6 +192,10 @@ CRONJOBS = [
     # Renewals entered 4 days ago with the Drive tick still blank: one task for
     # the employee who entered them to upload the issued policy. Daily 9 AM.
     ('0 9 * * *', 'django.core.management.call_command', ['renewal_upload_reminders']),
+    # Premium leads nobody has touched in 7 days: one high-priority follow-up
+    # task for the owner, due 10 AM, so it rings at the due minute and re-rings
+    # every 4h until acknowledged. Daily 9:10 AM.
+    ('10 9 * * *', 'django.core.management.call_command', ['premium_lead_alerts']),
     # Last month's celebration winners, pushed to every active employee. 10 AM
     # on the 2nd — a day's grace for month-end sales awaiting approval.
     ('0 10 2 * *', 'django.core.management.call_command', ['celebration_announce']),

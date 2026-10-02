@@ -28,6 +28,7 @@ from ..models import (
 from ..services import incentives as _incentives
 from ..services import calls as calls_service
 from ..services import sales as sales_service
+from ..templatetags.custom_filters import compact_inr
 from ..utils.phone_utils import digits10
 from .helpers import get_manager_access, name_words_q, product_mix
 from ..services import business_report
@@ -217,6 +218,7 @@ def app_dashboard(request):
     # prefetch is dropped, nothing here renders it.
     lead_qs = _lead_qs(request).prefetch_related(None)
     standing = lead_service.stage_counts(lead_qs.filter(is_discarded=False))
+    values = lead_service.stage_values(lead_qs.filter(is_discarded=False))
     data["pipeline"] = {
         "stages": [
             {
@@ -224,10 +226,18 @@ def app_dashboard(request):
                 "label": label,
                 "count": standing.get(stage, 0),
                 "hot": stage in Lead.STAGE_HOT,
+                "value": values[stage]["value"],
+                "value_label": f"₹{compact_inr(values[stage]['value'])}",
             }
             for stage, label in Lead.STAGE_CHOICES
         ],
         "live": sum(standing.values()),
+        # The open pipeline in rupees and its forecast (value × each stage's
+        # chance of booking) — the number to compare month on month.
+        "value": values["pipeline"]["value"],
+        "value_label": f"₹{compact_inr(values['pipeline']['value'])}",
+        "forecast": values["pipeline"]["forecast"],
+        "forecast_label": f"₹{compact_inr(values['pipeline']['forecast'])}",
         # One page per stage from Approach on — the screen is swiped through
         # stage by stage, and each lead says on its own card whether it is
         # being chased. A separate "needs you" list beside it would print the
@@ -246,6 +256,7 @@ def app_dashboard(request):
                         "phone": r["lead"].phone or "",
                         "owner": r["owner"],
                         "days_in_stage": r["days_in_stage"],
+                        **_lead_size(r["lead"]),
                         "followups": r["followups"],
                         "next_followup": (r["next_followup"].isoformat()
                                           if r["next_followup"] else None),
@@ -1122,7 +1133,7 @@ def app_notifications_read(request):
 
 from django.db import transaction  # noqa: E402
 
-from ..models import Lead, LeadInterest, Task  # noqa: E402
+from ..models import Lead, LeadInterest, LeadStageEvent, Task  # noqa: E402
 from ..services import followups as followups_service  # noqa: E402
 from ..services import leads as lead_service  # noqa: E402
 
@@ -1140,6 +1151,26 @@ def _can_assign_leads(request):
     return permissions.is_admin_or_manager(request.user)
 
 
+def _lead_size(lead):
+    """The value + age chips' data, shared by every lead row the app draws.
+
+    Tier and band go out as keys, not colours: the app maps them onto its
+    theme so dark mode gets its own shades. The labels are formatted here so
+    "₹12L" reads the same on the phone as on the web.
+    """
+    value, tier = lead.total_value, lead.value_tier
+    return {
+        "value": _money(value),
+        "value_label": f"₹{compact_inr(value)}" if tier else "",
+        "value_tier": tier["key"] if tier else "",
+        "age_days": lead.age_days,
+        "age_label": lead.age_label,
+        "age_band": lead.age_band[0],
+        # A premium lead the owner asked to drop, waiting on a manager.
+        "loss_requested": bool(lead.loss_requested_at),
+    }
+
+
 def _interest_summary(lead):
     """"Health Insurance · SIP" — what this lead actually wants, or blank."""
     return " · ".join(i.label for i in lead.interests.all()[:3])
@@ -1153,10 +1184,15 @@ def app_lead_meta(request):
         "stages": [
             {"value": v, "label": l, "help": Lead.STAGE_HELP[v]} for v, l in Lead.STAGE_CHOICES
         ],
+        # `monthly`: the amount is a monthly instalment (SIP — counted ×12).
+        # `insurance`: the requirement can carry a cover amount.
         "products": [
-            {"id": p.id, "name": p.name}
+            {"id": p.id, "name": p.name, "insurance": p.is_insurance,
+             "monthly": p.code in LeadInterest.MONTHLY_CODES}
             for p in Product.objects.selectable().main().in_display_order()
         ],
+        "sorts": [{"value": k, "label": label} for k, (label, _o) in lead_service.SORTS.items()],
+        "sizes": [{"value": k, "label": label} for k, (label, _f) in lead_service.SIZES.items()],
     }
     if _can_assign_leads(request):
         data["employees"] = [
@@ -1169,7 +1205,9 @@ def app_lead_meta(request):
 @login_required
 @require_GET
 def app_leads(request):
-    qs = _lead_qs(request)
+    # Size narrows the stage counts too, so a chip never counts leads the
+    # list below it would not show.
+    qs = lead_service.filter_size(_lead_qs(request), request.GET.get("size", ""))
 
     live = qs.filter(is_discarded=False)
     counts = {stage: 0 for stage, _ in Lead.STAGE_CHOICES}
@@ -1197,7 +1235,7 @@ def app_leads(request):
     except ValueError:
         page = 1
     start, end = (page - 1) * _PAGE, page * _PAGE
-    rows = list(qs.order_by("-stage_changed_at", "-updated_at")[start:end + 1])
+    rows = list(lead_service.ordered(qs, request.GET.get("sort", ""))[start:end + 1])
 
     return JsonResponse({
         "counts": counts,
@@ -1214,6 +1252,7 @@ def app_leads(request):
                 "is_discarded": l.is_discarded,
                 "converted": bool(l.converted_client_id),
                 "interests": _interest_summary(l),
+                **_lead_size(l),
                 "assigned_to": (
                     l.assigned_to.user.get_full_name() or l.assigned_to.user.username
                 ) if l.assigned_to_id and l.assigned_to.user_id else "",
@@ -1242,6 +1281,7 @@ def app_lead_detail(request, lead_id):
         "stage_help": lead.stage_help,
         "next_stage": lead.next_stage or "",
         "days_in_stage": lead.days_in_stage,
+        **_lead_size(lead),
         "is_discarded": lead.is_discarded,
         "lost_reason": lead.lost_reason,
         "converted_client_id": lead.converted_client_id,
@@ -1260,10 +1300,23 @@ def app_lead_detail(request, lead_id):
                 "product_id": i.product_id,
                 "label": i.label,
                 "amount": _money(i.amount) if i.amount is not None else None,
+                "cover_amount": _money(i.cover_amount) if i.cover_amount is not None else None,
+                "monthly": i.is_monthly,
+                "insurance": bool(i.product_id and i.product.is_insurance),
                 "note": i.note,
             }
             for i in lead.interests.all()
         ],
+        "loss_request": (
+            {
+                "by": lead.loss_requested_by.username if lead.loss_requested_by_id else "",
+                "at": timezone.localtime(lead.loss_requested_at).strftime("%d %b, %I:%M %p"),
+                "reason": getattr(lead.stage_events.filter(
+                    to_stage=LeadStageEvent.LOSS_REQUESTED).first(), "note", ""),
+            }
+            if lead.loss_requested_at else None
+        ),
+        "can_decide_loss": lead_service.can_decide_loss(request.user),
         "timeline": [
             {
                 "from": e.from_label,
@@ -1438,17 +1491,28 @@ def app_lead_interest(request, lead_id):
     if not product:
         return JsonResponse({"ok": False, "error": "Unknown product."}, status=400)
 
-    amount = None
-    raw = body.get("amount")
-    if raw not in (None, ""):
+    # Only the fields sent are written. The old screen posted the product id
+    # alone, and writing every field reset a requirement's amount to blank
+    # whenever the same product was picked again.
+    defaults = {}
+    for key in ("amount", "cover_amount"):
+        if key not in body:
+            continue
+        raw = body.get(key)
+        if raw in (None, ""):
+            defaults[key] = None
+            continue
         try:
-            amount = Decimal(str(raw))
+            defaults[key] = Decimal(str(raw))
         except InvalidOperation:
             return JsonResponse({"ok": False, "error": "Invalid amount."}, status=400)
+        if defaults[key] < 0:
+            return JsonResponse({"ok": False, "error": "Amounts cannot be negative."}, status=400)
+    if "note" in body:
+        defaults["note"] = str(body.get("note") or "").strip()[:255]
 
     interest, _created = LeadInterest.objects.update_or_create(
-        lead=lead, product=product,
-        defaults={"amount": amount, "note": str(body.get("note") or "").strip()[:255]},
+        lead=lead, product=product, defaults=defaults,
     )
     return JsonResponse({"ok": True, "id": interest.id})
 
@@ -1478,7 +1542,19 @@ def app_lead_action(request, lead_id):
     action = body.get("action")
 
     if action == "discard":
-        lead_service.mark_lost(lead, user=request.user, reason=str(body.get("reason") or "").strip())
+        event = lead_service.mark_lost(lead, user=request.user,
+                                       reason=str(body.get("reason") or "").strip())
+        if (event and event.to_stage == LeadStageEvent.LOSS_REQUESTED) or lead.loss_requested_at:
+            return JsonResponse({
+                "ok": True, "requested": True,
+                "message": "This is a Premium lead — an admin or manager has been asked "
+                           "to sign off before it is dropped.",
+            })
+    elif action == "decline_loss":
+        if not lead_service.can_decide_loss(request.user):
+            return JsonResponse({"ok": False, "error": "Only an admin or manager can decide this."},
+                                status=403)
+        lead_service.decline_loss(lead, request.user, str(body.get("note") or "").strip())
     elif action == "undiscard":
         lead_service.reopen(lead, user=request.user)
     elif action == "convert":

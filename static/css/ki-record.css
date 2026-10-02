@@ -455,6 +455,8 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
 .ki-board-head { display: flex; justify-content: space-between; align-items: baseline; gap: .4rem; }
 .ki-board-head .t { font-weight: 700; font-size: .85rem; color: var(--c, var(--ki-primary)); }
 .ki-board-head .n { font-size: .8rem; color: var(--ki-text-secondary); }
+.ki-board-col .val { font-size: .8rem; font-weight: 700; color: var(--ki-text-primary); margin-top: .15rem; }
+.ki-board-col .val span { font-weight: 400; color: var(--ki-text-secondary); }
 .ki-board-col .hint { font-size: .7rem; color: var(--ki-text-light); margin: .25rem 0 .6rem; line-height: 1.35; }
 .ki-board-card {
   display: block; text-decoration: none; background: var(--ki-bg, #fff);

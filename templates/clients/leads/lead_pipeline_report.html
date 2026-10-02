@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 {% block title %}Pipeline Report{% endblock %}
 {% block page_title %}Pipeline Report{% endblock %}
 {% block content %}
@@ -30,7 +31,7 @@
         </div>
         <div class="ki-funnel-bar"><span style="width: {{ s.reached_pct }}%;"></span></div>
         <div class="small text-muted mt-1">
-          Standing here now: {{ s.standing }}{% if s.lost_here %} · lost at this step: <span class="text-danger">{{ s.lost_here }}</span>{% endif %}
+          Standing here now: {{ s.standing }}{% if s.value %} · worth ₹{{ s.value|compact_inr }}{% if s.forecast %} × {{ s.probability }}% = <strong>₹{{ s.forecast|compact_inr }}</strong> expected{% endif %}{% endif %}{% if s.lost_here %} · lost at this step: <span class="text-danger">{{ s.lost_here }}</span>{% endif %}
         </div>
       </div>
     {% endfor %}
