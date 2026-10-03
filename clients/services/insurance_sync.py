@@ -60,6 +60,17 @@ def _plus_one_year(d):
         return d.replace(year=d.year + 1, day=28)
 
 
+def _paid_through(renewal):
+    """When the premium this renewal collected runs out. A half-yearly life
+    instalment pays for six months, not a year — a flat +1 year skipped the
+    reminder for every instalment in between."""
+    if renewal.renewal_end_date or not renewal.renewal_date:
+        return renewal.renewal_end_date
+    from .tasks import _add_months
+    months = Sale.PREMIUM_MODE_MONTHS.get(renewal.frequency, 12)
+    return _add_months(renewal.renewal_date, months)
+
+
 def sync_policy_from_sale(sale: Sale) -> InsurancePolicy | None:
     """Create or update the tracker policy for a Health/Life insurance sale.
 
@@ -230,7 +241,7 @@ def sync_policy_from_renewal(renewal: Renewal) -> InsurancePolicy | None:
         status=InsurancePolicy.STATUS_ACTIVE,
         premium_amount=renewal.premium_amount or 0,
         start_date=start,
-        end_date=renewal.renewal_end_date or _plus_one_year(start),
+        end_date=_paid_through(renewal),
         relationship_manager=renewal.employee,
         notes="Auto-created from a renewal entry — confirm the policy details.",
     )
@@ -313,7 +324,7 @@ def _advance_cover(policy, renewal):
     Only ever moves the date *forward* — back-entering an old renewal must not
     pull live cover backwards.
     """
-    new_end = renewal.renewal_end_date or _plus_one_year(renewal.renewal_date)
+    new_end = _paid_through(renewal)
     if not new_end or (policy.end_date and new_end <= policy.end_date):
         return
     policy.end_date = new_end
@@ -369,7 +380,7 @@ def link_renewal_to_policy(renewal, *, selected_policy_id=None, new_policy_numbe
         status=InsurancePolicy.STATUS_ACTIVE,
         premium_amount=renewal.premium_amount or 0,
         start_date=renewal.renewal_date,
-        end_date=renewal.renewal_end_date or _plus_one_year(renewal.renewal_date),
+        end_date=_paid_through(renewal),
         relationship_manager=renewal.employee,
         notes="Auto-created from a renewal entry — confirm the policy details.",
     )

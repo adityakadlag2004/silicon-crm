@@ -44,6 +44,7 @@ def _sale_product_meta(show_margin=False):
     meta = {
         "health_product_names": sorted({p.name for p in products if p.is_health}),
         "insurance_product_names": sorted({p.name for p in products if p.is_insurance}),
+        "life_product_names": sorted({p.name for p in products if p.is_life}),
         "product_children": _product_children_map(),
         "ppt_options": _ppt_options_map(),
         "show_margin": show_margin,

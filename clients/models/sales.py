@@ -129,6 +129,20 @@ class Sale(models.Model):
     EMI_MONTH_CHOICES = [(0, "Not on EMI"), (5, "5 months"), (8, "8 months"), (11, "11 months")]
     emi_months = models.PositiveSmallIntegerField(default=0, choices=EMI_MONTH_CHOICES)
 
+    # Life only: how the client pays the year's premium. The seller types the
+    # policy's YEARLY premium (yearly_premium); `amount` is the first instalment
+    # actually collected — yearly ÷ 2 / 4 / 12 — and that is what points, the FY
+    # ladder and every report read. Later instalments are Renewals (no points).
+    # Same strings as Renewal.frequency, so an instalment renews in kind.
+    PREMIUM_MODE_CHOICES = [("yearly", "Yearly"), ("half_yearly", "Half-yearly"),
+                            ("quarterly", "Quarterly"), ("monthly", "Monthly")]
+    PREMIUM_MODE_MONTHS = {"yearly": 12, "half_yearly": 6, "quarterly": 3, "monthly": 1}
+    premium_mode = models.CharField(max_length=12, choices=PREMIUM_MODE_CHOICES, default="yearly")
+    yearly_premium = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text="Life: the policy's annual premium as entered. Blank on older rows.",
+    )
+
     points = models.DecimalField(max_digits=14, decimal_places=3, default=Decimal("0.000"))
     # The slab-ladder portion of `points`, tracked separately because the
     # earned-to-date delta must be measured against bonus already released —
@@ -153,6 +167,25 @@ class Sale(models.Model):
         if self.product_ref_id:
             return self.product_ref.is_health
         return (self.product or "").strip().lower() == "health insurance"
+
+    def _is_life_product(self):
+        if self.product_ref_id:
+            return self.product_ref.is_life
+        return (self.product or "").strip().lower() == "life insurance"
+
+    @classmethod
+    def first_instalment(cls, yearly, mode):
+        """The premium collected at sale for a life policy paid in `mode`."""
+        months = cls.PREMIUM_MODE_MONTHS.get(mode, 12)
+        return (Decimal(yearly) * months / 12).quantize(Decimal("0.01"))
+
+    def apply_premium_mode(self):
+        """Life: amount = first instalment of yearly_premium. Anything else
+        is paid yearly. Run by save(), so every write path agrees."""
+        if not self._is_life_product():
+            self.premium_mode, self.yearly_premium = "yearly", None
+        elif self.yearly_premium:
+            self.amount = self.first_instalment(self.yearly_premium, self.premium_mode)
 
     @property
     def is_multiyear(self):
@@ -214,10 +247,16 @@ class Sale(models.Model):
         """Date the policy is paid through — the first renewal falls due here.
         For a multiyear policy that's policy_date + policy_years years (the
         client has already paid the intervening years); single-year policies
-        renew a year after commencement. None for non-insurance."""
+        renew a year after commencement. A life policy paid half-yearly /
+        quarterly / monthly is paid through its first instalment only — the
+        next one is due then. None for non-insurance."""
         basis = self.renewal_basis
         if not (self.is_insurance and basis):
             return None
+        months = self.PREMIUM_MODE_MONTHS.get(self.premium_mode, 12)
+        if months < 12:
+            from ..services.tasks import _add_months
+            return _add_months(basis, months)
         return _add_years(basis, self.policy_years or 1)
 
     def next_renewal_date(self, on_or_after=None):
@@ -411,6 +450,7 @@ class Sale(models.Model):
 
         if not self._is_health_product():
             self.policy_type = ""
+        self.apply_premium_mode()
         # The policy number is a matching key (sale ↔ tracker policy ↔ renewals),
         # so normalise it here rather than in each of the four forms/APIs that
         # can set it — "ins123" and "INS123 " must not become two policies.

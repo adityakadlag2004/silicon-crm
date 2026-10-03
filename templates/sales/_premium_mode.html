@@ -1,0 +1,44 @@
+{% comment %}
+Life only: how the client pays the year's premium. Included right after the
+Amount field on all three sale forms; `wrap` is that form's column class.
+For Life the Amount box is the YEARLY premium and the sale is booked at the
+first instalment (Sale.apply_premium_mode) — the hint shows that figure.
+{% endcomment %}
+<div class="{{ wrap }}" id="premium-mode-group" style="display:none;">
+  <label for="id_premium_mode" class="form-label fw-semibold">Premium payment mode</label>
+  <select name="premium_mode" id="id_premium_mode" class="form-select">
+    {% for value, label in form.fields.premium_mode.choices %}
+      <option value="{{ value }}" {% if form.premium_mode.value == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <small class="form-text text-muted d-block">Enter the full year's premium above. Half-yearly, quarterly and monthly: points and reports count the first instalment only; later instalments are entered as renewals.</small>
+  <small class="form-text fw-semibold d-block" id="premium-mode-hint"></small>
+</div>
+{{ life_product_names|json_script:"life-product-names" }}
+<script>
+(function () {
+  const lifeNames = JSON.parse(document.getElementById("life-product-names").textContent);
+  const product = document.getElementById("id_product");
+  const amount = document.getElementById("id_amount");
+  const mode = document.getElementById("id_premium_mode");
+  const group = document.getElementById("premium-mode-group");
+  const hint = document.getElementById("premium-mode-hint");
+  const label = document.querySelector('label[for="id_amount"]').firstChild;
+  const plainLabel = label.textContent;
+  const months = {yearly: 12, half_yearly: 6, quarterly: 3, monthly: 1};
+  function update() {
+    const life = lifeNames.includes(product.value);
+    group.style.display = life ? "" : "none";
+    if (!life) mode.value = "yearly";
+    label.textContent = life ? "Annual Premium (₹) " : plainLabel;
+    const yearly = parseFloat((amount.value || "").replace(/[,₹\s]/g, ""));
+    hint.textContent = (life && yearly > 0 && mode.value !== "yearly")
+      ? "Collected now: ₹" + (yearly * months[mode.value] / 12).toLocaleString("en-IN", {maximumFractionDigits: 2})
+      : "";
+  }
+  product.addEventListener("change", update);
+  mode.addEventListener("change", update);
+  amount.addEventListener("input", update);
+  update();
+})();
+</script>

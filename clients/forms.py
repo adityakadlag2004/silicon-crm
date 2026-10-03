@@ -140,6 +140,13 @@ def _is_health_product_name(product_name):
     return (product_name or "").strip().lower() == "health insurance"
 
 
+def _is_life_product_name(product_name):
+    product = Product.objects.filter(name=(product_name or "").strip()).select_related("parent").first()
+    if product:
+        return product.is_life
+    return (product_name or "").strip().lower() == "life insurance"
+
+
 def _renewal_type_from_product(product_ref):
     if not product_ref:
         return Renewal.PRODUCT_TYPE_OTHER
@@ -292,7 +299,27 @@ class SalePolicyTypeMixin:
                 cleaned_data["policy_years"] = 1
                 cleaned_data["emi_months"] = 0
 
+        # Life: the Amount box holds the YEARLY premium; the sale is booked at
+        # the first instalment actually collected (Sale.apply_premium_mode).
+        # Done here too so the duplicate check compares collected amounts.
+        if "premium_mode" in self.fields:
+            mode = cleaned_data.get("premium_mode") or "yearly"
+            if _is_life_product_name(product) and cleaned_data.get("amount"):
+                self.instance.yearly_premium = cleaned_data["amount"]
+                cleaned_data["amount"] = Sale.first_instalment(cleaned_data["amount"], mode)
+            else:
+                mode = "yearly"
+                self.instance.yearly_premium = None
+            cleaned_data["premium_mode"] = mode
+
         return cleaned_data
+
+    def _show_yearly_premium(self):
+        # Editing a life sale: the Amount box reopens on what was typed (the
+        # yearly premium), not the instalment derived from it.
+        inst = self.instance
+        if inst.pk and inst.yearly_premium and not self.is_bound:
+            self.initial["amount"] = inst.yearly_premium
 
 _POLICY_YEARS_CHOICES = [(1, "Single year"), (2, "2 years"), (3, "3 years")]
 
@@ -303,10 +330,11 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
     policy_years = forms.ChoiceField(choices=_POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
     emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months")
+    premium_mode = forms.ChoiceField(choices=Sale.PREMIUM_MODE_CHOICES, required=False, initial="yearly", label="Premium payment mode")
 
     class Meta:
         model = Sale
-        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "insurer", "policy_doc_submitted", "policy_years", "emi_months"]
+        fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "insurer", "policy_doc_submitted", "policy_years", "emi_months", "premium_mode"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),
@@ -330,10 +358,11 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
     policy_years = forms.ChoiceField(choices=_POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
     emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months")
+    premium_mode = forms.ChoiceField(choices=Sale.PREMIUM_MODE_CHOICES, required=False, initial="yearly", label="Premium payment mode")
 
     class Meta:
         model = Sale
-        fields = ["product", "ppt", "amount", "policy_type", "date", "policy_date", "policy_number", "insurer", "policy_years", "emi_months"]
+        fields = ["product", "ppt", "amount", "policy_type", "date", "policy_date", "policy_number", "insurer", "policy_years", "emi_months", "premium_mode"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),
@@ -343,6 +372,7 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         _init_product_fields(self)
         self._configure_policy_field()
+        self._show_yearly_premium()
 
 
 class RenewalForm(forms.ModelForm):

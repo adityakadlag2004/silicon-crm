@@ -36,6 +36,7 @@
       {{ form.amount }}
       {% if form.amount.errors %}<div class="text-danger small mt-1">{{ form.amount.errors|striptags }}</div>{% endif %}
     </div>
+    {% include "sales/_premium_mode.html" with wrap="mb-3" %}
     <div class="mb-3" id="policy-type-group" style="display:none;">
       <label class="form-label fw-semibold d-block">Policy Type <span class="text-danger">*</span></label>
       <div class="d-flex gap-2 flex-wrap policy-toggle-group">

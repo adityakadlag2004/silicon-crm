@@ -635,6 +635,13 @@ def explain(rule, is_health=False):
             "On 1 April the year's total and the prize both reset to zero. The base does "
             "not reset — it pays from your very first policy of the new year."
         )
+        if rule.product_ref_id and rule.product_ref.is_life:
+            out["notes"].append(
+                "A policy paid half-yearly, quarterly or monthly counts only its first "
+                "instalment — for the base and towards the year's total. A ₹60,000-a-year "
+                "policy paid half-yearly counts ₹30,000. The later instalments are "
+                "renewals and earn nothing."
+            )
         out["notes"].append(
             f"Never reach ₹{_n(slabs[0].threshold)} in a year? The prize is zero, but you "
             f"still earned the base on every policy you wrote."

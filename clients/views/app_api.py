@@ -317,6 +317,7 @@ def app_sale_meta(request):
         products.append({
             "id": p.id, "name": p.name,
             "is_health": is_health, "is_insurance": is_insurance,
+            "is_life": p.is_life,
             "ppt_options": ppt_by_prod.get(p.id, []),
             "subproducts": [
                 {"id": c.id, "name": c.name, "ppt_options": ppt_by_prod.get(c.id, [])}
@@ -470,6 +471,15 @@ def app_sale_create(request):
         policy_date=policy_date, policy_number=policy_number, insurer=insurer,
         policy_years=policy_years, emi_months=emi_months,
     )
+    # Life: `amount` is the yearly premium and the sale is booked at the first
+    # instalment. Before the duplicate check, so it compares collected amounts.
+    # Builds before 4.43 send no mode — a life sale from them is paid yearly.
+    if product.is_life:
+        mode = body.get("premium_mode") or "yearly"
+        if mode not in Sale.PREMIUM_MODE_MONTHS:
+            return JsonResponse({"ok": False, "error": "Invalid premium payment mode."}, status=400)
+        sale.premium_mode, sale.yearly_premium = mode, amount
+        sale.apply_premium_mode()
 
     # Same client + product + amount inside the window is nearly always the
     # same sale entered twice. The app asks, then re-posts with the flag —

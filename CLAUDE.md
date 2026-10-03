@@ -414,6 +414,29 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   `insurance_renewal` **calendar feed** (`services/calendar_feed.py`). Move it
   onto `InsurancePolicy.end_date` when the calendar next gets touched.
 
+## Life premium payment mode (half-yearly / quarterly / monthly)
+
+- A Life sale carries `Sale.premium_mode` (yearly / half_yearly / quarterly /
+  monthly — the same strings as `Renewal.frequency`; migration 0135). The
+  seller types the policy's **yearly** premium (`Sale.yearly_premium`) and
+  `amount` is the **first instalment actually collected** (yearly × months/12).
+- **`amount` is the collected figure on purpose**: points, the FY ladder volume,
+  margin, targets, the Business Report and the Portfolio all read `amount`, so
+  every one of them counts the first instalment with no per-report change. Later
+  instalments are entered as **Renewals**, which never carry points.
+- `Sale.apply_premium_mode()` runs in `save()` (web, app and admin all agree);
+  the web `clean()` and `app_sale_create` also apply it before the duplicate
+  check so it compares collected amounts. Non-life sales are forced to yearly
+  with no `yearly_premium`. Rows from before 0135 have `yearly_premium` blank
+  and are untouched. The edit form reopens on the yearly figure.
+- **Health is unchanged** — its own term + EMI structure (below) is a
+  different thing: one up-front multi-year premium, credited a year at a time.
+- The tracker chases each instalment: `coverage_end()` is policy date + one
+  instalment period, and `insurance_sync._paid_through` advances a policy by
+  the logged renewal's frequency (it used to add a flat year, which skipped
+  every instalment in between).
+- `clients.test.test_life_premium_mode` pins it.
+
 ## Future points (the multiyear statement)
 
 - `/clients/incentives/future-points/` is what an employee is owed but has not

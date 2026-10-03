@@ -88,6 +88,7 @@
           {{ form.amount }}
           <small class="form-text text-muted">Amount used for incentive points calculation</small>
         </div>
+        {% include "sales/_premium_mode.html" with wrap="col-md-6" %}
         <div class="col-md-6" id="cover-amount-group" style="display:none;">
           <label for="id_cover_amount" class="form-label fw-semibold">Cover Amount (₹)</label>
           {{ form.cover_amount }}

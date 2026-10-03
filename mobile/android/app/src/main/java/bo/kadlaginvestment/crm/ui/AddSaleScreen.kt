@@ -76,6 +76,10 @@ fun AddSaleScreen(
     var yearsMenuOpen by remember { mutableStateOf(false) }
     var emiMonths by remember { mutableStateOf(0) }           // 0/5/8/11
     var emiMenuOpen by remember { mutableStateOf(false) }
+    // Life only: the amount typed is the YEARLY premium; the server books the
+    // sale at the first instalment for half-yearly / quarterly / monthly.
+    var premiumMode by remember { mutableStateOf("yearly") }
+    var modeMenuOpen by remember { mutableStateOf(false) }
 
     var selectedEmployee by remember { mutableStateOf<Pair<Int, String>?>(null) }
     var employeeMenuOpen by remember { mutableStateOf(false) }
@@ -184,6 +188,7 @@ fun AddSaleScreen(
                             policyDate = ""; policyNumber = ""
                             policyYears = 1
                             emiMonths = 0
+                            premiumMode = "yearly"
                             productMenuOpen = false
                         },
                     )
@@ -243,14 +248,41 @@ fun AddSaleScreen(
             }
         }
 
+        val isLife = selectedProduct?.optBoolean("is_life") == true
         OutlinedTextField(
             value = amount,
             onValueChange = { amount = moneyInput(it) },
-            label = { Text("Business amount (₹)") },
+            label = { Text(if (isLife) "Annual premium (₹)" else "Business amount (₹)") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
+
+        if (isLife) {
+            val modes = listOf("yearly" to "Yearly", "half_yearly" to "Half-yearly",
+                "quarterly" to "Quarterly", "monthly" to "Monthly")
+            PickerField(
+                "Premium payment mode",
+                modes.first { it.first == premiumMode }.second,
+                { modeMenuOpen = true },
+            ) {
+                DropdownMenu(expanded = modeMenuOpen, onDismissRequest = { modeMenuOpen = false }) {
+                    modes.forEach { (v, lbl) ->
+                        DropdownMenuItem(text = { Text(lbl) }, onClick = { premiumMode = v; modeMenuOpen = false })
+                    }
+                }
+            }
+            val months = mapOf("yearly" to 12, "half_yearly" to 6, "quarterly" to 3, "monthly" to 1)
+            val yearly = amount.replace(",", "").toDoubleOrNull()
+            if (premiumMode != "yearly" && yearly != null && yearly > 0) {
+                Text(
+                    "Collected now: ${rupees(yearly * months.getValue(premiumMode) / 12)} — " +
+                        "points count this first instalment only; later instalments are renewals.",
+                    fontSize = rsp(12),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
 
         if (selectedProduct?.optBoolean("is_insurance") == true) {
             OutlinedTextField(
@@ -374,6 +406,7 @@ fun AddSaleScreen(
                 .put("policy_number", policyNumber)
                 .put("policy_years", policyYears)
                 .put("emi_months", emiMonths)
+                .put("premium_mode", premiumMode)
             if (confirmDuplicate) body.put("confirm_duplicate", true)
             if (selectedEmployee != null) body.put("employee_id", selectedEmployee!!.first)
             when (val r = ApiClient.post("/clients/api/app/sales/create/", body)) {
@@ -384,7 +417,7 @@ fun AddSaleScreen(
                     selectedProduct = null; selectedSubproduct = null; selectedPpt = null
                     amount = ""; coverAmount = ""; policyType = ""
                     policyDate = ""; policyNumber = ""
-                    policyYears = 1; emiMonths = 0
+                    policyYears = 1; emiMonths = 0; premiumMode = "yearly"
                     selectedEmployee = null
                 }
                 is ApiClient.Result.NotLoggedIn -> onSessionExpired()

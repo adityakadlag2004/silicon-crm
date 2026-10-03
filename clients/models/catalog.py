@@ -113,6 +113,12 @@ class Product(models.Model):
         return c.code == "HEALTH_INS" or (c.name or "").strip().lower() == "health insurance"
 
     @property
+    def is_life(self):
+        """Life-insurance products — paid yearly, half-yearly, quarterly or monthly."""
+        c = self.category
+        return c.code == "LIFE_INS" or (c.name or "").strip().lower() == "life insurance"
+
+    @property
     def is_insurance(self):
         """Health or Life — products (and their sub-products) that need a policy date."""
         c = self.category
