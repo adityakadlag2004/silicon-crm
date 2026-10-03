@@ -1160,7 +1160,15 @@ Production is a 1-vCPU / 1 GB droplet, so every fixed per-request cost counts.
      the pattern matches your own shell and you HUP that instead.
    - Before a migration that rewrites or drops data, run
      `scripts/backup_db.sh` first; it dumps and mirrors to Drive in seconds.
-4. **If CRONJOBS changed:** `venv/bin/python manage.py crontab remove && venv/bin/python manage.py crontab add`
+4. **If CRONJOBS changed:** rebuild the django-crontab lines from settings, keeping
+   the hand-added ones (the nightly `backup_db.sh`):
+   `crontab -l > ~/crontab.bak && crontab -l | grep -v "# django-cronjobs for config" | crontab - && venv/bin/python manage.py crontab add`
+   then `venv/bin/python manage.py crontab show` should list every CRONJOBS entry.
+   **Never `crontab remove` after a job was deleted from CRONJOBS**: django-crontab
+   raises on the first hash it no longer knows *and writes the half-removed
+   crontab back* (`add` runs the same removal first). On 2026-10-03 that dropped
+   the every-minute jobs, `tasks_mark_overdue`, `close_month` and `cleanup_data`
+   until the crontab was rebuilt.
 
 ## Release checklist (Android)
 
