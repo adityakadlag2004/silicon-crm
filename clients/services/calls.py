@@ -4,7 +4,8 @@ Outcomes started being recorded in v4.27 ("Done" asks what the call
 produced). One implementation so the two screens can't drift the way the
 call counts once did.
 """
-from django.db.models import Count, Q
+from django.db.models import Count, F, Func, Value
+from django.db.models.functions import Right
 
 from ..models import CallFollowUp, Client, Lead
 from ..utils.phone_utils import digits10
@@ -50,12 +51,15 @@ def caller_names(phones):
     if not keys:
         return {}
 
+    # The last ten digits in SQL — `digits10`'s twin — so the match is one IN
+    # lookup per row. An OR of `phone LIKE '%…'` per number was numbers × rows
+    # comparisons, and missed a phone stored with spaces ("+91 94234 40791").
+    last10 = Right(Func(F("phone"), Value(r"\D"), Value(""), Value("g"),
+                        function="regexp_replace"), 10)
+
     def _index(qs, name_field):
         found = {}
-        match = Q()
-        for key in keys:
-            match |= Q(phone__endswith=key)
-        for row in qs.filter(match).values("id", name_field, "phone"):
+        for row in qs.annotate(d10=last10).filter(d10__in=keys).values("id", name_field, "phone"):
             key = digits10(row["phone"])
             # First row wins: a stable answer beats an arbitrary one when two
             # records share a number.

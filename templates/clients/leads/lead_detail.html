@@ -208,30 +208,21 @@
         <input type="file" name="document" multiple required class="form-control form-control-sm" style="max-width:360px;" aria-label="Choose documents to upload" />
         <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary"><i class="bi bi-upload"></i> Upload</button>
       </form>
-      {% if documents_error %}<div class="alert alert-warning small mx-3">{{ documents_error }}</div>{% endif %}
-      <div class="ki-table-wrap">
-        <table class="ki-table mb-0">
-          <thead><tr><th>File</th><th>Size</th><th>Modified</th><th style="width:110px;"></th></tr></thead>
-          <tbody>
-            {% for d in documents %}
-              <tr>
-                <td class="small"><a href="{% url 'clients:lead_document' lead.id d.id %}" target="_blank" rel="noopener">{{ d.name }}</a></td>
-                <td class="small text-nowrap">{% if d.size %}{{ d.size|filesizeformat }}{% else %}—{% endif %}</td>
-                <td class="small text-nowrap">{{ d.modifiedTime|slice:":10" }}</td>
-                <td class="text-end text-nowrap">
-                  <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_document' lead.id d.id %}?download=1" aria-label="Download {{ d.name }}" title="Download"><i class="bi bi-download"></i></a>
-                  <form method="post" action="{% url 'clients:lead_document_delete' lead.id d.id %}" class="d-inline" onsubmit="return confirm('Delete {{ d.name|escapejs }} from Drive?');">
-                    {% csrf_token %}
-                    <button type="submit" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);" aria-label="Delete {{ d.name }}" title="Delete"><i class="bi bi-trash"></i></button>
-                  </form>
-                </td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="4" class="text-center text-muted small py-3">No documents yet — upload the quotations sent to this lead.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      <div id="lead-documents-list" data-url="{% url 'clients:lead_detail' lead.id %}?documents=1">
+        {% if lead.drive_folder_id %}<div class="text-muted small px-3 pb-3">Loading documents…</div>
+        {% else %}{% include "clients/leads/_lead_documents.html" %}{% endif %}
       </div>
+      {% if lead.drive_folder_id %}
+      <script>
+        (function () {
+          const box = document.getElementById("lead-documents-list");
+          fetch(box.dataset.url, {credentials: "same-origin"})
+            .then(r => r.ok ? r.text() : Promise.reject())
+            .then(html => { box.innerHTML = html; })
+            .catch(() => { box.innerHTML = '<div class="alert alert-warning small mx-3">Could not load the documents. Refresh to try again.</div>'; });
+        })();
+      </script>
+      {% endif %}
     </div>
   </div>
 

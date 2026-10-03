@@ -97,10 +97,22 @@ class LeadDocumentTests(TestCase):
 
     def test_detail_page_survives_drive_being_down(self):
         self._with_folder()
-        with mock.patch(f"{DRIVE}.list_files", side_effect=RuntimeError("boom")):
-            resp = self._as(self.emp).get(reverse("clients:lead_detail", args=[self.lead.pk]))
-        self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "Could not read this lead")
+        url = reverse("clients:lead_detail", args=[self.lead.pk])
+        with mock.patch(f"{DRIVE}.list_files", side_effect=RuntimeError("boom")) as ls:
+            page = self._as(self.emp).get(url)
+            # The page itself never waits on Drive: the list is fetched after it paints.
+            ls.assert_not_called()
+            fragment = self._as(self.emp).get(url + "?documents=1")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "?documents=1")
+        self.assertContains(fragment, "Could not read this lead")
+
+    def test_documents_fragment_lists_files_and_honours_lead_scope(self):
+        self._with_folder()
+        url = reverse("clients:lead_detail", args=[self.lead.pk]) + "?documents=1"
+        with mock.patch(f"{DRIVE}.list_files", return_value=FILES):
+            self.assertContains(self._as(self.emp).get(url), FILES[0]["name"])
+            self.assertEqual(self._as(self.other).get(url).status_code, 404)
 
     def test_app_lists_files_and_gates_folder_delete(self):
         self._with_folder()

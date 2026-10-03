@@ -104,6 +104,12 @@ class CallerNameTests(TestCase):
     def test_an_unknown_number_resolves_to_nothing(self):
         self.assertEqual(calls_service.caller_names(["9999900000"]), {})
 
+    def test_a_number_stored_with_spaces_is_found(self):
+        # Matched on the last ten digits in SQL; the old `phone LIKE '%…'`
+        # missed any number stored with a space in it.
+        Client.objects.create(name="SPACED OUT", phone="+91 98220 11223")
+        self.assertEqual(calls_service.caller_names(["9822011223"])["9822011223"][0], "SPACED OUT")
+
     def test_no_numbers_means_no_queries(self):
         with self.assertNumQueries(0):
             self.assertEqual(calls_service.caller_names([]), {})

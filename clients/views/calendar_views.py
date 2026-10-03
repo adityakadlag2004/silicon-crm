@@ -1,5 +1,6 @@
 """Calendar views: calendar page, unified events feed, CRUD, task actions."""
 import json
+from collections import Counter
 import logging
 from datetime import datetime, time, timedelta
 
@@ -91,6 +92,12 @@ def calendar_events_json(request):
     return JsonResponse(calendar_feed.to_fullcalendar(items), safe=False)
 
 
+# Per source (tasks, call follow-ups), latest first. The widget piles every
+# pre-week overdue item into Monday's 180px column; 10,000 of them was a 3.5 MB
+# response that took seconds to build and showed nobody anything.
+AGENDA_LIMIT = 300
+
+
 @require_GET
 @login_required
 def dashboard_agenda_json(request):
@@ -130,8 +137,12 @@ def dashboard_agenda_json(request):
 
     items = calendar_feed.feed_items(
         emp, start=start, end=end, sources=sources,
-        team_followups=is_admin, employee_id=employee_id,
+        team_followups=is_admin, employee_id=employee_id, limit=AGENDA_LIMIT,
     )
+    # A source that filled its quota was cut short, so the badge says "300+"
+    # rather than passing the visible slice off as the whole overdue count.
+    per_source = Counter(it["source"] for it in items)
+    capped = any(per_source[s] >= AGENDA_LIMIT for s in ("task", "call_followup"))
     if filter_mode == "overdue":
         items = [it for it in items if it["is_overdue"]]
     elif filter_mode == "this_week":
@@ -150,6 +161,7 @@ def dashboard_agenda_json(request):
         "week_dates": week_dates,
         "today": today.isoformat(),
         "overdue_count": sum(1 for it in items if it["is_overdue"]),
+        "capped": capped,
     })
 
 

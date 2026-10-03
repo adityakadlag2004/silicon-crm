@@ -1,0 +1,294 @@
+/* The app shell's top navbar — moved out of base.html so browsers cache it
+   instead of re-downloading it inside every page. Loaded after ki-mobile.css,
+   exactly where the inline <style> sat, so the cascade is unchanged. */
+/* ───────── Top Navbar (industry-standard horizontal nav) ───────── */
+:root {
+  --kn-h: 60px;                 /* navbar height */
+  --kn-bg: #ffffff;
+  --kn-fg: var(--ki-text-primary, #1f2937);
+  --kn-fg-muted: var(--ki-text-secondary, #6b7280);
+  --kn-border: var(--ki-card-border, #e5e7eb);
+  --kn-hover-bg: #f3f4f6;
+  --kn-active-bg: var(--ki-primary-pale, #fef3c7);
+  --kn-active-fg: var(--ki-primary, #d97706);
+  --kn-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04);
+}
+
+body { padding-top: var(--kn-h); background: var(--ki-body-bg, #f9fafb); }
+
+.kn-navbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--kn-h);
+  background: var(--kn-bg);
+  border-bottom: 1px solid var(--kn-border);
+  box-shadow: var(--kn-shadow);
+  display: flex;
+  align-items: center;
+  z-index: 1040;       /* must stay above .kn-overlay so nav slide-out is clickable */
+  padding: 0 1.25rem;
+}
+
+.kn-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  color: var(--kn-fg);
+  text-decoration: none;
+  margin-right: 1.5rem;
+  flex-shrink: 0;
+}
+.kn-brand:hover { color: var(--kn-active-fg); }
+.kn-brand-logo {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--ki-primary, #d97706), #f59e0b);
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+.kn-brand-title { font-size: 0.95rem; white-space: nowrap; }
+
+.kn-toggle {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--kn-border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-size: 1.2rem;
+  color: var(--kn-fg);
+  cursor: pointer;
+  margin-right: 0.5rem;
+}
+.kn-toggle:hover { background: var(--kn-hover-bg); }
+
+.kn-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex: 1;
+  overflow: visible;
+}
+
+.kn-link, .kn-dropdown-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--kn-fg);
+  background: transparent;
+  border: none;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s;
+}
+.kn-link i, .kn-dropdown-toggle i { font-size: 0.95rem; opacity: 0.7; }
+.kn-link:hover, .kn-dropdown-toggle:hover { background: var(--kn-hover-bg); color: var(--kn-fg); }
+.kn-link.active, .kn-dropdown-toggle.active {
+  background: var(--kn-active-bg);
+  color: var(--kn-active-fg);
+}
+.kn-link.active i, .kn-dropdown-toggle.active i { opacity: 1; }
+
+.kn-dropdown { position: relative; }
+.kn-dropdown-toggle .kn-caret {
+  font-size: 0.65rem;
+  opacity: 0.5;
+  margin-left: 0.15rem;
+}
+
+.kn-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 240px;
+  background: var(--kn-bg);
+  border: 1px solid var(--kn-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.05);
+  padding: 0.4rem;
+  list-style: none;
+  margin: 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+  z-index: 1040;
+  max-height: min(72vh, 560px);
+  overflow-y: auto;
+}
+/* Last group in the bar would spill past the right edge. */
+.kn-dropdown.kn-align-right .kn-menu { left: auto; right: 0; }
+.kn-dropdown.open .kn-menu,
+.kn-dropdown:hover .kn-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.kn-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 6px;
+  color: var(--kn-fg);
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+.kn-menu-item:hover { background: var(--kn-hover-bg); color: var(--kn-fg); }
+.kn-menu-item.active { background: var(--kn-active-bg); color: var(--kn-active-fg); }
+.kn-menu-item i { font-size: 0.95rem; opacity: 0.7; width: 18px; text-align: center; }
+.kn-menu-item.active i { opacity: 1; }
+.kn-menu-divider {
+  height: 1px;
+  background: var(--kn-border);
+  margin: 0.35rem 0.2rem;
+}
+.kn-menu-section {
+  padding: 0.4rem 0.7rem 0.2rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--kn-fg-muted);
+  font-weight: 600;
+}
+
+.kn-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.kn-icon-btn {
+  position: relative;
+  background: transparent;
+  border: none;
+  color: var(--kn-fg);
+  font-size: 1.1rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.kn-icon-btn:hover { background: var(--kn-hover-bg); }
+.kn-badge {
+  position: absolute;
+  top: 4px; right: 4px;
+  background: var(--ki-danger, #ef4444);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 16px; height: 16px;
+  border-radius: 8px;
+  display: none;
+  align-items: center; justify-content: center;
+  padding: 0 4px;
+}
+
+.kn-user-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--kn-border);
+  color: var(--kn-fg);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.kn-user-toggle:hover { background: var(--kn-hover-bg); }
+.kn-user-toggle i { font-size: 1.1rem; }
+.kn-user-toggle .kn-caret { font-size: 0.65rem; opacity: 0.6; }
+.kn-user-menu { right: 0; left: auto; min-width: 200px; }
+
+/* Page content */
+.kn-content {
+  padding: 1.5rem 2rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+@media (max-width: 768px) {
+  .kn-content { padding: 1rem; }
+}
+
+/* Module monogram — the coloured two-letter chip on each nav group. */
+.kn-mono {
+  width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto;
+  display: inline-grid; place-items: center; color: #fff;
+  font-size: .62rem; font-weight: 700; letter-spacing: .01em;
+  background: var(--c, var(--ki-primary));
+}
+
+.kn-page-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.kn-page-header h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--kn-fg);
+}
+
+/* ── Narrow screens: hamburger collapses nav into off-canvas ──
+   1280 is where eight groups stop fitting on one line. Keep the JS
+   MOBILE constant in js/ki-shell-nav.js in step with it. */
+@media (max-width: 1280px) {
+  .kn-toggle { display: inline-flex; align-items: center; }
+  .kn-nav {
+    position: fixed;
+    top: var(--kn-h);
+    left: 0;
+    width: min(320px, 90vw);
+    height: calc(100vh - var(--kn-h));
+    background: var(--kn-bg);
+    border-right: 1px solid var(--kn-border);
+    box-shadow: 4px 0 20px rgba(0,0,0,0.1);
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0.5rem;
+    overflow-y: auto;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 1035;
+  }
+  .kn-nav.show { transform: translateX(0); }
+  .kn-nav .kn-link, .kn-nav .kn-dropdown-toggle { width: 100%; justify-content: flex-start; padding: 0.65rem 0.8rem; }
+  .kn-nav .kn-dropdown { width: 100%; }
+  .kn-menu {
+    position: static;
+    opacity: 1; visibility: visible; transform: none;
+    width: 100%;
+    max-height: none;
+    box-shadow: none;
+    border: none;
+    padding: 0 0 0.4rem 1.2rem;
+    margin-top: -0.2rem;
+    display: none;
+  }
+  .kn-dropdown.open .kn-menu { display: block; }
+  .kn-dropdown-toggle .kn-caret { margin-left: auto; transition: transform 0.2s; }
+  .kn-dropdown.open .kn-dropdown-toggle .kn-caret { transform: rotate(180deg); }
+
+  .kn-overlay {
+    display: none;
+    position: fixed;
+    top: var(--kn-h); left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 1030;     /* below .kn-navbar (1040) so nav slide-out stays clickable */
+  }
+  .kn-overlay.show { display: block; }
+
+  .kn-brand-title { display: none; }
+}

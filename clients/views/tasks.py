@@ -457,7 +457,7 @@ def task_detail(request, pk):
         ],
         "task": task,
         "page_title": f"#{task.pk} · {task.title}",
-        "checklist": task.checklist_items.all(),
+        "checklist": task.checklist_items.select_related("completed_by"),
         "comments": task.comments.select_related("author"),
         "attachments": task.attachments.select_related("uploaded_by"),
         "subscribers": task.subscribers.select_related("user"),

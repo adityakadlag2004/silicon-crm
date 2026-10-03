@@ -80,6 +80,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'clients.middleware.SessionRefreshMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -152,12 +153,13 @@ CRONJOBS = [
     ('5 0 1 * *', 'django.core.management.call_command', ['close_month']),
     # Clean old notifications, message logs, expired sessions every Sunday at 3 AM
     ('0 3 * * 0', 'django.core.management.call_command', ['cleanup_data']),
-    # Reminders for due call/lead follow-ups + calendar events, every minute
-    ('* * * * *', 'django.core.management.call_command', ['send_followup_reminders']),
+    # Every minute, in ONE process (clients/cron.py): send_followup_reminders
+    # (due call follow-ups + calendar events) and tasks_ring_due (exact task
+    # due-times + re-ringing unacknowledged high/critical tasks). Each CRONJOBS
+    # line boots its own Django, which the one-vCPU droplet feels every minute.
+    ('* * * * *', 'clients.cron.every_minute'),
     # Flip past-due tasks to Overdue and notify, every 15 minutes
     ('*/15 * * * *', 'django.core.management.call_command', ['tasks_mark_overdue']),
-    # Ring exact task due-times + re-ring unacknowledged high/critical tasks, every minute
-    ('* * * * *', 'django.core.management.call_command', ['tasks_ring_due']),
     # Generate recurring task instances, daily at 12:20 AM
     ('20 0 * * *', 'django.core.management.call_command', ['tasks_generate_recurring']),
     # Employee birthdays / work anniversaries: generate them and nudge admins
@@ -204,11 +206,11 @@ CRONJOBS = [
 
 
 # ── Sessions ──
-# App-like persistence: 30-day rolling window. Every request refreshes the
-# expiry, so active users (especially the Android app) stay signed in and
-# only truly idle sessions expire.
+# App-like persistence: 30-day rolling window, so active users (especially
+# the Android app) stay signed in and only truly idle sessions expire. The
+# window is rolled once a day by clients.middleware.SessionRefreshMiddleware —
+# SESSION_SAVE_EVERY_REQUEST did it with a DB write on every single request.
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
-SESSION_SAVE_EVERY_REQUEST = True
 
 
 # Password validation

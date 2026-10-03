@@ -115,7 +115,7 @@ def _birthdays(employee, start, end):
     return items
 
 
-def _call_followups(employee, start, end, employee_id=None):
+def _call_followups(employee, start, end, employee_id=None, limit=None):
     qs = CallFollowUp.objects.filter(status=CallFollowUp.STATUS_PENDING).select_related(
         "client", "employee__user")
     if employee is not None:
@@ -126,7 +126,7 @@ def _call_followups(employee, start, end, employee_id=None):
         qs = qs.filter(scheduled_at__gte=start)
     if end:
         qs = qs.filter(scheduled_at__lte=end)
-    rows = list(qs)
+    rows = list(qs.order_by("-scheduled_at")[:limit] if limit else qs)
 
     # A follow-up links its client once, when the call is logged. Anything that
     # was a lead, or became a client afterwards, stayed a bare phone number on
@@ -159,7 +159,7 @@ def _call_followups(employee, start, end, employee_id=None):
 TASK_KIND_LABELS = {"lead": "Lead", "claim": "Claim", "extpolicy": "External Policy"}
 
 
-def _tasks(employee, start, end, employee_id=None):
+def _tasks(employee, start, end, employee_id=None, limit=None):
     """Open dated tasks — which is also every lead and claim follow-up.
 
     Scoped exactly like `_call_followups`: an employee sees their own, an admin
@@ -181,7 +181,7 @@ def _tasks(employee, start, end, employee_id=None):
         qs = qs.filter(due_date__gte=start.date())
     if end:
         qs = qs.filter(due_date__lte=end.date())
-    qs = list(qs)
+    qs = list(qs.order_by("-due_date", "-due_time")[:limit] if limit else qs)
 
     # One extra query for every lead behind a follow-up, so the agenda can tint
     # and rank by SPANCO stage — a Negotiation chase is not a stationery order.
@@ -259,7 +259,7 @@ def _insurance_renewals(employee, start, end):
 
 
 def feed_items(employee, *, start=None, end=None, sources=None,
-               team_followups=False, employee_id=None):
+               team_followups=False, employee_id=None, limit=None):
     """Collect unified calendar items.
 
     employee        scope for personal sources (events, birthdays, renewals)
@@ -267,6 +267,10 @@ def feed_items(employee, *, start=None, end=None, sources=None,
     team_followups  admin dashboards: include *all* employees' tasks (every
                     lead/claim follow-up is one) and call follow-ups,
                     optionally narrowed to employee_id.
+    limit           tasks and call follow-ups keep only their `limit` latest
+                    rows. The agenda's past is unbounded (it carries every
+                    overdue item), and on an admin's team-wide view that was
+                    the firm's whole overdue history in one response.
     """
     sources = [s for s in (sources or ALL_SOURCES) if s in ALL_SOURCES]
     # birthdays must have a bounded range to expand years into
@@ -281,9 +285,9 @@ def feed_items(employee, *, start=None, end=None, sources=None,
     if "birthday" in sources:
         items += _birthdays(employee, b_start, b_end)
     if "call_followup" in sources:
-        items += _call_followups(fu_employee, start, end, employee_id=employee_id)
+        items += _call_followups(fu_employee, start, end, employee_id=employee_id, limit=limit)
     if "task" in sources:
-        items += _tasks(fu_employee, start, end, employee_id=employee_id)
+        items += _tasks(fu_employee, start, end, employee_id=employee_id, limit=limit)
     if "insurance_renewal" in sources:
         items += _insurance_renewals(employee, b_start, b_end)
 

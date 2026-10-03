@@ -1,6 +1,6 @@
 """Send reminders for everything due on the common calendar.
 
-Runs every minute via CRONJOBS. Two reminder sources:
+Runs every minute via CRONJOBS (clients.cron.every_minute). Two reminder sources:
 
 1. Call follow-ups — creates an in-app Notification with `_skip_push` set,
    then sends a high-priority data-only push (kind=followup_alarm) that the

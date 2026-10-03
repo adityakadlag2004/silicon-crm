@@ -328,6 +328,13 @@ def lead_pipeline_report(request):
 @login_required
 def lead_detail(request, lead_id):
     lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    if request.GET.get("documents"):
+        # The page fetches its Drive file list after it paints, so a slow Drive
+        # never holds up the lead itself (the app does the same).
+        documents, documents_error = lead_service.documents(lead)
+        return render(request, "clients/leads/_lead_documents.html", {
+            "lead": lead, "documents": documents, "documents_error": documents_error,
+        })
 
     # The stepper: every SPANCO step with where this lead has got to.
     current = lead.stage_index
@@ -342,8 +349,6 @@ def lead_detail(request, lead_id):
         }
         for index, (stage, label) in enumerate(Lead.STAGE_CHOICES)
     ]
-    documents, documents_error = lead_service.documents(lead)
-
     return render(request, "clients/leads/lead_detail.html", {
         "crumbs": [
             {"label": "Leads", "url": reverse("clients:lead_management")},
@@ -359,8 +364,6 @@ def lead_detail(request, lead_id):
         "open_task_statuses": Task.OPEN_STATUSES,
         "remarks": lead.remarks.select_related("created_by").order_by("-created_at"),
         "stage_events": lead.stage_events.select_related("created_by")[:50],
-        "documents": documents,
-        "documents_error": documents_error,
         "can_delete_drive_folder": permissions.is_admin_or_manager(request.user),
         "can_decide_loss": lead_service.can_decide_loss(request.user),
         "loss_request": (

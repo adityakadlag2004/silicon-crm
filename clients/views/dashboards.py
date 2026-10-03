@@ -180,32 +180,15 @@ def _renewal_attention(today, employee=None):
     """Renewal follow-up counts for approved Health/Life policies, mirroring the
     renewal_reminders cron. Returns {"c30","prem30","c5","c7"}. Scope to one
     employee (as seller or the client's mapped owner) when given.
-    ponytail: iterates the approved insurance book; annotate in SQL if it slows."""
-    qs = (
-        Sale.objects.filter(status=Sale.STATUS_APPROVED)
-        .filter(
-            Q(product_ref__code__in=["HEALTH_INS", "LIFE_INS"])
-            | Q(product__iexact="Health Insurance")
-            | Q(product__iexact="Life Insurance")
-        )
-        .select_related("product_ref")
-    )
-    if employee is not None:
-        qs = qs.filter(Q(employee=employee) | Q(client__mapped_to=employee))
-    c30, c5, prem30 = 0, 0, Decimal("0")
-    for sale in qs:
-        nxt = sale.next_renewal_date(today)
-        if not nxt:
-            continue
-        days = (nxt - today).days
-        if 0 <= days <= 30:
-            c30 += 1
-            prem30 += sale.annual_premium or Decimal("0")
-            if days <= 5:
-                c5 += 1
+    ponytail: iterates the approved insurance book once; annotate in SQL if it slows."""
     from ..services import sales as sales_service
-    c7 = len(sales_service.renewal_due_sale_ids(today, employee=employee))
-    return {"c30": c30, "prem30": prem30, "c5": c5, "c7": c7}
+    due = sales_service.upcoming_renewals(today, employee=employee, within_days=30)
+    return {
+        "c30": len(due),
+        "prem30": sum((sale.annual_premium or Decimal("0") for sale, _d in due), Decimal("0")),
+        "c5": sum(1 for _s, days in due if days <= 5),
+        "c7": sum(1 for _s, days in due if days <= 7),
+    }
 
 
 def _emis_due_this_month(today, employee=None):

@@ -229,7 +229,8 @@ def app_tasks(request):
         still_overdue = Q(status__in=Task.OPEN_STATUSES) & (Q(status=Task.STATUS_OVERDUE) | past_due)
         qs = qs.filter(in_window | still_overdue)
 
-    qs = qs.select_related("category", "assigned_to__user", "client").order_by("-created_at")
+    qs = (qs.select_related("category", "assigned_to__user", "client")
+          .prefetch_related("checklist_items").order_by("-created_at"))
     counts = _scoped(request).aggregate(
         total=Count("id"),
         pending=Count("id", filter=Q(status=Task.STATUS_PENDING) & ~past_due),

@@ -1,0 +1,25 @@
+{# The lead's Drive files. Fetched after the page paints (lead_detail?documents=1): listing a Drive folder is a round trip to Google, and the rest of the lead page should not wait on it. #}
+{% if documents_error %}<div class="alert alert-warning small mx-3">{{ documents_error }}</div>{% endif %}
+<div class="ki-table-wrap">
+  <table class="ki-table mb-0">
+    <thead><tr><th>File</th><th>Size</th><th>Modified</th><th style="width:110px;"></th></tr></thead>
+    <tbody>
+      {% for d in documents %}
+        <tr>
+          <td class="small"><a href="{% url 'clients:lead_document' lead.id d.id %}" target="_blank" rel="noopener">{{ d.name }}</a></td>
+          <td class="small text-nowrap">{% if d.size %}{{ d.size|filesizeformat }}{% else %}—{% endif %}</td>
+          <td class="small text-nowrap">{{ d.modifiedTime|slice:":10" }}</td>
+          <td class="text-end text-nowrap">
+            <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_document' lead.id d.id %}?download=1" aria-label="Download {{ d.name }}" title="Download"><i class="bi bi-download"></i></a>
+            <form method="post" action="{% url 'clients:lead_document_delete' lead.id d.id %}" class="d-inline" onsubmit="return confirm('Delete {{ d.name|escapejs }} from Drive?');">
+              {% csrf_token %}
+              <button type="submit" class="ki-btn ki-btn-sm" style="color:var(--ki-danger);border-color:var(--ki-danger);" aria-label="Delete {{ d.name }}" title="Delete"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="text-center text-muted small py-3">No documents yet — upload the quotations sent to this lead.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

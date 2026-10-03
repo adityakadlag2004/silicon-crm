@@ -1030,6 +1030,40 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - Django's `{# #}` comments **cannot span lines** — a multi-line one renders
   as visible page text. Use `{% comment %}` for anything longer than one line.
 
+## Performance (pages must stay flat as the book grows)
+
+Found on 2026-10-03 by timing every URL against a production-sized book
+(3,000 clients, 6,000 sales, 15,000 tasks, 50,000 notifications/call logs).
+Production is a 1-vCPU / 1 GB droplet, so every fixed per-request cost counts.
+
+- **The session is written once a day, not per request.**
+  `clients.middleware.SessionRefreshMiddleware` rolls the 30-day window on the
+  first request of each day (login stamps the day too). `SESSION_SAVE_EVERY_REQUEST`
+  did it with a DB write + commit on every page and every app poll — don't bring it back.
+- **Every-minute jobs share one process**: `clients/cron.py` `EVERY_MINUTE`.
+  Each CRONJOBS line boots its own Django (~2 s of the only CPU); add a new
+  minute job to that tuple, never as another `* * * * *` line.
+- **Never aggregate across two joins in one `annotate()`.** The team list's
+  `Count("client") + Count("sales") + Sum("sales__points")` multiplied clients by
+  sales per employee: 11 s, and a points sum inflated by the client count.
+- **`.order_by()` on a prefetched relation re-queries.** Sort in Python
+  (`incentives._slabs`) — the calculator ran ~40 slab queries per page.
+- **The dashboard agenda is capped** (`calendar_views.AGENDA_LIMIT`, newest
+  first per source; the badge reads "300+"). Its past is unbounded by design,
+  and on an admin's team view that was the firm's whole overdue history: 10,206
+  items, 3.5 MB, every dashboard load.
+- **No Google Drive call inside a page render.** The lead page fetches its file
+  list after it paints (`lead_detail?documents=1`), like the app does.
+- **No `<select>` of the client book.** Pick through the search box into a
+  hidden input (`AdminSaleForm.client` rendered ~3,000 hidden options).
+- **The app shell's CSS/JS are static files** (`css/ki-shell.css`,
+  `js/ki-shell-nav.js`, `js/ki-shell-forms.js`), cached by the browser instead
+  of re-sent inside every page. Only code that needs template tags stays inline
+  in `base.html` — and `collectstatic` must run on deploy.
+- `caller_names` matches the last ten digits in SQL (one IN lookup), not an OR
+  of `phone LIKE '%…'` per number.
+- `clients.test.test_performance_guards` and `test_query_budget` pin all of it.
+
 ## People / employee records
 
 - `Employee` owns names, DOB, joining date, position, domain, reports_to,
@@ -1193,7 +1227,7 @@ signal there is, since the app is self-hosted with no Play Console.
 ## Housekeeping standard (5S — run this audit monthly)
 
 - [ ] `manage.py test clients` all green; `manage.py check` + `makemigrations --check` clean.
-- [ ] Every management command is either in `CRONJOBS` or listed under Red-tag/manual tools below — delete anything that is neither.
+- [ ] Every management command is either in `CRONJOBS` (or `clients/cron.py` `EVERY_MINUTE`) or listed under Red-tag/manual tools below — delete anything that is neither.
 - [ ] `git branch -a` — delete merged/stale branches; `git worktree list` — remove dead worktrees.
 - [ ] No junk in tree: `find . -name .DS_Store -delete`, clear `logs/*.log`, no stray venvs/`__pycache__` at root.
 - [ ] `requirements.txt` matches actual imports (no unused pins).

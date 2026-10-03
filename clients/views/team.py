@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
 from django.views.decorators.http import require_POST
 from django.db import transaction
-from django.db.models import Sum, Count, Q
+from django.db.models import Count, Q
 
 from django.db.models import Max
 from django.urls import reverse
@@ -59,10 +59,12 @@ def team_list(request):
     # badge: an ex-employee in the grid is noise on every scan of the team.
     status_filter = request.GET.get("status") or "active"
 
+    # One aggregate only: a second join (sales) multiplied every employee's
+    # clients by their sales — 11 seconds on a production-sized book, and a
+    # points sum inflated by the client count. The card's figures come from
+    # `list_stats` below.
     employees = Employee.objects.select_related("user").annotate(
-        client_count=Count("client", distinct=True),
-        total_sales=Count("sales", distinct=True),
-        total_points=Sum("sales__points"),
+        client_count=Count("client"),
     ).order_by("-active", "user__first_name", "user__username")
 
     if q:

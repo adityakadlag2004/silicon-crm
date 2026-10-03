@@ -101,12 +101,13 @@ def _own_book(qs, employee):
     return qs.filter(Q(employee=employee) | Q(client__mapped_to=employee))
 
 
-def renewal_due_sale_ids(today, employee=None, within_days=7):
-    """Approved insurance policies renewing within `within_days`.
+def upcoming_renewals(today, employee=None, within_days=7):
+    """[(sale, days_to_renewal)] for approved insurance renewing within `within_days`.
 
     The dashboard counts these and "My day" links to them, so both read this
     one selector — a count that doesn't match the list it opens is worse than
-    no count at all.
+    no count at all. The dashboard reads its 30/7/5-day figures off a single
+    30-day call rather than walking the book once per window.
     """
     from django.db.models import Q
 
@@ -120,12 +121,16 @@ def renewal_due_sale_ids(today, employee=None, within_days=7):
         ).select_related("product_ref"),
         employee,
     )
-    ids = []
+    out = []
     for sale in qs:
         nxt = sale.next_renewal_date(today)
         if nxt and 0 <= (nxt - today).days <= within_days:
-            ids.append(sale.pk)
-    return ids
+            out.append((sale, (nxt - today).days))
+    return out
+
+
+def renewal_due_sale_ids(today, employee=None, within_days=7):
+    return [sale.pk for sale, _days in upcoming_renewals(today, employee, within_days)]
 
 
 def emi_due_sale_ids(today, employee=None):

@@ -1,12 +1,19 @@
 from .models import ManagerAccessConfig
 
 
+def _access(request):
+    """ManagerAccessConfig, read once per request — both processors need it."""
+    if not hasattr(request, "_manager_access"):
+        request._manager_access = ManagerAccessConfig.current()
+    return request._manager_access
+
+
 def manager_access(request):
     """Expose manager access config to templates.
 
     Returns ManagerAccessConfig.current() so templates can gate links.
     """
-    return {"manager_access": ManagerAccessConfig.current()}
+    return {"manager_access": _access(request)}
 
 
 def nav(request):
@@ -22,7 +29,7 @@ def nav(request):
     is_admin = permissions.is_admin(user)
     is_manager = permissions.is_manager(user)
     is_employee = bool(getattr(user, "employee", None)) and not is_admin and not is_manager
-    access = ManagerAccessConfig.current()
+    access = _access(request)
 
     return {"nav": {
         "is_admin": is_admin,

@@ -336,6 +336,9 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
         model = Sale
         fields = ["client", "employee", "product", "ppt", "amount", "cover_amount", "policy_type", "date", "policy_date", "policy_number", "insurer", "policy_doc_submitted", "policy_years", "emi_months", "premium_mode"]
         widgets = {
+            # Picked through the client search box; a Select rendered every
+            # client in the book as a hidden <option> (~3,000 on production).
+            "client": forms.HiddenInput(),
             "date": forms.DateInput(attrs={"type": "date"}),
             "policy_date": forms.DateInput(attrs={"type": "date"}),
         }
@@ -344,7 +347,7 @@ class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         _init_product_fields(self)
         if "employee" in self.fields:
-            self.fields["employee"].queryset = Employee.objects.filter(active=True)
+            self.fields["employee"].queryset = Employee.objects.filter(active=True).select_related("user")
             # Non-admins don't submit an employee (the field is hidden for them);
             # the view assigns their own employee record. Keep it optional so the
             # form validates for employees/managers, not just admins.
@@ -408,7 +411,7 @@ class RenewalForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["client"].required = False
         self.fields["employee"].required = False
-        self.fields["employee"].queryset = Employee.objects.filter(active=True)
+        self.fields["employee"].queryset = Employee.objects.filter(active=True).select_related("user")
         self.fields["product_ref"].queryset = Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
             domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]
         )
@@ -458,7 +461,7 @@ class EditRenewalForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["employee"].required = False
-        self.fields["employee"].queryset = Employee.objects.filter(active=True)
+        self.fields["employee"].queryset = Employee.objects.filter(active=True).select_related("user")
         product_qs = Product.objects.filter(is_active=True, archived_at__isnull=True).filter(
             domain__in=[Product.DOMAIN_RENEWAL, Product.DOMAIN_BOTH]
         )
@@ -513,7 +516,7 @@ class ClientForm(forms.ModelForm):
             # in on KYC Issues, so this is an add-flow rule only.
             self.fields["date_of_birth"].required = True
         if "mapped_to" in self.fields:
-            self.fields["mapped_to"].queryset = Employee.objects.filter(active=True)
+            self.fields["mapped_to"].queryset = Employee.objects.filter(active=True).select_related("user")
         for name, field in self.fields.items():
             widget = field.widget
             # Style checkboxes distinctly so they stay visible
@@ -571,7 +574,7 @@ class ClientForm(forms.ModelForm):
 
 class ClientReassignForm(forms.Form):
     new_employee = forms.ModelChoiceField(
-        queryset=Employee.objects.filter(active=True),
+        queryset=Employee.objects.filter(active=True).select_related("user"),
         required=False,
         empty_label="-- Unassign --",
         label="Assign to"
@@ -636,7 +639,7 @@ class LeadForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
-        self.fields["assigned_to"].queryset = Employee.objects.filter(active=True)
+        self.fields["assigned_to"].queryset = Employee.objects.filter(active=True).select_related("user")
         self.fields["collaborators"].queryset = (
             Employee.objects.filter(active=True).select_related("user").order_by("user__username")
         )
@@ -850,7 +853,7 @@ class EmployeeAdminForm(forms.ModelForm):
             css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
             field.widget.attrs.setdefault("class", css)
         # Nobody reports to themselves, and inactive staff aren't managers.
-        qs = Employee.objects.filter(active=True)
+        qs = Employee.objects.filter(active=True).select_related("user")
         if self.instance and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
         self.fields["reports_to"].queryset = qs.select_related("user")

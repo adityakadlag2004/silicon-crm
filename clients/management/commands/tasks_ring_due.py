@@ -1,6 +1,6 @@
 """Ring task deadlines and unacknowledged assignments on the phone.
 
-Runs every minute via CRONJOBS. Two jobs:
+Runs every minute via CRONJOBS (clients.cron.every_minute). Two jobs:
 
 1. **Due-time ring** — a task due at 15:00 rings at 15:00 like an alarm
    (data-only ``task_alarm`` push; the app also arms a local AlarmManager

@@ -232,7 +232,7 @@
         todayStr = data.today || '';
         if (overdueBadge) {
           overdueBadge.style.display = data.overdue_count ? '' : 'none';
-          overdueBadge.innerText = data.overdue_count || '';
+          overdueBadge.innerText = data.overdue_count ? data.overdue_count + (data.capped ? '+' : '') : '';
         }
         renderGrid(data.items || []);
       })

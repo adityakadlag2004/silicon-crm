@@ -609,7 +609,7 @@ def _is_admin(user):
 @user_passes_test(_is_admin)
 def map_client(request, client_id):
     client = get_object_or_404(Client, id=client_id)
-    employees = Employee.objects.all()
+    employees = Employee.objects.select_related("user")
 
     if request.method == "POST":
         emp_id = request.POST.get("employee")

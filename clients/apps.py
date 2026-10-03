@@ -6,5 +6,6 @@ class ClientsConfig(AppConfig):
 
     def ready(self):
         import clients.signals
+        import clients.middleware  # registers the login receiver that stamps the session's day
 
 

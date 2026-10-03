@@ -402,13 +402,19 @@ def period_totals(rule, employee, on_date, *, exclude_pk=None, is_health=False):
     return volume or ZERO, (agg["b"] or ZERO) + advances, agg["p"] or ZERO
 
 
+def _slabs(rule, reverse=False):
+    """The rule's slabs by threshold, sorted in Python: `.order_by()` would
+    ignore a `prefetch_related("slabs")` and re-query on every call."""
+    return sorted(rule.slabs.all(), key=lambda s: s.threshold, reverse=reverse)
+
+
 def rate_for_volume(rule, volume):
     """The rate-mode band a cumulative volume lands in."""
     from ..models import IncentiveRule
 
     if rule is None or rule.slab_mode != IncentiveRule.MODE_RATE:
         return unit_rate_percent(rule)
-    band = next((s for s in rule.slabs.all().order_by("-threshold")
+    band = next((s for s in _slabs(rule, reverse=True)
                  if Decimal(str(volume or 0)) >= s.threshold), None)
     return band.payout if band else unit_rate_percent(rule)
 
@@ -424,7 +430,7 @@ def next_rung(rule, volume):
     if rule is None:
         return None
     volume = Decimal(str(volume or 0))
-    ahead = [s for s in rule.slabs.all().order_by("threshold") if s.threshold > volume]
+    ahead = [s for s in _slabs(rule) if s.threshold > volume]
     if not ahead:
         return None
     s = ahead[0]
@@ -479,7 +485,7 @@ def bonus_released_for(rule, volume):
     if rule is None or rule.slab_mode != IncentiveRule.MODE_BONUS:
         return ZERO
     volume = Decimal(str(volume or 0))
-    band = next((s for s in rule.slabs.all().order_by("-threshold") if volume >= s.threshold), None)
+    band = next((s for s in _slabs(rule, reverse=True) if volume >= s.threshold), None)
     return band.payout if band else ZERO
 
 
