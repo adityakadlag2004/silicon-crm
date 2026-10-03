@@ -15,7 +15,9 @@ import java.nio.charset.StandardCharsets;
  */
 public final class BackendClient {
 
-    public static final String BASE_URL = "http://10.0.2.2:8000";
+    // Production. Emulator testing against a local server swaps this for
+    // http://10.0.2.2:8000 — never commit that; release.sh refuses to ship it.
+    public static final String BASE_URL = "https://bo.kadlaginvestment.com";
     private static final String TAG = "BackendClient";
 
     private BackendClient() {}

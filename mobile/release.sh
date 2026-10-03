@@ -24,6 +24,14 @@ KEYDIR="$(cd "$DIR/.." && pwd)/android"
 
 cd "$DIR/android"
 
+# 4.43.0 shipped pointing at the emulator's test server and every phone that
+# installed it was locked out. Only a production build may be published.
+grep -q 'BASE_URL = "https://bo.kadlaginvestment.com"' \
+  app/src/main/java/bo/kadlaginvestment/crm/BackendClient.java || {
+  echo "Not publishing: BackendClient.BASE_URL is not https://bo.kadlaginvestment.com"
+  exit 1
+}
+
 VERSION_CODE=$(grep -o 'versionCode [0-9]*' app/build.gradle | awk '{print $2}')
 VERSION_NAME=$(grep -o 'versionName "[^"]*"' app/build.gradle | cut -d'"' -f2)
 
