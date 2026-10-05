@@ -83,6 +83,7 @@
         {% endif %}
         {% if client.sip_status %}<span class="ki-tag" style="--c:#0369A1;">SIP Active</span>{% endif %}
         {% if client.pms_status %}<span class="ki-tag" style="--c:#7E22CE;">PMS</span>{% endif %}
+        {% if tax.pending %}<a href="#tax" class="ki-tag" style="--c:#B45309;">Tax harvest pending · {{ tax.fy_label }}</a>{% endif %}
       </div>
     </div>
     <div class="ki-rec-actions">
@@ -121,6 +122,7 @@
   <button class="ki-rtab active" data-tab="overview">Overview</button>
   <button class="ki-rtab" data-tab="insurance">Health &amp; Life ({{ insurance_policies|length }})</button>
   <button class="ki-rtab" data-tab="external">External ({{ external_policies|length }})</button>
+  <button class="ki-rtab" data-tab="tax">Tax Harvest{% if tax.pending %} <span class="ki-tag" style="--c:#B45309;">Pending</span>{% endif %}</button>
   <button class="ki-rtab" data-tab="portfolio">Portfolio</button>
   <button class="ki-rtab" data-tab="work">Work ({{ open_tasks|length }})</button>
   <button class="ki-rtab" data-tab="history">History</button>
@@ -328,6 +330,79 @@
           pension date.
         </div>
       {% endfor %}
+    </div>
+
+    {% comment %}
+      LTCG harvests: each year's gain booked inside the tax-free limit and
+      reinvested. The reinvestment lifts the statement's cost by every rupee
+      booked, so the statement under-reports the gain by the harvested total —
+      the add-back line says so.
+    {% endcomment %}
+    <div data-panel="tax" class="ki-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap;">
+        <h3 class="ki-section-title" style="margin-top:0;">Tax Harvesting</h3>
+        <div style="display:flex;gap:.4rem;">
+          {% if tax.years %}
+          <form method="post" action="{% url 'clients:tax_harvest_stop' client.id %}">
+            {% csrf_token %}<input type="hidden" name="stop" value="{% if tax.stopped %}0{% else %}1{% endif %}">
+            <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm">{% if tax.stopped %}<i class="bi bi-play-circle"></i> Resume{% else %}<i class="bi bi-stop-circle"></i> Stop{% endif %}</button>
+          </form>
+          {% endif %}
+          <a href="{% url 'clients:tax_harvest_add' %}?client={{ client.id }}" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-plus-lg"></i> Record Harvest</a>
+        </div>
+      </div>
+      {% if tax.years %}
+        <div class="ki-fields">
+          <div class="info-row"><span class="info-label">{{ tax.fy_label }}</span><span class="info-value">
+            {% if tax.now.done %}Done · ₹{{ tax.now.fy_gain|inr }} booked, ₹{{ tax.now.headroom|inr }} of the ₹{{ tax.limit|inr }} limit left
+            {% elif tax.stopped %}<span class="ki-tag" style="--c:#57534E;">Stopped</span> not harvesting any more
+            {% else %}<span class="ki-tag" style="--c:#B45309;">Pending</span> nothing booked yet{% endif %}
+          </span></div>
+          {% if not tax.stopped %}
+          <div class="info-row"><span class="info-label">Next harvest</span><span class="info-value">{% include "clients/_next_harvest.html" with r=tax.now %}</span></div>
+          {% endif %}
+          <div class="info-row"><span class="info-label">Harvested to date</span><span class="info-value">₹{{ tax.now.total_gain|inr }}</span></div>
+          <div class="info-row"><span class="info-label">Tax saved (est.)</span><span class="info-value">₹{{ tax.tax_saved|inr }} <span class="text-muted small">at 12.5% LTCG + cess</span></span></div>
+        </div>
+        {% if tax.now.total_gain %}
+        <div class="ki-card mt-2" style="border-left:4px solid #B45309;padding:.6rem .9rem;">
+          <strong>Reading this client's statement:</strong> each harvest was reinvested, so the
+          statement's invested amount now includes ₹{{ tax.now.total_gain|inr }} of booked profit
+          and the gain it shows is that much lower than the real one.
+          <strong>Real profit = statement profit + ₹{{ tax.now.total_gain|inr }}.</strong>
+        </div>
+        {% endif %}
+        {% for y in tax.years %}
+          <div class="rows-total mt-3" style="border-top:0;padding-left:0;">
+            <strong>{{ y.label }}</strong> ₹{{ y.gain|inr }} booked of ₹{{ y.limit|inr }}
+            {% if y.over %}<span class="ki-tag" style="--c:#BE123C;">₹{{ y.over|inr }} over — taxable</span>{% endif %}
+          </div>
+          <div class="ki-table-scroll">
+            <table class="mini-table">
+              <thead><tr><th>Date</th><th class="text-right">Profit Booked</th><th class="text-right">Portfolio</th><th>Details</th><th>By</th><th></th></tr></thead>
+              <tbody>
+                {% for h in y.entries %}
+                <tr>
+                  <td>{{ h.date|date:"d M Y" }}</td>
+                  <td class="text-right">{% if h.gain_booked %}₹{{ h.gain_booked|inr }}{% else %}<span class="text-muted">reviewed · nil</span>{% endif %}</td>
+                  <td class="text-right">{% if h.portfolio_value %}₹{{ h.portfolio_value|inr }}{% else %}—{% endif %}</td>
+                  <td style="white-space:pre-line;">{{ h.details|default:"—" }}</td>
+                  <td>{% if h.created_by %}{{ h.created_by.get_full_name|default:h.created_by.username }}{% else %}—{% endif %}</td>
+                  <td><a href="{% url 'clients:tax_harvest_edit' h.id %}" class="ki-btn ki-btn-secondary ki-btn-sm" aria-label="Edit harvest"><i class="bi bi-pencil"></i></a></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="ki-empty">
+          <i class="bi bi-piggy-bank"></i>
+          No tax harvest recorded. Book up to ₹{{ tax.limit|inr }} of long-term equity gain a
+          year tax-free and reinvest it; from then on this client is flagged every year until
+          it is done again.
+        </div>
+      {% endif %}
     </div>
 
     {% if open_tasks %}

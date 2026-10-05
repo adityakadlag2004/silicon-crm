@@ -1,7 +1,7 @@
 """Client CRUD, profile, KYC issues, merge, reassign, analysis."""
 from django.urls import path
 
-from ..views import clients_views, kyc
+from ..views import clients_views, kyc, tax_harvest
 
 urlpatterns = [
     path("clients/<int:client_id>/edit/", clients_views.edit_client, name="edit_client"),
@@ -23,4 +23,12 @@ urlpatterns = [
     path("clients/merge/", kyc.client_merge_view, name="client_merge"),
     path("clients/bulk-merge/", kyc.client_bulk_merge, name="client_bulk_merge"),
     path("clients/<int:client_id>/safe-delete/", kyc.client_safe_delete, name="client_safe_delete"),
+    path("clients/tax-harvest/", tax_harvest.tax_harvest_list, name="tax_harvest_list"),
+    path("clients/tax-harvest/add/", tax_harvest.tax_harvest_form, name="tax_harvest_add"),
+    path("clients/tax-harvest/<int:harvest_id>/edit/", tax_harvest.tax_harvest_form,
+         name="tax_harvest_edit"),
+    path("clients/tax-harvest/<int:harvest_id>/delete/", tax_harvest.tax_harvest_delete,
+         name="tax_harvest_delete"),
+    path("clients/<int:client_id>/tax-harvest/stop/", tax_harvest.tax_harvest_stop,
+         name="tax_harvest_stop"),
 ]

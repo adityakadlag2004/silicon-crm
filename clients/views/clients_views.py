@@ -515,7 +515,7 @@ def client_profile(request, client_id):
                           if p.insurance_type in ("health", "life")]
     # What the client holds, grouped by product line, straight off the sales
     # book and the renewals against it — one row per policy, with its number.
-    from ..services import holdings as holdings_service
+    from ..services import holdings as holdings_service, tax_harvest as tax_harvest_service
     portfolio = holdings_service.portfolio(client)
     by_code = {line["code"]: line for line in portfolio}
 
@@ -557,6 +557,7 @@ def client_profile(request, client_id):
         "policies_renewals": sum(p.renewal_count for p in policies),
         # Policies held elsewhere — ours to remind about, never our business.
         "external_policies": client.external_policies.all(),
+        "tax": tax_harvest_service.client_record(client, timezone.localdate()),
         "portfolio": portfolio,
         "sales_total_amount": sales_summary.get("total_amount") or 0,
         "sales_total_points": sales_summary.get("total_points") or 0,

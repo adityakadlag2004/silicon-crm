@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+{% block title %}Tax Harvesting{% endblock %}
+{% block page_title %}Tax Harvesting{% endblock %}
+{% block content %}
+
+{% comment %}
+  One financial year at a time, and only the clients with a harvest on record.
+  Pending = harvested before, nothing yet this FY (a 0 entry counts: reviewed,
+  nothing to book); it reads Missed once the FY closes. Stopped clients are
+  never pending. Next Harvest = a year after the last one.
+{% endcomment %}
+<div class="ki-showbar" style="gap:.4rem;">
+  {% for y in years %}
+    <a href="?fy={{ y.fy }}&tab={{ tab }}" class="ki-btn ki-btn-sm {% if y.fy == fy %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">{{ y.label }}</a>
+  {% endfor %}
+  <span class="right">
+    <a href="{% url 'clients:tax_harvest_add' %}" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-plus-lg"></i> Record Harvest</a>
+  </span>
+</div>
+
+<form method="get" class="ki-showbar">
+  <input type="hidden" name="fy" value="{{ fy }}"><input type="hidden" name="tab" value="{{ tab }}">
+  <a href="?fy={{ fy }}&tab=pending{% if q %}&q={{ q|urlencode }}{% endif %}" class="ki-btn ki-btn-sm {% if tab == 'pending' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">{{ waiting }} <span class="text-muted">({{ pending|length }})</span></a>
+  <a href="?fy={{ fy }}&tab=done{% if q %}&q={{ q|urlencode }}{% endif %}" class="ki-btn ki-btn-sm {% if tab == 'done' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Done <span class="text-muted">({{ done|length }})</span></a>
+  <a href="?fy={{ fy }}&tab=stopped{% if q %}&q={{ q|urlencode }}{% endif %}" class="ki-btn ki-btn-sm {% if tab == 'stopped' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Stopped <span class="text-muted">({{ stopped|length }})</span></a>
+  <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm" style="max-width:260px;" placeholder="Client name…">
+  <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit"><i class="bi bi-search"></i> Search</button>
+  {% if q %}<a class="ki-btn ki-btn-secondary ki-btn-sm" href="?fy={{ fy }}&tab={{ tab }}">Reset</a>{% endif %}
+  <span class="right text-muted small">Tax-free limit {{ fy_label }}: ₹{{ limit|inr }} · next harvest = a year after the last</span>
+</form>
+
+{% if tab == "pending" %}
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr>
+      <th>Client</th><th>Last Harvest</th><th>Next Harvest</th>
+      <th class="num">Portfolio</th><th class="num">Harvested to Date</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for r in pending %}
+      <tr>
+        <td data-label="Client">
+          <a href="{% url 'clients:client_profile' r.client.id %}#tax" class="name-link">{{ r.client.name }}</a>
+          <span class="ki-tag" style="--c:{% if waiting == 'Pending' %}#B45309{% else %}#BE123C{% endif %};">{{ waiting }}</span>
+        </td>
+        <td data-label="Last Harvest">{{ r.last.date|date:"d M Y" }} · ₹{{ r.last.gain_booked|inr }}</td>
+        <td data-label="Next Harvest">{% include "clients/_next_harvest.html" %}</td>
+        <td data-label="Portfolio" class="num">{% if r.portfolio_value %}₹{{ r.portfolio_value|inr }}{% else %}—{% endif %}</td>
+        <td data-label="Harvested to Date" class="num">₹{{ r.total_gain|inr }}</td>
+        <td style="white-space:nowrap;">
+          <a href="{% url 'clients:tax_harvest_add' %}?client={{ r.client.id }}" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-plus-lg"></i> Record</a>
+          <form method="post" action="{% url 'clients:tax_harvest_stop' r.client.id %}" style="display:inline;">
+            {% csrf_token %}<input type="hidden" name="stop" value="1"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-stop-circle"></i> Stop</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6"><div class="ki-empty"><i class="bi bi-check2-circle"></i>
+        {% if q %}No match.{% else %}Nobody {{ waiting|lower }} for {{ fy_label }}.{% endif %}
+      </div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% elif tab == "done" %}
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr>
+      <th>Client</th><th>Harvested</th><th class="num">Profit Booked</th>
+      <th class="num">Limit Left</th><th>Next Harvest</th><th class="num">Portfolio</th><th class="num">Harvested to Date</th>
+    </tr></thead>
+    <tbody>
+      {% for r in done %}
+      <tr>
+        <td data-label="Client">
+          <a href="{% url 'clients:client_profile' r.client.id %}#tax" class="name-link">{{ r.client.name }}</a>
+          {% if r.over %}<span class="ki-tag" style="--c:#BE123C;">₹{{ r.over|inr }} over limit</span>{% elif not r.fy_gain %}<span class="ki-tag" style="--c:#57534E;">Reviewed · nothing to book</span>{% endif %}
+          {% if r.client.tax_harvest_stopped %}<span class="ki-tag" style="--c:#57534E;">Stopped</span>{% endif %}
+        </td>
+        <td data-label="Harvested">
+          {% for h in r.entries %}<div>{{ h.date|date:"d M Y" }}{% if r.entries|length > 1 %} · ₹{{ h.gain_booked|inr }}{% endif %}</div>{% endfor %}
+        </td>
+        <td data-label="Profit Booked" class="num">₹{{ r.fy_gain|inr }}</td>
+        <td data-label="Limit Left" class="num">₹{{ r.headroom|inr }}</td>
+        <td data-label="Next Harvest">{% if r.client.tax_harvest_stopped %}—{% else %}{% include "clients/_next_harvest.html" %}{% endif %}</td>
+        <td data-label="Portfolio" class="num">{% if r.portfolio_value %}₹{{ r.portfolio_value|inr }}{% else %}—{% endif %}</td>
+        <td data-label="Harvested to Date" class="num">₹{{ r.total_gain|inr }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7"><div class="ki-empty"><i class="bi bi-piggy-bank"></i>
+        {% if q %}No match.{% else %}No harvest recorded for {{ fy_label }} yet.{% endif %}
+      </div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr>
+      <th>Client</th><th>Last Harvest</th><th class="num">Harvested to Date</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for r in stopped %}
+      <tr>
+        <td data-label="Client"><a href="{% url 'clients:client_profile' r.client.id %}#tax" class="name-link">{{ r.client.name }}</a></td>
+        <td data-label="Last Harvest">{{ r.last.date|date:"d M Y" }} · ₹{{ r.last.gain_booked|inr }}</td>
+        <td data-label="Harvested to Date" class="num">₹{{ r.total_gain|inr }}</td>
+        <td>
+          <form method="post" action="{% url 'clients:tax_harvest_stop' r.client.id %}">
+            {% csrf_token %}<input type="hidden" name="stop" value="0"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-play-circle"></i> Resume</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4"><div class="ki-empty"><i class="bi bi-stop-circle"></i>
+        {% if q %}No match.{% else %}No client has been stopped.{% endif %}
+      </div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

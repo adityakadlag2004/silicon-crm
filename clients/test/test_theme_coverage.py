@@ -12,7 +12,7 @@ from clients.models import Client, Employee
 
 # name -> kwargs. Every no-argument GET screen a user reaches from the nav.
 SCREENS = [
-    "all_clients", "my_clients", "family_list", "client_kyc_issues",
+    "all_clients", "my_clients", "family_list", "client_kyc_issues", "tax_harvest_list",
     "all_sales", "approve_sales", "all_renewals",
     "policy_list", "external_policy_list", "claim_list",
     "lead_management", "task_dashboard", "task_my", "task_delegated",
@@ -134,7 +134,7 @@ class TemplateHygieneTests(TestCase):
 # strip. Dashboards and form pages are deliberately excluded — a strip on a
 # form is noise, and the task board already has its status tabs.
 KPI_SCREENS = [
-    "all_clients", "my_clients", "family_list", "client_kyc_issues",
+    "all_clients", "my_clients", "family_list", "client_kyc_issues", "tax_harvest_list",
     "all_sales", "all_renewals", "policy_list", "external_policy_list", "claim_list",
     "lead_management", "task_deleted",
     "links_dashboard", "team_list", "my_call_followups",

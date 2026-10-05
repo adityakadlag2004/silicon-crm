@@ -1,0 +1,7 @@
+{# Next harvest date + days left. Expects `r` (a tax_harvest summary row). #}
+{% if r.next_harvest %}
+  {{ r.next_harvest|date:"d M Y" }}
+  <div class="small" style="color:{% if r.overdue %}#BE123C{% elif r.days <= 30 %}#B45309{% else %}var(--ki-text-muted){% endif %};">
+    {% if r.overdue %}{{ r.overdue }} day{{ r.overdue|pluralize }} overdue{% elif r.days == 0 %}today{% else %}in {{ r.days }} day{{ r.days|pluralize }}{% endif %}
+  </div>
+{% else %}—{% endif %}

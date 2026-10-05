@@ -16,19 +16,7 @@
 
     <h3 class="ki-section-title" style="margin-top:0;">Client</h3>
     <div class="row g-3">
-      <div class="col-12 position-relative">
-        <label class="form-label fw-semibold" for="xp-client-search">Client <span class="text-danger">*</span></label>
-        {{ form.client }}
-        <div id="xp-picked" style="display:flex;align-items:center;gap:.5rem;" {% if not picked %}hidden{% endif %}>
-          <span class="ki-tag" style="--c:#4338CA;"><i class="bi bi-person-check"></i> <span id="xp-picked-name">{{ picked.name }}</span></span>
-          <button type="button" id="xp-change" class="ki-btn ki-btn-secondary ki-btn-sm">Change</button>
-        </div>
-        <input type="search" id="xp-client-search" class="form-control" autocomplete="off"
-               placeholder="Type the client's name, phone or email…" {% if picked %}hidden{% endif %}>
-        <div id="xp-client-results" class="list-group position-absolute shadow-sm"
-             style="z-index:1000;max-height:240px;overflow-y:auto;left:.75rem;right:.75rem;"></div>
-        {% if form.client.errors %}<div class="text-danger small mt-1">Pick the client this policy belongs to.</div>{% endif %}
-      </div>
+      {% include "clients/_client_picker.html" with field=form.client %}
     </div>
 
     <h3 class="ki-section-title mt-4">Policy</h3>
@@ -99,50 +87,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   typeSel.addEventListener("change", sync);
   sync();
-
-  // Client picker — the same search the renewal form uses.
-  const idField = document.getElementById("id_client");
-  const search = document.getElementById("xp-client-search");
-  const results = document.getElementById("xp-client-results");
-  const picked = document.getElementById("xp-picked");
-  const pickedName = document.getElementById("xp-picked-name");
-  let timer;
-  search.addEventListener("input", function () {
-    clearTimeout(timer);
-    const q = search.value.trim();
-    if (q.length < 2) { results.innerHTML = ""; return; }
-    timer = setTimeout(function () {
-      fetch("{% url 'clients:search_clients' %}?q=" + encodeURIComponent(q))
-        .then(r => r.json())
-        .then(function (data) {
-          results.innerHTML = "";
-          (data.results || []).forEach(function (c) {
-            const b = document.createElement("button");
-            b.type = "button";
-            b.className = "list-group-item list-group-item-action py-2";
-            b.textContent = c.text;
-            b.onclick = function () {
-              idField.value = c.id;
-              pickedName.textContent = c.text;
-              picked.hidden = false;
-              search.hidden = true;
-              results.innerHTML = "";
-            };
-            results.appendChild(b);
-          });
-          if (!results.children.length) {
-            results.innerHTML = '<div class="list-group-item text-muted py-2">No matching client</div>';
-          }
-        });
-    }, 250);
-  });
-  document.getElementById("xp-change").addEventListener("click", function () {
-    idField.value = "";
-    picked.hidden = true;
-    search.hidden = false;
-    search.value = "";
-    search.focus();
-  });
 });
 </script>
 {% endblock %}

@@ -973,3 +973,45 @@ class ExternalPolicyForm(forms.ModelForm):
         if every and term and every >= term:
             self.add_error("payout_every_years", "Must fall inside the policy term.")
         return d
+
+
+class TaxHarvestForm(forms.ModelForm):
+    """Record one LTCG harvest (or a year reviewed with nothing to book)."""
+
+    class Meta:
+        from .models import TaxHarvest
+        model = TaxHarvest
+        fields = ["client", "date", "gain_booked", "portfolio_value", "details"]
+        widgets = {
+            # Picked by the page's search box, never a <select> of the book.
+            "client": forms.HiddenInput(),
+            "date": forms.DateInput(attrs={"type": "date"}),
+            "details": forms.Textarea(attrs={
+                "rows": 3,
+                "placeholder": "Scheme(s) sold, folio, units, sale value — and what it was reinvested into"}),
+        }
+        labels = {
+            "date": "Harvest date",
+            "gain_booked": "Profit booked — LTCG (₹)",
+            "portfolio_value": "Portfolio value on the day (₹)",
+            "details": "Transaction details",
+        }
+        help_texts = {
+            "gain_booked": "The long-term gain realised, not the sale value. 0 = reviewed, "
+                           "nothing to book this year.",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.setdefault("class", "form-control")
+        self.fields["portfolio_value"].required = False
+
+    def clean_date(self):
+        d = self.cleaned_data["date"]
+        if d > timezone.localdate():
+            raise forms.ValidationError("A harvest is recorded after it is done — not a future date.")
+        return d
+
+    def clean_portfolio_value(self):
+        return self.cleaned_data.get("portfolio_value") or 0

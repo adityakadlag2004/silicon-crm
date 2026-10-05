@@ -27,6 +27,7 @@ from .clients import (  # noqa: F401
     ClientMappingAudit,
     Family,
     Renewal,
+    TaxHarvest,
 )
 from .insurance import (  # noqa: F401
     ClaimActivity,

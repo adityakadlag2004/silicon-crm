@@ -265,6 +265,32 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 - `clients.test.test_external_policies` pins the schedule, the form, the tagging
   and the reminders.
 
+## Tax harvesting (yearly LTCG harvest)
+
+- `TaxHarvest` + `Client.tax_harvest_stopped` (migration 0137): equity units
+  sold to book long-term gain inside the Sec 112A limit and reinvested.
+  **`gain_booked` is the gain, not the sale value.** `/clients/clients/tax-harvest/`
+  (Clients menu), the profile's **Tax Harvest** tab, and a pending tag in the
+  profile header.
+- **A hand-kept register for a few clients — no tasks, reminders or crons, by
+  the owner's choice (2026-10-05).** Only clients with a harvest on record
+  appear. Don't wire it into tasks/followups.
+- **The programme is derived** (`services/tax_harvest.book`): **Pending** = a
+  harvest in an earlier FY and none in this one; **Missed** once that FY closes
+  (the exemption doesn't carry forward). A **0 entry = reviewed, nothing to
+  book** and clears it. **Stopped** clients are never pending, keep their
+  history, and can be resumed (`tax_harvest_stop`).
+- **Next harvest = last harvest + 12 months + 1 day** (`next_harvest`), shown
+  with days left / overdue — the bought-back units are long-term only once
+  held *more* than a year; sold sooner it is 20% short-term gain.
+- Limit by FY (`exemption`): ₹1L to FY 2023-24, ₹1.25L from FY 2024-25. Going
+  over is **recorded and warned, never refused**: the redemption already
+  happened. Tax saved = the exempt slice × 13% (12.5% + cess).
+- **The statement under-reports the gain by every rupee harvested** (the
+  reinvestment lifts its cost), so the profile says: real profit = statement
+  profit + harvested to date. That is the whole reason the history is kept.
+- Not on the app. `clients.test.test_tax_harvest` pins it.
+
 ## Renewal filing checklist
 
 - `Renewal.policy_doc_submitted` (migration 0125) is one tick: "Renewal policy

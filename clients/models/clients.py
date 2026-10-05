@@ -35,6 +35,10 @@ class Client(models.Model):
     family = models.ForeignKey("Family", null=True, blank=True, on_delete=models.SET_NULL,
                                related_name="members")
 
+    # Out of the tax-harvesting programme: never read as pending again, while
+    # the harvests already booked stay on record. Reversible.
+    tax_harvest_stopped = models.BooleanField(default=False)
+
     # SIP details
     sip_status = models.BooleanField(default=False)
     sip_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -352,3 +356,41 @@ class Family(models.Model):
             if total >= floor:
                 return label
         return self.CATEGORY_BANDS[-1][0]
+
+
+class TaxHarvest(models.Model):
+    """One LTCG harvest: equity units sold to book a long-term gain inside the
+    year's Sec 112A exemption, and the money put straight back in.
+
+    Booked a slice a year, inside the limit, the gain is never taxed; left to
+    pile up, all of it is taxed on the day it is finally sold. The price: the
+    reinvestment buys at today's NAV, so the statement's cost rises by exactly
+    the gain booked and the profit it prints shrinks by the same. The client's
+    real gain is the statement's plus every ``gain_booked`` to date — the
+    client's record shows that add-back.
+
+    A zero-gain row is a year *reviewed* with nothing to book (a falling
+    market): it clears that year's pending tag just as a harvest does.
+    """
+
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="tax_harvests")
+    date = models.DateField(db_index=True)
+    gain_booked = models.DecimalField(max_digits=14, decimal_places=2,
+                                      validators=[MinValueValidator(0)])
+    portfolio_value = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+                                          validators=[MinValueValidator(0)])
+    details = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return f"{self.client} · ₹{self.gain_booked} on {self.date}"
+
+    @property
+    def fy(self):
+        from ..services.incentives import fy_start_year
+        return fy_start_year(self.date)
