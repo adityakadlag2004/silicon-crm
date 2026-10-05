@@ -267,7 +267,7 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 
 ## Tax harvesting (yearly LTCG harvest)
 
-- `TaxHarvest` + `Client.tax_harvest_stopped` (migration 0137): equity units
+- `TaxHarvest` + `Client.tax_harvest_stopped` (migrations 0137–0138): equity units
   sold to book long-term gain inside the Sec 112A limit and reinvested.
   **`gain_booked` is the gain, not the sale value.** `/clients/clients/tax-harvest/`
   (Clients menu), the profile's **Tax Harvest** tab, and a pending tag in the
@@ -280,9 +280,16 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   (the exemption doesn't carry forward). A **0 entry = reviewed, nothing to
   book** and clears it. **Stopped** clients are never pending, keep their
   history, and can be resumed (`tax_harvest_stop`).
-- **Next harvest = last harvest + 12 months + 1 day** (`next_harvest`), shown
-  with days left / overdue — the bought-back units are long-term only once
-  held *more* than a year; sold sooner it is 20% short-term gain.
+- **Two stages, shown as a progress bar.** Selling is **50%** — on its own it
+  takes the money out of our AUM. **100%** = the money is back in:
+  `TaxHarvest.reinvestment` = repurchased in the fund (`mf`) or converted to
+  insurance, with `reinvested_on` (migration 0138). A 0 "reviewed" entry sold
+  nothing, so it counts as complete. The **Awaiting Repurchase** tab
+  (`tax_harvest.awaiting`) lists every 50% entry from any FY, oldest first.
+- **Next harvest = repurchase (else sale) + 12 months + 1 day** (`next_harvest`),
+  shown with days left / overdue — the bought-back units are long-term only once
+  held *more* than a year; sold sooner it is 20% short-term gain. An insurance
+  conversion bought no units back, so it counts from the sale.
 - Limit by FY (`exemption`): ₹1L to FY 2023-24, ₹1.25L from FY 2024-25. Going
   over is **recorded and warned, never refused**: the redemption already
   happened. Tax saved = the exempt slice × 13% (12.5% + cess).

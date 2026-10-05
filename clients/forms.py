@@ -976,22 +976,27 @@ class ExternalPolicyForm(forms.ModelForm):
 
 
 class TaxHarvestForm(forms.ModelForm):
-    """Record one LTCG harvest (or a year reviewed with nothing to book)."""
+    """Record one LTCG harvest (or a year reviewed with nothing to book):
+    the sale, and — now or later — the money going back in."""
 
     class Meta:
         from .models import TaxHarvest
         model = TaxHarvest
-        fields = ["client", "date", "gain_booked", "portfolio_value", "details"]
+        fields = ["client", "date", "gain_booked", "portfolio_value", "details",
+                  "reinvestment", "reinvested_on"]
         widgets = {
             # Picked by the page's search box, never a <select> of the book.
             "client": forms.HiddenInput(),
             "date": forms.DateInput(attrs={"type": "date"}),
+            "reinvested_on": forms.DateInput(attrs={"type": "date"}),
             "details": forms.Textarea(attrs={
                 "rows": 3,
                 "placeholder": "Scheme(s) sold, folio, units, sale value — and what it was reinvested into"}),
         }
         labels = {
-            "date": "Harvest date",
+            "date": "Sold on",
+            "reinvestment": "Money back in?",
+            "reinvested_on": "Repurchased / converted on",
             "gain_booked": "Profit booked — LTCG (₹)",
             "portfolio_value": "Portfolio value on the day (₹)",
             "details": "Transaction details",
@@ -999,12 +1004,18 @@ class TaxHarvestForm(forms.ModelForm):
         help_texts = {
             "gain_booked": "The long-term gain realised, not the sale value. 0 = reviewed, "
                            "nothing to book this year.",
+            "reinvestment": "Selling alone takes the money out of our AUM — the harvest is "
+                            "complete once it is repurchased or converted.",
         }
 
     def __init__(self, *args, **kwargs):
+        from .models import TaxHarvest
         super().__init__(*args, **kwargs)
+        self.fields["reinvestment"].choices = [("", "Not yet — only sold (50%)")] + [
+            (k, f"{label} (100%)") for k, label in TaxHarvest.REINVEST_CHOICES]
         for field in self.fields.values():
-            field.widget.attrs.setdefault("class", "form-control")
+            css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
+            field.widget.attrs.setdefault("class", css)
         self.fields["portfolio_value"].required = False
 
     def clean_date(self):
@@ -1015,3 +1026,17 @@ class TaxHarvestForm(forms.ModelForm):
 
     def clean_portfolio_value(self):
         return self.cleaned_data.get("portfolio_value") or 0
+
+    def clean(self):
+        d = super().clean()
+        if not d.get("reinvestment"):
+            d["reinvested_on"] = None
+            return d
+        on, sold = d.get("reinvested_on"), d.get("date")
+        if not on:
+            self.add_error("reinvested_on", "When was it repurchased or converted?")
+        elif on > timezone.localdate():
+            self.add_error("reinvested_on", "Record it once it is done — not a future date.")
+        elif sold and on < sold:
+            self.add_error("reinvested_on", "Can't be before the sale.")
+        return d

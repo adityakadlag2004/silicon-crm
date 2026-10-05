@@ -1,0 +1,9 @@
+{# A harvest's two stages as a bar: sold = 50%, money back in = 100%. Expects `h`. #}
+<div class="ki-progress" role="progressbar" aria-label="Harvest progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ h.progress }}" style="min-width:110px;">
+  <span style="width:{{ h.progress }}%;background:{% if h.is_complete %}#15803D{% else %}#B45309{% endif %};"></span>
+</div>
+<div class="small" style="color:{% if h.is_complete %}var(--ki-text-muted){% else %}#B45309{% endif %};">
+  {% if not h.gain_booked %}Reviewed · nothing sold
+  {% elif h.reinvestment %}100% · {{ h.get_reinvestment_display }}{% if h.reinvested_on %} · {{ h.reinvested_on|date:"d M Y" }}{% endif %}
+  {% else %}50% · sold, awaiting repurchase{% endif %}
+</div>

@@ -59,12 +59,14 @@ def summary(harvests, fy, today):
 
 
 def next_harvest(last, today):
-    """The next harvest falls a year on: units bought back on the harvest day
-    are long-term once held MORE than 12 months — sold sooner, the gain is
-    short-term and taxed at 20%. ``days`` is negative once it is overdue."""
+    """The next harvest falls a year on: units bought back are long-term once
+    held MORE than 12 months — sold sooner, the gain is short-term and taxed at
+    20%. So it counts from the repurchase, or the sale while nothing has been
+    bought back. ``days`` is negative once it is overdue."""
     if not last:
         return {"next_harvest": None, "days": None, "overdue": 0}
-    due = _add_months(last.date, 12) + timedelta(days=1)
+    bought_back = last.reinvestment == TaxHarvest.REINVEST_MF and last.reinvested_on
+    due = _add_months(bought_back or last.date, 12) + timedelta(days=1)
     days = (due - today).days
     return {"next_harvest": due, "days": days, "overdue": max(-days, 0)}
 
@@ -120,3 +122,10 @@ def client_record(client, today):
         "years": by_year,
         "tax_saved": sum((min(y["gain"], y["limit"]) for y in by_year), Decimal(0)) * TAX_RATE,
     }
+
+
+def awaiting():
+    """Every harvest still at 50% — sold, money not yet back in — oldest first,
+    whatever its FY: until it is repurchased or converted it is AUM lost."""
+    return (TaxHarvest.objects.filter(reinvestment="", gain_booked__gt=0)
+            .select_related("client").order_by("date", "id"))

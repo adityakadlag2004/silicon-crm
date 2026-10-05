@@ -6,19 +6,29 @@
 
 <div class="ki-card" style="max-width:760px;">
   <p class="text-muted small">
-    Equity units sold to book long-term gain up to the ₹{{ limit|inr }} yearly tax-free limit,
-    and reinvested. Record the <strong>gain</strong>, not the sale value. Checked a client and
-    there is nothing to book this year? Record a 0 — it clears their pending tag.
+    Two stages: <strong>sell</strong> to book long-term gain up to the ₹{{ limit|inr }} yearly
+    tax-free limit (50%), then put the money <strong>back in</strong> — repurchase in the fund or
+    convert to insurance (100%). Record the <strong>gain</strong>, not the sale value. Nothing to
+    book this year? Record a 0 — it clears the client's pending tag.
   </p>
+  {% if harvest %}<div class="mb-3">{% include "clients/_harvest_progress.html" with h=harvest %}</div>{% endif %}
 
   <form method="post" novalidate>
     {% csrf_token %}
     {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors|join:" " }}</div>{% endif %}
     <div class="row g-3">
       {% include "clients/_client_picker.html" with field=form.client %}
+    </div>
+    <h3 class="ki-section-title mt-4">Stage 1 · Sell <span class="text-muted small fw-normal">(50%)</span></h3>
+    <div class="row g-3">
       {% include "insurance/_xp_field.html" with f=form.date %}
       {% include "insurance/_xp_field.html" with f=form.gain_booked %}
       {% include "insurance/_xp_field.html" with f=form.portfolio_value %}
+    </div>
+    <h3 class="ki-section-title mt-4">Stage 2 · Money back in <span class="text-muted small fw-normal">(100%)</span></h3>
+    <div class="row g-3">
+      {% include "insurance/_xp_field.html" with f=form.reinvestment %}
+      {% include "insurance/_xp_field.html" with f=form.reinvested_on %}
       {% include "insurance/_xp_field.html" with f=form.details col="col-12" %}
     </div>
     <div class="d-flex gap-2 justify-content-end mt-4">

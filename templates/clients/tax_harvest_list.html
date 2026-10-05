@@ -23,6 +23,7 @@
   <input type="hidden" name="fy" value="{{ fy }}"><input type="hidden" name="tab" value="{{ tab }}">
   <a href="?fy={{ fy }}&tab=pending{% if q %}&q={{ q|urlencode }}{% endif %}" class="ki-btn ki-btn-sm {% if tab == 'pending' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">{{ waiting }} <span class="text-muted">({{ pending|length }})</span></a>
   <a href="?fy={{ fy }}&tab=done{% if q %}&q={{ q|urlencode }}{% endif %}" class="ki-btn ki-btn-sm {% if tab == 'done' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Done <span class="text-muted">({{ done|length }})</span></a>
+  <a href="?fy={{ fy }}&tab=awaiting{% if q %}&q={{ q|urlencode }}{% endif %}" class="ki-btn ki-btn-sm {% if tab == 'awaiting' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Awaiting Repurchase <span class="text-muted">({{ awaiting|length }})</span></a>
   <a href="?fy={{ fy }}&tab=stopped{% if q %}&q={{ q|urlencode }}{% endif %}" class="ki-btn ki-btn-sm {% if tab == 'stopped' %}ki-btn-primary{% else %}ki-btn-secondary{% endif %}">Stopped <span class="text-muted">({{ stopped|length }})</span></a>
   <input type="search" name="q" value="{{ q }}" class="form-control form-control-sm" style="max-width:260px;" placeholder="Client name…">
   <button class="ki-btn ki-btn-primary ki-btn-sm" type="submit"><i class="bi bi-search"></i> Search</button>
@@ -81,7 +82,10 @@
           {% if r.client.tax_harvest_stopped %}<span class="ki-tag" style="--c:#57534E;">Stopped</span>{% endif %}
         </td>
         <td data-label="Harvested">
-          {% for h in r.entries %}<div>{{ h.date|date:"d M Y" }}{% if r.entries|length > 1 %} · ₹{{ h.gain_booked|inr }}{% endif %}</div>{% endfor %}
+          {% for h in r.entries %}
+            <div class="mb-1">{{ h.date|date:"d M Y" }}{% if r.entries|length > 1 %} · ₹{{ h.gain_booked|inr }}{% endif %}
+              {% include "clients/_harvest_progress.html" %}</div>
+          {% endfor %}
         </td>
         <td data-label="Profit Booked" class="num">₹{{ r.fy_gain|inr }}</td>
         <td data-label="Limit Left" class="num">₹{{ r.headroom|inr }}</td>
@@ -92,6 +96,31 @@
       {% empty %}
       <tr><td colspan="7"><div class="ki-empty"><i class="bi bi-piggy-bank"></i>
         {% if q %}No match.{% else %}No harvest recorded for {{ fy_label }} yet.{% endif %}
+      </div></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% elif tab == "awaiting" %}
+<p class="text-muted small">Sold but not yet repurchased or converted to insurance — out of our AUM until it is. Every year, oldest first.</p>
+<div class="ki-table-wrap">
+  <table class="ki-dtable ki-cardify">
+    <thead><tr>
+      <th>Client</th><th>Sold On</th><th class="num">Profit Booked</th><th>Progress</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for h in awaiting %}
+      <tr>
+        <td data-label="Client"><a href="{% url 'clients:client_profile' h.client_id %}#tax" class="name-link">{{ h.client.name }}</a></td>
+        <td data-label="Sold On">{{ h.date|date:"d M Y" }} <div class="text-muted small">{% if h.date == today %}today{% else %}{{ h.date|timesince:today }} ago{% endif %}</div></td>
+        <td data-label="Profit Booked" class="num">₹{{ h.gain_booked|inr }}</td>
+        <td data-label="Progress">{% include "clients/_harvest_progress.html" %}</td>
+        <td><a href="{% url 'clients:tax_harvest_edit' h.id %}" class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check2-circle"></i> Mark Repurchased</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5"><div class="ki-empty"><i class="bi bi-check2-all"></i>
+        {% if q %}No match.{% else %}Every harvest is back in — nothing awaiting repurchase.{% endif %}
       </div></td></tr>
       {% endfor %}
     </tbody>

@@ -379,13 +379,14 @@
           </div>
           <div class="ki-table-scroll">
             <table class="mini-table">
-              <thead><tr><th>Date</th><th class="text-right">Profit Booked</th><th class="text-right">Portfolio</th><th>Details</th><th>By</th><th></th></tr></thead>
+              <thead><tr><th>Sold On</th><th class="text-right">Profit Booked</th><th class="text-right">Portfolio</th><th>Progress</th><th>Details</th><th>By</th><th></th></tr></thead>
               <tbody>
                 {% for h in y.entries %}
                 <tr>
                   <td>{{ h.date|date:"d M Y" }}</td>
                   <td class="text-right">{% if h.gain_booked %}₹{{ h.gain_booked|inr }}{% else %}<span class="text-muted">reviewed · nil</span>{% endif %}</td>
                   <td class="text-right">{% if h.portfolio_value %}₹{{ h.portfolio_value|inr }}{% else %}—{% endif %}</td>
+                  <td>{% include "clients/_harvest_progress.html" %}</td>
                   <td style="white-space:pre-line;">{{ h.details|default:"—" }}</td>
                   <td>{% if h.created_by %}{{ h.created_by.get_full_name|default:h.created_by.username }}{% else %}—{% endif %}</td>
                   <td><a href="{% url 'clients:tax_harvest_edit' h.id %}" class="ki-btn ki-btn-secondary ki-btn-sm" aria-label="Edit harvest"><i class="bi bi-pencil"></i></a></td>

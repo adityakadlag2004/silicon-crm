@@ -32,8 +32,9 @@ def tax_harvest_list(request):
     # An unused exemption does not carry forward: once the FY is over it is missed.
     waiting = "Pending" if fy == current else "Missed"
     done, pending, stopped = th.book(fy, today)
+    awaiting = list(th.awaiting())
     tab = request.GET.get("tab")
-    tab = tab if tab in ("done", "stopped") else "pending"
+    tab = tab if tab in ("done", "stopped", "awaiting") else "pending"
 
     base = reverse("clients:tax_harvest_list")
     kpis = [
@@ -46,6 +47,10 @@ def tax_harvest_list(request):
         {"label": "Tax Saved (est.)", "color": "#7E22CE",
          "value": f"₹{inr(sum(r['tax_saved'] for r in done))}", "sub": "12.5% LTCG + cess"},
     ]
+    if awaiting:
+        kpis.insert(2, {"label": "Awaiting Repurchase", "value": len(awaiting), "color": "#BE123C",
+                        "url": f"{base}?fy={fy}&tab=awaiting", "active": tab == "awaiting",
+                        "sub": "sold, not yet back in · 50%"})
     over = sum(1 for r in done if r["over"])
     if over:
         kpis.append({"label": "Over the Limit", "value": over, "color": "#BE123C",
@@ -57,6 +62,7 @@ def tax_harvest_list(request):
         done = [r for r in done if all(w in r["client"].name.lower() for w in words)]
         pending = [r for r in pending if all(w in r["client"].name.lower() for w in words)]
         stopped = [r for r in stopped if all(w in r["client"].name.lower() for w in words)]
+        awaiting = [h for h in awaiting if all(w in h.client.name.lower() for w in words)]
 
     return render(request, "clients/tax_harvest_list.html", {
         "crumbs": [{"label": "Clients", "url": reverse("clients:all_clients")},
@@ -65,7 +71,7 @@ def tax_harvest_list(request):
         "fy": fy, "fy_label": th.fy_label(fy), "limit": th.exemption(fy),
         "years": [{"fy": y, "label": th.fy_label(y)} for y in years],
         "tab": tab, "waiting": waiting, "q": q, "today": today,
-        "done": done, "pending": pending, "stopped": stopped,
+        "done": done, "pending": pending, "stopped": stopped, "awaiting": awaiting,
     })
 
 
@@ -81,7 +87,10 @@ def tax_harvest_form(request, harvest_id=None):
                 obj.created_by = request.user
             obj.save()
             messages.success(request, f"Tax harvest {'updated' if harvest else 'recorded'} "
-                                      f"for {obj.client.name}.")
+                                      f"for {obj.client.name} — {obj.progress}% done.")
+            if not obj.is_complete:
+                messages.warning(request, "Only sold so far, so it is out of our AUM. Edit this "
+                                          "entry once it is repurchased or converted to insurance.")
             start, end = th.fy_range(obj.fy)
             booked = sum(obj.client.tax_harvests.filter(date__range=(start, end))
                          .values_list("gain_booked", flat=True))

@@ -153,3 +153,60 @@ class ScreenTests(TestCase):
         self.client.post(url, {"stop": "0", "next": "https://evil.example/"})
         self.customer.refresh_from_db()
         self.assertFalse(self.customer.tax_harvest_stopped)
+
+
+class ReinvestmentStageTests(TestCase):
+    """Selling is 50%; the harvest is complete once the money is back in."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user("th_stage", password="x")
+        Employee.objects.create(user=cls.user, role="employee", salary=0, active=True)
+        cls.customer = Client.objects.create(name="Stage Client")
+        cls.sold_on = timezone.localdate() - timedelta(days=5)
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def _post(self, harvest=None, **data):
+        url = (reverse("clients:tax_harvest_edit", args=[harvest.pk]) if harvest
+               else reverse("clients:tax_harvest_add"))
+        base = {"client": self.customer.pk, "date": self.sold_on.isoformat(), "gain_booked": "120000"}
+        return self.client.post(url, {**base, **data}, follow=True)
+
+    def test_a_sale_alone_is_half_done_and_waits_in_the_queue(self):
+        resp = self._post()
+        h = TaxHarvest.objects.get()
+        self.assertEqual((h.progress, h.reinvestment, h.reinvested_on), (50, "", None))
+        self.assertContains(resp, "50% done")
+        page = self.client.get(reverse("clients:tax_harvest_list") + "?tab=awaiting")
+        self.assertEqual(page.context["awaiting"], [h])
+        self.assertContains(page, "Mark Repurchased")
+
+    def test_repurchase_or_insurance_conversion_completes_it(self):
+        self._post()
+        h = TaxHarvest.objects.get()
+        on = (self.sold_on + timedelta(days=1)).isoformat()
+        for kind in (TaxHarvest.REINVEST_MF, TaxHarvest.REINVEST_INSURANCE):
+            self._post(h, reinvestment=kind, reinvested_on=on)
+            h.refresh_from_db()
+            self.assertEqual((h.progress, h.reinvestment), (100, kind))
+        self.assertEqual(list(th.awaiting()), [])
+
+    def test_the_repurchase_needs_a_date_not_before_the_sale(self):
+        self._post(reinvestment=TaxHarvest.REINVEST_MF)
+        self._post(reinvestment=TaxHarvest.REINVEST_MF,
+                   reinvested_on=(self.sold_on - timedelta(days=1)).isoformat())
+        self.assertFalse(TaxHarvest.objects.exists())
+
+    def test_a_nil_review_sold_nothing_so_it_is_complete(self):
+        h = _harvest(self.customer, self.sold_on, 0)
+        self.assertEqual(h.progress, 100)
+        self.assertEqual(list(th.awaiting()), [])
+
+    def test_next_harvest_counts_from_the_repurchase_not_the_sale(self):
+        h = _harvest(self.customer, date(2026, 3, 20), 125000,
+                     reinvestment=TaxHarvest.REINVEST_MF, reinvested_on=date(2026, 3, 27))
+        self.assertEqual(th.next_harvest(h, date(2026, 10, 5))["next_harvest"], date(2027, 3, 28))
+        h.reinvestment = TaxHarvest.REINVEST_INSURANCE      # no units bought back
+        self.assertEqual(th.next_harvest(h, date(2026, 10, 5))["next_harvest"], date(2027, 3, 21))

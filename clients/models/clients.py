@@ -371,7 +371,16 @@ class TaxHarvest(models.Model):
 
     A zero-gain row is a year *reviewed* with nothing to book (a falling
     market): it clears that year's pending tag just as a harvest does.
+
+    Two stages. Selling is half the job (50%): on its own it takes the money
+    out of the firm's AUM. The harvest is complete (100%) once the money goes
+    back in — repurchased in the fund, or converted into an insurance policy.
     """
+
+    REINVEST_MF = "mf"
+    REINVEST_INSURANCE = "insurance"
+    REINVEST_CHOICES = [(REINVEST_MF, "Repurchased in mutual fund"),
+                        (REINVEST_INSURANCE, "Converted to insurance")]
 
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name="tax_harvests")
     date = models.DateField(db_index=True)
@@ -380,6 +389,9 @@ class TaxHarvest(models.Model):
     portfolio_value = models.DecimalField(max_digits=14, decimal_places=2, default=0,
                                           validators=[MinValueValidator(0)])
     details = models.TextField(blank=True)
+    # Stage 2 — blank until the money is back in.
+    reinvestment = models.CharField(max_length=10, choices=REINVEST_CHOICES, blank=True)
+    reinvested_on = models.DateField(null=True, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -389,6 +401,15 @@ class TaxHarvest(models.Model):
 
     def __str__(self):
         return f"{self.client} · ₹{self.gain_booked} on {self.date}"
+
+    @property
+    def is_complete(self):
+        # A nil review sold nothing, so there is nothing to put back.
+        return bool(self.reinvestment) or not self.gain_booked
+
+    @property
+    def progress(self):
+        return 100 if self.is_complete else 50
 
     @property
     def fy(self):
