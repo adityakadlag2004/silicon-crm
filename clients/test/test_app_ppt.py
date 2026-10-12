@@ -74,7 +74,8 @@ class AppPptTests(TestCase):
         health.save()
         resp = self._http(self.admin_user).post(
             reverse("clients:app_sale_create"),
-            data=json.dumps({"client_id": self.customer.id, "product_id": health.id,
+            data=json.dumps({"client_id": self.customer.id,
+                             "product_id": Product.objects.get(code="HEALTH_MEDICLAIM").id,
                              "amount": "300000", "policy_type": "fresh",
                              "policy_date": "2026-01-05", "policy_number": "HLTH1",
                              "policy_years": 3, "emi_months": 5}),

@@ -1,4 +1,5 @@
 import re
+import json
 from datetime import date
 
 from django import forms
@@ -282,19 +283,13 @@ class SalePolicyTypeMixin:
         # force single-year / no-EMI so the fields can't leak onto other sales.
         if "policy_years" in self.fields:
             if _is_health_product_name(product):
-                try:
-                    years = int(cleaned_data.get("policy_years") or 1)
-                except (TypeError, ValueError):
-                    years = 1
-                cleaned_data["policy_years"] = max(1, years)
-                try:
-                    emi = int(cleaned_data.get("emi_months") or 0)
-                except (TypeError, ValueError):
-                    emi = 0
-                if emi not in {0, 5, 8, 11}:
-                    emi = 0
+                years = int(cleaned_data.get("policy_years") or 1)
                 # EMI only makes sense on a multiyear policy.
-                cleaned_data["emi_months"] = emi if cleaned_data["policy_years"] > 1 else 0
+                emi = int(cleaned_data.get("emi_months") or 0) if years > 1 else 0
+                if emi not in Sale.emi_allowed(years):
+                    self.add_error("emi_months", f"A {years}-year policy can be on EMI for "
+                                                 f"up to {Sale.EMI_MAX_MONTHS[years]} months.")
+                cleaned_data["policy_years"], cleaned_data["emi_months"] = years, emi
             else:
                 cleaned_data["policy_years"] = 1
                 cleaned_data["emi_months"] = 0
@@ -321,15 +316,16 @@ class SalePolicyTypeMixin:
         if inst.pk and inst.yearly_premium and not self.is_bound:
             self.initial["amount"] = inst.yearly_premium
 
-_POLICY_YEARS_CHOICES = [(1, "Single year"), (2, "2 years"), (3, "3 years")]
+# The term caps the EMI tenure; the form's JS hides the months a term can't take.
+_EMI_SELECT = forms.Select(attrs={"data-emi-max": json.dumps(Sale.EMI_MAX_MONTHS)})
 
 
 class AdminSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
     subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
     ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
-    policy_years = forms.ChoiceField(choices=_POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
-    emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months")
+    policy_years = forms.ChoiceField(choices=Sale.POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
+    emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months", widget=_EMI_SELECT)
     premium_mode = forms.ChoiceField(choices=Sale.PREMIUM_MODE_CHOICES, required=False, initial="yearly", label="Premium payment mode")
 
     class Meta:
@@ -359,8 +355,8 @@ class EditSaleForm(SalePolicyTypeMixin, forms.ModelForm):
     product = forms.ChoiceField(choices=(), widget=forms.Select(), label="Product")
     subproduct = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="Sub-product")
     ppt = forms.ChoiceField(choices=(), required=False, widget=forms.Select(), label="PPT")
-    policy_years = forms.ChoiceField(choices=_POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
-    emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months")
+    policy_years = forms.ChoiceField(choices=Sale.POLICY_YEARS_CHOICES, required=False, initial=1, label="Policy years")
+    emi_months = forms.ChoiceField(choices=Sale.EMI_MONTH_CHOICES, required=False, initial=0, label="EMI months", widget=_EMI_SELECT)
     premium_mode = forms.ChoiceField(choices=Sale.PREMIUM_MODE_CHOICES, required=False, initial="yearly", label="Premium payment mode")
 
     class Meta:

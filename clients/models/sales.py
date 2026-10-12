@@ -119,14 +119,20 @@ class Sale(models.Model):
     # first-year slice (amount / policy_years) is Fresh business now; the
     # remaining years become renewals on each anniversary. policy_years == 1 is
     # an ordinary single-year sale.
+    POLICY_YEARS_CHOICES = [(1, "Single year"), (2, "2 years"), (3, "3 years"),
+                            (4, "4 years"), (5, "5 years")]
     policy_years = models.PositiveSmallIntegerField(
         default=1,
         help_text="Years the (multiyear) policy covers. 1 = ordinary single-year sale.",
     )
     # Multiyear policies are often paid in monthly EMIs, due the 5th, starting
-    # the month AFTER the sale, for this many months (5/8/11; 0 = not on EMI).
+    # the month AFTER the sale, for this many months (0 = not on EMI).
     # Drives the monthly EMI-collection reminder + auto-assigned call task.
-    EMI_MONTH_CHOICES = [(0, "Not on EMI"), (5, "5 months"), (8, "8 months"), (11, "11 months")]
+    EMI_MONTH_CHOICES = [(0, "Not on EMI"), (5, "5 months"), (8, "8 months"),
+                         (11, "11 months"), (17, "17 months"), (23, "23 months")]
+    # The insurer caps the EMI tenure by term: 2y up to 11, 3y up to 17,
+    # 4–5y up to 23 months. A single-year policy is never on EMI.
+    EMI_MAX_MONTHS = {2: 11, 3: 17, 4: 23, 5: 23}
     emi_months = models.PositiveSmallIntegerField(default=0, choices=EMI_MONTH_CHOICES)
 
     # Life only: how the client pays the year's premium. The seller types the
@@ -194,6 +200,12 @@ class Sale(models.Model):
     @property
     def is_emi(self):
         return (self.emi_months or 0) > 0
+
+    @classmethod
+    def emi_allowed(cls, years):
+        """EMI month counts the insurer allows on a `years`-year policy (0 always)."""
+        cap = cls.EMI_MAX_MONTHS.get(years, 0)
+        return [m for m, _ in cls.EMI_MONTH_CHOICES if m <= cap]
 
     @property
     def annual_premium(self):

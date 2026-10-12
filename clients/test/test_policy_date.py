@@ -70,7 +70,7 @@ class PolicyDateFormTests(TestCase):
         from clients.forms import AdminSaleForm
         data = {
             "client": self.client_rec.id, "employee": self.emp.id,
-            "product": "Health Insurance", "amount": "12000",
+            "product": "Health Insurance", "subproduct": "Mediclaim", "amount": "12000",
             "policy_type": "fresh", "date": "2026-03-20",
             "policy_date": "2026-01-05", "policy_number": "INS76123499", "insurer": "Star Health",
         }
@@ -159,13 +159,13 @@ class AddSaleEndToEndTests(TestCase):
         tc = TC(); tc.force_login(self.admin_emp.user)
         resp = tc.post(reverse("clients:add_sale"), {
             "client": self.client_rec.id, "employee": self.seller.id,
-            "product": "Health Insurance", "amount": "12000",
+            "product": "Health Insurance", "subproduct": "Mediclaim", "amount": "12000",
             "policy_type": "fresh", "date": "2026-03-20",
             "policy_date": "2026-01-05", "cover_amount": "500000",
             "policy_number": "INS76123499", "insurer": "Star Health",
         })
         self.assertIn(resp.status_code, (302, 200))
-        sale = Sale.objects.filter(client=self.client_rec, product="Health Insurance").first()
+        sale = Sale.objects.filter(client=self.client_rec, product="Mediclaim").first()
         self.assertIsNotNone(sale, "sale was not created")
         self.assertEqual(sale.policy_date, date(2026, 1, 5))
         self.assertNotEqual(sale.policy_date, sale.date)
@@ -196,7 +196,7 @@ class AppApiPolicyDateTests(TestCase):
         au = User.objects.create_user("app_pd_admin", password="pw")
         cls.admin = Employee.objects.create(user=au, role="admin", salary=0, active=True)
         cls.client_rec = Client.objects.create(id=5010, name="Neha Kulkarni")
-        cls.health = Product.objects.get(code="HEALTH_INS")
+        cls.health = Product.objects.get(code="HEALTH_MEDICLAIM")  # Health's plans are sub-products
         cls.sip = Product.objects.get(code="SIP")
 
     def _post(self, **body):
@@ -271,7 +271,7 @@ class OldAppCompatibilityTests(TestCase):
         u = User.objects.create_user("oldapp_admin", password="pw")
         cls.admin = Employee.objects.create(user=u, role="admin", salary=0, active=True)
         cls.client_rec = Client.objects.create(id=5020, name="Vikram Joshi")
-        cls.health = Product.objects.get(code="HEALTH_INS")
+        cls.health = Product.objects.get(code="HEALTH_MEDICLAIM")  # Health's plans are sub-products
         cls.sip = Product.objects.get(code="SIP")
 
     def _post(self, payload):

@@ -164,6 +164,7 @@
         <div class="col-md-6" id="emi-group" style="display:none;">
           <label for="id_emi_months" class="form-label fw-semibold">Sold on EMI?</label>
           {{ form.emi_months }}
+          {% if form.emi_months.errors %}<div class="text-danger small mt-1">{{ form.emi_months.errors|striptags }}</div>{% endif %}
           <small class="form-text text-muted">Monthly EMI due the 5th, starting next month. Books call reminders for the client's employee on the 3rd–5th each month.</small>
         </div>
       </div>
@@ -429,7 +430,11 @@ document.addEventListener("DOMContentLoaded", function () {
       const multi = isHealthInsurance && yearsSel && parseInt(yearsSel.value, 10) >= 2;
       if (emiGroup) {
         emiGroup.style.display = multi ? "" : "none";
-        if (!multi && emiSel) emiSel.value = "0";
+        if (emiSel && yearsSel) {  // the term caps the EMI tenure (Sale.EMI_MAX_MONTHS)
+          const cap = multi ? (JSON.parse(emiSel.dataset.emiMax || "{}")[yearsSel.value] || 0) : 0;
+          Array.from(emiSel.options).forEach(o => { o.hidden = o.disabled = +o.value > cap; });
+          if (+emiSel.value > cap) emiSel.value = "0";
+        }
       }
     }
 

@@ -5,7 +5,7 @@ the current month, it pushes the client's mapped employee and — once per month
 auto-assigns a "call client for EMI" task due the 5th, so the call happens before
 the due date. A missed EMI can cancel the policy, so this is high priority.
 
-EMI window: starts the month AFTER the sale, runs `emi_months` (5/8/11) months.
+EMI window: starts the month AFTER the sale, runs `emi_months` (5–23) months.
 
 In CRONJOBS (scheduled 3rd–5th); the day guard makes it a no-op otherwise.
 """

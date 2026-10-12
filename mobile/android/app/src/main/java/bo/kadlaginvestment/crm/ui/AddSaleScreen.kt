@@ -74,7 +74,7 @@ fun AddSaleScreen(
     var policyNumber by remember { mutableStateOf("") }
     var policyYears by remember { mutableStateOf(1) }         // Health multiyear term
     var yearsMenuOpen by remember { mutableStateOf(false) }
-    var emiMonths by remember { mutableStateOf(0) }           // 0/5/8/11
+    var emiMonths by remember { mutableStateOf(0) }           // 0 = not on EMI; capped by term
     var emiMenuOpen by remember { mutableStateOf(false) }
     // Life only: the amount typed is the YEARLY premium; the server books the
     // sale at the first instalment for half-yearly / quarterly / monthly.
@@ -331,10 +331,10 @@ fun AddSaleScreen(
                 { yearsMenuOpen = true },
             ) {
                 DropdownMenu(expanded = yearsMenuOpen, onDismissRequest = { yearsMenuOpen = false }) {
-                    listOf(1 to "Single year", 2 to "2 years", 3 to "3 years").forEach { (v, lbl) ->
-                        DropdownMenuItem(text = { Text(lbl) }, onClick = {
+                    (1..5).forEach { v ->
+                        DropdownMenuItem(text = { Text(if (v == 1) "Single year" else "$v years") }, onClick = {
                             policyYears = v
-                            if (v <= 1) emiMonths = 0
+                            if (emiMonths > emiMaxMonths(v)) emiMonths = 0
                             yearsMenuOpen = false
                         })
                     }
@@ -349,8 +349,9 @@ fun AddSaleScreen(
                     { emiMenuOpen = true },
                 ) {
                     DropdownMenu(expanded = emiMenuOpen, onDismissRequest = { emiMenuOpen = false }) {
-                        listOf(0 to "Not on EMI", 5 to "5 months", 8 to "8 months", 11 to "11 months").forEach { (v, lbl) ->
-                            DropdownMenuItem(text = { Text(lbl) }, onClick = { emiMonths = v; emiMenuOpen = false })
+                        listOf(0, 5, 8, 11, 17, 23).filter { it <= emiMaxMonths(policyYears) }.forEach { v ->
+                            DropdownMenuItem(text = { Text(if (v == 0) "Not on EMI" else "$v months") },
+                                onClick = { emiMonths = v; emiMenuOpen = false })
                         }
                     }
                 }
@@ -468,3 +469,6 @@ fun AddSaleScreen(
         Spacer(Modifier.height(24.dp))
     }
 }
+
+/** The insurer's EMI cap for a term (server: Sale.EMI_MAX_MONTHS). */
+private fun emiMaxMonths(years: Int) = when (years) { 2 -> 11; 3 -> 17; 4, 5 -> 23; else -> 0 }

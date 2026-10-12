@@ -400,15 +400,19 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
 
 ## Multiyear health policies + EMI
 
-- A Health sale can be **multiyear** (`Sale.policy_years` 2/3): the entered
+- A Health sale can be **multiyear** (`Sale.policy_years` 2–5): the entered
   `amount` is the full multi-year premium. Only the **first-year slice**
   (`amount / policy_years`, via `Sale.annual_premium`) is Fresh business now —
   the margin report counts that slice, not the full amount. Years 2..N are
   recognized as **renewals on each anniversary** at the health renewal rate
   (12.75%), derived live in `_month_renewal_breakdown` (no records to maintain).
   Multiyear is **Health-only** (forced off for other products in the sale form).
-- Multiyear policies are often on **EMI** (`Sale.emi_months` 5/8/11), due the
-  **5th**, starting the month AFTER the sale. The `emi_reminders` cron (in
+- Multiyear policies are often on **EMI** (`Sale.emi_months` 5/8/11/17/23), due
+  the **5th**, starting the month AFTER the sale. **The term caps the tenure**
+  (`Sale.EMI_MAX_MONTHS`, the insurer's rule from 2026-10-12): 2y up to 11,
+  3y up to 17, 4–5y up to 23. Web `clean()` and `app_sale_create` refuse an
+  over-cap EMI rather than drop it (a dropped EMI loses its reminders); the
+  forms' JS and the app's picker hide what the term can't take. The `emi_reminders` cron (in
   CRONJOBS, 8 AM on the 3rd–5th) pushes the client's **mapped employee**
   (`Client.mapped_to`, falling back to the seller) and auto-assigns one
   high-priority "call client for EMI" **task** per policy per month (deduped via
@@ -416,6 +420,11 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   cancel the policy, so the reminder is the point.
 - The app's Add Sale carries the multiyear term + EMI pickers too (Health only,
   same rules as the web form).
+- **Personal Accident is a Health sub-product** (migration 0140, beside
+  "Mediclaim"), so it inherits all of the above — terms, EMI, tracker policy,
+  accruals — and rolls up into Health everywhere. Mediclaim exists because a
+  product with sub-products makes one mandatory on the sale forms: PA alone
+  would have booked every health sale as PA.
 - **Renewal reminders** (`renewal_reminders` cron, daily 8:45 AM) walk the
   **Insurance Tracker, not the sales book**. A policy's `end_date` *is* its
   renewal due date, so `InsurancePolicy` is the only queryable that reaches the
@@ -515,7 +524,7 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   the one told the EMIs stopped, and the only points a cancellation takes away
   are theirs. Deleting a policy stays admin-only.
 - **A policy pays for its term and no longer.** The term is what was sold
-  (`policy_years`, 1–3): year 1 lands with the sale and years 2..N on the
+  (`policy_years`, 1–5): year 1 lands with the sale and years 2..N on the
   anniversaries inside the term, so a 3-year policy produces exactly three
   credit events and a 2-year policy two. `coverage_end()` is the wall — nothing
   is credited on or after it, running the job daily for a decade adds nothing,

@@ -63,7 +63,7 @@
     <div class="col-6 col-md-3">
       <label class="form-label" for="calc-years">Policy years <span class="text-muted">(health)</span></label>
       <select class="form-select" name="policy_years" id="calc-years">
-        {% for y in "123"|make_list %}
+        {% for y in "12345"|make_list %}
           <option value="{{ y }}" {% if trial.policy_years|stringformat:"s" == y %}selected{% endif %}>{{ y }}</option>
         {% endfor %}
       </select>

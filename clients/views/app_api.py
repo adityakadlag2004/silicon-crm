@@ -452,10 +452,15 @@ def app_sale_create(request):
     except (TypeError, ValueError):
         policy_years, emi_months = 1, 0
     if product.is_health:
-        policy_years = policy_years if policy_years in (1, 2, 3) else 1
-        emi_months = emi_months if emi_months in (0, 5, 8, 11) else 0
+        policy_years = policy_years if policy_years in dict(Sale.POLICY_YEARS_CHOICES) else 1
         if policy_years <= 1:
             emi_months = 0
+        if emi_months not in Sale.emi_allowed(policy_years):
+            return JsonResponse(
+                {"ok": False, "error": f"A {policy_years}-year policy can be on EMI for up to "
+                                       f"{Sale.EMI_MAX_MONTHS[policy_years]} months."},
+                status=400,
+            )
     else:
         policy_years, emi_months = 1, 0
 

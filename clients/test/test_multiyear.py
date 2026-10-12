@@ -66,6 +66,7 @@ class MultiyearFormTests(TestCase):
 
     def _data(self, product, **extra):
         d = {"client": self.customer.id, "employee": self.emp.id, "product": product,
+             "subproduct": "Mediclaim" if product == "Health Insurance" else "",
              "amount": "300000", "date": "2026-07-20", "policy_years": "3", "emi_months": "5"}
         d.update(extra)
         return d
@@ -92,6 +93,73 @@ class MultiyearFormTests(TestCase):
                                           policy_number="X2", insurer="Star Health"))
         self.assertTrue(f.is_valid(), f.errors)
         self.assertEqual(f.cleaned_data["emi_months"], 0)  # EMI dropped without multiyear
+
+    def test_five_year_term_takes_a_23_month_emi(self):
+        from clients.forms import AdminSaleForm
+        f = AdminSaleForm(data=self._data("Health Insurance", policy_years="5", emi_months="23",
+                                          policy_type="fresh", policy_date="2026-07-20",
+                                          policy_number="X5", insurer="Star Health"))
+        self.assertTrue(f.is_valid(), f.errors)
+        self.assertEqual((f.cleaned_data["policy_years"], f.cleaned_data["emi_months"]), (5, 23))
+
+    def test_emi_tenure_is_capped_by_the_term(self):
+        """2y up to 11 months, 3y up to 17, 4–5y up to 23 — the insurer's caps."""
+        from clients.forms import AdminSaleForm
+        for years, emi, ok in [("2", "11", True), ("2", "17", False), ("3", "17", True),
+                               ("3", "23", False), ("4", "23", True)]:
+            f = AdminSaleForm(data=self._data("Health Insurance", policy_years=years, emi_months=emi,
+                                              policy_type="fresh", policy_date="2026-07-20",
+                                              policy_number=f"C{years}{emi}", insurer="Star Health"))
+            self.assertEqual(f.is_valid(), ok, (years, emi, f.errors))
+            if not ok:
+                self.assertIn("emi_months", f.errors)
+
+    def test_personal_accident_is_sold_on_healths_terms(self):
+        """PA is a Health sub-product (migration 0140): 1–5 years, EMI up to 23."""
+        from clients.forms import AdminSaleForm
+        f = AdminSaleForm(data=self._data("Health Insurance", subproduct="Personal Accident",
+                                          policy_years="5", emi_months="23", policy_type="fresh",
+                                          policy_date="2026-07-20", policy_number="PA5",
+                                          insurer="Star Health"))
+        self.assertTrue(f.is_valid(), f.errors)
+        self.assertEqual(f.cleaned_data["product"], "Personal Accident")
+        self.assertEqual((f.cleaned_data["policy_years"], f.cleaned_data["emi_months"]), (5, 23))
+
+
+class AppEmiCapTests(TestCase):
+    """The app's Add Sale enforces the same term → EMI caps as the web form."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.health, _ = Product.objects.get_or_create(
+            code="HEALTH_INS", defaults={"name": "Health Insurance"})
+        u = User.objects.create_user("emi_cap_admin", password="x")
+        cls.admin = Employee.objects.create(user=u, role="admin", salary=0, active=True)
+        cls.customer = Client.objects.create(name="EMI Cap Client")
+
+    def _post(self, years, emi):
+        import json
+        from django.urls import reverse
+        self.client.force_login(self.admin.user)
+        return self.client.post(reverse("clients:app_sale_create"), content_type="application/json",
+                                data=json.dumps({
+                                    "client_id": self.customer.id,
+                                    "product_id": Product.objects.get(code="HEALTH_MEDICLAIM").id,
+                                    "amount": "250000", "policy_type": "fresh",
+                                    "policy_date": "2026-07-20", "policy_number": f"APP{years}{emi}",
+                                    "policy_years": years, "emi_months": emi}))
+
+    def test_five_year_23_month_emi_is_booked(self):
+        resp = self._post(5, 23)
+        self.assertEqual(resp.status_code, 200, resp.content)
+        sale = Sale.objects.get(policy_number="APP523")
+        self.assertEqual((sale.policy_years, sale.emi_months), (5, 23))
+
+    def test_over_the_cap_is_refused_not_dropped(self):
+        resp = self._post(3, 23)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("17 months", resp.json()["error"])
+        self.assertFalse(Sale.objects.filter(policy_number="APP323").exists())
 
 
 class EmiWindowTests(TestCase):

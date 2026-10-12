@@ -35,7 +35,7 @@ class SalePolicyUploadTests(TestCase):
     def _post(self, **extra):
         data = {
             "client": self.customer.id, "employee": self.emp.id,
-            "product": self.health.name, "amount": "20000",
+            "product": self.health.name, "subproduct": "Mediclaim", "amount": "20000",
             "cover_amount": "500000", "policy_type": "fresh",
             "date": "2026-05-10", "policy_date": "2026-05-10",
             "policy_number": "UPL900", "insurer": "Star Health", "policy_years": 1, "emi_months": 0,
