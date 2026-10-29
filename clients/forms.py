@@ -7,7 +7,7 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django.forms import inlineformset_factory
 from django.utils import timezone
-from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadInterest, FirmSettings, Renewal, Product, PlanPptRate
+from .models import Sale, Client, Employee, Lead, LeadFamilyMember, LeadGoal, LeadInterest, FirmSettings, Renewal, Product, PlanPptRate
 
 # Indian PAN: 5 letters, 4 digits, 1 letter (e.g. ABCDE1234F).
 PAN_RE = re.compile(r"[A-Z]{5}[0-9]{4}[A-Z]")
@@ -613,11 +613,17 @@ class LeadForm(forms.ModelForm):
             "income",
             "expenses",
             "notes",
+            "date_of_birth",
+            "occupation",
+            "city",
+            "hobbies",
             "assigned_to",
             "collaborators",
             "stage",
         ]
         widgets = {
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
+            "hobbies": forms.Textarea(attrs={"rows": 2, "placeholder": "Cricket fan, daughter studying in Pune, plans a Europe trip"}),
             "data_received_on": forms.DateInput(attrs={"type": "date"}),
             "income": forms.NumberInput(attrs={"step": "0.01"}),
             "expenses": forms.NumberInput(attrs={"step": "0.01"}),
@@ -658,6 +664,9 @@ class LeadForm(forms.ModelForm):
             else:
                 widget.attrs.setdefault("class", "form-control")
 
+    def clean_date_of_birth(self):
+        return validate_dob(self.cleaned_data.get("date_of_birth"), required=False)
+
     def clean_collaborators(self):
         """The owner is on the team by definition — never also a collaborator.
 
@@ -673,13 +682,56 @@ class LeadForm(forms.ModelForm):
 
 
 class LeadFamilyMemberForm(forms.ModelForm):
+    """One relative. Serves the family-tree modal (with `via`) and the lead
+    form's formset (without it — see LeadFamilyMemberFormSet)."""
+
     class Meta:
         model = LeadFamilyMember
-        fields = ["name", "relation", "date_of_birth", "notes"]
+        fields = ["name", "relation", "via", "date_of_birth", "phone", "occupation", "notes"]
         widgets = {
             "date_of_birth": forms.DateInput(attrs={"type": "date"}),
-            "notes": forms.Textarea(attrs={"rows": 2}),
+            "notes": forms.Textarea(attrs={"rows": 2, "placeholder": "Health conditions, existing cover, school / college…"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["relation"].choices = [("", "— Choose —")] + LeadFamilyMember.RELATION_CHOICES
+        if "via" in self.fields:
+            # Only this lead's own children — a posted id from another lead's
+            # family must not validate.
+            self.fields["via"].queryset = LeadFamilyMember.objects.filter(
+                lead_id=self.instance.lead_id, relation__in=LeadFamilyMember.CHILDREN,
+            ).exclude(pk=self.instance.pk)
+            self.fields["via"].empty_label = "— Not sure yet —"
+        for field in self.fields.values():
+            css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
+            field.widget.attrs.setdefault("class", css)
+
+    def clean_date_of_birth(self):
+        return validate_dob(self.cleaned_data.get("date_of_birth"), required=False)
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("relation") not in LeadFamilyMember.CHILD_SPOUSES + LeadFamilyMember.GRANDCHILDREN:
+            cleaned["via"] = None
+        return cleaned
+
+
+class LeadGoalForm(forms.ModelForm):
+    class Meta:
+        model = LeadGoal
+        fields = ["kind", "member", "target_amount", "target_year", "note"]
+        labels = {"kind": "Goal", "target_amount": "Amount needed (₹)", "target_year": "By year",
+                  "note": "Details"}
+        widgets = {"target_amount": forms.NumberInput(attrs={"step": "1", "min": "0"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["member"].queryset = LeadFamilyMember.objects.filter(lead_id=self.instance.lead_id)
+        self.fields["member"].empty_label = "The whole family"
+        for field in self.fields.values():
+            css = "form-select" if isinstance(field.widget, forms.Select) else "form-control"
+            field.widget.attrs.setdefault("class", css)
 
 
 class LeadInterestForm(forms.ModelForm):
@@ -718,6 +770,9 @@ LeadFamilyMemberFormSet = inlineformset_factory(
     Lead,
     LeadFamilyMember,
     form=LeadFamilyMemberForm,
+    # No `via`: it is set on the tree. A field missing from the POST would
+    # blank the link on every save of the lead form.
+    fields=["name", "relation", "date_of_birth", "phone", "occupation", "notes"],
     extra=1,
     can_delete=True,
 )

@@ -62,6 +62,7 @@ from .leads import (  # noqa: F401
     Lead,
     LeadRemark,
     LeadFamilyMember,
+    LeadGoal,
     LeadInterest,
     LeadStageEvent,
 )

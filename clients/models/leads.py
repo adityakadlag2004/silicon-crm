@@ -1,7 +1,7 @@
-"""Lead Pipeline: SPANCO stages, product interests, remarks, follow-ups, family."""
+"""Lead Pipeline: SPANCO stages, product interests, remarks, follow-ups, family, goals."""
 
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
@@ -11,6 +11,14 @@ from .hr import Employee
 
 
 # Calendar (calling component removed — see migration 0057+ for table drops)
+
+
+def years_old(dob):
+    """Whole years old today, or None when there is no date of birth."""
+    if not dob:
+        return None
+    today = timezone.localdate()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 class Lead(models.Model):
@@ -104,6 +112,15 @@ class Lead(models.Model):
     income = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     expenses = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     notes = models.TextField(blank=True)
+    # Who the person is. Read before every call, so a lead picked up after a
+    # month's silence still opens on the human, not just the deal.
+    date_of_birth = models.DateField(null=True, blank=True)
+    occupation = models.CharField(max_length=120, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    hobbies = models.TextField(
+        "Interests & hobbies", blank=True,
+        help_text="What they care about outside money — what the next call opens with.",
+    )
 
     # "Lost / parked" in SPANCO terms. Kept under the old column name so no
     # historical row moves during the redesign.
@@ -259,6 +276,11 @@ class Lead(models.Model):
         return bool(tier and tier["key"] in self.LOSS_SIGNOFF_TIERS)
 
     @property
+    def years_old(self):
+        """The person's age (None without a DOB) — `age_days` is the lead's."""
+        return years_old(self.date_of_birth)
+
+    @property
     def age_days(self):
         """Days since the lead was added — its age in the system, not in its stage."""
         return (timezone.now() - self.created_at).days
@@ -386,14 +408,101 @@ class LeadRemark(models.Model):
 
 
 class LeadFamilyMember(models.Model):
+    """One relative of the lead, placed on the family tree by `relation`.
+
+    The relation is relative to the lead ("Self"). Children-in-law and
+    grandchildren also name `via` — the lead's child they hang off — or the
+    tree cannot tell whose spouse or whose child they are.
+    """
+
+    RELATION_CHOICES = [
+        ("spouse", "Spouse"),
+        ("father", "Father"),
+        ("mother", "Mother"),
+        ("son", "Son"),
+        ("daughter", "Daughter"),
+        ("brother", "Brother"),
+        ("sister", "Sister"),
+        ("daughter_in_law", "Daughter-in-law"),
+        ("son_in_law", "Son-in-law"),
+        ("grandson", "Grandson"),
+        ("granddaughter", "Granddaughter"),
+        ("father_in_law", "Father-in-law"),
+        ("mother_in_law", "Mother-in-law"),
+        ("other", "Other"),
+    ]
+    CHILDREN = ("son", "daughter")
+    CHILD_SPOUSES = ("daughter_in_law", "son_in_law")
+    GRANDCHILDREN = ("grandson", "granddaughter")
+
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="family_members")
     name = models.CharField(max_length=255)
-    relation = models.CharField(max_length=100, blank=True)
+    relation = models.CharField(max_length=100, choices=RELATION_CHOICES, default="other")
+    via = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+        verbose_name="Spouse / child of",
+        help_text="For a child-in-law or grandchild: which of the lead's children.",
+    )
     date_of_birth = models.DateField(null=True, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    occupation = models.CharField(max_length=120, blank=True)
     notes = models.TextField(blank=True)
 
     class Meta:
         ordering = ["name"]
 
+    def save(self, *args, **kwargs):
+        if self.phone:
+            self.phone = clean_phone(self.phone)
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.name} ({self.relation})"
+        return f"{self.name} ({self.get_relation_display()})"
+
+    @property
+    def years_old(self):
+        return years_old(self.date_of_birth)
+
+
+class LeadGoal(models.Model):
+    """Something the lead is saving for — the reason a product is needed."""
+
+    KIND_CHOICES = [
+        ("retirement", "Retirement"),
+        ("child_education", "Child's education"),
+        ("child_marriage", "Child's marriage"),
+        ("house", "Buy a house"),
+        ("vehicle", "Buy a vehicle"),
+        ("travel", "Travel"),
+        ("emergency", "Emergency fund"),
+        ("protection", "Protect the family"),
+        ("wealth", "Wealth creation"),
+        ("tax", "Tax saving"),
+        ("other", "Other"),
+    ]
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="goals")
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="other")
+    member = models.ForeignKey(
+        LeadFamilyMember, null=True, blank=True, on_delete=models.SET_NULL, related_name="goals",
+        verbose_name="For", help_text="Whose goal it is, when it is one person's (a child's education).",
+    )
+    target_amount = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)],
+    )
+    target_year = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(2000), MaxValueValidator(2100)],
+    )
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["target_year", "id"]
+
+    def __str__(self):
+        who = f" for {self.member.name}" if self.member_id else ""
+        return f"{self.get_kind_display()}{who}"
+
+    @property
+    def years_away(self):
+        return self.target_year - timezone.localdate().year if self.target_year else None

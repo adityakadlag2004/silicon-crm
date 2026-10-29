@@ -486,3 +486,55 @@ a.sip-tile:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow)
 .ki-split-note a:hover strong { text-decoration:underline; }
 .ki-split-earlier { flex-wrap:wrap; }
 .ki-split-earlier .ki-split-sub { flex-basis:100%; font-size:.78rem; color:var(--ki-text-muted); }
+
+/* ─── Family tree (lead page) ────────────────────────────────
+   The nested-list org chart: every <li> draws its own elbow up
+   to the bar above it (::before / ::after), so the tree is just
+   markup. A couple sits side by side joined by a line, and its
+   children hang from the middle of that line. Scrolls sideways
+   inside itself on a phone instead of widening the page.      */
+.ki-ftree-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 1rem .5rem 1.25rem; }
+.ki-ftree { width: max-content; margin: 0 auto; --line: var(--ki-text-muted); }
+.ki-ftree ul { display: flex; justify-content: center; margin: 0; padding: 20px 0 0; position: relative; }
+.ki-ftree > ul { padding-top: 0; }
+.ki-ftree li {
+  list-style: none; position: relative; padding: 20px 6px 0;
+  display: flex; flex-direction: column; align-items: center;
+}
+.ki-ftree li::before, .ki-ftree li::after {
+  content: ""; position: absolute; top: 0; right: 50%; width: 50%; height: 20px;
+  border-top: 2px solid var(--line);
+}
+.ki-ftree li::after { right: auto; left: 50%; border-left: 2px solid var(--line); }
+.ki-ftree li:only-child::before, .ki-ftree li:only-child::after { display: none; }
+.ki-ftree li:only-child { padding-top: 0; }
+.ki-ftree li:first-child::before, .ki-ftree li:last-child::after { border: 0; }
+.ki-ftree li:last-child::before { border-right: 2px solid var(--line); border-radius: 0 6px 0 0; }
+.ki-ftree li:first-child::after { border-radius: 6px 0 0 0; }
+.ki-ftree ul ul::before {
+  content: ""; position: absolute; top: 0; left: 50%; height: 20px; border-left: 2px solid var(--line);
+}
+.ki-fcouple { display: flex; gap: 18px; position: relative; }
+.ki-fcouple::before {
+  content: ""; position: absolute; left: 25%; right: 25%; top: 50%; border-top: 2px solid var(--line);
+}
+.ki-fcouple:has(+ ul)::after {
+  content: ""; position: absolute; left: 50%; top: 50%; bottom: 0; border-left: 2px solid var(--line);
+}
+.ki-fnode {
+  position: relative; z-index: 1; width: 112px; min-height: 78px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  padding: .45rem .4rem; border: 2px solid var(--ki-card-border); border-radius: 12px;
+  background: var(--ki-card-bg); color: var(--ki-text-primary);
+  font: inherit; text-align: center; text-decoration: none; cursor: pointer; transition: var(--ki-transition);
+}
+.ki-fnode:hover { border-color: var(--ki-primary); box-shadow: var(--ki-shadow); color: var(--ki-text-primary); }
+.ki-fnode .rel { font-size: .64rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ki-text-secondary); }
+.ki-fnode .nm { font-weight: 600; font-size: .82rem; line-height: 1.2; overflow-wrap: anywhere; }
+.ki-fnode .meta { font-size: .7rem; color: var(--ki-text-secondary); }
+.ki-fnode-self { border-color: var(--ki-primary); background: var(--ki-primary-pale); }
+.ki-fnode-add { border-style: dashed; color: var(--ki-text-secondary); }
+.ki-fnode-add .bi { font-size: 1.1rem; }
+
+/* The last thing said to the lead, at the top of its page. */
+.ki-quote { border-left: 3px solid var(--ki-primary); padding: .1rem 0 .1rem .7rem; margin: 0; font-size: .92rem; }

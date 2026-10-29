@@ -62,6 +62,30 @@
     </div>
   </div>
 
+  <div class="ki-card mb-3">
+    <div class="ki-card-label"><i class="bi bi-person-vcard"></i> About the person</div>
+    <div class="row g-3 p-3">
+      <div class="col-md-3">
+        <label class="form-label" for="{{ form.date_of_birth.id_for_label }}">Date of birth</label>
+        {{ form.date_of_birth }}
+        {% for e in form.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="col-md-5">
+        <label class="form-label" for="{{ form.occupation.id_for_label }}">Occupation</label>
+        {{ form.occupation }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="{{ form.city.id_for_label }}">City</label>
+        {{ form.city }}
+      </div>
+      <div class="col-12">
+        <label class="form-label" for="{{ form.hobbies.id_for_label }}">{{ form.hobbies.label }}</label>
+        {{ form.hobbies }}
+        <div class="form-text">{{ form.hobbies.help_text }}</div>
+      </div>
+    </div>
+  </div>
+
   {% comment %}
     Requirements: add only what this lead actually needs. There is deliberately
     no pre-filled Health / Life / SIP grid — that was the old format, and it
@@ -104,7 +128,7 @@
     <div class="ki-card-label d-flex justify-content-between align-items-center">
       <span><i class="bi bi-people"></i> Family Members</span>
       <div class="d-flex gap-2">
-        <small class="text-muted me-2 align-self-center">Capture key relations.</small>
+        <small class="text-muted me-2 align-self-center">Capture key relations — the lead page draws them as a family tree.</small>
         <button type="button" class="ki-btn ki-btn-sm ki-btn-primary" id="add-family-btn"><i class="bi bi-plus"></i> Add</button>
       </div>
     </div>
@@ -117,7 +141,9 @@
               {{ f.id }}
               <div class="mb-2"><label class="form-label" for="{{ f.name.id_for_label }}">Name</label>{{ f.name }}</div>
               <div class="mb-2"><label class="form-label" for="{{ f.relation.id_for_label }}">Relation</label>{{ f.relation }}</div>
-              <div class="mb-2"><label class="form-label" for="{{ f.date_of_birth.id_for_label }}">DOB</label>{{ f.date_of_birth }}</div>
+              <div class="mb-2"><label class="form-label" for="{{ f.date_of_birth.id_for_label }}">DOB</label>{{ f.date_of_birth }}{% for e in f.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}</div>
+              <div class="mb-2"><label class="form-label" for="{{ f.phone.id_for_label }}">Phone</label>{{ f.phone }}</div>
+              <div class="mb-2"><label class="form-label" for="{{ f.occupation.id_for_label }}">Occupation / studying</label>{{ f.occupation }}</div>
               <div class="mb-2"><label class="form-label" for="{{ f.notes.id_for_label }}">Notes</label>{{ f.notes }}</div>
               {% if family_formset.can_delete %}
                 <div class="d-flex justify-content-between align-items-center">
@@ -163,6 +189,8 @@
       <div class="mb-2"><label class="form-label">Name</label>{{ family_formset.empty_form.name }}</div>
       <div class="mb-2"><label class="form-label">Relation</label>{{ family_formset.empty_form.relation }}</div>
       <div class="mb-2"><label class="form-label">DOB</label>{{ family_formset.empty_form.date_of_birth }}</div>
+      <div class="mb-2"><label class="form-label">Phone</label>{{ family_formset.empty_form.phone }}</div>
+      <div class="mb-2"><label class="form-label">Occupation / studying</label>{{ family_formset.empty_form.occupation }}</div>
       <div class="mb-2"><label class="form-label">Notes</label>{{ family_formset.empty_form.notes }}</div>
       {% if family_formset.can_delete %}
         <div class="d-flex justify-content-between align-items-center">

@@ -24,6 +24,8 @@ from .. import permissions
 from ..models import (
     Employee,
     Lead,
+    LeadFamilyMember,
+    LeadGoal,
     LeadStageEvent,
     Product,
     Sale,
@@ -31,7 +33,9 @@ from ..models import (
 )
 from ..forms import (
     LeadForm,
+    LeadFamilyMemberForm,
     LeadFamilyMemberFormSet,
+    LeadGoalForm,
     LeadInterestFormSet,
 )
 from ..services import followups
@@ -349,6 +353,10 @@ def lead_detail(request, lead_id):
         }
         for index, (stage, label) in enumerate(Lead.STAGE_CHOICES)
     ]
+    remarks = list(lead.remarks.select_related("created_by"))
+    events = list(lead.stage_events.select_related("created_by")[:50])
+    fus = list(followups.for_source(followups.LEAD, lead.pk))
+    open_fus = [f for f in fus if f.status in Task.OPEN_STATUSES and f.due_date]
     return render(request, "clients/leads/lead_detail.html", {
         "crumbs": [
             {"label": "Leads", "url": reverse("clients:lead_management")},
@@ -360,10 +368,22 @@ def lead_detail(request, lead_id):
         "next_stage": lead.next_stage,
         "next_stage_label": dict(Lead.STAGE_CHOICES).get(lead.next_stage, ""),
         "interests": lead.interests.select_related("product"),
-        "followups": followups.for_source(followups.LEAD, lead.pk),
+        "followups": fus,
         "open_task_statuses": Task.OPEN_STATUSES,
-        "remarks": lead.remarks.select_related("created_by").order_by("-created_at"),
-        "stage_events": lead.stage_events.select_related("created_by")[:50],
+        # The catch-up card: what was said last and what is booked next, so a
+        # lead picked up after a month opens on the conversation, not a form.
+        "last_remark": remarks[0] if remarks else None,
+        "next_followup": min(open_fus, key=lambda f: (f.due_date, f.due_time or datetime.min.time()),
+                             default=None),
+        # Notes and stage moves read as one story, newest first.
+        "history": sorted([("note", r.created_at, r) for r in remarks]
+                          + [("stage", e.created_at, e) for e in events],
+                          key=lambda row: row[1], reverse=True),
+        "tree": lead_service.family_tree(lead),
+        "family_form": LeadFamilyMemberForm(instance=LeadFamilyMember(lead=lead)),
+        "via_relations": " ".join(LeadFamilyMember.CHILD_SPOUSES + LeadFamilyMember.GRANDCHILDREN),
+        "goals": lead.goals.select_related("member"),
+        "goal_form": LeadGoalForm(instance=LeadGoal(lead=lead)),
         "can_delete_drive_folder": permissions.is_admin_or_manager(request.user),
         "can_decide_loss": lead_service.can_decide_loss(request.user),
         "loss_request": (
@@ -371,6 +391,38 @@ def lead_detail(request, lead_id):
             if lead.loss_requested_at else None
         ),
     })
+
+
+def _save_lead_row(request, lead_id, related, row_id, form_class, anchor):
+    """Add, edit or (`delete=1`) remove one row hanging off a lead — a relative
+    on the family tree or a goal. Scoped like every lead action: a lead the
+    user cannot see is a 404, and so is a row id from another lead."""
+    lead = get_object_or_404(_lead_queryset_for_request(request), pk=lead_id)
+    manager = getattr(lead, related)
+    row = get_object_or_404(manager, pk=row_id) if row_id else manager.model(lead=lead)
+    if row.pk and request.POST.get("delete"):
+        row.delete()
+        messages.info(request, f"Removed {row}.")
+    else:
+        form = form_class(request.POST, instance=row)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Saved {row}.")
+        else:
+            messages.error(request, "Not saved — " + " ".join(e for errs in form.errors.values() for e in errs))
+    return redirect(reverse("clients:lead_detail", args=[lead.id]) + anchor)
+
+
+@login_required
+@require_POST
+def lead_family_save(request, lead_id, member_id=None):
+    return _save_lead_row(request, lead_id, "family_members", member_id, LeadFamilyMemberForm, "#family")
+
+
+@login_required
+@require_POST
+def lead_goal_save(request, lead_id, goal_id=None):
+    return _save_lead_row(request, lead_id, "goals", goal_id, LeadGoalForm, "#goals")
 
 
 @login_required

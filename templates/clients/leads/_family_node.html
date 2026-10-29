@@ -1,0 +1,14 @@
+{% comment %}
+  One relative on the lead's family tree. Clicking opens the shared family
+  modal pre-filled from the data-f-* attributes (see lead_detail.html).
+{% endcomment %}
+<button type="button" class="ki-fnode" data-bs-toggle="modal" data-bs-target="#familyModal"
+        data-title="Edit {{ m.name }}" data-edit="1"
+        data-action="{% url 'clients:lead_family_edit' lead.id m.id %}"
+        data-f-name="{{ m.name }}" data-f-relation="{{ m.relation }}" data-f-via="{{ m.via_id|default_if_none:'' }}"
+        data-f-date_of_birth="{{ m.date_of_birth|date:'Y-m-d' }}" data-f-phone="{{ m.phone }}"
+        data-f-occupation="{{ m.occupation }}" data-f-notes="{{ m.notes }}">
+  <span class="rel">{{ m.get_relation_display }}</span>
+  <span class="nm">{{ m.name }}</span>
+  <span class="meta">{% if m.years_old is not None %}{{ m.years_old }} yrs{% endif %}{% if m.years_old is not None and m.occupation %} · {% endif %}{{ m.occupation|truncatechars:16 }}</span>
+</button>

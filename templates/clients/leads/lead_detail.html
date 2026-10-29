@@ -65,6 +65,44 @@
 </div>
 {% endif %}
 
+{% comment %}
+  Catch up: what was said last and what is booked next. A lead picked up after
+  a month opens on the conversation, and the note box is right here because a
+  note not written straight after the call is never written.
+{% endcomment %}
+<div class="ki-card mb-3" id="catch-up">
+  <div class="ki-card-label"><i class="bi bi-chat-quote"></i> Catch up</div>
+  <div class="row g-3 p-3">
+    <div class="col-md-7">
+      <div class="small text-muted mb-1">Last conversation</div>
+      {% if last_remark %}
+        <blockquote class="ki-quote mb-1">{{ last_remark.text|linebreaksbr }}</blockquote>
+        <div class="text-muted" style="font-size:0.75rem;">{{ last_remark.created_by.username|default:"System" }} &bull; {{ last_remark.created_at|timesince }} ago ({{ last_remark.created_at|date:"d M Y" }})</div>
+      {% else %}
+        <div class="text-muted small">Nothing written down yet. Note what you talked about after every call — it is the first thing the next person to open this lead reads.</div>
+      {% endif %}
+      <div class="small text-muted mt-3 mb-1">Next follow-up</div>
+      {% if next_followup %}
+        <a class="small fw-semibold" href="{% url 'clients:task_detail' next_followup.id %}">{{ next_followup.due_date|date:"D d M Y" }}{% if next_followup.due_time %}, {{ next_followup.due_time|time:"H:i" }}{% endif %}</a>
+        {% if next_followup.is_overdue %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
+        {# The note leads the task text (followups._describe); the rest is context for the phone. #}
+        <span class="small text-muted">{{ next_followup.description.splitlines.0|truncatechars:90 }}</span>
+      {% else %}
+        <span class="badge bg-danger">None booked</span>
+        <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary ms-1" data-bs-toggle="modal" data-bs-target="#addFollowupModal"><i class="bi bi-alarm"></i> Book one</button>
+      {% endif %}
+    </div>
+    <div class="col-md-5">
+      <form method="post" action="{% url 'clients:lead_add_remark' lead.id %}">
+        {% csrf_token %}
+        <label class="form-label small" for="catchup-note">What did you talk about?</label>
+        <textarea name="text" id="catchup-note" class="form-control" rows="3" required placeholder="Spoke to his wife — wants a term plan quote by Friday; son's admission is in June"></textarea>
+        <button type="submit" class="ki-btn ki-btn-sm ki-btn-primary mt-2"><i class="bi bi-plus-lg"></i> Add note</button>
+      </form>
+    </div>
+  </div>
+</div>
+
 {# ── SPANCO stepper ── #}
 <div class="ki-card mb-3">
   <div class="p-3">
@@ -87,6 +125,77 @@
       </div>
     {% endif %}
   </div>
+</div>
+
+{% comment %}
+  Family tree. Always drawn whole — every empty slot is a "+" — so the shape
+  of the family is there to fill in on any lead, captured or not. Anyone the
+  shape has no slot for is listed under it (services.leads.family_tree).
+{% endcomment %}
+<div class="ki-card mb-3" id="family">
+  <div class="ki-card-label d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span><i class="bi bi-diagram-3"></i> Family</span>
+    <span class="d-flex gap-2 align-items-center">
+      <small class="text-muted">Tap a box to edit, <i class="bi bi-plus-lg" aria-hidden="true"></i> to add.</small>
+      <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary" data-bs-toggle="modal" data-bs-target="#familyModal"
+              data-title="Add a relative" data-action="{% url 'clients:lead_family_add' lead.id %}" data-f-relation="" data-f-via=""><i class="bi bi-plus"></i> Other relative</button>
+    </span>
+  </div>
+  <div class="ki-ftree-wrap">
+    <div class="ki-ftree">
+      <ul><li>
+        <div class="ki-fcouple">
+          {% if tree.father %}{% include "clients/leads/_family_node.html" with m=tree.father %}{% else %}{% include "clients/leads/_family_add.html" with rel="father" label="Father" %}{% endif %}
+          {% if tree.mother %}{% include "clients/leads/_family_node.html" with m=tree.mother %}{% else %}{% include "clients/leads/_family_add.html" with rel="mother" label="Mother" %}{% endif %}
+        </div>
+        <ul>
+          {% for m in tree.siblings %}<li>{% include "clients/leads/_family_node.html" %}</li>{% endfor %}
+          <li>
+            <div class="ki-fcouple">
+              <a class="ki-fnode ki-fnode-self" href="{% url 'clients:lead_update' lead.id %}" title="Edit the lead's own details">
+                <span class="rel">Self</span>
+                <span class="nm">{{ lead.customer_name }}</span>
+                <span class="meta">{% if lead.years_old is not None %}{{ lead.years_old }} yrs{% endif %}{% if lead.years_old is not None and lead.occupation %} · {% endif %}{{ lead.occupation|truncatechars:16 }}</span>
+              </a>
+              {% if tree.spouse %}{% include "clients/leads/_family_node.html" with m=tree.spouse %}{% else %}{% include "clients/leads/_family_add.html" with rel="spouse" label="Spouse" %}{% endif %}
+            </div>
+            <ul>
+              {% for u in tree.children %}
+                <li>
+                  {% if u.spouse or u.grown %}
+                    <div class="ki-fcouple">
+                      {% include "clients/leads/_family_node.html" with m=u.member %}
+                      {% if u.spouse %}{% include "clients/leads/_family_node.html" with m=u.spouse %}
+                      {% elif u.member.relation == "son" %}{% include "clients/leads/_family_add.html" with rel="daughter_in_law" label="Daughter-in-law" via=u.member.id %}
+                      {% else %}{% include "clients/leads/_family_add.html" with rel="son_in_law" label="Son-in-law" via=u.member.id %}{% endif %}
+                    </div>
+                  {% else %}
+                    {% include "clients/leads/_family_node.html" with m=u.member %}
+                  {% endif %}
+                  {% if u.kids or u.grown %}
+                    <ul>
+                      {% for m in u.kids %}<li>{% include "clients/leads/_family_node.html" %}</li>{% endfor %}
+                      {% if u.grown %}<li>{% include "clients/leads/_family_add.html" with rel="" label="Grandchild" via=u.member.id %}</li>{% endif %}
+                    </ul>
+                  {% endif %}
+                </li>
+              {% endfor %}
+              <li>{% include "clients/leads/_family_add.html" with rel="" label="Child" %}</li>
+            </ul>
+          </li>
+          <li>{% include "clients/leads/_family_add.html" with rel="" label="Sibling" %}</li>
+        </ul>
+      </li></ul>
+    </div>
+  </div>
+  {% if tree.others %}
+    <div class="px-3 pb-3">
+      <div class="small text-muted mb-2">Other relatives</div>
+      <div class="d-flex flex-wrap gap-2">
+        {% for m in tree.others %}{% include "clients/leads/_family_node.html" %}{% endfor %}
+      </div>
+    </div>
+  {% endif %}
 </div>
 
 <div class="row g-3 mb-3">
@@ -143,6 +252,41 @@
             {% empty %}
               <tr><td colspan="4" class="text-center text-muted small py-3">
                 Nothing captured yet — add only the products this lead actually needs.
+              </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# ── What they are saving for ── #}
+    <div class="ki-card mb-3" id="goals">
+      <div class="ki-card-label d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-flag"></i> Goals</span>
+        <button type="button" class="ki-btn ki-btn-sm ki-btn-primary" data-bs-toggle="modal" data-bs-target="#goalModal"
+                data-title="Add a goal" data-action="{% url 'clients:lead_goal_add' lead.id %}"><i class="bi bi-plus"></i> Add Goal</button>
+      </div>
+      <div class="ki-table-wrap">
+        <table class="ki-table mb-0">
+          <thead><tr><th>Goal</th><th>Amount</th><th>By</th><th>Details</th><th style="width:50px;"></th></tr></thead>
+          <tbody>
+            {% for g in goals %}
+              <tr>
+                <td class="fw-semibold">{{ g.get_kind_display }}{% if g.member %} <span class="text-muted small fw-normal">· {{ g.member.name }}</span>{% endif %}</td>
+                <td>{% if g.target_amount %}₹{{ g.target_amount|inr }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="text-nowrap">{% if g.target_year %}{{ g.target_year }} <span class="text-muted small">{% if g.years_away > 0 %}in {{ g.years_away }} yr{{ g.years_away|pluralize }}{% elif g.years_away == 0 %}this year{% else %}passed{% endif %}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td class="small text-muted">{{ g.note|default:"—" }}</td>
+                <td class="text-end">
+                  <button type="button" class="ki-btn ki-btn-sm ki-btn-secondary" aria-label="Edit goal" data-bs-toggle="modal" data-bs-target="#goalModal"
+                          data-title="Edit goal" data-edit="1" data-action="{% url 'clients:lead_goal_edit' lead.id g.id %}"
+                          data-f-kind="{{ g.kind }}" data-f-member="{{ g.member_id|default_if_none:'' }}"
+                          data-f-target_amount="{{ g.target_amount|default_if_none:''|floatformat:'0' }}" data-f-target_year="{{ g.target_year|default_if_none:'' }}"
+                          data-f-note="{{ g.note }}"><i class="bi bi-pencil"></i></button>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-center text-muted small py-3">
+                No goals yet — ask what they are saving for: a child's education, a house, retirement.
               </td></tr>
             {% endfor %}
           </tbody>
@@ -228,67 +372,45 @@
 
   <div class="col-lg-5">
     <div class="ki-card mb-3">
-      <div class="ki-card-label"><i class="bi bi-camera"></i> Snapshot</div>
+      <div class="ki-card-label d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-person-vcard"></i> Profile</span>
+        <a class="ki-btn ki-btn-sm ki-btn-secondary" href="{% url 'clients:lead_update' lead.id %}" aria-label="Edit profile"><i class="bi bi-pencil"></i></a>
+      </div>
       <div class="p-3">
+        <div class="mb-2"><strong>Age:</strong> {% if lead.years_old is not None %}{{ lead.years_old }} <span class="text-muted">(born {{ lead.date_of_birth|date:"d M Y" }})</span>{% else %}<span class="text-muted">DOB not captured</span>{% endif %}</div>
+        <div class="mb-2"><strong>Occupation:</strong> {{ lead.occupation|default:"—" }}</div>
+        <div class="mb-2"><strong>City:</strong> {{ lead.city|default:"—" }}</div>
+        <div class="mb-2"><strong>Income:</strong> {% if lead.income %}₹{{ lead.income|inr }}{% else %}—{% endif %}
+          &nbsp; <strong>Expenses:</strong> {% if lead.expenses %}₹{{ lead.expenses|inr }}{% else %}—{% endif %}</div>
         <div class="mb-2"><strong>Data received:</strong> {% if lead.data_received %}Yes{% else %}No{% endif %}
           {% if lead.data_received_on %}<span class="text-muted">on {{ lead.data_received_on }}</span>{% endif %}
         </div>
-        <div class="mb-2"><strong>Income:</strong> Rs {{ lead.income|default:"—" }}</div>
-        <div class="mb-2"><strong>Expenses:</strong> Rs {{ lead.expenses|default:"—" }}</div>
-        <div class="mb-0"><strong>Notes:</strong><br><span class="text-muted">{{ lead.notes|default:"No notes yet." }}</span></div>
+        <div class="mb-2"><strong>Interests &amp; hobbies:</strong><br><span class="text-muted">{{ lead.hobbies|default:"Not captured — what do they care about outside money?"|linebreaksbr }}</span></div>
+        <div class="mb-0"><strong>Notes:</strong><br><span class="text-muted">{{ lead.notes|default:"No notes yet."|linebreaksbr }}</span></div>
       </div>
     </div>
 
+    {# Notes and stage moves as one story, newest first. #}
     <div class="ki-card mb-3">
-      <div class="ki-card-label"><i class="bi bi-people"></i> Family Members</div>
-      <ul class="list-group list-group-flush">
-        {% for member in lead.family_members.all %}
-          <li class="list-group-item">
-            <div class="fw-semibold">{{ member.name }}</div>
-            <div class="text-muted small">{{ member.relation|default:"" }}{% if member.date_of_birth %} &bull; DOB {{ member.date_of_birth }}{% endif %}</div>
-            {% if member.notes %}<div class="small">{{ member.notes }}</div>{% endif %}
-          </li>
-        {% empty %}
-          <li class="list-group-item text-muted">No family members captured.</li>
-        {% endfor %}
-      </ul>
-    </div>
-
-    <div class="ki-card mb-3">
-      <div class="ki-card-label"><i class="bi bi-signpost-split"></i> Stage History</div>
+      <div class="ki-card-label"><i class="bi bi-clock-history"></i> History</div>
       <div class="p-3">
-        {% for e in stage_events %}
-          <div class="{% if not forloop.last %}mb-2 pb-2 border-bottom{% endif %}">
-            <div class="small"><strong>{{ e.from_label }} → {{ e.to_label }}</strong>{% if e.note %} — {{ e.note }}{% endif %}</div>
-            <div class="text-muted" style="font-size:0.75rem;">{{ e.created_by.username|default:"System" }} &bull; {{ e.created_at|date:"d M Y H:i" }}</div>
+        {% for kind, at, item in history %}
+          <div class="d-flex gap-2 {% if not forloop.last %}mb-2 pb-2 border-bottom{% endif %}">
+            <i class="bi {% if kind == 'note' %}bi-chat-dots text-primary{% else %}bi-signpost-split text-muted{% endif %}" aria-hidden="true"></i>
+            <div class="flex-grow-1">
+              {% if kind == "note" %}
+                <div class="small">{{ item.text|linebreaksbr }}</div>
+              {% else %}
+                <div class="small"><strong>{{ item.from_label }} → {{ item.to_label }}</strong>{% if item.note %} — {{ item.note }}{% endif %}</div>
+              {% endif %}
+              <div class="text-muted" style="font-size:0.75rem;">{{ item.created_by.username|default:"System" }} &bull; {{ at|date:"d M Y H:i" }}</div>
+            </div>
           </div>
         {% empty %}
-          <div class="text-muted small">No stage moves recorded yet.</div>
+          <div class="text-muted small">Nothing recorded yet.</div>
         {% endfor %}
       </div>
     </div>
-  </div>
-</div>
-
-<div class="ki-card mb-3">
-  <div class="ki-card-label d-flex justify-content-between align-items-center">
-    <span><i class="bi bi-chat-left-text"></i> Remarks</span>
-    <button class="ki-btn ki-btn-sm ki-btn-primary" data-bs-toggle="modal" data-bs-target="#addRemarkModal"><i class="bi bi-plus"></i> Add Remark</button>
-  </div>
-  <div class="p-3">
-    {% for r in remarks %}
-      <div class="d-flex gap-3 align-items-start {% if not forloop.last %}mb-3 pb-3 border-bottom{% endif %}">
-        <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;">
-          <i class="bi bi-chat-dots text-primary"></i>
-        </div>
-        <div class="flex-grow-1">
-          <div class="small">{{ r.text }}</div>
-          <div class="text-muted" style="font-size:0.75rem;">{{ r.created_by.username|default:"System" }} &bull; {{ r.created_at|date:"d M Y H:i" }}</div>
-        </div>
-      </div>
-    {% empty %}
-      <div class="text-muted small text-center py-2">No remarks yet.</div>
-    {% endfor %}
   </div>
 </div>
 
@@ -320,27 +442,97 @@
   </div>
 </div>
 
-<div class="modal fade" id="addRemarkModal" tabindex="-1" aria-hidden="true">
+{% comment %}
+  One modal per kind of record. Every box and "+" on the page opens it with
+  the form's action and values in data-* attributes (data-f-<field>), filled
+  in by the script below — no per-person modal in the page.
+{% endcomment %}
+<div class="modal fade" id="familyModal" tabindex="-1" aria-hidden="true" aria-labelledby="familyModalTitle">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="ki-modal-header">
-        <h5 class="modal-title">Add Remark for {{ lead.customer_name }}</h5>
+        <h5 class="modal-title" id="familyModalTitle">Family member</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <form method="post" action="{% url 'clients:lead_add_remark' lead.id %}">
+      <form method="post" data-fill data-via-for="{{ via_relations }}">
         {% csrf_token %}
         <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label" for="lr-text">Remark</label>
-            <textarea name="text" id="lr-text" class="form-control" rows="3" required></textarea>
+          <div class="row g-2">
+            <div class="col-sm-6"><label class="form-label" for="{{ family_form.relation.id_for_label }}">Relation</label>{{ family_form.relation }}</div>
+            <div class="col-sm-6"><label class="form-label" for="{{ family_form.name.id_for_label }}">Name</label>{{ family_form.name }}</div>
+            <div class="col-12" data-via-row><label class="form-label" for="{{ family_form.via.id_for_label }}">{{ family_form.via.label }}</label>{{ family_form.via }}</div>
+            <div class="col-sm-6"><label class="form-label" for="{{ family_form.date_of_birth.id_for_label }}">Date of birth</label>{{ family_form.date_of_birth }}</div>
+            <div class="col-sm-6"><label class="form-label" for="{{ family_form.phone.id_for_label }}">Phone</label>{{ family_form.phone }}</div>
+            <div class="col-12"><label class="form-label" for="{{ family_form.occupation.id_for_label }}">Occupation / studying</label>{{ family_form.occupation }}</div>
+            <div class="col-12"><label class="form-label" for="{{ family_form.notes.id_for_label }}">Notes</label>{{ family_form.notes }}</div>
           </div>
         </div>
         <div class="modal-footer">
+          <button type="submit" name="delete" value="1" formnovalidate data-delete class="ki-btn me-auto" style="color:var(--ki-danger);border-color:var(--ki-danger);" onclick="return confirm('Remove this person from the family?');">Remove</button>
           <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-plus-lg"></i> Add remark</button>
+          <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save</button>
         </div>
       </form>
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="goalModal" tabindex="-1" aria-hidden="true" aria-labelledby="goalModalTitle">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="ki-modal-header">
+        <h5 class="modal-title" id="goalModalTitle">Goal</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" data-fill>
+        {% csrf_token %}
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-sm-6"><label class="form-label" for="{{ goal_form.kind.id_for_label }}">{{ goal_form.kind.label }}</label>{{ goal_form.kind }}</div>
+            <div class="col-sm-6"><label class="form-label" for="{{ goal_form.member.id_for_label }}">{{ goal_form.member.label }}</label>{{ goal_form.member }}</div>
+            <div class="col-sm-6"><label class="form-label" for="{{ goal_form.target_amount.id_for_label }}">{{ goal_form.target_amount.label }}</label>{{ goal_form.target_amount }}</div>
+            <div class="col-sm-6"><label class="form-label" for="{{ goal_form.target_year.id_for_label }}">{{ goal_form.target_year.label }}</label>{{ goal_form.target_year }}</div>
+            <div class="col-12"><label class="form-label" for="{{ goal_form.note.id_for_label }}">{{ goal_form.note.label }}</label>{{ goal_form.note }}</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" name="delete" value="1" formnovalidate data-delete class="ki-btn me-auto" style="color:var(--ki-danger);border-color:var(--ki-danger);" onclick="return confirm('Remove this goal?');">Remove</button>
+          <button type="button" class="ki-btn ki-btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="ki-btn ki-btn-primary"><i class="bi bi-check-lg"></i> Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    document.addEventListener("show.bs.modal", function (ev) {
+      const btn = ev.relatedTarget, form = ev.target.querySelector("form[data-fill]");
+      if (!btn || !form || !btn.dataset.action) return;
+      form.reset();
+      form.action = btn.dataset.action;
+      ev.target.querySelector(".modal-title").textContent = btn.dataset.title || "";
+      form.querySelector("[data-delete]").hidden = !btn.dataset.edit;
+      for (const [key, value] of Object.entries(btn.dataset)) {
+        const field = /^f[A-Z]/.test(key) && form.elements[key[1].toLowerCase() + key.slice(2)];
+        if (field) field.value = value;
+      }
+      form.dispatchEvent(new Event("change"));
+    });
+    // On a phone the tree is wider than the screen: open it centred on the lead.
+    // After `load`: the shell settles its layout after this script runs.
+    addEventListener("load", function () {
+      const wrap = document.querySelector(".ki-ftree-wrap"), self = wrap.querySelector(".ki-fnode-self");
+      wrap.scrollLeft += self.getBoundingClientRect().left - wrap.getBoundingClientRect().left
+                         - (wrap.clientWidth - self.offsetWidth) / 2;
+    });
+    // "Spouse / child of" only means something for a child-in-law or grandchild.
+    const fam = document.querySelector("#familyModal form");
+    const viaFor = fam.dataset.viaFor.split(" ");
+    fam.addEventListener("change", function () {
+      fam.querySelector("[data-via-row]").hidden = !viaFor.includes(fam.elements.relation.value);
+    });
+  })();
+</script>
 {% endblock %}

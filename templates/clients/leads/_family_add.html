@@ -1,0 +1,7 @@
+{# An empty slot on the family tree: opens the family modal with the relation (and `via`) pre-picked. #}
+<button type="button" class="ki-fnode ki-fnode-add" data-bs-toggle="modal" data-bs-target="#familyModal"
+        data-title="Add {{ label|lower }}" data-action="{% url 'clients:lead_family_add' lead.id %}"
+        data-f-relation="{{ rel }}" data-f-via="{{ via|default_if_none:'' }}" aria-label="Add {{ label|lower }}">
+  <i class="bi bi-plus-lg" aria-hidden="true"></i>
+  <span class="rel">{{ label }}</span>
+</button>

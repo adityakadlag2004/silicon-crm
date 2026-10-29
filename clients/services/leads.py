@@ -12,7 +12,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import permissions
-from ..models import Client, Employee, Lead, LeadInterest, LeadRemark, LeadStageEvent, Task
+from ..models import (Client, Employee, Lead, LeadFamilyMember, LeadInterest, LeadRemark,
+                      LeadStageEvent, Task)
 from . import followups
 
 VALID_STAGES = dict(Lead.STAGE_CHOICES)
@@ -493,6 +494,52 @@ def stage_counts(qs):
 
 
 @transaction.atomic
+def family_tree(lead):
+    """The lead's family arranged for the tree on the lead page.
+
+    Parents on top, the lead with spouse and siblings in the middle, the
+    lead's children below — each with their own spouse and children. The page
+    draws a `+` wherever a slot is empty, so a lead with no family captured
+    still shows the whole shape to fill in. Anyone the shape has no slot for
+    (in-laws, a second spouse, a grandchild not yet linked to a child) is in
+    `others`, never dropped.
+    """
+    M = LeadFamilyMember
+    pool = {}
+    for m in lead.family_members.all():
+        pool.setdefault(m.relation, []).append(m)
+
+    def eldest_first(people):
+        return sorted(people, key=lambda m: (m.date_of_birth is None, m.date_of_birth, m.name))
+
+    def one(relation):
+        return pool[relation].pop(0) if pool.get(relation) else None
+
+    father, mother, spouse = one("father"), one("mother"), one("spouse")
+    # `grown`: a child old enough to have a spouse and children of their own
+    # gets empty slots for them; a ten-year-old does not.
+    children = [{"member": c, "spouse": None, "kids": [],
+                 "grown": c.years_old is None or c.years_old >= 18}
+                for c in eldest_first(pool.pop("son", []) + pool.pop("daughter", []))]
+    by_child = {u["member"].pk: u for u in children}
+    others = []
+    for relation in M.CHILD_SPOUSES + M.GRANDCHILDREN:
+        for m in pool.pop(relation, []):
+            unit = by_child.get(m.via_id)
+            if unit and relation in M.GRANDCHILDREN:
+                unit["kids"].append(m)
+            elif unit and unit["spouse"] is None:
+                unit["spouse"] = m
+            else:
+                others.append(m)
+    for unit in children:
+        unit["kids"] = eldest_first(unit["kids"])
+    siblings = eldest_first(pool.pop("brother", []) + pool.pop("sister", []))
+    others += [m for rest in pool.values() for m in rest]
+    return {"father": father, "mother": mother, "spouse": spouse, "siblings": siblings,
+            "children": children, "others": others}
+
+
 def convert_to_client(lead, user=None):
     """Create the Client record for a booked lead (Order stage).
 
@@ -509,6 +556,7 @@ def convert_to_client(lead, user=None):
         name=lead.customer_name,
         phone=lead.phone or None,
         email=lead.email or None,
+        date_of_birth=lead.date_of_birth,
         mapped_to=lead.assigned_to,
         status="Mapped" if lead.assigned_to else "Unmapped",
     )

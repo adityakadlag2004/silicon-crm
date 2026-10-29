@@ -935,6 +935,38 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   not touch its folder.
 - `clients.test.test_lead_documents` pins all of it.
 
+## The lead page is the whole person (family tree, goals, catch-up)
+
+- **Family tree, always drawn.** `services/leads.family_tree(lead)` lays
+  `LeadFamilyMember` rows out as a genogram: parents → the lead + spouse +
+  siblings → children (each with spouse) → grandchildren. Every empty slot
+  renders as a `+`, so a lead with no family captured still shows the shape
+  to fill in. Pure nested-`<ul>` CSS (`.ki-ftree` in `ki-record.css`), no JS
+  library; it scrolls sideways inside itself and opens centred on the lead.
+- **`relation` is a fixed key, relative to the lead** (migration 0143; 0144
+  mapped the old free text — unknown words became `other` with the typed word
+  kept at the top of `notes`). Children-in-law and grandchildren also name
+  `via` — which of the lead's children they hang off. Without it they go to
+  "Other relatives" under the tree, never dropped. Only a child aged 18+ (or
+  with no DOB) gets spouse/grandchild `+` slots.
+- **`via` is set on the tree only.** The lead form's formset leaves it out
+  (`LeadFamilyMemberFormSet(fields=…)`): a field absent from the POST would
+  blank the link on every save. The member form limits `via` to *this lead's*
+  children — a posted id from another lead's family must not validate.
+- `LeadGoal` (what, for whom, amount, target year) and the profile fields on
+  `Lead` (DOB, occupation, city, interests & hobbies). `convert_to_client`
+  copies the DOB — new clients need one anyway.
+- **One modal per kind, filled from `data-f-<field>` attributes** on whatever
+  box or `+` opened it. One endpoint per kind (`lead_family_save`,
+  `lead_goal_save`) adds, edits and — with `delete=1` — removes, scoped like
+  every lead action (`_save_lead_row`).
+- **Catch-up card** at the top: the last remark, the next open follow-up (its
+  note is the task's first line), and a note box — a note not written straight
+  after the call is never written. Remarks and stage moves read as one
+  History timeline.
+- Not on the Android app yet: `app_lead_detail` serves neither family nor goals.
+- `clients.test.test_lead_family_tree` pins it.
+
 ## Date of birth, and the two alerts it drives
 
 - `Client.date_of_birth` is **mandatory on every client added from 2026-09-04
