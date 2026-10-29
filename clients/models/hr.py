@@ -7,6 +7,21 @@ from django.core.validators import MinValueValidator
 from django.db import models
 
 
+class Branch(models.Model):
+    """An office. Every employee works out of one, and a sale, client or lead
+    belongs to the branch of the employee on it — so this is the only column a
+    branch report needs. Branches are created on the Django admin."""
+
+    name = models.CharField(max_length=80, unique=True)
+
+    class Meta:
+        ordering = ["id"]
+        verbose_name_plural = "branches"
+
+    def __str__(self):
+        return self.name
+
+
 class Employee(models.Model):
     class Role(models.TextChoices):
         ADMIN = "admin", "Admin"
@@ -26,6 +41,8 @@ class Employee(models.Model):
         MANAGEMENT = "management", "Management"
 
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    branch = models.ForeignKey(Branch, null=True, blank=True, on_delete=models.PROTECT,
+                               related_name="employees")
     role = models.CharField(max_length=50, choices=Role.choices)
     active = models.BooleanField(default=True)
     salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -69,6 +86,11 @@ class Employee(models.Model):
         """Mirror the name onto User so every ``user.get_full_name()`` in the
         codebase greets the person, not their login id. Blank names leave User
         blank, which is what makes the username show through as the fallback."""
+        if self.branch_id is None:
+            # Three screens create employees (team page, employee management,
+            # the app); only the model covers all of them. New hires land in
+            # the first office and are moved on the team edit page.
+            self.branch = Branch.objects.first()
         super().save(*args, **kwargs)
         if not self.user_id:
             return

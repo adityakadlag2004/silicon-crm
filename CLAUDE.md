@@ -1106,6 +1106,24 @@ Production is a 1-vCPU / 1 GB droplet, so every fixed per-request cost counts.
   of `phone LIKE '%…'` per number.
 - `clients.test.test_performance_guards` and `test_query_budget` pin all of it.
 
+## Branches (two offices, tracked apart)
+
+- `Branch` (migrations 0141 schema / 0142 data) is an office, and
+  `Employee.branch` is the **only** branch column. A sale, a client (via
+  `mapped_to`) and a lead belong to the branch of the employee on them. 0142 put
+  everyone on **Head Office**; the second office is created on the Django admin
+  and its people moved on the team edit page. `Employee.save()` lands a
+  branchless employee in the first office, because three screens create employees.
+- **Tracking, not isolation** (owner's call, 2026-10-29): both offices still see
+  the same clients and screens. The Business Report's branch picker
+  (`sheet(branch=)`) is how an office's output is read. The firm-wide
+  celebration is hidden while one branch is picked, or it would name winners
+  the table doesn't show.
+- An employee moved between offices takes their sales history with them,
+  because nothing is stamped on `Sale`. Add `Sale.branch` if people start
+  transferring. Clusters and per-branch access were proposed and deferred.
+- `clients.test.test_branches` pins it.
+
 ## People / employee records
 
 - `Employee` owns names, DOB, joining date, position, domain, reports_to,

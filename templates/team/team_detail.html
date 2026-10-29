@@ -54,6 +54,7 @@
       <h2 class="ki-rec-title">{{ who }}</h2>
       <div class="ki-tags">
         <span class="ki-tag text-capitalize" style="--c:var(--ki-primary);">{{ emp.role }}</span>
+        {% if emp.branch %}<span class="ki-tag" style="--c:#4338CA;">{{ emp.branch.name }}</span>{% endif %}
         {% if emp.active %}
           <span class="ki-tag" style="--c:#15803D;">Active</span>
         {% else %}

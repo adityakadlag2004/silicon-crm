@@ -22,7 +22,7 @@ from django.utils.timezone import now
 
 from .. import permissions
 from ..models import (
-    Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
+    Branch, Sale, Employee, MonthlyTargetHistory, Product, Expense, ExpenseCategory,
     Renewal,
 )
 from ..services import business_report, incentives
@@ -709,16 +709,19 @@ def monthly_business_report(request, mode="month"):
     today = date.today()
     daily = mode == "day"
     sel_date = today
+    branches = list(Branch.objects.all())
+    raw_branch = request.GET.get("branch", "")
+    branch = next((b for b in branches if str(b.pk) == raw_branch), None)
     if daily:
         try:
             sel_date = date.fromisoformat(request.GET.get("date", ""))
         except ValueError:
             sel_date = today
         sel_month, sel_year = sel_date.month, sel_date.year
-        sheet = business_report.sheet(sel_date=sel_date)
+        sheet = business_report.sheet(sel_date=sel_date, branch=branch)
     else:
         sel_year, sel_month = _sel_month(request, today)
-        sheet = business_report.sheet(sel_year=sel_year, sel_month=sel_month)
+        sheet = business_report.sheet(sel_year=sel_year, sel_month=sel_month, branch=branch)
 
     context = {
         **sheet,
@@ -730,8 +733,13 @@ def monthly_business_report(request, mode="month"):
         "daily": daily,
         "sel_date": sel_date,
         "period_label": sel_date.strftime("%d %b %Y") if daily else f"{month_name[sel_month]} {sel_year}",
+        # One office needs no picker.
+        "branches": branches if len(branches) > 1 else [],
+        "sel_branch": branch,
     }
-    if not daily and permissions.is_admin(request.user):
+    # The awards are the whole firm's; under one branch's table they would
+    # name winners the table above them doesn't show.
+    if not daily and branch is None and permissions.is_admin(request.user):
         context["celebration"] = business_report.celebration(sel_year, sel_month, sheet)
     return render(request, "reports/monthly_business_report.html", context)
 

@@ -16,19 +16,28 @@ from ..templatetags.custom_filters import indian_number
 from ..views.helpers import category_name_map
 
 
-def sheet(sel_date=None, sel_year=None, sel_month=None):
+def sheet(sel_date=None, sel_year=None, sel_month=None, branch=None):
     """The Business Report grid, for one day (`sel_date`) or one month.
 
     One row per active employee, one column per reportable main product, plus
     accounts opened and points; grand totals alongside. Shared by the web page
     and the app's Daily Report — the roll-up rules below are fiddly enough that
     a second copy of them would drift.
+
+    `branch` narrows the whole sheet to one office's people, so its grand
+    totals are that office's output. A sale belongs to the seller's branch.
     """
     daily = sel_date is not None
     if daily:
         approved = Sale.objects.filter(status="approved", date=sel_date)
     else:
         approved = Sale.objects.filter(status="approved", date__year=sel_year, date__month=sel_month)
+    employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
+    new_clients = Client.objects.filter(mapped_to__isnull=False)
+    if branch is not None:
+        approved = approved.filter(employee__branch=branch)
+        employees = employees.filter(branch=branch)
+        new_clients = new_clients.filter(mapped_to__branch=branch)
 
     # Top-level products only. The life plan catalogue alone is ~40 sub-products,
     # and a column per plan makes this sheet unreadable — a sub-product's sales
@@ -64,7 +73,6 @@ def sheet(sel_date=None, sel_year=None, sel_month=None):
         category = cat_map.get(product_name, product_name)
         if category and category not in products and category not in hidden:
             products.append(category)
-    employees = Employee.objects.filter(active=True).select_related("user").order_by("user__first_name")
 
     # Pre-aggregate amounts grouped by (employee, product) and points by employee.
     # Replaces an N×M loop of per-cell `.aggregate(Sum)` calls with two queries.
@@ -82,7 +90,6 @@ def sheet(sel_date=None, sel_year=None, sel_month=None):
     # firm reads this row for ("whose book grew").
     # ponytail: re-mapping a client moves its credit to the new employee; add
     # Client.created_by if that ever matters.
-    new_clients = Client.objects.filter(mapped_to__isnull=False)
     if daily:
         new_clients = new_clients.filter(created_at__date=sel_date)
     else:

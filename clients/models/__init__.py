@@ -6,6 +6,7 @@ All names are re-exported so `from clients.models import X` keeps
 working everywhere.
 """
 from .hr import (  # noqa: F401
+    Branch,
     Employee,
     EmployeeMilestone,
     EmployeeTarget,

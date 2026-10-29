@@ -13,7 +13,7 @@ from django.utils import timezone
 from import_export.admin import ImportExportModelAdmin
 
 from .models import (
-    Client, Employee, Sale, IncentiveRule, Target,
+    Branch, Client, Employee, Sale, IncentiveRule, Target,
     EmployeeTarget,
     MessageTemplate,
     Renewal,
@@ -31,9 +31,13 @@ from .models import (
 )
 
 
+admin.site.register(Branch)
+
+
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ("user", "role", "salary")
+    list_display = ("user", "branch", "role", "salary")
+    list_filter = ("branch",)
     search_fields = ("user__username", "user__email")
 
 @admin.register(Client)

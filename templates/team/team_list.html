@@ -135,6 +135,7 @@ ex-employee only shows when you ask for one.
         </div>
         <div class="text-muted" style="font-size:.82rem;">
           <span class="text-capitalize">{{ emp.role }}</span>
+          {% if emp.branch %} &middot; {{ emp.branch.name }}{% endif %}
           {% if emp.employee_number %} &middot; #{{ emp.employee_number }}{% endif %}
         </div>
         {% if emp.user.email %}
@@ -246,6 +247,12 @@ ex-employee only shows when you ask for one.
                 <option value="employee" selected>Employee</option>
                 <option value="manager">Manager</option>
                 <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="add-branch">Branch</label>
+              <select id="add-branch" name="branch" class="form-select">
+                {% for b in branches %}<option value="{{ b.pk }}">{{ b.name }}</option>{% endfor %}
               </select>
             </div>
             <div class="col-6">

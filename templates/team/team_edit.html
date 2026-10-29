@@ -63,6 +63,12 @@
         </select>
       </div>
       <div>
+        <label class="form-label" for="id_branch">Branch</label>
+        <select id="id_branch" name="branch" class="form-select">
+          {% for b in branches %}<option value="{{ b.pk }}" {% if emp.branch_id == b.pk %}selected{% endif %}>{{ b.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
         <label class="form-label">Salary (₹/mo)</label>
         <input type="number" name="salary" class="form-control" step="0.01" value="{{ emp.salary|default:'' }}" placeholder="Monthly salary">
       </div>

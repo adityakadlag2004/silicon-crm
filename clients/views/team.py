@@ -20,7 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import permissions
-from ..models import (AuditLog, Client, Sale, Employee, EmployeeMilestone,
+from ..models import (AuditLog, Branch, Client, Sale, Employee, EmployeeMilestone,
                       ManagerAccessConfig, Renewal)
 from ..templatetags.custom_filters import inr
 from ..forms import (EmployeeAdminForm, EmployeeCreateForm, EmployeeDeactivateForm,
@@ -63,7 +63,7 @@ def team_list(request):
     # clients by their sales — 11 seconds on a production-sized book, and a
     # points sum inflated by the client count. The card's figures come from
     # `list_stats` below.
-    employees = Employee.objects.select_related("user").annotate(
+    employees = Employee.objects.select_related("user", "branch").annotate(
         client_count=Count("client"),
     ).order_by("-active", "user__first_name", "user__username")
 
@@ -105,6 +105,7 @@ def team_list(request):
              "url": reverse("clients:people_hub")},
         ],
         "employees": employees,
+        "branches": Branch.objects.all(),
         # Headline numbers per card, four queries for the whole grid.
         "stats": employee_performance.list_stats(employees),
         "q": q,
@@ -138,11 +139,14 @@ def team_add(request):
                     is_active=True,
                 )
                 raw_num = request.POST.get("employee_number", "").strip()
+                raw_branch = request.POST.get("branch", "").strip()
                 emp = Employee.objects.create(
                     user=user,
                     role=form.cleaned_data["role"],
                     salary=form.cleaned_data["salary"],
                     employee_number=raw_num if raw_num else _next_employee_number(),
+                    # None falls back to the first office in Employee.save().
+                    branch=Branch.objects.filter(pk=raw_branch).first() if raw_branch.isdigit() else None,
                     active=True,
                 )
             messages.success(request, f"Team member '{user.username}' created successfully.")
@@ -202,6 +206,15 @@ def team_detail(request, employee_id):
     return render(request, "team/team_detail.html", context)
 
 
+def _edit_page(request, emp):
+    return render(request, "team/team_edit.html", {
+        "emp": emp,
+        "domain_choices": Employee.Domain.choices,
+        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
+        "branches": Branch.objects.all(),
+    })
+
+
 @login_required
 def team_edit(request, employee_id):
     """Edit employee profile."""
@@ -215,11 +228,7 @@ def team_edit(request, employee_id):
         new_role = (request.POST.get("role") or emp.role).strip()
         if new_role not in valid_roles:
             messages.error(request, f"Invalid role '{new_role}'.")
-            return render(request, "team/team_edit.html", {
-        "emp": emp,
-        "domain_choices": Employee.Domain.choices,
-        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
-    })
+            return _edit_page(request, emp)
 
         raw_salary = (request.POST.get("salary") or "").strip()
         if raw_salary:
@@ -229,22 +238,14 @@ def team_edit(request, employee_id):
                     raise InvalidOperation
             except InvalidOperation:
                 messages.error(request, "Salary must be a non-negative number.")
-                return render(request, "team/team_edit.html", {
-        "emp": emp,
-        "domain_choices": Employee.Domain.choices,
-        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
-    })
+                return _edit_page(request, emp)
         else:
             new_salary = emp.salary
 
         new_number = request.POST.get("employee_number", "").strip() or None
         if new_number and Employee.objects.exclude(pk=emp.pk).filter(employee_number=new_number).exists():
             messages.error(request, f"Employee number '{new_number}' is already in use.")
-            return render(request, "team/team_edit.html", {
-        "emp": emp,
-        "domain_choices": Employee.Domain.choices,
-        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
-    })
+            return _edit_page(request, emp)
 
         user = emp.user
         user.first_name = request.POST.get("first_name", user.first_name)
@@ -284,6 +285,9 @@ def team_edit(request, employee_id):
             emp.reports_to = Employee.objects.filter(pk=int(raw_manager)).exclude(pk=emp.pk).first()
         elif raw_manager == "":
             emp.reports_to = None
+        raw_branch = (request.POST.get("branch") or "").strip()
+        if raw_branch.isdigit():
+            emp.branch = Branch.objects.filter(pk=int(raw_branch)).first() or emp.branch
 
         emp.save()
         # New dates mean new occasions to mark.
@@ -302,11 +306,7 @@ def team_edit(request, employee_id):
         messages.success(request, f"Updated {user.get_full_name() or user.username}.")
         return redirect("clients:team_detail", employee_id=emp.id)
 
-    return render(request, "team/team_edit.html", {
-        "emp": emp,
-        "domain_choices": Employee.Domain.choices,
-        "managers": Employee.objects.filter(active=True).exclude(pk=emp.pk).select_related("user"),
-    })
+    return _edit_page(request, emp)
 
 
 @login_required
