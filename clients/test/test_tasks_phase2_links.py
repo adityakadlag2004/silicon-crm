@@ -68,10 +68,12 @@ class RecurrenceTests(_Base):
     def test_generation_creates_instances_and_copies_checklist(self):
         start = timezone.localdate() - timedelta(days=3)
         rule = self._make_rule("daily", start)
+        # Missed days are skipped, not backfilled (test_tasks_overhaul): one
+        # instance, today's, however long the rule went without a run.
         created = generate_recurring()
-        self.assertGreaterEqual(created, 3)
+        self.assertEqual(created, 1)
         instances = Task.objects.filter(recurring_rule=rule)
-        self.assertGreaterEqual(instances.count(), 3)
+        self.assertEqual([t.due_date for t in instances], [timezone.localdate()])
         # Checklist template copied.
         self.assertEqual(instances.first().checklist_items.count(), 2)
         # Subscriber copied.
@@ -81,7 +83,8 @@ class RecurrenceTests(_Base):
         start = timezone.localdate() - timedelta(days=10)
         rule = self._make_rule("daily", start, end_type=RecurringTaskRule.END_AFTER,
                                max_occurrences=3)
-        generate_recurring()
+        for day in range(4):   # the cron, four days running
+            generate_recurring(today=timezone.localdate() + timedelta(days=day))
         rule.refresh_from_db()
         # 1 initial (counted) + 2 generated = 3, then deactivates.
         self.assertEqual(rule.occurrences_created, 3)

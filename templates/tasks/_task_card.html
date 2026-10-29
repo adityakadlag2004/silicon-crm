@@ -8,7 +8,8 @@
     <form method="post" action="{% url 'clients:task_set_status' task.pk %}" class="tk-check-form">{% csrf_token %}
       <input type="hidden" name="status" value="{% if task.status == 'completed' %}pending{% else %}completed{% endif %}">
       <button type="submit" class="tk-card-check {% if task.status == 'completed' %}done{% endif %}"
-              title="{% if task.status == 'completed' %}Reopen task{% else %}Mark done{% endif %}">
+              title="{% if task.status == 'completed' %}Reopen task{% else %}Mark done{% endif %}"
+              aria-label="{% if task.status == 'completed' %}Reopen{% else %}Mark done{% endif %}: {{ task.title }}">
         <i class="bi {% if task.status == 'completed' %}bi-check-circle-fill{% else %}bi-circle{% endif %}"></i>
       </button>
     </form>
@@ -18,7 +19,9 @@
       <span class="tk-id">#{{ task.pk }}</span>
       <span class="tk-card-title {% if task.status == 'completed' %}tk-done{% endif %}">{{ task.title }}</span>
       <span class="tk-pri tk-pri-{{ task.priority }}">{{ task.get_priority_display }}</span>
-      <span class="tk-st tk-st-{{ task.status }}">{{ task.get_status_display }}</span>
+      {% comment %}Past its deadline reads Overdue now, not after the 15-minute cron.{% endcomment %}
+      {% if task.status == "pending" and task.is_overdue %}<span class="tk-st tk-st-overdue">Overdue</span>
+      {% else %}<span class="tk-st tk-st-{{ task.status }}">{{ task.get_status_display }}</span>{% endif %}
     </div>
     <div class="tk-card-meta">
       {% if task.category %}<span class="tk-cat"><span class="dot" style="background:{{ task.category.color }}"></span>{{ task.category.name }}</span>{% endif %}
@@ -32,12 +35,12 @@
     {% if task.status != 'in_progress' %}
     <form method="post" action="{% url 'clients:task_set_status' task.pk %}" style="margin:0;">{% csrf_token %}
       <input type="hidden" name="status" value="in_progress">
-      <button type="submit" class="tk-quick-btn tk-q-prog" title="Mark In Progress"><i class="bi bi-play-fill"></i></button>
+      <button type="submit" class="tk-quick-btn tk-q-prog" title="Mark In Progress" aria-label="Mark in progress: {{ task.title }}"><i class="bi bi-play-fill"></i></button>
     </form>
     {% endif %}
     <form method="post" action="{% url 'clients:task_set_status' task.pk %}" style="margin:0;">{% csrf_token %}
       <input type="hidden" name="status" value="completed">
-      <button type="submit" class="tk-quick-btn tk-q-done" title="Mark Completed"><i class="bi bi-check-lg"></i></button>
+      <button type="submit" class="tk-quick-btn tk-q-done" title="Mark Completed" aria-label="Mark completed: {{ task.title }}"><i class="bi bi-check-lg"></i></button>
     </form>
   </div>
   {% endif %}

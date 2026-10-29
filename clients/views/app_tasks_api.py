@@ -31,17 +31,26 @@ from ..models import (
     TaskTemplate,
 )
 from ..services.tasks import (
+    acknowledge,
+    add_subscriber,
     apply_edit,
     assignee_label,
     build_recurrence,
     collapse_groups,
-    create_notification,
     delete_task,
     group_ack_roster,
     group_siblings,
     log_activity,
     notify_mentions,
     notify_task,
+    remove_subscriber,
+    set_category,
+    set_description,
+    set_due,
+    set_priority,
+    set_status,
+    thread_attachments,
+    thread_comments,
 )
 from .helpers import parse_date_param
 from .. import permissions
@@ -462,13 +471,13 @@ def app_task_detail(request, pk):
                       for i in task.checklist_items.all()],
         "comments": [{"author": c.author.username if c.author else "—",
                       "body": c.body, "at": c.created_at.isoformat()}
-                     for c in task.comments.select_related("author")],
+                     for c in thread_comments(task)],
         "subscribers": [{"id": s.id, "user_id": s.user_id,
                          "name": s.user.get_full_name() or s.user.username}
                         for s in task.subscribers.select_related("user")],
         "attachments": [{"id": a.id, "filename": a.filename, "is_voice": a.is_voice_note,
                          "url": f"/clients/tasks/attachment/{a.id}/download/"}
-                        for a in task.attachments.all()],
+                        for a in thread_attachments(task)],
         "activities": [{"actor": a.actor.username if a.actor else "System",
                         "action": a.get_action_display(), "detail": a.detail,
                         "at": a.created_at.isoformat()}
@@ -492,7 +501,8 @@ def app_task_create(request):
     priority = body.get("priority")
     if priority not in dict(Task.PRIORITY_CHOICES):
         priority = Task.PRIORITY_MEDIUM
-    category = TaskCategory.objects.filter(pk=body.get("category_id"), is_active=True).first()
+    cid = str(body.get("category_id") or "")
+    category = TaskCategory.objects.filter(pk=cid, is_active=True).first() if cid.isdigit() else None
 
     # Accept a list of assignees ("assignees") or a single "assigned_to".
     raw_ids = body.get("assignees") or ([body.get("assigned_to")] if body.get("assigned_to") else [])
@@ -504,14 +514,17 @@ def app_task_create(request):
     due_date = parse_date_param(body.get("due_date"))
     due_time = _parse_time(body.get("due_time"))
     checklist = [c for c in (body.get("checklist") or []) if (c or "").strip()]
-    subs = [int(u) for u in (body.get("subscribers") or []) if str(u).isdigit()]
+    subs = list(User.objects.filter(
+        pk__in=[int(u) for u in (body.get("subscribers") or []) if str(u).isdigit()],
+    ).values_list("pk", flat=True))
     freq = (body.get("repeat_rule") or "").strip()
-    client = Client.objects.filter(pk=body.get("client_id")).first() if body.get("client_id") else None
+    client_id = str(body.get("client_id") or "")
+    client = Client.objects.filter(pk=client_id).first() if client_id.isdigit() else None
 
     # Several assignees → sibling rows sharing a group id (see views.tasks).
     group = uuid4().hex if len(assignees) > 1 else ""
 
-    created_ids = []
+    created = []
     for assignee in assignees:
         task = Task.objects.create(
             title=title[:255], description=description, category=category,
@@ -526,13 +539,14 @@ def app_task_create(request):
         log_activity(task, request.user, TaskActivity.CREATED, f"Created “{task.title}”.")
         if assignee:
             log_activity(task, request.user, TaskActivity.ASSIGNED, f"Assigned to {assignee.user.username}.")
-        if freq:
-            build_recurrence(task, freq, request.user)
+        created.append(task)
+    if freq:   # one series for the whole group — it links every sibling
+        build_recurrence(created[0], freq, request.user)
+    for task in created:
         notify_task(task, request.user, "New task assigned",
                     f"{request.user.username} assigned you “{task.title}”.", event="assigned")
-        created_ids.append(task.pk)
 
-    return JsonResponse({"ok": True, "id": created_ids[0], "ids": created_ids})
+    return JsonResponse({"ok": True, "id": created[0].pk, "ids": [t.pk for t in created]})
 
 
 @login_required
@@ -551,54 +565,14 @@ def app_task_action(request, pk):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
 
     if action == "status":
-        new = body.get("status")
-        # "Pending" on a task already past its deadline is really Overdue —
-        # never let a reopen/reset hide a blown due date.
-        if (new == Task.STATUS_PENDING and task.due_at and task.due_at < timezone.now()):
-            new = Task.STATUS_OVERDUE
-        if new in dict(Task.STATUS_CHOICES) and new != task.status:
-            old = task.get_status_display()
-            task.status = new
-            # completed_at reflects the LATEST completion — cleared on reopen
-            # so timeliness reports never show a stale first-completion date.
-            task.completed_at = timezone.now() if new == Task.STATUS_COMPLETED else None
-            # Touching the status proves the assignee has seen the task.
-            if (task.acknowledged_at is None and task.assigned_to
-                    and task.assigned_to.user_id == request.user.id):
-                task.acknowledged_at = timezone.now()
-            task.save(update_fields=["status", "completed_at", "acknowledged_at", "updated_at"])
-            if new == Task.STATUS_COMPLETED:
-                log_activity(task, request.user, TaskActivity.COMPLETED, "Marked completed.")
-                notify_task(task, request.user, "Task completed",
-                            f"“{task.title}” was completed.", event="completed")
-            else:
-                log_activity(task, request.user, TaskActivity.STATUS_CHANGED,
-                             f"{old} → {task.get_status_display()}.")
-                notify_task(task, request.user, "Task status changed",
-                            f"“{task.title}”: {old} → {task.get_status_display()}.",
-                            event="status_changed")
+        set_status(task, request.user, body.get("status"))
     elif action == "acknowledge":
-        # Only the assignee can acknowledge — it means "I have seen this".
-        if not (task.assigned_to and task.assigned_to.user_id == request.user.id):
-            return JsonResponse({"ok": False, "error": "Only the assignee can acknowledge."}, status=403)
-        if task.acknowledged_at is None:
-            task.acknowledged_at = timezone.now()
-            task.save(update_fields=["acknowledged_at", "updated_at"])
-            log_activity(task, request.user, TaskActivity.ACKNOWLEDGED, "Acknowledged the task.")
-            if task.created_by and task.created_by != request.user:
-                create_notification(task.created_by, "Task acknowledged",
-                                    f"{request.user.username} acknowledged “{task.title}”.",
-                                    f"/clients/tasks/{task.pk}/", event="status_changed")
+        try:
+            acknowledge(task, request.user)
+        except PermissionError as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=403)
     elif action == "priority":
-        new = body.get("priority")
-        if new in dict(Task.PRIORITY_CHOICES) and new != task.priority:
-            old = task.get_priority_display()
-            task.priority = new
-            task.save(update_fields=["priority", "updated_at"])
-            log_activity(task, request.user, TaskActivity.PRIORITY_CHANGED,
-                         f"{old} → {task.get_priority_display()}.")
-            notify_task(task, request.user, "Task priority changed",
-                        f"“{task.title}” priority updated.", event="priority_changed")
+        set_priority(task, request.user, body.get("priority"))
     elif action == "comment":
         text = (body.get("body") or "").strip()
         if text:
@@ -609,9 +583,10 @@ def app_task_action(request, pk):
             mentioned = notify_mentions(task, request.user, text)
             notify_task(task, request.user, "New comment on a task",
                         f"{request.user.username} commented on “{task.title}”.",
-                        event="comment_added", exclude_users=mentioned)
+                        event="comment_added", exclude_users=mentioned, group=True)
     elif action == "checklist_toggle":
-        item = TaskChecklistItem.objects.filter(pk=body.get("item_id"), task=task).first()
+        item_id = str(body.get("item_id") or "")
+        item = TaskChecklistItem.objects.filter(pk=item_id, task=task).first() if item_id.isdigit() else None
         if item:
             item.is_done = not item.is_done
             item.completed_by = request.user if item.is_done else None
@@ -626,42 +601,24 @@ def app_task_action(request, pk):
                                              order=task.checklist_items.count())
             log_activity(task, request.user, TaskActivity.CHECKLIST_UPDATED, f"Added “{title[:120]}”.")
     elif action == "due":
-        task.due_date = parse_date_param(body.get("due_date"))
-        task.due_time = _parse_time(body.get("due_time"))
-        if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
-            task.status = Task.STATUS_PENDING
-        # New deadline → reminders and the due-time ring must fire again.
-        task.reminded_day_before = False
-        task.reminded_same_day = False
-        task.due_alarm_sent_at = None
-        task.save(update_fields=["due_date", "due_time", "status", "reminded_day_before",
-                                 "reminded_same_day", "due_alarm_sent_at", "updated_at"])
-        log_activity(task, request.user, TaskActivity.DUE_CHANGED, f"Due {task.due_date or '—'}.")
-        notify_task(task, request.user, "Task due date changed",
-                    f"“{task.title}” is now due {task.due_date or '—'}.", event="due_changed")
+        set_due(task, request.user, parse_date_param(body.get("due_date")),
+                _parse_time(body.get("due_time")))
     elif action == "category":
-        cid = body.get("category_id")
-        task.category = TaskCategory.objects.filter(pk=cid).first() if cid else None
-        task.save(update_fields=["category", "updated_at"])
-        log_activity(task, request.user, TaskActivity.CATEGORY_CHANGED,
-                     f"Category → {task.category.name if task.category else '—'}.")
+        cid = str(body.get("category_id") or "")
+        set_category(task, request.user,
+                     TaskCategory.objects.filter(pk=cid).first() if cid.isdigit() else None)
     elif action == "description":
-        task.description = (body.get("description") or "").strip()
-        task.save(update_fields=["description", "updated_at"])
-        log_activity(task, request.user, TaskActivity.DESCRIPTION_UPDATED, "Updated description.")
+        set_description(task, request.user, body.get("description"))
     elif action == "add_subscriber":
-        uid = body.get("user_id")
-        user = User.objects.filter(pk=uid).first() if uid else None
+        uid = str(body.get("user_id") or "")
+        user = User.objects.filter(pk=uid).first() if uid.isdigit() else None
         if user:
-            _sub, created = TaskSubscriber.objects.get_or_create(task=task, user=user)
-            if created:
-                log_activity(task, request.user, TaskActivity.SUBSCRIBER_ADDED,
-                             f"Added {user.username} in loop.")
-                create_notification(user, "Added to a task",
-                                    f"You're now in the loop on “{task.title}”.",
-                                    f"/clients/tasks/{task.pk}/", event="subscriber_added")
+            add_subscriber(task, request.user, user)
     elif action == "remove_subscriber":
-        TaskSubscriber.objects.filter(pk=body.get("subscriber_id"), task=task).delete()
+        sid = str(body.get("subscriber_id") or "")
+        sub = TaskSubscriber.objects.filter(pk=sid, task=task).first() if sid.isdigit() else None
+        if sub:
+            remove_subscriber(task, sub.user_id)
     elif action == "edit":
         # Update every provided field at once (the native Edit sheet). Shared
         # with the web Edit modal — see services.tasks.apply_edit.

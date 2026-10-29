@@ -21,6 +21,7 @@ urlpatterns = [
     path("tasks/bulk/delete/", tasks.task_bulk_delete, name="task_bulk_delete"),
     path("tasks/<int:pk>/", tasks.task_detail, name="task_detail"),
     path("tasks/<int:pk>/edit/", tasks.task_edit, name="task_edit"),
+    path("tasks/<int:pk>/acknowledge/", tasks.task_acknowledge, name="task_acknowledge"),
     path("tasks/<int:pk>/status/", tasks.task_set_status, name="task_set_status"),
     path("tasks/<int:pk>/priority/", tasks.task_set_priority, name="task_set_priority"),
     path("tasks/<int:pk>/due/", tasks.task_set_due, name="task_set_due"),

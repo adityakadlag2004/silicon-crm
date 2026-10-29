@@ -15,11 +15,11 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
-from django.urls import reverse
 from django.utils import timezone
 
 from clients.models import Employee, Notification, Task
 from clients.services.push import send_data_push_to_user
+from clients.services.tasks import notify_from_cron
 
 ESCALATE_AFTER_DAYS = 2
 ESCALATION_TITLE = "🚨 Overdue tasks need attention"
@@ -57,6 +57,10 @@ class Command(BaseCommand):
 
         sent = 0
         for user, tasks in per_user.items():
+            # Follow-ups and reminders are created by the inactive system
+            # user; a digest written to it is read by nobody.
+            if not user.is_active:
+                continue
             already = Notification.objects.filter(
                 recipient=user, title=ESCALATION_TITLE, created_at__date=local.date()
             ).exists()
@@ -92,16 +96,19 @@ class Command(BaseCommand):
         # impossible (the cron kept reverting the status within 15 minutes).
         # Late in-progress tasks stay visible via the `late` flag and the
         # escalation digest below.
+        # Nothing due after today can be late yet — leave those rows in the
+        # database instead of walking every future task every 15 minutes.
         candidates = (
             Task.objects.filter(
                 is_deleted=False,
                 status=Task.STATUS_PENDING,
-                due_date__isnull=False,
+                due_date__lte=timezone.localdate(now),
             )
             .select_related("assigned_to__user")
         )
 
         flipped = 0
+        seen = set()   # a watcher of a group task hears once, not once per assignee
         for task in candidates:
             due = task.due_at
             if not due or due >= now:
@@ -109,22 +116,10 @@ class Command(BaseCommand):
             task.status = Task.STATUS_OVERDUE
             task.save(update_fields=["status", "updated_at"])
             flipped += 1
-
-            link = reverse("clients:task_detail", args=[task.pk])
-            # Notify assignee + subscribers.
-            recipients = {}
-            if task.assigned_to and task.assigned_to.user_id:
-                recipients[task.assigned_to.user_id] = task.assigned_to.user
-            for sub in task.subscribers.select_related("user"):
-                if sub.user_id:
-                    recipients[sub.user_id] = sub.user
-            for user in recipients.values():
-                Notification.objects.create(
-                    recipient=user,
-                    title="Task overdue",
-                    body=f"“{task.title}” has passed its due date.",
-                    link=link,
-                )
+            # event="overdue": the "Task overdue" switch on the settings page
+            # was never read, so turning it off changed nothing.
+            notify_from_cron(task, "Task overdue", f"“{task.title}” has passed its due date.",
+                             event="overdue", seen=seen)
 
         escalated = self._escalate(now)
 

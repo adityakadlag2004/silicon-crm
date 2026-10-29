@@ -4,24 +4,11 @@
 (function(){
   var CSRF = (document.querySelector('#tkCsrf [name=csrfmiddlewaretoken]')||{}).value || '';
 
-  /* ---------- View toggle (List / Kanban / Calendar) ---------- */
-  var toggle = document.getElementById('tkViewToggle');
-  function showView(v){
-    document.querySelectorAll('.tk-view').forEach(function(el){ el.hidden = (el.dataset.view !== v); });
-    if(toggle){ toggle.querySelectorAll('button').forEach(function(b){
-      b.classList.toggle('ki-btn-primary', b.dataset.view === v);
-      b.classList.toggle('ki-btn-secondary', b.dataset.view !== v);
-    }); }
-    var field = document.getElementById('tkViewField'); if(field) field.value = v;
-    try{ var u = new URL(window.location); u.searchParams.set('view', v); history.replaceState(null,'',u); }catch(e){}
-    if(v === 'calendar') renderCalendar();
-  }
-  if(toggle){
-    toggle.querySelectorAll('button').forEach(function(b){
-      b.addEventListener('click', function(){ showView(b.dataset.view); });
-    });
-    showView(toggle.dataset.default || 'list');
-  }
+  /* The List / Kanban / Calendar switch is a server-side link (?view=), so
+     there is no client-side toggle any more. The old one called
+     renderCalendar() from up here, before the calendar's month state below
+     existed: it threw, and the Calendar view drew nothing at all. The
+     calendar is now rendered once, at the end of this script. */
 
   /* ---------- Bulk select on the list ---------- */
   var bulk = document.getElementById('tkBulkForm');
@@ -77,7 +64,7 @@
     var row = document.createElement('div');
     row.style.cssText = 'display:flex;gap:.4rem;margin-bottom:.4rem;';
     row.innerHTML = '<input type="text" name="checklist_item" class="form-control form-control-sm" placeholder="Checklist item">'
-      + '<button type="button" class="ki-btn ki-btn-secondary ki-btn-sm">&times;</button>';
+      + '<button type="button" class="ki-btn ki-btn-secondary ki-btn-sm" aria-label="Remove checklist item">&times;</button>';
     row.querySelector('button').addEventListener('click', function(){ row.remove(); });
     wrap.appendChild(row);
   }
@@ -159,6 +146,12 @@
   var calState = new Date(); calState.setDate(1);
   function events(){ try{ return JSON.parse(document.getElementById('tkCalData').textContent) || []; }catch(e){ return []; } }
   function pcolor(p){ return p==='critical'?'#dc2626':p==='high'?'#d97706':p==='low'?'#9ca3af':'#2563eb'; }
+  // Titles are typed by anyone who can assign a task and the cells are built
+  // as HTML: unescaped, a title like <img onerror=…> ran script in the
+  // browser of whoever opened the calendar — an admin's included.
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function ymd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function renderCalendar(){
     var body = document.getElementById('tkCalBody'); if(!body) return;
     var evs = events();
@@ -168,7 +161,7 @@
     var first = new Date(y, m, 1);
     var startDow = (first.getDay()+6)%7; // Monday=0
     var daysInMonth = new Date(y, m+1, 0).getDate();
-    var todayStr = new Date().toISOString().slice(0,10);
+    var todayStr = ymd(new Date());   // local date — toISOString() is UTC, a day behind before 05:30 IST
     var byDate = {}; evs.forEach(function(e){ (byDate[e.date]=byDate[e.date]||[]).push(e); });
     var html = '', day = 1 - startDow;
     for(var w=0; w<6 && day<=daysInMonth; w++){
@@ -178,9 +171,14 @@
         var ds = y + '-' + String(m+1).padStart(2,'0') + '-' + String(day).padStart(2,'0');
         var cls = ds === todayStr ? ' class="today"' : '';
         var cell = '<td'+cls+'><span class="day-num">'+day+'</span>';
-        (byDate[ds]||[]).slice(0,4).forEach(function(e){
-          cell += '<a class="ev" style="background:'+pcolor(e.priority)+'" href="/clients/tasks/'+e.id+'/" title="'+e.title.replace(/"/g,'&quot;')+'">'+e.title+'</a>';
+        var dayEvs = byDate[ds]||[];
+        dayEvs.slice(0,4).forEach(function(e){
+          cell += '<a class="ev" style="background:'+pcolor(e.priority)+'" href="/clients/tasks/'+Number(e.id)+'/" title="'+esc(e.title)+'">'+esc(e.title)+'</a>';
         });
+        if(dayEvs.length > 4){
+          // The rest used to vanish without a trace; the list view shows the day.
+          cell += '<a class="ev-more" href="?view=list&from='+ds+'&to='+ds+'">+'+(dayEvs.length-4)+' more</a>';
+        }
         html += cell + '</td>';
       }
       html += '</tr>';
@@ -190,5 +188,6 @@
   var prev = document.getElementById('tkCalPrev'), next = document.getElementById('tkCalNext');
   if(prev) prev.addEventListener('click', function(){ calState.setMonth(calState.getMonth()-1); renderCalendar(); });
   if(next) next.addEventListener('click', function(){ calState.setMonth(calState.getMonth()+1); renderCalendar(); });
+  renderCalendar();   // no-op unless the Calendar view is on the page
 })();
 </script>

@@ -35,9 +35,11 @@ class Command(BaseCommand):
         rung = 0
 
         # ── 1) Tasks whose exact due moment just arrived ──
+        # Yesterday too: a 23:55 deadline's ring window runs past midnight,
+        # and the 00:0x run used to look at today's tasks only.
         candidates = Task.objects.filter(
             is_deleted=False, status__in=ACTIVE,
-            due_date=now.date(), due_time__isnull=False,
+            due_date__in=[now.date(), now.date() - timedelta(days=1)], due_time__isnull=False,
             due_alarm_sent_at__isnull=True,
             assigned_to__user__isnull=False,
         ).select_related("assigned_to__user", "client")

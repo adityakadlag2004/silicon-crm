@@ -15,6 +15,11 @@ server-side parameter (`?view=`), so switching is a link.
   </div>
 </div>
 
+{% if truncated %}
+<div class="ki-alert ki-alert-info" style="font-size:.85rem;"><i class="bi bi-info-circle"></i>
+  Showing the newest {{ limit }} tasks only — narrow it with a status, date or search to see the rest.</div>
+{% endif %}
+
 {# ── List ── #}
 {% if view_mode == "list" %}
 <div class="tk-view" data-view="list">

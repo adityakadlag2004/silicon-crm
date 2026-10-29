@@ -78,8 +78,17 @@ def apply_to_group(task, actor, fields):
     siblings = group_siblings(task).exclude(pk=task.pk)
     n = 0
     for sib in siblings:
+        moved = any(k in shared and getattr(sib, k) != shared[k] for k in ("due_date", "due_time"))
         for k, v in shared.items():
             setattr(sib, k, v)
+        if moved:
+            # A sibling's own "already rung" flags belong to the old deadline.
+            # Callers that move only the date (the sidebar, the calendar drag,
+            # the phone) used to leave them set, so every assignee but the one
+            # whose row was clicked never rang at the new time.
+            sib.due_alarm_sent_at = None
+            sib.reminded_day_before = False
+            sib.reminded_same_day = False
         # A sibling sitting at Overdue whose deadline just moved forward is no
         # longer overdue — same rule the single-task edit path applies.
         if "due_date" in shared and sib.status == sib.STATUS_OVERDUE and not sib.is_overdue:
@@ -107,30 +116,67 @@ def delete_task(task, actor):
     if rule and rule.is_active:
         rule.is_active = False
         rule.save(update_fields=["is_active"])
+    now = timezone.now()   # one stamp for the group — restore_task matches on it
     for t in rows:
         t.is_deleted = True
-        t.deleted_at = timezone.now()
+        t.deleted_at = now
         t.deleted_by = actor
         t.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
         log_activity(t, actor, TaskActivity.DELETED, "Moved to recycle bin.")
     return len(rows)
 
 
+def restore_task(task, actor):
+    """Bring a task back from the recycle bin — the whole group, as it left.
+
+    Deleting takes every sibling at once, so restoring one row used to bring
+    back one person's copy and leave the rest in the bin. The siblings deleted
+    in the same action come back (matched on `deleted_at`; a few seconds'
+    slack covers rows deleted before the stamp was shared). A person removed
+    from the task earlier stays removed. A repeating task's series, stopped by
+    the delete, starts again. Returns the number of rows restored.
+    """
+    from ..models import Task
+
+    rows = [task]
+    if task.assign_group and task.deleted_at:
+        slack = timedelta(seconds=5)
+        rows += list(Task.objects.filter(
+            assign_group=task.assign_group, is_deleted=True,
+            deleted_at__range=(task.deleted_at - slack, task.deleted_at + slack),
+        ).exclude(pk=task.pk))
+    for t in rows:
+        t.is_deleted, t.deleted_at, t.deleted_by = False, None, None
+        t.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
+        log_activity(t, actor, TaskActivity.RESTORED, "Restored from recycle bin.")
+    rule = task.recurring_rule
+    if rule and task.repeat_rule and not rule.is_active:
+        rule.is_active = True     # generation re-checks the end conditions
+        rule.save(update_fields=["is_active"])
+    return len(rows)
+
+
 def sync_group_assignees(task, employee_ids, actor):
     """Reconcile who a task is assigned to, adding/removing sibling rows.
 
-    `employee_ids` is the complete intended set. People removed have their row
-    soft-deleted; people added get a fresh row carrying the same work (and a
-    copy of the checklist), joined to the group. `task` keeps its own status
-    and acknowledgement if its assignee survives.
+    `employee_ids` is the complete intended set. A removed person's row is
+    handed to an added person where there is one — a reassignment keeps the
+    row, with its comments, files, history and ticks. Only then are leftover
+    rows soft-deleted and leftover people given a fresh row carrying the same
+    work (and a copy of the checklist), joined to the group.
+
+    Swapping the assignee of a solo task through Edit used to bin the task and
+    create a blank copy for the new person, and the page then opened the
+    binned one.
     """
-    from ..models import Employee, Task, TaskChecklistItem
+    from ..models import Employee, Task, TaskChecklistItem, TaskSubscriber
     from uuid import uuid4
 
-    wanted = [e for e in Employee.objects.filter(pk__in=employee_ids, active=True)]
+    wanted = [e for e in Employee.objects.filter(pk__in=employee_ids, active=True)
+              .select_related("user")]
     if not wanted:
         return
-    rows = list(group_siblings(task)) if task.assign_group else [task]
+    rows = _group_rows(task)
     current = {t.assigned_to_id: t for t in rows}
     wanted_ids = {e.pk for e in wanted}
 
@@ -141,26 +187,41 @@ def sync_group_assignees(task, employee_ids, actor):
             t.assign_group = group
             t.save(update_fields=["assign_group", "updated_at"])
 
-    for emp_id, row in current.items():
-        if emp_id not in wanted_ids:
-            row.is_deleted = True
-            row.deleted_at = timezone.now()
-            row.deleted_by = actor
-            row.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
-            log_activity(row, actor, TaskActivity.DELETED, "Removed from this task.")
+    leaving = sorted((row for emp_id, row in current.items() if emp_id not in wanted_ids),
+                     key=lambda r: r.pk != task.pk)      # `task` itself is handed on first
+    joining = [e for e in wanted if e.pk not in current]
+    while leaving and joining:
+        row, emp = leaving.pop(0), joining.pop(0)
+        row.assigned_to = emp
+        # The new person has seen nothing yet: acknowledgement and the
+        # due-time ring start again for them.
+        row.acknowledged_at = row.ack_last_rung_at = row.due_alarm_sent_at = None
+        row.save()
+        log_activity(row, actor, TaskActivity.ASSIGNED, f"Reassigned to {emp.user.username}.")
+        notify_task(row, actor, "New task assigned",
+                    f"{actor.username} assigned you “{row.title}”.", event="assigned")
+
+    for row in leaving:
+        row.is_deleted = True
+        row.deleted_at = timezone.now()
+        row.deleted_by = actor
+        row.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
+        log_activity(row, actor, TaskActivity.DELETED, "Removed from this task.")
 
     checklist = list(task.checklist_items.values_list("title", "order"))
-    for emp in wanted:
-        if emp.pk in current:
-            continue
+    watchers = list(task.subscribers.values_list("user_id", flat=True))
+    for emp in joining:
         new = Task.objects.create(
             title=task.title, description=task.description, category=task.category,
             priority=task.priority, created_by=task.created_by, assigned_to=emp,
             due_date=task.due_date, due_time=task.due_time, client=task.client,
             assign_group=group, silent=task.silent,
+            repeat_rule=task.repeat_rule, recurring_rule=task.recurring_rule,
         )
         for title, order in checklist:
             TaskChecklistItem.objects.create(task=new, title=title, order=order)
+        for uid in watchers:
+            TaskSubscriber.objects.get_or_create(task=new, user_id=uid)
         log_activity(new, actor, TaskActivity.ASSIGNED, f"Assigned to {emp.user.username}.")
         notify_task(new, actor, "New task assigned",
                     f"{actor.username} assigned you “{new.title}”.", event="assigned")
@@ -200,8 +261,7 @@ def apply_edit(task, actor, data):
     the phone could not be fixed in a browser. Dates and times arrive as
     strings ("2026-09-04", "15:30") from both callers.
     """
-    from ..models import (Client, Employee, RecurringTaskRule, Task, TaskCategory,
-                          TaskChecklistItem, TaskSubscriber)
+    from ..models import Client, Employee, RecurringTaskRule, Task, TaskCategory
 
     if (data.get("title") or "").strip():
         task.title = data["title"].strip()[:255]
@@ -214,7 +274,9 @@ def apply_edit(task, actor, data):
         task.category = TaskCategory.objects.filter(pk=cid).first() if cid else None
     if "due_date" in data:
         new_date = _parse_date(data.get("due_date"))
-        new_time = _parse_time(data.get("due_time"))
+        # Presence-sensitive like everything else here: a caller that sends
+        # only a date is moving the day, not clearing the time.
+        new_time = _parse_time(data.get("due_time")) if "due_time" in data else task.due_time
         if new_date != task.due_date or new_time != task.due_time:
             # New deadline → the reminders and the due-time ring must fire again.
             task.reminded_day_before = False
@@ -257,19 +319,9 @@ def apply_edit(task, actor, data):
                 build_recurrence(task, freq, actor)
     if "silent" in data:
         task.silent = bool(data["silent"])
-    # Replace subscribers if a list is supplied.
-    if isinstance(data.get("subscribers"), list):
-        task.subscribers.all().delete()
-        for uid in data["subscribers"]:
-            if str(uid).isdigit():
-                TaskSubscriber.objects.get_or_create(task=task, user_id=int(uid))
     task.save()
-    # Replace checklist if supplied.
     if isinstance(data.get("checklist"), list):
-        task.checklist_items.all().delete()
-        for i, ct in enumerate(data["checklist"]):
-            if (ct or "").strip():
-                TaskChecklistItem.objects.create(task=task, title=ct.strip()[:255], order=i)
+        sync_checklist(task, data["checklist"])
     # A multi-assignee task is N sibling rows — the shared fields must move
     # on all of them, or the other people keep the old title/deadline.
     apply_to_group(task, actor, {f: getattr(task, f) for f in GROUP_SHARED_FIELDS})
@@ -277,10 +329,231 @@ def apply_edit(task, actor, data):
         ids = [int(x) for x in group_assignees if str(x).isdigit()]
         if ids:
             sync_group_assignees(task, ids, actor)
+    # After the assignee sync, so a person just added is in the loop list too.
+    if isinstance(data.get("subscribers"), list):
+        set_subscribers(task, data["subscribers"])
+    sync_rule_from_task(task)
     log_activity(task, actor, TaskActivity.DESCRIPTION_UPDATED, "Task details updated.")
     notify_task(task, actor, "Task updated",
-                f"“{task.title}” was updated.", event="status_changed")
+                f"“{task.title}” was updated.", event="status_changed", group=True)
     return task
+
+
+def sync_checklist(task, titles):
+    """Make the checklist read `titles`, in that order, keeping every tick.
+
+    The phone's Edit sheet sends the checklist as plain titles on every save.
+    It used to be deleted and rebuilt from them, so fixing a typo in the title
+    un-ticked every item the assignee had already done. Items are matched by
+    title: a kept line keeps its tick, a new line starts unticked, a dropped
+    line goes.
+    """
+    from ..models import TaskChecklistItem
+
+    pool = {}
+    for item in task.checklist_items.all():
+        pool.setdefault(item.title, []).append(item)
+    keep = []
+    lines = [t.strip()[:255] for t in titles if (t or "").strip()]
+    for order, title in enumerate(lines):
+        item = pool[title].pop(0) if pool.get(title) else TaskChecklistItem(task=task, title=title)
+        if item.pk is None or item.order != order:
+            item.order = order
+            item.save()
+        keep.append(item.pk)
+    task.checklist_items.exclude(pk__in=keep).delete()
+
+
+def _group_rows(task):
+    """Every row of `task`'s group, with `task` itself as the very object the
+    caller holds — so a change made through one is never lost on a stale copy."""
+    if not task.assign_group:
+        return [task]
+    return [task if t.pk == task.pk else t for t in group_siblings(task)]
+
+
+def thread_ids(task):
+    """Pks of every copy of a group task (`task` included, even if binned).
+
+    Comments and files are one thread for the whole task. A comment lands on
+    the row it was typed on, and files attached at assignment land on the
+    first row only — read per row, the second and third assignee never saw the
+    brief or the voice note the assigner recorded for all three.
+    """
+    return {task.pk} | {t.pk for t in _group_rows(task)}
+
+
+def thread_comments(task):
+    from ..models import TaskComment
+    return TaskComment.objects.filter(task_id__in=thread_ids(task)).select_related("author")
+
+
+def thread_attachments(task):
+    from ..models import TaskAttachment
+    return TaskAttachment.objects.filter(task_id__in=thread_ids(task)).select_related("uploaded_by")
+
+
+def add_subscriber(task, actor, user):
+    """Put `user` in the loop on the whole task (every sibling). True if new."""
+    from ..models import TaskSubscriber
+
+    created = False
+    for row in _group_rows(task):
+        created = TaskSubscriber.objects.get_or_create(task=row, user=user)[1] or created
+    if created:
+        log_activity(task, actor, TaskActivity.SUBSCRIBER_ADDED, f"Added {user.username} in loop.")
+        create_notification(user, "Added to a task",
+                            f"You're now in the loop on “{task.title}”.",
+                            _task_link(task), event="subscriber_added")
+    return created
+
+
+def remove_subscriber(task, user_id):
+    from ..models import TaskSubscriber
+
+    TaskSubscriber.objects.filter(task__in=_group_rows(task), user_id=user_id).delete()
+
+
+def set_subscribers(task, user_ids):
+    """Replace the in-loop list on every sibling with `user_ids`.
+
+    Subscribers are on the task, not on one person's copy of it: a watcher
+    added to one row of a three-person task used to hear about one third of it.
+    """
+    from django.contrib.auth.models import User
+    from ..models import TaskSubscriber
+
+    wanted = set(User.objects.filter(pk__in=[int(u) for u in user_ids if str(u).isdigit()])
+                 .values_list("pk", flat=True))
+    rows = _group_rows(task)
+    TaskSubscriber.objects.filter(task__in=rows).exclude(user_id__in=wanted).delete()
+    for row in rows:
+        for uid in wanted:
+            TaskSubscriber.objects.get_or_create(task=row, user_id=uid)
+
+
+# ───────────────────── one-field changes (web + phone) ─────────────────────
+#
+# The web sidebar and the phone's per-field actions each carried their own
+# copy of these. The copies drifted: the phone's due/priority/category/
+# description changes touched one row of a group task, so the other assignees
+# kept the old deadline. One implementation each, called from both doors.
+
+def set_status(task, actor, new):
+    """Move one person's task to `new`, logging and notifying. True if changed.
+
+    Status is that person's own business, so it is never applied to siblings.
+    """
+    from ..models import Task
+
+    # "Pending" past the deadline is really Overdue — a reopen/reset must
+    # never hide a blown due date.
+    if new == Task.STATUS_PENDING and task.due_at and task.due_at < timezone.now():
+        new = Task.STATUS_OVERDUE
+    if new not in dict(Task.STATUS_CHOICES) or new == task.status:
+        return False
+    old = task.get_status_display()
+    task.status = new
+    # completed_at reflects the LATEST completion — cleared on reopen so
+    # timeliness reports never show a stale first-completion date.
+    task.completed_at = timezone.now() if new == Task.STATUS_COMPLETED else None
+    # Touching the status proves the assignee has seen the task.
+    if (task.acknowledged_at is None and task.assigned_to
+            and task.assigned_to.user_id == getattr(actor, "pk", None)):
+        task.acknowledged_at = timezone.now()
+    task.save(update_fields=["status", "completed_at", "acknowledged_at", "updated_at"])
+    if new == Task.STATUS_COMPLETED:
+        log_activity(task, actor, TaskActivity.COMPLETED, "Marked completed.")
+        notify_task(task, actor, "Task completed",
+                    f"“{task.title}” was marked completed.", event="completed")
+    else:
+        log_activity(task, actor, TaskActivity.STATUS_CHANGED,
+                     f"{old} → {task.get_status_display()}.")
+        notify_task(task, actor, "Task status changed",
+                    f"“{task.title}”: {old} → {task.get_status_display()}.", event="status_changed")
+    return True
+
+
+def _due_text(task):
+    if not task.due_date:
+        return "—"
+    return f"{task.due_date:%d %b %Y}" + (f" {task.due_time:%H:%M}" if task.due_time else "")
+
+
+def set_due(task, actor, due_date, due_time):
+    """Give the task (and every sibling) a new deadline that rings afresh."""
+    from ..models import Task
+
+    task.due_date, task.due_time = due_date, due_time
+    # A new deadline has not been rung yet. Without this the task keeps the
+    # flag from the deadline it used to have and tasks_ring_due never rings it
+    # again — a rescheduled task that goes silent is worse than no reminder.
+    task.due_alarm_sent_at = None
+    task.reminded_day_before = False
+    task.reminded_same_day = False
+    if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
+        task.status = Task.STATUS_PENDING
+    task.save(update_fields=["due_date", "due_time", "status", "due_alarm_sent_at",
+                             "reminded_day_before", "reminded_same_day", "updated_at"])
+    apply_to_group(task, actor, {"due_date": due_date, "due_time": due_time})
+    log_activity(task, actor, TaskActivity.DUE_CHANGED, f"Due {_due_text(task)}.")
+    notify_task(task, actor, "Task due date changed",
+                f"“{task.title}” is now due {_due_text(task)}.", event="due_changed", group=True)
+
+
+def set_priority(task, actor, new):
+    from ..models import Task
+
+    if new not in dict(Task.PRIORITY_CHOICES) or new == task.priority:
+        return False
+    old = task.get_priority_display()
+    task.priority = new
+    task.save(update_fields=["priority", "updated_at"])
+    apply_to_group(task, actor, {"priority": new})
+    log_activity(task, actor, TaskActivity.PRIORITY_CHANGED, f"{old} → {task.get_priority_display()}.")
+    notify_task(task, actor, "Task priority changed",
+                f"“{task.title}”: priority {old} → {task.get_priority_display()}.",
+                event="priority_changed", group=True)
+    sync_rule_from_task(task)
+    return True
+
+
+def set_category(task, actor, category):
+    task.category = category
+    task.save(update_fields=["category", "updated_at"])
+    apply_to_group(task, actor, {"category": category})
+    log_activity(task, actor, TaskActivity.CATEGORY_CHANGED,
+                 f"Category → {category.name if category else '—'}.")
+    sync_rule_from_task(task)
+
+
+def set_description(task, actor, text):
+    task.description = (text or "").strip()
+    task.save(update_fields=["description", "updated_at"])
+    apply_to_group(task, actor, {"description": task.description})
+    log_activity(task, actor, TaskActivity.DESCRIPTION_UPDATED, "Updated description.")
+    sync_rule_from_task(task)
+
+
+def acknowledge(task, actor):
+    """The assignee says "I have seen this". True if it was news.
+
+    Stops the 4-hourly re-ring of a high/critical task and tells the person
+    who assigned it. Only the assignee can do it — that is what it means.
+    """
+    if not (task.assigned_to and task.assigned_to.user_id == getattr(actor, "pk", None)):
+        raise PermissionError("Only the assignee can acknowledge.")
+    if task.acknowledged_at is not None:
+        return False
+    task.acknowledged_at = timezone.now()
+    task.save(update_fields=["acknowledged_at", "updated_at"])
+    log_activity(task, actor, TaskActivity.ACKNOWLEDGED, "Acknowledged the task.")
+    # A follow-up's creator is the inactive system user — nobody to tell.
+    if task.created_by_id and task.created_by_id != actor.pk and task.created_by.is_active:
+        create_notification(task.created_by, "Task acknowledged",
+                            f"{actor.username} acknowledged “{task.title}”.",
+                            _task_link(task), event="status_changed")
+    return True
 
 
 def group_ack_roster(task):
@@ -417,21 +690,35 @@ def ring_task(user, title, body, task, kind="task_alarm"):
     })
 
 
-def task_recipients(task, exclude_user=None):
+# What the person who handed the task out wants to hear without subscribing:
+# that it is done, and what the assignee said. An assignee's "I need the PAN
+# copy" used to reach nobody unless the assigner had put themselves in loop.
+CREATOR_EVENTS = {"completed", "comment_added"}
+
+
+def task_recipients(task, exclude_user=None, group=False, creator=False):
     """Users who should hear about a change: assignee + subscribers.
 
-    Excludes `exclude_user` (usually the actor — no self-notifications) and
-    de-duplicates by user id.
+    `group` widens it to every sibling's assignee and subscribers — for a
+    change to the shared work (deadline, priority, details), which moves all of
+    them. `creator` adds whoever assigned the task. Inactive users (the system
+    user that creates follow-ups, people who have left) are never notified.
+    Excludes `exclude_user` (usually the actor) and de-duplicates by user id.
     """
+    from ..models import TaskSubscriber
+
+    rows = _group_rows(task) if group else [task]
     users = {}
-    if task.assigned_to and task.assigned_to.user_id:
-        users[task.assigned_to.user_id] = task.assigned_to.user
-    for sub in task.subscribers.select_related("user"):
-        if sub.user_id:
-            users[sub.user_id] = sub.user
+    for row in rows:
+        if row.assigned_to and row.assigned_to.user_id:
+            users[row.assigned_to.user_id] = row.assigned_to.user
+    for sub in TaskSubscriber.objects.filter(task__in=rows).select_related("user"):
+        users[sub.user_id] = sub.user
+    if creator and task.created_by_id:
+        users[task.created_by_id] = task.created_by
     if exclude_user is not None:
         users.pop(getattr(exclude_user, "id", None), None)
-    return list(users.values())
+    return [u for u in users.values() if u.is_active]
 
 
 def _task_link(task):
@@ -441,17 +728,19 @@ def _task_link(task):
         return ""
 
 
-def notify_task(task, actor, title, body, event=None, exclude_users=None):
+def notify_task(task, actor, title, body, event=None, exclude_users=None, group=False):
     """Fan out an in-app (+push) notification to everyone watching `task`.
 
     `actor` is excluded so the person who made the change is not pinged, as is
     anyone in `exclude_users` (e.g. @mentioned users who already got a more
     specific ping). Each recipient's NotificationPreference for `event` is
-    respected. Deep links to the task detail page (the Android app routes
-    /clients/tasks/… ).
+    respected. `group` reaches every assignee of a multi-person task (see
+    task_recipients). Deep links to the task detail page (the Android app
+    routes /clients/tasks/… ).
     """
     link = _task_link(task)
-    recipients = task_recipients(task, exclude_user=actor)
+    recipients = task_recipients(task, exclude_user=actor, group=group,
+                                 creator=event in CREATOR_EVENTS)
     excluded = {u.pk for u in (exclude_users or [])}
     sent = 0
     for user in recipients:
@@ -460,6 +749,24 @@ def notify_task(task, actor, title, body, event=None, exclude_users=None):
         if create_notification(user, title, body, link, event, ring=not task.silent):
             sent += 1
     return sent
+
+
+def notify_from_cron(task, title, body, event=None, seen=None):
+    """A cron's notice about one row: its assignee always hears; anyone else
+    watching a group task hears once per run, not once per assignee.
+
+    A manager in loop on a five-person task used to get five "Task overdue"
+    notices for one deadline. Pass the same `seen` set for the whole run.
+    """
+    seen = set() if seen is None else seen
+    link = _task_link(task)
+    own = task.assigned_to.user_id if task.assigned_to_id else None
+    for user in task_recipients(task):
+        key = (task.assign_group or task.pk, user.pk)
+        if user.pk != own and key in seen:
+            continue
+        seen.add(key)
+        create_notification(user, title, body, link, event)
 
 
 _MENTION_RE = re.compile(r"@([A-Za-z0-9_.@+-]+)")
@@ -522,72 +829,92 @@ def next_due_date(rule, after):
             return after + timedelta(days=7)
         return after + timedelta(days=7 * interval)
     if rule.frequency == RecurringTaskRule.FREQ_MONTHLY:
-        return _add_months(after, interval)
+        # Counted from the start date, never from the last instance: stepping
+        # from a clamped date (31 Jan → 28 Feb) slid the series to the 28th for
+        # good. The same rule ExternalPolicy.events follows.
+        start = rule.start_date
+        k = max(1, ((after.year - start.year) * 12 + after.month - start.month) // interval)
+        nxt = _add_months(start, k * interval)
+        while nxt <= after:
+            k += 1
+            nxt = _add_months(start, k * interval)
+        return nxt
     # custom → treat like daily-with-interval
     return after + timedelta(days=interval)
 
 
-def generate_rule_instances(rule, today=None, cap=60):
-    """Create any Task instances for `rule` whose due date has arrived.
+def _rule_finished(rule):
+    from ..models import RecurringTaskRule
+    return (rule.end_type == RecurringTaskRule.END_AFTER and rule.max_occurrences
+            and rule.occurrences_created >= rule.max_occurrences)
 
-    Catches up on missed periods (bounded by `cap`), honours end conditions,
-    copies the checklist + subscribers, logs activity, and notifies. Returns
-    the list of created Task instances.
+
+def generate_rule_instances(rule, today=None):
+    """Create this period's instance of `rule` once its due date has arrived.
+
+    One instance per period, for everyone on the rule (a group rule makes a
+    group, sharing an assign_group like a hand-made multi-person task). Missed
+    periods are skipped, not backfilled: the cron down for a week, a rule
+    restored from the bin or started on a past date used to produce one
+    instantly-overdue task per missed day — up to sixty — each escalating to
+    management. Only the latest due occurrence is created. Returns the tasks.
     """
-    from ..models import RecurringTaskRule, Task, TaskChecklistItem, TaskSubscriber
+    from uuid import uuid4
+
+    from ..models import Employee, RecurringTaskRule, Task, TaskChecklistItem, TaskSubscriber
 
     today = today or timezone.localdate()
-    created = []
     if not rule.is_active:
-        return created
+        return []
+    if _rule_finished(rule):
+        rule.is_active = False
+        rule.save(update_fields=["is_active"])
+        return []
 
-    guard = 0
-    while guard < cap:
-        guard += 1
-
-        if (rule.end_type == RecurringTaskRule.END_AFTER and rule.max_occurrences
-                and rule.occurrences_created >= rule.max_occurrences):
-            rule.is_active = False
-            rule.save(update_fields=["is_active"])
+    ends = rule.end_date if rule.end_type == RecurringTaskRule.END_ON else None
+    nxt = next_due_date(rule, rule.last_generated_date or rule.start_date)
+    if nxt > today:
+        return []
+    while True:
+        later = next_due_date(rule, nxt)
+        if later > today or (ends and later > ends):
             break
+        nxt = later
+    if ends and nxt > ends:
+        rule.is_active = False
+        rule.save(update_fields=["is_active"])
+        return []
 
-        anchor = rule.last_generated_date or rule.start_date
-        nxt = next_due_date(rule, anchor)
-        if not nxt or nxt > today:
-            break
-        if (rule.end_type == RecurringTaskRule.END_ON and rule.end_date
-                and nxt > rule.end_date):
-            rule.is_active = False
-            rule.save(update_fields=["is_active"])
-            break
+    ids = rule.assignee_id_list() or ([rule.assigned_to_id] if rule.assigned_to_id else [])
+    by_id = {e.pk: e for e in Employee.objects.filter(pk__in=ids, active=True).select_related("user")}
+    assignees = [by_id[i] for i in ids if i in by_id] or [None]
+    group = uuid4().hex if len(assignees) > 1 else ""
+    checklist = [l.strip()[:255] for l in rule.checklist_template.splitlines() if l.strip()]
 
+    created = []
+    for assignee in assignees:
         task = Task.objects.create(
-            title=rule.title,
-            description=rule.description,
-            category=rule.category,
-            priority=rule.priority,
-            created_by=rule.created_by,
-            assigned_to=rule.assigned_to,
-            due_date=nxt,
-            due_time=rule.due_time,
-            repeat_rule=rule.frequency,
-            recurring_rule=rule,
+            title=rule.title, description=rule.description, category=rule.category,
+            priority=rule.priority, created_by=rule.created_by, assigned_to=assignee,
+            due_date=nxt, due_time=rule.due_time, repeat_rule=rule.frequency,
+            recurring_rule=rule, assign_group=group,
         )
-        for i, line in enumerate(l for l in rule.checklist_template.splitlines() if l.strip()):
-            TaskChecklistItem.objects.create(task=task, title=line.strip()[:255], order=i)
+        for i, line in enumerate(checklist):
+            TaskChecklistItem.objects.create(task=task, title=line, order=i)
         for uid in rule.subscriber_id_list():
             TaskSubscriber.objects.get_or_create(task=task, user_id=uid)
-
         log_activity(task, rule.created_by, TaskActivity.CREATED,
                      f"Auto-generated from a {rule.get_frequency_display().lower()} recurring rule.")
-        notify_task(task, None, "Recurring task created",
-                    f"“{task.title}” is due {nxt:%d %b}.", event="recurring_created")
-
-        rule.occurrences_created += 1
-        rule.last_generated_date = nxt
-        rule.save(update_fields=["occurrences_created", "last_generated_date"])
         created.append(task)
 
+    rule.occurrences_created += 1
+    rule.last_generated_date = nxt
+    rule.is_active = not _rule_finished(rule)
+    rule.save(update_fields=["occurrences_created", "last_generated_date", "is_active"])
+    seen = set()   # one notice per watcher, however many people the rule covers
+    for task in created:
+        notify_from_cron(task, "Recurring task created",
+                         f"“{task.title}” is due {nxt:%d %b}.", event="recurring_created", seen=seen)
     return created
 
 
@@ -618,6 +945,11 @@ def build_recurrence(task, freq, actor, end_date=None, max_occ=None):
     weekdays = str(anchor.weekday()) if freq == RecurringTaskRule.FREQ_WEEKLY else ""
     checklist_template = "\n".join(c.title for c in task.checklist_items.all())
     subscriber_ids = ",".join(str(s.user_id) for s in task.subscribers.all())
+    # A task for three people is one series for three people. Each sibling
+    # used to get a rule of its own, so tomorrow's copies came back as three
+    # unrelated tasks and deleting one stopped only that person's series.
+    rows = _group_rows(task)
+    assignee_ids = ",".join(str(t.assigned_to_id) for t in rows if t.assigned_to_id)
 
     if end_date:
         end_type = RecurringTaskRule.END_ON
@@ -630,13 +962,41 @@ def build_recurrence(task, freq, actor, end_date=None, max_occ=None):
         title=task.title, description=task.description, category=task.category,
         priority=task.priority, created_by=actor, assigned_to=task.assigned_to,
         due_time=task.due_time, checklist_template=checklist_template,
-        subscriber_ids=subscriber_ids, frequency=freq, interval=1, weekdays=weekdays,
+        subscriber_ids=subscriber_ids, assignee_ids=assignee_ids,
+        frequency=freq, interval=1, weekdays=weekdays,
         start_date=anchor, end_type=end_type,
         end_date=end_date if end_type == RecurringTaskRule.END_ON else None,
         max_occurrences=max_occ if end_type == RecurringTaskRule.END_AFTER else None,
         occurrences_created=1, last_generated_date=anchor,
     )
-    task.recurring_rule = rule
-    task.repeat_rule = freq
-    task.save(update_fields=["recurring_rule", "repeat_rule", "updated_at"])
+    for row in rows:
+        row.recurring_rule = rule
+        row.repeat_rule = freq
+        row.save(update_fields=["recurring_rule", "repeat_rule", "updated_at"])
     return rule
+
+
+def sync_rule_from_task(task):
+    """Carry an edit to a repeating task into the tasks still to come.
+
+    The series used to keep whatever it was created with: retitle the daily
+    report, hand it to someone else, change its time — and tomorrow's copy
+    came back with the old title, to the old person, at the old time. Only
+    the newest instance speaks for the series; editing last week's copy
+    leaves the future alone.
+    """
+    rule = task.recurring_rule
+    if not (rule and rule.is_active):
+        return
+    rows = _group_rows(task)
+    newer = rule.instances.filter(created_at__gt=task.created_at, is_deleted=False) \
+        .exclude(pk__in=[r.pk for r in rows])
+    if newer.exists():
+        return
+    rule.title, rule.description = task.title, task.description
+    rule.category, rule.priority, rule.due_time = task.category, task.priority, task.due_time
+    rule.assigned_to = task.assigned_to
+    rule.assignee_ids = ",".join(str(r.assigned_to_id) for r in rows if r.assigned_to_id)
+    rule.subscriber_ids = ",".join(str(u) for u in task.subscribers.values_list("user_id", flat=True))
+    rule.checklist_template = "\n".join(task.checklist_items.values_list("title", flat=True))
+    rule.save()

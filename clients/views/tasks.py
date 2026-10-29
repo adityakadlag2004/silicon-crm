@@ -22,6 +22,7 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_POST
 
 from .. import permissions
@@ -39,18 +40,27 @@ from ..models import (
     TaskSubscriber,
 )
 from ..services.tasks import (
-    GROUP_SHARED_FIELDS,
+    acknowledge,
+    add_subscriber,
     apply_edit,
-    apply_to_group,
     assignee_label,
+    build_recurrence,
     collapse_groups,
-    create_notification,
     delete_task,
     group_ack_roster,
     group_siblings,
     log_activity,
     notify_mentions,
     notify_task,
+    remove_subscriber,
+    restore_task,
+    set_category,
+    set_due,
+    set_priority,
+    set_status,
+    thread_attachments,
+    thread_comments,
+    thread_ids,
 )
 from .helpers import parse_date_param, query_without
 
@@ -125,18 +135,21 @@ def _scoped_qs(request):
     ).distinct()
 
 
-def _visible_task_or_404(request, pk, include_deleted=False):
-    qs = Task.objects.all() if include_deleted else Task.objects.filter(is_deleted=False)
-    task = get_object_or_404(qs, pk=pk)
+def _can_see(request, task):
     if _can_manage_all(request):
-        return task
+        return True
     uid = request.user.id
-    allowed = (
+    return (
         task.created_by_id == uid
         or (task.assigned_to and task.assigned_to.user_id == uid)
         or task.subscribers.filter(user_id=uid).exists()
     )
-    if not allowed:
+
+
+def _visible_task_or_404(request, pk, include_deleted=False):
+    qs = Task.objects.all() if include_deleted else Task.objects.filter(is_deleted=False)
+    task = get_object_or_404(qs, pk=pk)
+    if not _can_see(request, task):
         raise PermissionDenied("You cannot access this task.")
     return task
 
@@ -425,7 +438,11 @@ def _board_ctx(request, qs, limit, collapse=False):
     "Mansi +4" — used by Delegated, where the creator wants one row per task
     they assigned, not one per recipient.
     """
-    items = list(qs[:limit])
+    items = list(qs[:limit + 1])
+    # The list stops at `limit`; say so, or the tail just vanishes (the app's
+    # list did exactly that until it got paging).
+    truncated = len(items) > limit
+    items = items[:limit]
     if collapse:
         items = collapse_groups(items)
     manage_all = _can_manage_all(request)
@@ -442,6 +459,8 @@ def _board_ctx(request, qs, limit, collapse=False):
     mode = _view_mode(request)
     return {
         "tasks": items,
+        "truncated": truncated,
+        "limit": limit,
         "kanban": _kanban(items) if mode == "kanban" else None,
         "cal_events": _cal_events(items) if mode == "calendar" else None,
     }
@@ -458,8 +477,9 @@ def task_detail(request, pk):
         "task": task,
         "page_title": f"#{task.pk} · {task.title}",
         "checklist": task.checklist_items.select_related("completed_by"),
-        "comments": task.comments.select_related("author"),
-        "attachments": task.attachments.select_related("uploaded_by"),
+        # One thread for a group task: every copy's comments and files.
+        "comments": thread_comments(task),
+        "attachments": thread_attachments(task),
         "subscribers": task.subscribers.select_related("user"),
         "activities": task.activities.select_related("actor")[:100],
         "categories": TaskCategory.objects.filter(is_active=True),
@@ -550,7 +570,11 @@ def task_create(request):
     due_time = _parse_time(request.POST.get("due_time"))
     repeat_rule = (request.POST.get("repeat_rule") or "").strip()[:20]
     checklist_titles = [c.strip() for c in request.POST.getlist("checklist_item") if c.strip()]
-    subscriber_ids = [int(u) for u in request.POST.getlist("subscribers") if u.isdigit()]
+    # Only ids of real users — a stale or forged one used to fail the whole
+    # create with a foreign-key error.
+    subscriber_ids = list(User.objects.filter(
+        pk__in=[int(u) for u in request.POST.getlist("subscribers") if u.isdigit()],
+    ).values_list("pk", flat=True))
 
     # Several assignees → sibling rows sharing a group id, so the Delegated
     # list shows one task ("Mansi +4"), not one row per person.
@@ -593,8 +617,9 @@ def task_create(request):
         else:
             log_activity(first, request.user, TaskActivity.VOICENOTE_UPLOADED, "Voice note")
 
+    # One series for the whole group: build_recurrence links every sibling.
+    _maybe_create_recurrence(request, first)
     for task in created_tasks:
-        _maybe_create_recurrence(request, task)
         notify_task(task, request.user, "New task assigned",
                     f"{request.user.username} assigned you “{task.title}”.", event="assigned")
 
@@ -609,8 +634,6 @@ def task_create(request):
 
 def _maybe_create_recurrence(request, task):
     """If the create form requested a repeat, spin up a RecurringTaskRule."""
-    from ..services.tasks import build_recurrence
-
     freq = (request.POST.get("repeat_rule") or "").strip()
     end_date = parse_date_param(request.POST.get("repeat_end_date"))
     raw_max = request.POST.get("repeat_max")
@@ -649,7 +672,10 @@ def task_edit(request, pk):
         "assignees": request.POST.getlist("assigned_to"),
     })
     messages.success(request, "Task updated.")
-    return redirect("clients:task_detail", pk=task.pk)
+    # Taking this row's own person off a group task bins this row; open a
+    # copy that is still live instead of the recycle-bin page.
+    live = task if not task.is_deleted else group_siblings(task).first()
+    return redirect("clients:task_detail", pk=(live or task).pk)
 
 
 # ─────────────────────────────── actions ───────────────────────────────
@@ -660,38 +686,18 @@ def _guard_edit(request, task):
     return None
 
 
-def _apply_status(request, task, new):
-    """Move one task to `new`, logging + notifying. True if it changed.
-
-    Shared by the single-task endpoint and the list's bulk bar, so a bulk
-    change leaves exactly the same trail as a one-by-one one.
-    """
-    # "Pending" past the deadline is really Overdue — a reopen/reset must
-    # never hide a blown due date.
-    if new == Task.STATUS_PENDING and task.due_at and task.due_at < timezone.now():
-        new = Task.STATUS_OVERDUE
-    if new not in dict(Task.STATUS_CHOICES) or new == task.status:
-        return False
-    old = task.get_status_display()
-    task.status = new
-    # completed_at reflects the LATEST completion — cleared on reopen so
-    # timeliness reports never show a stale first-completion date.
-    task.completed_at = timezone.now() if new == Task.STATUS_COMPLETED else None
-    # Touching the status proves the assignee has seen the task.
-    if (task.acknowledged_at is None and task.assigned_to
-            and task.assigned_to.user_id == request.user.id):
-        task.acknowledged_at = timezone.now()
-    task.save(update_fields=["status", "completed_at", "acknowledged_at", "updated_at"])
-    if new == Task.STATUS_COMPLETED:
-        log_activity(task, request.user, TaskActivity.COMPLETED, "Marked completed.")
-        notify_task(task, request.user, "Task completed",
-                    f"“{task.title}” was marked completed.", event="completed")
-    else:
-        log_activity(task, request.user, TaskActivity.STATUS_CHANGED,
-                     f"{old} → {task.get_status_display()}.")
-        notify_task(task, request.user, "Task status changed",
-                    f"“{task.title}”: {old} → {task.get_status_display()}.", event="status_changed")
-    return True
+@login_required
+@require_POST
+def task_acknowledge(request, pk):
+    """The assignee's "I have seen this" — the button the 4-hourly re-ring of
+    a high/critical task tells them to tap. It existed only in the app."""
+    task = _visible_task_or_404(request, pk)
+    try:
+        if acknowledge(task, request.user):
+            messages.success(request, "Acknowledged.")
+    except PermissionError as exc:
+        return HttpResponseForbidden(str(exc))
+    return _back(request, task)
 
 
 @login_required
@@ -703,7 +709,7 @@ def task_set_status(request, pk):
         return guard
     # A bare POST means "done" — that is the one-tap tick on the calendar
     # widget and on a lead/claim page, where there is no status to pick.
-    _apply_status(request, task, request.POST.get("status") or Task.STATUS_COMPLETED)
+    set_status(task, request.user, request.POST.get("status") or Task.STATUS_COMPLETED)
     return _back(request, task)
 
 
@@ -712,12 +718,12 @@ def task_set_status(request, pk):
 def task_bulk_status(request):
     """Apply one status to every task ticked on the list."""
     new = request.POST.get("status") or Task.STATUS_COMPLETED
-    ids = request.POST.getlist("task_ids")[:500]
+    ids = [i for i in request.POST.getlist("task_ids")[:500] if i.isdigit()]
     changed = skipped = 0
     for task in _scoped_qs(request).filter(pk__in=ids):
         if not _can_edit(request, task):
             skipped += 1
-        elif _apply_status(request, task, new):
+        elif set_status(task, request.user, new):
             changed += 1
     messages.success(request, f"{changed} task{'' if changed == 1 else 's'} updated.")
     if skipped:
@@ -734,7 +740,7 @@ def task_bulk_delete(request):
     (`_can_delete`), so a ticked task the user may only work on is skipped
     rather than silently removed.
     """
-    ids = request.POST.getlist("task_ids")[:500]
+    ids = [i for i in request.POST.getlist("task_ids")[:500] if i.isdigit()]
     deleted = skipped = 0
     for task in _scoped_qs(request).filter(pk__in=ids):
         if not _can_delete(request, task):
@@ -755,18 +761,7 @@ def task_set_priority(request, pk):
     guard = _guard_edit(request, task)
     if guard:
         return guard
-    new = request.POST.get("priority")
-    if new not in dict(Task.PRIORITY_CHOICES) or new == task.priority:
-        return _back(request, task)
-    old = task.get_priority_display()
-    task.priority = new
-    task.save(update_fields=["priority", "updated_at"])
-    apply_to_group(task, request.user, {"priority": new})
-    log_activity(task, request.user, TaskActivity.PRIORITY_CHANGED,
-                 f"{old} → {task.get_priority_display()}.")
-    notify_task(task, request.user, "Task priority changed",
-                f"“{task.title}”: priority {old} → {task.get_priority_display()}.",
-                event="priority_changed")
+    set_priority(task, request.user, request.POST.get("priority"))
     return _back(request, task)
 
 
@@ -777,24 +772,8 @@ def task_set_due(request, pk):
     guard = _guard_edit(request, task)
     if guard:
         return guard
-    task.due_date = parse_date_param(request.POST.get("due_date"))
-    task.due_time = _parse_time(request.POST.get("due_time"))
-    # A new deadline has not been rung yet. Without this the task keeps the
-    # flag from the deadline it used to have and tasks_ring_due never rings it
-    # again — a rescheduled task that goes silent is worse than no reminder.
-    task.due_alarm_sent_at = None
-    task.reminded_day_before = False
-    task.reminded_same_day = False
-    # Reopen if a past-due overdue task got a fresh future date.
-    if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
-        task.status = Task.STATUS_PENDING
-    task.save(update_fields=["due_date", "due_time", "status", "due_alarm_sent_at",
-                             "reminded_day_before", "reminded_same_day", "updated_at"])
-    apply_to_group(task, request.user, {"due_date": task.due_date, "due_time": task.due_time})
-    log_activity(task, request.user, TaskActivity.DUE_CHANGED,
-                 f"Due {task.due_date or '—'} {task.due_time or ''}".strip())
-    notify_task(task, request.user, "Task due date changed",
-                f"“{task.title}” is now due {task.due_date or '—'}.", event="due_changed")
+    set_due(task, request.user, parse_date_param(request.POST.get("due_date")),
+            _parse_time(request.POST.get("due_time")))
     return _back(request, task)
 
 
@@ -818,17 +797,7 @@ def task_reschedule(request, pk):
     except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
         return JsonResponse({"error": "Invalid date."}, status=400)
 
-    task.due_date = new_date
-    task.due_alarm_sent_at = None
-    task.reminded_day_before = False
-    task.reminded_same_day = False
-    if task.status == Task.STATUS_OVERDUE and not task.is_overdue:
-        task.status = Task.STATUS_PENDING
-    task.save(update_fields=["due_date", "status", "due_alarm_sent_at",
-                             "reminded_day_before", "reminded_same_day", "updated_at"])
-    apply_to_group(task, request.user, {"due_date": task.due_date, "due_time": task.due_time})
-    log_activity(task, request.user, TaskActivity.DUE_CHANGED,
-                 f"Moved to {new_date:%d %b %Y}.")
+    set_due(task, request.user, new_date, task.due_time)
     return JsonResponse({
         "ok": True,
         "new_date": new_date.isoformat(),
@@ -844,14 +813,8 @@ def task_set_category(request, pk):
     if guard:
         return guard
     cat_id = request.POST.get("category")
-    task.category = (
-        TaskCategory.objects.filter(pk=int(cat_id)).first()
-        if cat_id and cat_id.isdigit() else None
-    )
-    task.save(update_fields=["category", "updated_at"])
-    apply_to_group(task, request.user, {"category": task.category})
-    log_activity(task, request.user, TaskActivity.CATEGORY_CHANGED,
-                 f"Category → {task.category.name if task.category else '—'}.")
+    set_category(task, request.user, TaskCategory.objects.filter(pk=int(cat_id)).first()
+                 if cat_id and cat_id.isdigit() else None)
     return _back(request, task)
 
 
@@ -866,16 +829,7 @@ def task_add_subscriber(request, pk):
     if uid and uid.isdigit():
         user = User.objects.filter(pk=int(uid)).first()
         if user:
-            _sub, created = TaskSubscriber.objects.get_or_create(task=task, user=user)
-            if created:
-                log_activity(task, request.user, TaskActivity.SUBSCRIBER_ADDED,
-                             f"Added {user.username} in loop.")
-                create_notification(
-                    user, "Added to a task",
-                    f"You're now in the loop on “{task.title}”.",
-                    reverse("clients:task_detail", args=[task.pk]),
-                    event="subscriber_added",
-                )
+            add_subscriber(task, request.user, user)
     return _back(request, task)
 
 
@@ -887,8 +841,10 @@ def task_remove_subscriber(request, pk):
     if guard:
         return guard
     sub_id = request.POST.get("subscriber")
-    if sub_id and sub_id.isdigit():
-        TaskSubscriber.objects.filter(pk=int(sub_id), task=task).delete()
+    sub = TaskSubscriber.objects.filter(pk=int(sub_id), task=task).first() \
+        if sub_id and sub_id.isdigit() else None
+    if sub:
+        remove_subscriber(task, sub.user_id)
     return _back(request, task)
 
 
@@ -904,7 +860,7 @@ def task_add_comment(request, pk):
         mentioned = notify_mentions(task, request.user, body)
         notify_task(task, request.user, "New comment on a task",
                     f"{request.user.username} commented on “{task.title}”.",
-                    event="comment_added", exclude_users=mentioned)
+                    event="comment_added", exclude_users=mentioned, group=True)
     return _back(request, task)
 
 
@@ -969,7 +925,7 @@ def task_upload_attachment(request, pk):
             notify_task(task, request.user,
                         "Voice note added" if is_voice else "Attachment added",
                         f"{request.user.username} added a file to “{task.title}”.",
-                        event="voicenote_added" if is_voice else "attachment_added")
+                        event="voicenote_added" if is_voice else "attachment_added", group=True)
     if warnings:
         messages.warning(request, " ".join(warnings))
     # The Android app posts here too (multipart with the session cookie) and
@@ -986,7 +942,7 @@ def task_delete_attachment(request, pk, att_id):
     guard = _guard_edit(request, task)
     if guard:
         return guard
-    att = get_object_or_404(TaskAttachment, pk=att_id, task=task)
+    att = get_object_or_404(TaskAttachment, pk=att_id, task_id__in=thread_ids(task))
     from ..services.google_drive import delete_file
     delete_file(att.drive_file_id)
     att.delete()
@@ -996,9 +952,12 @@ def task_delete_attachment(request, pk, att_id):
 @login_required
 def task_attachment_download(request, att_id):
     """Proxy a Drive file's bytes so previews/playback work without Drive auth."""
-    att = get_object_or_404(TaskAttachment, pk=att_id)
-    # Reuse task visibility rules.
-    _visible_task_or_404(request, att.task_id, include_deleted=True)
+    att = get_object_or_404(TaskAttachment.objects.select_related("task"), pk=att_id)
+    # Anyone who can see a copy of the task can open its files — a brief
+    # attached at assignment sits on the first copy only.
+    rows = [att.task] + (list(group_siblings(att.task)) if att.task.assign_group else [])
+    if not any(_can_see(request, t) for t in rows):
+        raise PermissionDenied("You cannot access this task.")
     from ..services.google_drive import DriveNotConfigured, stream_file
     try:
         content, mime = stream_file(att.drive_file_id)
@@ -1007,8 +966,8 @@ def task_attachment_download(request, att_id):
     except Exception:
         return HttpResponse("File unavailable.", status=502)
     resp = HttpResponse(content, content_type=mime or att.mime or "application/octet-stream")
-    disposition = "inline" if request.GET.get("dl") != "1" else "attachment"
-    resp["Content-Disposition"] = f'{disposition}; filename="{att.filename}"'
+    resp["Content-Disposition"] = content_disposition_header(
+        request.GET.get("dl") == "1", att.filename)
     return resp
 
 
@@ -1037,12 +996,8 @@ def task_restore(request, pk):
     task = get_object_or_404(Task, pk=pk, is_deleted=True)
     if not _can_delete(request, task):
         return HttpResponseForbidden("You cannot restore this task.")
-    task.is_deleted = False
-    task.deleted_at = None
-    task.deleted_by = None
-    task.save(update_fields=["is_deleted", "deleted_at", "deleted_by", "updated_at"])
-    log_activity(task, request.user, TaskActivity.RESTORED, "Restored from recycle bin.")
-    messages.success(request, f"Task #{task.pk} restored.")
+    n = restore_task(task, request.user)
+    messages.success(request, f"Task #{task.pk} restored." + (f" ({n} assignees)" if n > 1 else ""))
     return redirect("clients:task_detail", pk=task.pk)
 
 
@@ -1092,14 +1047,15 @@ def task_categories(request):
                 )
                 messages.success(request, f"Category “{name}” added.")
         elif action == "toggle":
-            cid = request.POST.get("id")
-            cat = TaskCategory.objects.filter(pk=cid).first() if cid else None
+            cid = request.POST.get("id") or ""
+            cat = TaskCategory.objects.filter(pk=cid).first() if cid.isdigit() else None
             if cat:
                 cat.is_active = not cat.is_active
                 cat.save(update_fields=["is_active", "updated_at"])
         elif action == "delete":
-            cid = request.POST.get("id")
-            TaskCategory.objects.filter(pk=cid).delete()
+            cid = request.POST.get("id") or ""
+            if cid.isdigit():
+                TaskCategory.objects.filter(pk=cid).delete()
             messages.success(request, "Category deleted.")
         return redirect("clients:task_categories")
 

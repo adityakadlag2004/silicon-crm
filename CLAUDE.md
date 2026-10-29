@@ -753,6 +753,52 @@ Local dev: `.venv/bin/python manage.py runserver` (Python 3.12 venv at `.venv/`)
   rescheduling are task actions and must not be re-implemented per record.
 - `clients.test.test_followup_tasks` pins all of this.
 
+## Task module rules (audit of 2026-10-29)
+
+- **Every change goes through `services/tasks.py`, from both doors.**
+  `set_status`, `set_due`, `set_priority`, `set_category`, `set_description`,
+  `acknowledge`, `add_subscriber` / `remove_subscriber` / `set_subscribers`,
+  `apply_edit`, `delete_task`, `restore_task`. The web views and
+  `app_tasks_api` used to carry a copy each; the phone's copies touched one
+  row of a group task, so its other assignees kept the old deadline.
+- **A group task is one task.** Shared fields move on every sibling
+  (`apply_to_group`, which also re-arms each sibling's due ring when the
+  deadline moves); in-loop people are on every sibling; **comments and files
+  are one thread** (`thread_comments` / `thread_attachments`) — files attached
+  at assignment sit on the first row only, so per-row reads hid the brief from
+  everyone else. A shared change notifies the whole group (`group=True`);
+  status stays each person's own.
+- **Reassigning keeps the row.** `sync_group_assignees` hands a removed
+  person's row to an added one; Edit used to bin a solo task and create a blank
+  copy, losing comments, files and history.
+- **The assigner hears "completed" and comments** (`CREATOR_EVENTS`) without
+  subscribing. Nobody inactive is ever notified (the system user that creates
+  follow-ups, people who left).
+- **The phone's Edit sheet sends the checklist as plain titles on every save.**
+  `sync_checklist` matches by title so ticks survive; it used to delete and
+  rebuild, un-ticking everything on a title fix. `apply_edit` is
+  presence-sensitive: `due_date` without `due_time` keeps the time.
+- **Recurrence**: one `RecurringTaskRule` per group (`assignee_ids`, 0145), so
+  instances come back as one group task and deleting one stops the series for
+  all. **Monthly dates count from `start_date`** — stepping from the last
+  instance slid a 31st series to the 28th for good. **Missed periods are
+  skipped, not backfilled**: only the latest due occurrence is created (it used
+  to make up to 60 instantly-overdue tasks after downtime or a restore). An
+  edit to the newest instance carries into the series (`sync_rule_from_task`).
+- **A task you gave yourself is acknowledged** (`Task.save`; 0146 stamped the
+  old rows) — the 4-hourly high/critical re-ring nagged its own author. The
+  web detail page has an Acknowledge button for the assignee now; it existed
+  only in the app, though the re-ring tells people to tap it.
+- Crons: `notify_from_cron` tells a watcher of a group task once per run, not
+  once per assignee; "Task overdue" honours `notify_overdue` (the setting was
+  never read); the escalation digest skips inactive users; `tasks_ring_due`
+  also checks yesterday so a 23:55 deadline still rings after midnight.
+- **The calendar view builds cells as HTML — titles go through `esc()`.**
+  Unescaped, a task title ran as script in the viewer's browser. The view had
+  also crashed on load since 2026-09-05 (ecb6fee: it rendered before its month
+  state existed), which is the only reason that never fired.
+- `clients.test.test_tasks_overhaul` pins every one of these.
+
 ## "Don't ring" (Task.silent)
 
 - A task assigned after hours can be marked **silent** (tick on the web assign

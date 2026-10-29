@@ -11,7 +11,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from clients.models import Task, TaskReminderSetting
-from clients.services.tasks import notify_task
+from clients.services.tasks import notify_from_cron
 
 
 class Command(BaseCommand):
@@ -27,14 +27,15 @@ class Command(BaseCommand):
         tomorrow = today + timedelta(days=1)
         open_statuses = [Task.STATUS_PENDING, Task.STATUS_IN_PROGRESS]
         sent = 0
+        seen = set()   # a watcher of a group task hears once, not once per assignee
 
         if setting.remind_day_before:
             for task in Task.objects.filter(
                 is_deleted=False, status__in=open_statuses,
                 due_date=tomorrow, reminded_day_before=False,
             ).select_related("assigned_to__user"):
-                notify_task(task, None, "Task due tomorrow",
-                            f"“{task.title}” is due tomorrow.")
+                notify_from_cron(task, "Task due tomorrow", f"“{task.title}” is due tomorrow.",
+                                 seen=seen)
                 task.reminded_day_before = True
                 task.save(update_fields=["reminded_day_before"])
                 sent += 1
@@ -44,8 +45,8 @@ class Command(BaseCommand):
                 is_deleted=False, status__in=open_statuses,
                 due_date=today, reminded_same_day=False,
             ).select_related("assigned_to__user"):
-                notify_task(task, None, "Task due today",
-                            f"“{task.title}” is due today.")
+                notify_from_cron(task, "Task due today", f"“{task.title}” is due today.",
+                                 seen=seen)
                 task.reminded_same_day = True
                 task.save(update_fields=["reminded_same_day"])
                 sent += 1

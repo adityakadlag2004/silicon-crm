@@ -162,6 +162,36 @@ class Task(models.Model):
     def __str__(self):
         return f"#{self.pk} {self.title}"
 
+    def save(self, *args, **kwargs):
+        # A task you gave yourself has been seen by definition. Without this
+        # the 4-hourly "awaiting your acknowledgement" re-ring of a high or
+        # critical task nagged its own author. Here rather than in each create
+        # path, because there are five of them (web, app, group sync,
+        # recurrence, an edit that reassigns to yourself).
+        if (self.acknowledged_at is None and self.assigned_to_id and self.created_by_id
+                and self.assigned_to.user_id == self.created_by_id):
+            self.acknowledged_at = timezone.now()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = {*kwargs["update_fields"], "acknowledged_at"}
+        super().save(*args, **kwargs)
+
+    # Where a follow-up points back to: source_kind → (label, URL name).
+    SOURCE_PAGES = {
+        "lead": ("Lead", "clients:lead_detail"),
+        "claim": ("Claim", "clients:claim_detail"),
+        "extpolicy": ("External policy", "clients:external_policy_detail"),
+    }
+
+    @property
+    def source_link(self):
+        """(label, url) of the record this follow-up was raised on, or None."""
+        from django.urls import reverse
+
+        page = self.SOURCE_PAGES.get(self.source_kind)
+        if not (page and self.source_id):
+            return None
+        return page[0], reverse(page[1], args=[self.source_id])
+
     @property
     def due_at(self):
         """Aware datetime for the deadline (end-of-day if no time), or None."""
@@ -385,6 +415,10 @@ class RecurringTaskRule(models.Model):
         blank=True, help_text="One checklist item per line; copied onto each instance.")
     subscriber_ids = models.CharField(
         max_length=255, blank=True, help_text="CSV of User ids added In-Loop to each instance.")
+    # Everyone the series is for. Blank on rules from before 0145, which read
+    # `assigned_to` alone; several ids → each instance is a group task.
+    assignee_ids = models.CharField(
+        max_length=255, blank=True, help_text="CSV of Employee ids each instance is assigned to.")
 
     # ── Schedule ──
     frequency = models.CharField(max_length=10, choices=FREQ_CHOICES, default=FREQ_DAILY)
@@ -413,6 +447,9 @@ class RecurringTaskRule(models.Model):
             if part.isdigit() and 0 <= int(part) <= 6:
                 out.append(int(part))
         return out
+
+    def assignee_id_list(self):
+        return [int(p) for p in (self.assignee_ids or "").split(",") if p.strip().isdigit()]
 
     def subscriber_id_list(self):
         out = []

@@ -16,6 +16,18 @@
 
 {% if can_edit and not task.is_deleted %}{% include "tasks/_assign_modal.html" with edit_task=task %}{% endif %}
 
+{% if not task.is_deleted and task.assigned_to.user_id == request.user.id and not task.acknowledged_at %}
+  {% comment %}
+    The 4-hourly re-ring of a high/critical task says "tap Acknowledge"; the
+    button used to exist only in the app.
+  {% endcomment %}
+  <div class="ki-alert ki-alert-info" style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+    <span style="flex:1;"><i class="bi bi-eye"></i> You haven't acknowledged this task yet. Let {{ task.created_by.get_full_name|default:task.created_by.username|default:"the assigner" }} know you've seen it.</span>
+    <form method="post" action="{% url 'clients:task_acknowledge' task.pk %}" style="margin:0;">{% csrf_token %}
+      <button class="ki-btn ki-btn-primary ki-btn-sm"><i class="bi bi-check2-circle"></i> Acknowledge</button></form>
+  </div>
+{% endif %}
+
 {% if task.is_deleted %}
   <div class="ki-alert ki-alert-warning">This task is in the recycle bin.
     <form method="post" action="{% url 'clients:task_restore' task.pk %}" style="display:inline;">{% csrf_token %}
@@ -50,9 +62,19 @@
           <span><i class="bi bi-person-badge"></i> Created by {{ task.created_by.get_full_name|default:task.created_by.username|default:"—" }}</span>
           {% if task.assigned_to %}<span><i class="bi bi-person-check"></i> {{ task.assigned_to.user.get_full_name|default:task.assigned_to.user.username }}</span>{% endif %}
           {% if task.category %}<span class="tk-cat"><span class="dot" style="background:{{ task.category.color }}"></span>{{ task.category.name }}</span>{% endif %}
-          {% if task.due_date %}<span><i class="bi bi-calendar-event"></i> {{ task.due_date|date:"d M Y" }}{% if task.due_time %} {{ task.due_time|time:"H:i" }}{% endif %}</span>{% endif %}
+          {% if task.due_date %}<span><i class="bi bi-calendar-event"></i> {{ task.due_date|date:"d M Y" }}{% if task.due_time %} {{ task.due_time|time:"H:i" }}{% endif %}{% if task.is_overdue %} <strong style="color:#dc2626;">· late</strong>{% endif %}</span>{% endif %}
           <span><i class="bi bi-clock-history"></i> {{ task.created_at|date:"d M Y H:i" }}</span>
         </div>
+        {% comment %}
+          What the task is about. The client used to show only in the app, and
+          a lead/claim follow-up named its record as a bare path in the text.
+        {% endcomment %}
+        {% if task.client or task.source_link %}
+        <div class="tk-card-meta" style="margin-top:.5rem;">
+          {% if task.client %}<span><i class="bi bi-person-vcard"></i> <a href="{% url 'clients:client_profile' task.client_id %}">{{ task.client.name }}</a>{% if task.client.phone %} · <a href="tel:{{ task.client.phone }}"><i class="bi bi-telephone"></i> {{ task.client.phone }}</a>{% endif %}</span>{% endif %}
+          {% with src=task.source_link %}{% if src %}<span><i class="bi bi-link-45deg"></i> Follow-up on <a href="{{ src.1 }}">{{ src.0 }} #{{ task.source_id }}</a></span>{% endif %}{% endwith %}
+        </div>
+        {% endif %}
 
         {# ── Who has seen this task (by name, across all assignees) ── #}
         {% if ack_roster %}
@@ -82,7 +104,7 @@
         <div class="tk-prog" style="flex:auto;margin-bottom:.7rem;"><span style="width:{{ task.checklist_percent }}%"></span></div>
         {% for item in checklist %}
           <div class="tk-check {% if item.is_done %}done{% endif %}">
-            {% if can_edit %}
+            {% if can_edit and not task.is_deleted %}
             <form method="post" action="{% url 'clients:task_toggle_checklist' task.pk item.id %}" style="margin:0;">{% csrf_token %}
               <button type="submit" class="tk-chip-remove" aria-label="{% if item.is_done %}Mark checklist item not done{% else %}Mark checklist item done{% endif %}" style="color:{% if item.is_done %}#16a34a{% else %}#9ca3af{% endif %};font-size:1.1rem;">
                 <i class="bi {% if item.is_done %}bi-check-square-fill{% else %}bi-square{% endif %}"></i></button>
@@ -91,7 +113,7 @@
             <label>{{ item.title }}{% if item.is_done and item.completed_by %} <span class="text-muted" style="font-size:.72rem;">— {{ item.completed_by.username }}</span>{% endif %}</label>
           </div>
         {% empty %}<p class="text-muted" style="font-size:.85rem;">No checklist items.</p>{% endfor %}
-        {% if can_edit %}
+        {% if can_edit and not task.is_deleted %}
         <form method="post" action="{% url 'clients:task_add_checklist' task.pk %}" class="tk-checklist-add">{% csrf_token %}
           <input type="text" name="title" class="form-control form-control-sm" placeholder="Add checklist item" required>
           <button class="ki-btn ki-btn-secondary ki-btn-sm" aria-label="Add"><i class="bi bi-plus"></i></button>
@@ -115,11 +137,11 @@
               {% endif %}
             </div>
             <a class="ki-btn ki-btn-secondary ki-btn-sm" href="{% url 'clients:task_attachment_download' att.id %}?dl=1" aria-label="Download"><i class="bi bi-download"></i></a>
-            {% if can_edit %}<form method="post" action="{% url 'clients:task_delete_attachment' task.pk att.id %}" style="margin:0;" onsubmit="return confirm('Delete this file?');">{% csrf_token %}<button class="ki-btn ki-btn-danger ki-btn-sm" aria-label="Delete"><i class="bi bi-trash"></i></button></form>{% endif %}
+            {% if can_edit and not task.is_deleted %}<form method="post" action="{% url 'clients:task_delete_attachment' task.pk att.id %}" style="margin:0;" onsubmit="return confirm('Delete this file?');">{% csrf_token %}<button class="ki-btn ki-btn-danger ki-btn-sm" aria-label="Delete"><i class="bi bi-trash"></i></button></form>{% endif %}
           </div>
         {% empty %}<p class="text-muted" style="font-size:.85rem;">No attachments.</p>{% endfor %}
 
-        {% if can_edit %}
+        {% if can_edit and not task.is_deleted %}
         <form method="post" action="{% url 'clients:task_upload_attachment' task.pk %}" enctype="multipart/form-data" style="margin-top:.7rem;display:flex;gap:.4rem;flex-wrap:wrap;">{% csrf_token %}
           <input type="file" name="attachments" class="form-control form-control-sm" multiple style="flex:1;min-width:180px;">
           <button class="ki-btn ki-btn-secondary ki-btn-sm"><i class="bi bi-upload"></i> Upload</button>
@@ -145,17 +167,19 @@
             <span class="when">· {{ c.created_at|date:"d M Y H:i" }}</span>
             <div style="white-space:pre-wrap;margin-top:.2rem;">{{ c.body }}</div></div>
         {% empty %}<p class="text-muted" style="font-size:.85rem;">No comments yet.</p>{% endfor %}
+        {% if not task.is_deleted %}
         <form method="post" action="{% url 'clients:task_add_comment' task.pk %}" style="margin-top:.6rem;display:flex;gap:.4rem;">{% csrf_token %}
           <input type="text" name="body" class="form-control form-control-sm" placeholder="Write a comment…" required>
           <button class="ki-btn ki-btn-primary ki-btn-sm" aria-label="Post comment"><i class="bi bi-send"></i></button>
         </form>
+        {% endif %}
       </div>
     </div>
   </div>
 
   {# ─────────── Side column ─────────── #}
   <div class="tk-side">
-    {% if can_edit %}
+    {% if can_edit and not task.is_deleted %}
     <div class="ki-card"><div class="ki-card-header"><span class="ki-card-title">Update</span></div>
       <div class="ki-card-body">
         <form method="post" action="{% url 'clients:task_set_status' task.pk %}" style="margin-bottom:.6rem;">{% csrf_token %}
@@ -195,10 +219,10 @@
         {% for sub in subscribers %}
           <div style="display:flex;align-items:center;gap:.4rem;padding:.25rem 0;">
             <i class="bi bi-person-circle"></i><span style="flex:1;font-size:.85rem;">{{ sub.user.get_full_name|default:sub.user.username }}</span>
-            {% if can_edit %}<form method="post" action="{% url 'clients:task_remove_subscriber' task.pk %}" style="margin:0;">{% csrf_token %}<input type="hidden" name="subscriber" value="{{ sub.id }}"><button class="tk-chip-remove">&times;</button></form>{% endif %}
+            {% if can_edit and not task.is_deleted %}<form method="post" action="{% url 'clients:task_remove_subscriber' task.pk %}" style="margin:0;">{% csrf_token %}<input type="hidden" name="subscriber" value="{{ sub.id }}"><button class="tk-chip-remove" aria-label="Take {{ sub.user.get_full_name|default:sub.user.username }} out of the loop">&times;</button></form>{% endif %}
           </div>
         {% empty %}<p class="text-muted" style="font-size:.82rem;">No subscribers.</p>{% endfor %}
-        {% if can_edit %}
+        {% if can_edit and not task.is_deleted %}
         <form method="post" action="{% url 'clients:task_add_subscriber' task.pk %}" style="margin-top:.5rem;display:flex;gap:.3rem;">{% csrf_token %}
           <select name="user" class="form-select form-select-sm" required>
             <option value="">Add someone…</option>
