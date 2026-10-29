@@ -110,3 +110,10 @@ class SecurityHardeningTests(TestCase):
         self.client.login(username="mgr_user", password="pass123")
         response = self.client.get(reverse("clients:bulk_reassign"))
         self.assertEqual(response.status_code, 200)
+
+
+class LoginRedirectTests(TestCase):
+    def test_signed_out_deep_link_goes_to_the_real_login_page(self):
+        resp = self.client.get(reverse("clients:monthly_business_report"))
+        self.assertRedirects(resp, reverse("clients:login") + "?next="
+                             + reverse("clients:monthly_business_report"))

@@ -212,6 +212,10 @@ CRONJOBS = [
 # SESSION_SAVE_EVERY_REQUEST did it with a DB write on every single request.
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30
 
+# Django's default is /accounts/login/, which is not a page here: a signed-out
+# deep link (a bookmarked report) used to land on a 404.
+LOGIN_URL = "clients:login"
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators
