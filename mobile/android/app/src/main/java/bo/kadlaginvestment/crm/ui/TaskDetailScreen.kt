@@ -273,6 +273,12 @@ fun TaskDetailScreen(
                     )
                 }
             }
+            // The lead/claim this follow-up was raised on — opens its page.
+            t.optJSONObject("source")?.let { src ->
+                Box(Modifier.clickable { onOpenWeb(src.optString("url")) }) {
+                    InfoRow("Follow-up on", src.optString("label") + "  ›")
+                }
+            }
             // Due row is always visible and, for editors, tap-to-change —
             // date picker then time picker, saved via action=due.
             fun pickDue() {

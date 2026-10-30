@@ -456,6 +456,9 @@ def app_task_detail(request, pk):
         "ack_roster": [{"name": r["name"], "acknowledged": r["acknowledged"],
                         "status": r["status"]} for r in group_ack_roster(task)],
         "client_phone": task.client.phone if task.client_id else None,
+        # The lead/claim a follow-up was raised on — the phone opens its web page.
+        "source": ({"label": f"{src[0]} #{task.source_id}", "url": src[1]}
+                   if (src := task.source_link) else None),
         # ids so the edit sheet can pre-select the right options
         "category_id": task.category_id,
         "assignee_id": task.assigned_to_id,

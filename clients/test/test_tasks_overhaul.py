@@ -348,6 +348,10 @@ class PageTests(_Base):
         self.assertIn("Kiran Patil", html)
         self.assertIn('href="tel:9876543210"', html)
         self.assertIn(reverse("clients:lead_detail", args=[42]), html)
+        # The phone gets the same link.
+        data = self._client(self.boss).get(reverse("clients:app_task_detail", args=[t.pk])).json()
+        self.assertEqual(data["source"], {"label": "Lead #42",
+                                          "url": reverse("clients:lead_detail", args=[42])})
 
     def test_a_capped_list_says_it_is_capped(self):
         me = self.people[0]
