@@ -134,18 +134,21 @@ def _task_row(task):
         "late": task.is_overdue,
         "priority": task.priority,
         "priority_label": task.get_priority_display(),
-        "category": task.category.name if task.category else None,
-        "category_color": task.category.color if task.category else None,
+        # Text fields are "" when empty, never null: the app reads them with
+        # org.json's optString, which turns null into the word "null" — every
+        # task without a client read "Client: null 📞" and dialled tel:null.
+        "category": task.category.name if task.category else "",
+        "category_color": task.category.color if task.category else "",
         "assignee": (task.assigned_to.user.get_full_name() or task.assigned_to.user.username)
-        if task.assigned_to else None,
+        if task.assigned_to else "",
         "assignee_user_id": task.assigned_to.user_id if task.assigned_to else None,
         # "Mansi +4 others" when several people share this assignment.
         "assignee_label": assignee_label(task),
         "group_count": getattr(task, "group_count", 1),
-        "client": task.client.name if task.client_id else None,
+        "client": task.client.name if task.client_id else "",
         "client_id": task.client_id,
-        "due_date": task.due_date.isoformat() if task.due_date else None,
-        "due_time": task.due_time.strftime("%H:%M") if task.due_time else None,
+        "due_date": task.due_date.isoformat() if task.due_date else "",
+        "due_time": task.due_time.strftime("%H:%M") if task.due_time else "",
         # A "don't ring" task withholds due_at_ms: TaskAlarmScheduler arms an
         # on-device exact alarm from it, and that copy rings offline with no
         # server in the loop, so suppressing it here is the only way to keep
@@ -447,7 +450,7 @@ def app_task_detail(request, pk):
     data = _task_row(task)
     data.update({
         "description": task.description,
-        "created_by": task.created_by.username if task.created_by else None,
+        "created_by": task.created_by.username if task.created_by else "",
         "can_edit": _can_edit(request, task),
         "can_delete": _can_delete(request, task),
         # Only the assignee acknowledges — drives the app's Acknowledge button.
@@ -455,7 +458,7 @@ def app_task_detail(request, pk):
         # Who has seen it, by name — the app lists these under Acknowledgement.
         "ack_roster": [{"name": r["name"], "acknowledged": r["acknowledged"],
                         "status": r["status"]} for r in group_ack_roster(task)],
-        "client_phone": task.client.phone if task.client_id else None,
+        "client_phone": (task.client.phone or "") if task.client_id else "",
         # The lead/claim a follow-up was raised on — the phone opens its web page.
         "source": ({"label": f"{src[0]} #{task.source_id}", "url": src[1]}
                    if (src := task.source_link) else None),

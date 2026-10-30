@@ -353,6 +353,14 @@ class PageTests(_Base):
         self.assertEqual(data["source"], {"label": "Lead #42",
                                           "url": reverse("clients:lead_detail", args=[42])})
 
+    def test_the_app_gets_blanks_not_nulls(self):
+        # org.json's optString turns null into the word "null" on the phone.
+        t = Task.objects.create(title="Bare", created_by=self.boss, assigned_to=self.people[0])
+        data = self._client(self.boss).get(reverse("clients:app_task_detail", args=[t.pk])).json()
+        for key in ("category", "category_color", "client", "client_phone", "due_date", "due_time"):
+            self.assertEqual(data[key], "", key)
+        self.assertIsNone(data["source"])
+
     def test_a_capped_list_says_it_is_capped(self):
         me = self.people[0]
         Task.objects.bulk_create(Task(title=f"T{i}", created_by=self.boss, assigned_to=me)
