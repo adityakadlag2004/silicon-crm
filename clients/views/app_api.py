@@ -2203,7 +2203,7 @@ def app_client_create(request):
     from ..forms import validate_dob, validate_pan
     from django.core.exceptions import ValidationError as _VErr
     try:
-        pan = validate_pan(body.get("pan"), required=True)
+        pan = validate_pan(body.get("pan"))
         # Mandatory here as well as on the web form: guarding only the
         # browser would let every phone-added client skip it, which is the
         # whole of the rule. Old clients keep their blank and are filled in

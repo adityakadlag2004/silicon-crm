@@ -627,10 +627,11 @@ class AppClientCreateTests(TestCase):
         self.assertEqual(self._post(self.emp_user, {"name": "X"}).status_code, 400)
         self.assertEqual(self._post(self.emp_user, {"phone": "981"}).status_code, 400)
 
-    def test_requires_pan(self):
-        # PAN links the client to their MF folios — mandatory on create.
-        self.assertEqual(self._post(self.emp_user, {"name": "NoPan", "phone": "9811119999"}).status_code, 400)
+    def test_pan_optional_but_format_checked(self):
+        # Optional since 2026-11-23; a typed PAN must still be well-formed.
         self.assertEqual(self._post(self.emp_user, {"name": "BadPan", "phone": "9811119999", "pan": "XYZ"}).status_code, 400)
+        self.assertEqual(self._post(self.emp_user, {"name": "NoPan", "phone": "9811119999"}).status_code, 200)
+        self.assertIsNone(Client.objects.get(phone__endswith="9811119999").pan)
 
     def test_duplicate_phone_rejected(self):
         Client.objects.create(name="Existing", phone="9822223333")

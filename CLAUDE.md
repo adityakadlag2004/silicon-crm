@@ -1346,8 +1346,9 @@ signal there is, since the app is self-hosted with no Play Console.
 - Three screens lost feed-derived sections and are otherwise intact: the client
   profile (MF Folios / SIP Register / Valuation Report), **KYC Issues** (the
   unlinked-folio tile, folio PAN suggestions and the PAN/name-conflict card),
-  and **Approve Sales** (the RTA evidence row). PAN stays mandatory on new
-  clients — it is the identity key behind duplicate detection.
+  and **Approve Sales** (the RTA evidence row). PAN is **optional** on new
+  clients (owner's call, 2026-11-23) — checked for format when typed, and a
+  blank one is chased on KYC Issues. All three add-client doors agree.
 - `RTA_FEED_IMAP_*` env vars, the `rta_formats/` samples and the feed-only pins
   (`dbfread`, `pyzipper`, `xlrd`, `msoffcrypto-tool`) are gone too. Don't
   reintroduce any of it without the owner asking.

@@ -1,4 +1,4 @@
-"""Client KYC: PAN required on add, KYC Issues screen (inline PAN entry,
+"""Client KYC: PAN optional on add (format-checked), KYC Issues screen (inline PAN entry,
 role scoping) and duplicate merge/safe-delete.
 
 Run: .venv/bin/python manage.py test clients.test.test_client_kyc -v 2
@@ -27,11 +27,11 @@ def _form_data(**overrides):
     return data
 
 
-class PanRequiredTests(TestCase):
-    def test_new_client_requires_pan(self):
+class PanOptionalTests(TestCase):
+    def test_new_client_without_pan_is_allowed(self):
         form = ClientForm(data=_form_data(pan=""))
-        self.assertFalse(form.is_valid())
-        self.assertIn("pan", form.errors)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertIsNone(form.cleaned_data["pan"])
 
     def test_invalid_pan_rejected(self):
         form = ClientForm(data=_form_data(pan="12345ABCDE"))

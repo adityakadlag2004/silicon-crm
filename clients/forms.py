@@ -506,7 +506,6 @@ class ClientForm(forms.ModelForm):
             self.fields["name"].required = True
             self.fields["phone"].required = True
             self.fields["email"].required = True
-            self.fields["pan"].required = True
             # Mandatory from 2026-09 on: the client's age drives the retirement
             # -planning alert at 40. Imported clients have none and are filled
             # in on KYC Issues, so this is an add-flow rule only.
@@ -541,10 +540,9 @@ class ClientForm(forms.ModelForm):
         return value
 
     def clean_pan(self):
-        # Required for NEW clients; existing clients without one are surfaced
-        # on the KYC Issues screen instead of blocking every edit.
-        return validate_pan(self.cleaned_data.get("pan"),
-                            required=not getattr(self.instance, "pk", None))
+        # Optional (owner's call, 2026-11-23): checked for format when typed;
+        # clients without one are surfaced on the KYC Issues screen.
+        return validate_pan(self.cleaned_data.get("pan"))
 
     def clean_email(self):
         value = (self.cleaned_data.get("email") or "").strip().upper()
